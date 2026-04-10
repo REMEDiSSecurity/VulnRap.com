@@ -64,7 +64,7 @@ catalogs:
       specifier: ^7.3.0
       version: 7.3.1
     zod:
-      specifier: ^3.25.76
+      specifier: 3.25.76
       version: 3.25.76
 
 overrides:
@@ -190,12 +190,18 @@ importers:
       multer:
         specifier: ^2.1.1
         version: 2.1.1
+      pdf-parse-new:
+        specifier: ^2.0.0
+        version: 2.0.0
       pino:
         specifier: ^9
         version: 9.14.0
       pino-http:
         specifier: ^10
         version: 10.5.0
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
     devDependencies:
       '@types/cookie-parser':
         specifier: ^1.4.10
@@ -2353,6 +2359,9 @@ packages:
       react: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
       react-dom: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
 
+  node-ensure@0.0.0:
+    resolution: {integrity: sha512-DRI60hzo2oKN1ma0ckc6nQWlHU69RH6xN0sjQTjMpChPfTYvKZdcQFfdYK2RWbJcKyUizSIy/l8OTGxMAM1QDw==}
+
   node-releases@2.0.36:
     resolution: {integrity: sha512-TdC8FSgHz8Mwtw9g5L4gR/Sh9XhSP/0DEkQxfEFXOpiul5IiHgHan2VhYYb6agDSfp4KuvltmGApc8HMgUrIkA==}
 
@@ -2418,6 +2427,10 @@ packages:
 
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
+
+  pdf-parse-new@2.0.0:
+    resolution: {integrity: sha512-9RG2m8lws0H/6kn9kngrooLNJM/FW8rtLRLgtxd69fuEV/uuP7L6ez3dKt2hGW/laO/eVxGiQYYwo+wysB4saA==}
+    engines: {node: '>=20.11.0'}
 
   pg-cloudflare@1.3.0:
     resolution: {integrity: sha512-6lswVVSztmHiRtD6I8hw4qP/nDm1EJbKMRhf3HCYaqud7frGysPv7FYJ5noZQdhQtN2xJnimfMtvQq21pdbzyQ==}
@@ -4942,6 +4955,8 @@ snapshots:
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
 
+  node-ensure@0.0.0: {}
+
   node-releases@2.0.36: {}
 
   npm-run-path@6.0.0:
@@ -5020,6 +5035,13 @@ snapshots:
   path-to-regexp@8.3.0: {}
 
   pathe@2.0.3: {}
+
+  pdf-parse-new@2.0.0:
+    dependencies:
+      debug: 4.4.3
+      node-ensure: 0.0.0
+    transitivePeerDependencies:
+      - supports-color
 
   pg-cloudflare@1.3.0:
     optional: true

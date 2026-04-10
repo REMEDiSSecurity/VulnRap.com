@@ -65,6 +65,7 @@ router.get("/stats/recent", async (_req, res): Promise<void> => {
     .select({
       id: reportsTable.id,
       slopScore: reportsTable.slopScore,
+      slopTier: reportsTable.slopTier,
       similarityMatches: reportsTable.similarityMatches,
       createdAt: reportsTable.createdAt,
     })
@@ -74,12 +75,7 @@ router.get("/stats/recent", async (_req, res): Promise<void> => {
 
   const mapped = recentReports.map((r) => {
     const matches = r.similarityMatches as Array<{ reportId: number; similarity: number; matchType: string }>;
-    let tier: string;
-    if (r.slopScore >= 70) tier = "Pure Slop";
-    else if (r.slopScore >= 50) tier = "Highly Suspicious";
-    else if (r.slopScore >= 30) tier = "Questionable";
-    else if (r.slopScore >= 15) tier = "Mildly Suspicious";
-    else tier = "Probably Legit";
+    const tier = r.slopTier;
 
     return {
       id: r.id,

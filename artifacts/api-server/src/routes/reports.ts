@@ -2,34 +2,48 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { reportsTable } from "@workspace/db";
+import { reportsTable, reportHashesTable, similarityResultsTable, reportStatsTable } from "@workspace/db";
 import {
   GetReportParams,
   GetReportResponse,
   LookupByHashParams,
   LookupByHashResponse,
 } from "@workspace/api-zod";
-import { computeMinHash, computeSimhash, computeContentHash, findSimilarReports } from "../lib/similarity";
+import { z } from "zod/v4";
+
+const SubmitReportBodySchema = z.object({
+  file: z.string(),
+  contentMode: z.enum(["full", "similarity_only"]).default("full"),
+});
+import { computeMinHash, computeSimhash, computeContentHash, computeLSHBuckets, findSimilarReports } from "../lib/similarity";
 import { analyzeSloppiness } from "../lib/sloppiness";
 import { sanitizeText, sanitizeFileName } from "../lib/sanitize";
+import { extractTextFromPdf } from "../lib/pdf";
+import { sql } from "drizzle-orm";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+
+const ALLOWED_EXTENSIONS = [".txt", ".md", ".pdf"];
+const ALLOWED_MIMETYPES = [
+  "text/plain",
+  "text/markdown",
+  "text/x-markdown",
+  "application/pdf",
+  "application/octet-stream",
+];
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
-    const allowed = [
-      "text/plain",
-      "text/markdown",
-      "text/x-markdown",
-      "application/octet-stream",
-    ];
     const ext = file.originalname.toLowerCase();
-    if (allowed.includes(file.mimetype) || ext.endsWith(".txt") || ext.endsWith(".md")) {
+    const hasValidExt = ALLOWED_EXTENSIONS.some(e => ext.endsWith(e));
+    const hasValidMime = ALLOWED_MIMETYPES.includes(file.mimetype);
+
+    if (hasValidExt || hasValidMime) {
       cb(null, true);
     } else {
-      cb(new Error("Unsupported file type. Only .txt and .md files are accepted."));
+      cb(new Error("Unsupported file type. Accepted formats: .txt, .md, .pdf"));
     }
   },
 });
@@ -52,13 +66,35 @@ router.post("/reports", (req, res, next): void => {
 
 router.post("/reports", async (req, res): Promise<void> => {
   if (!req.file) {
-    res.status(400).json({ error: "No file uploaded. Please attach a .txt or .md file." });
+    res.status(400).json({ error: "No file uploaded. Please attach a .txt, .md, or .pdf file." });
     return;
   }
 
-  const contentMode = req.body.contentMode === "similarity_only" ? "similarity_only" : "full";
-  const rawText = req.file.buffer.toString("utf-8");
-  const text = sanitizeText(rawText);
+  const bodyValidation = SubmitReportBodySchema.safeParse({
+    file: req.file.originalname,
+    contentMode: req.body.contentMode,
+  });
+
+  if (!bodyValidation.success) {
+    res.status(400).json({ error: bodyValidation.error.message });
+    return;
+  }
+
+  const contentMode = bodyValidation.data.contentMode;
+
+  let text: string;
+  const fileName = req.file.originalname.toLowerCase();
+
+  if (fileName.endsWith(".pdf") || req.file.mimetype === "application/pdf") {
+    const pdfResult = await extractTextFromPdf(req.file.buffer);
+    if (!pdfResult.success) {
+      res.status(400).json({ error: pdfResult.error });
+      return;
+    }
+    text = sanitizeText(pdfResult.text);
+  } else {
+    text = sanitizeText(req.file.buffer.toString("utf-8"));
+  }
 
   if (text.length === 0) {
     res.status(400).json({ error: "File is empty or contains no readable text." });
@@ -68,20 +104,27 @@ router.post("/reports", async (req, res): Promise<void> => {
   const contentHash = computeContentHash(text);
   const simhash = computeSimhash(text);
   const minhashSignature = computeMinHash(text);
+  const lshBuckets = computeLSHBuckets(minhashSignature);
 
   const existingReports = await db
     .select({
       id: reportsTable.id,
       minhashSignature: reportsTable.minhashSignature,
       simhash: reportsTable.simhash,
+      lshBuckets: reportsTable.lshBuckets,
     })
     .from(reportsTable);
 
-  const similarityMatches = findSimilarReports(minhashSignature, simhash, existingReports as Array<{ id: number; minhashSignature: number[]; simhash: string }>);
+  const similarityMatches = findSimilarReports(
+    minhashSignature,
+    simhash,
+    lshBuckets,
+    existingReports as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
+  );
 
   const analysis = analyzeSloppiness(text);
 
-  const fileName = req.file.originalname ? sanitizeFileName(req.file.originalname) : null;
+  const safeFileName = req.file.originalname ? sanitizeFileName(req.file.originalname) : null;
 
   const [report] = await db
     .insert(reportsTable)
@@ -89,22 +132,58 @@ router.post("/reports", async (req, res): Promise<void> => {
       contentHash,
       simhash,
       minhashSignature,
+      lshBuckets,
       contentText: contentMode === "full" ? text : null,
       contentMode,
       slopScore: analysis.score,
+      slopTier: analysis.tier,
       similarityMatches,
       feedback: analysis.feedback,
-      fileName,
+      fileName: safeFileName,
       fileSize: req.file.size,
     })
     .returning();
+
+  await db.insert(reportHashesTable).values([
+    { reportId: report.id, hashType: "sha256", hashValue: contentHash },
+    { reportId: report.id, hashType: "simhash", hashValue: simhash },
+  ]);
+
+  if (similarityMatches.length > 0) {
+    await db.insert(similarityResultsTable).values(
+      similarityMatches.map(m => ({
+        sourceReportId: report.id,
+        matchedReportId: m.reportId,
+        similarityScore: m.similarity / 100,
+        matchType: m.matchType,
+      }))
+    );
+  }
+
+  await db
+    .insert(reportStatsTable)
+    .values({ key: "total_reports", value: 1 })
+    .onConflictDoUpdate({
+      target: reportStatsTable.key,
+      set: { value: sql`${reportStatsTable.value} + 1` },
+    });
+
+  if (similarityMatches.length > 0) {
+    await db
+      .insert(reportStatsTable)
+      .values({ key: "duplicates_detected", value: 1 })
+      .onConflictDoUpdate({
+        target: reportStatsTable.key,
+        set: { value: sql`${reportStatsTable.value} + 1` },
+      });
+  }
 
   const response = GetReportResponse.parse({
     id: report.id,
     contentHash: report.contentHash,
     contentMode: report.contentMode,
     slopScore: report.slopScore,
-    slopTier: analysis.tier,
+    slopTier: report.slopTier,
     similarityMatches: report.similarityMatches,
     feedback: report.feedback,
     fileName: report.fileName,
@@ -132,16 +211,12 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const analysis = analyzeSloppiness(
-    report.contentText || ""
-  );
-
   const response = GetReportResponse.parse({
     id: report.id,
     contentHash: report.contentHash,
     contentMode: report.contentMode,
     slopScore: report.slopScore,
-    slopTier: analysis.tier,
+    slopTier: report.slopTier,
     similarityMatches: report.similarityMatches,
     feedback: report.feedback,
     fileName: report.fileName,
@@ -178,13 +253,12 @@ router.get("/reports/lookup/:hash", async (req, res): Promise<void> => {
   }
 
   const matches = (report.similarityMatches as Array<{ reportId: number; similarity: number; matchType: string }>);
-  const analysis = analyzeSloppiness(report.contentText || "");
 
   const response = LookupByHashResponse.parse({
     found: true,
     reportId: report.id,
     slopScore: report.slopScore,
-    slopTier: analysis.tier,
+    slopTier: report.slopTier,
     matchCount: matches.length,
     firstSeen: report.createdAt,
   });

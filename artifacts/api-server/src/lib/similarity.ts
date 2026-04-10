@@ -3,6 +3,8 @@ import crypto from "crypto";
 const SHINGLE_SIZE = 5;
 const NUM_HASHES = 128;
 const LARGE_PRIME = 2147483647;
+const LSH_BANDS = 16;
+const LSH_ROWS_PER_BAND = NUM_HASHES / LSH_BANDS;
 
 function getShingles(text: string): Set<string> {
   const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
@@ -54,6 +56,20 @@ export function computeMinHash(text: string): number[] {
   }
 
   return signature;
+}
+
+export function computeLSHBuckets(signature: number[]): string[] {
+  const buckets: string[] = [];
+  for (let band = 0; band < LSH_BANDS; band++) {
+    const start = band * LSH_ROWS_PER_BAND;
+    const bandSlice = signature.slice(start, start + LSH_ROWS_PER_BAND);
+    const bandHash = crypto
+      .createHash("md5")
+      .update(bandSlice.join(","))
+      .digest("hex");
+    buckets.push(`b${band}:${bandHash}`);
+  }
+  return buckets;
 }
 
 export function computeSimhash(text: string): string {
@@ -121,21 +137,39 @@ export interface SimilarityResult {
 export function findSimilarReports(
   newMinHash: number[],
   newSimhash: string,
-  existingReports: Array<{ id: number; minhashSignature: number[]; simhash: string }>,
+  newLSHBuckets: string[],
+  existingReports: Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
   topN: number = 10,
   threshold: number = 0.15,
 ): SimilarityResult[] {
+  const newBucketSet = new Set(newLSHBuckets);
+
+  const lshCandidateIds = new Set<number>();
+  for (const report of existingReports) {
+    for (const bucket of report.lshBuckets) {
+      if (newBucketSet.has(bucket)) {
+        lshCandidateIds.add(report.id);
+        break;
+      }
+    }
+  }
+
+  const candidates = lshCandidateIds.size > 0
+    ? existingReports.filter(r => lshCandidateIds.has(r.id))
+    : existingReports;
+
   const results: SimilarityResult[] = [];
 
-  for (const report of existingReports) {
+  for (const report of candidates) {
     const jaccardSim = jaccardSimilarity(newMinHash, report.minhashSignature);
     const simhashSim = simhashSimilarity(newSimhash, report.simhash);
+    const isLSHCandidate = lshCandidateIds.has(report.id);
 
     const combinedSim = Math.max(jaccardSim, simhashSim);
 
     if (combinedSim >= threshold) {
       let matchType = "semantic";
-      if (jaccardSim >= 0.8) {
+      if (jaccardSim >= 0.8 || (isLSHCandidate && jaccardSim >= 0.6)) {
         matchType = "near-duplicate";
       } else if (jaccardSim >= 0.5) {
         matchType = "high-similarity";
