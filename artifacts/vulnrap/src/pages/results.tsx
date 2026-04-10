@@ -10,11 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import FeedbackForm from "@/components/feedback-form";
-
-function anonymizeId(id: number): string {
-  const hex = id.toString(16).padStart(4, "0");
-  return `VR-${hex.toUpperCase()}`;
-}
+import { anonymizeId } from "@/lib/utils";
 
 function getSlopColor(score: number) {
   if (score < 30) return "text-green-500";

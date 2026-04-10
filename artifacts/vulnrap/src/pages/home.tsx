@@ -9,17 +9,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
+import { cn, anonymizeId } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import logoSrc from "@/assets/logo.png";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 20 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
-
-function anonymizeId(id: number): string {
-  return `VR-${id.toString(16).padStart(4, "0").toUpperCase()}`;
-}
 
 function getSlopColor(score: number) {
   if (score < 30) return "text-green-500";

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
+import { cn, anonymizeId } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 
@@ -45,10 +45,6 @@ function getSlopProgressColor(score: number) {
   if (score < 30) return "bg-green-500";
   if (score < 70) return "bg-yellow-500";
   return "bg-destructive";
-}
-
-function anonymizeId(id: number): string {
-  return `VR-${id.toString(16).padStart(4, "0").toUpperCase()}`;
 }
 
 const REDACTION_LABELS: Record<string, string> = {
