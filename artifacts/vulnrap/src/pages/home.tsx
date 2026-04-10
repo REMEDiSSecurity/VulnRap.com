@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint } from "lucide-react";
+import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX } from "lucide-react";
 import { useSubmitReport, SubmitReportBodyContentMode } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -163,14 +163,36 @@ export default function Home() {
         </p>
       </div>
 
+      <div className="rounded-lg border border-primary/20 bg-card/30 overflow-hidden">
+        <video
+          className="w-full"
+          controls
+          playsInline
+          preload="metadata"
+        >
+          <source src={`${import.meta.env.BASE_URL}vulnrap-intro.mp4`} type="video/mp4" />
+          <source src={`${import.meta.env.BASE_URL}vulnrap-intro.mov`} type="video/quicktime" />
+          Your browser does not support video playback.
+        </video>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-border/50 bg-card/30">
+          <div className="p-2 rounded-md bg-primary/10">
+            <ShieldCheck className="w-5 h-5 text-green-500" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold mb-1">Auto-Redaction</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">PII, secrets, credentials, and company names are automatically scrubbed before your report is stored or compared.</p>
+          </div>
+        </div>
         <div className="flex items-start gap-3 p-4 rounded-lg border border-border/50 bg-card/30">
           <div className="p-2 rounded-md bg-primary/10">
             <Fingerprint className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h3 className="text-sm font-bold mb-1">Similarity Fingerprinting</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">Your report is hashed using MinHash + LSH to detect near-duplicates in the corpus without exposing content.</p>
+            <h3 className="text-sm font-bold mb-1">Section-Level Hashing</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">Each section of your report is hashed independently, detecting partial matches even when full documents differ.</p>
           </div>
         </div>
         <div className="flex items-start gap-3 p-4 rounded-lg border border-border/50 bg-card/30">
@@ -180,15 +202,6 @@ export default function Home() {
           <div>
             <h3 className="text-sm font-bold mb-1">AI Slop Detection</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">Structural and linguistic analysis scores how likely your report is AI-generated, with actionable feedback.</p>
-          </div>
-        </div>
-        <div className="flex items-start gap-3 p-4 rounded-lg border border-border/50 bg-card/30">
-          <div className="p-2 rounded-md bg-primary/10">
-            <Lock className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold mb-1">Zero-Knowledge Option</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">In Similarity Only mode, we never store your content. Only cryptographic hashes touch the disk.</p>
           </div>
         </div>
       </div>
@@ -270,7 +283,7 @@ export default function Home() {
                   <RadioGroupItem value={SubmitReportBodyContentMode.similarity_only} id="similarity_only" className="mt-1" />
                   <div className="space-y-1">
                     <Label htmlFor="similarity_only" className="font-medium cursor-pointer">Similarity Only</Label>
-                    <p className="text-xs text-muted-foreground leading-relaxed">Stores only document hashes for comparison. Your original content is discarded immediately after analysis. Best for sensitive zero-days and undisclosed vulnerabilities.</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">Report is auto-redacted then hashed. Only hashes are stored -- no text, not even the redacted version. Best for sensitive zero-days.</p>
                   </div>
                 </div>
               </div>
@@ -279,7 +292,7 @@ export default function Home() {
                   <RadioGroupItem value={SubmitReportBodyContentMode.full} id="full" className="mt-1" />
                   <div className="space-y-1">
                     <Label htmlFor="full" className="font-medium cursor-pointer">Full Storage</Label>
-                    <p className="text-xs text-muted-foreground leading-relaxed">Stores the full content securely. Contributes to the community corpus, improving detection accuracy for everyone. Recommended for already-disclosed bugs.</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">Stores the auto-redacted version (PII/secrets removed) for richer comparison. Contributes to the community corpus. Recommended for disclosed bugs.</p>
                   </div>
                 </div>
               </div>
@@ -306,26 +319,33 @@ export default function Home() {
           <Zap className="w-5 h-5 text-primary" />
           How It Works
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="space-y-2">
             <div className="text-3xl font-bold text-primary/30">01</div>
             <h3 className="font-medium text-sm">Upload</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Submit your vulnerability report as a .txt or .md file. We extract the text content and begin processing immediately.
+              Submit your vulnerability report as a .txt or .md file. We extract the text and begin processing immediately.
             </p>
           </div>
           <div className="space-y-2">
             <div className="text-3xl font-bold text-primary/30">02</div>
-            <h3 className="font-medium text-sm">Analyze</h3>
+            <h3 className="font-medium text-sm">Auto-Redact</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              We generate cryptographic fingerprints (MinHash + Simhash) and run structural analysis to score AI-generation likelihood.
+              PII, secrets, credentials, and company names are automatically scrubbed. Only the redacted version is used from this point.
             </p>
           </div>
           <div className="space-y-2">
             <div className="text-3xl font-bold text-primary/30">03</div>
+            <h3 className="font-medium text-sm">Analyze</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              We hash each section independently, compare against all existing reports, and score AI-generation likelihood.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div className="text-3xl font-bold text-primary/30">04</div>
             <h3 className="font-medium text-sm">Results</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Get a detailed report with your sloppiness score, similarity matches against existing reports, and actionable improvement feedback.
+              Get your slop score, similarity matches, section-level hash analysis, redaction summary, and improvement feedback.
             </p>
           </div>
         </div>
