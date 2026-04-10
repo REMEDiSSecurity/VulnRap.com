@@ -2,6 +2,11 @@ import { pgTable, text, serial, integer, timestamp, jsonb, index, varchar } from
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
+export interface RedactionSummary {
+  totalRedactions: number;
+  categories: Record<string, number>;
+}
+
 export const reportsTable = pgTable("reports", {
   id: serial("id").primaryKey(),
   contentHash: varchar("content_hash", { length: 64 }).notNull(),
@@ -9,10 +14,14 @@ export const reportsTable = pgTable("reports", {
   minhashSignature: jsonb("minhash_signature").notNull().$type<number[]>(),
   lshBuckets: jsonb("lsh_buckets").notNull().$type<string[]>().default([]),
   contentText: text("content_text"),
+  redactedText: text("redacted_text"),
   contentMode: varchar("content_mode", { length: 20 }).notNull().default("full"),
   slopScore: integer("slop_score").notNull().default(0),
   slopTier: varchar("slop_tier", { length: 30 }).notNull().default("Unknown"),
   similarityMatches: jsonb("similarity_matches").notNull().$type<SimilarityMatch[]>().default([]),
+  sectionHashes: jsonb("section_hashes").$type<Record<string, string>>().default({}),
+  sectionMatches: jsonb("section_matches").$type<SectionMatch[]>().default([]),
+  redactionSummary: jsonb("redaction_summary").$type<RedactionSummary>().default({ totalRedactions: 0, categories: {} }),
   feedback: jsonb("feedback").notNull().$type<string[]>().default([]),
   fileName: varchar("file_name", { length: 255 }),
   fileSize: integer("file_size").notNull(),
