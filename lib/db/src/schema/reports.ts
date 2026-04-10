@@ -31,6 +31,8 @@ export const reportsTable = pgTable("reports", {
   index("idx_reports_content_hash").on(table.contentHash),
   index("idx_reports_simhash").on(table.simhash),
   index("idx_reports_created_at").on(table.createdAt),
+  index("idx_reports_show_in_feed").on(table.showInFeed, table.createdAt),
+  index("idx_reports_slop_score").on(table.slopScore),
 ]);
 
 export interface SimilarityMatch {

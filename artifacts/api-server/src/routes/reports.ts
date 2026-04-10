@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { eq } from "drizzle-orm";
+import { eq, or, sql as dsql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { reportsTable, reportHashesTable, similarityResultsTable, reportStatsTable } from "@workspace/db";
 import {
@@ -112,86 +112,98 @@ router.post("/reports", async (req, res): Promise<void> => {
 
   const { sections, sectionHashes } = parseSections(analysisText);
 
-  const existingReports = await db
-    .select({
-      id: reportsTable.id,
-      minhashSignature: reportsTable.minhashSignature,
-      simhash: reportsTable.simhash,
-      lshBuckets: reportsTable.lshBuckets,
-      sectionHashes: reportsTable.sectionHashes,
-    })
-    .from(reportsTable);
+  const lshConditions = lshBuckets.map(bucket =>
+    dsql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
+  );
+
+  const candidateReports = lshConditions.length > 0
+    ? await db
+        .select({
+          id: reportsTable.id,
+          minhashSignature: reportsTable.minhashSignature,
+          simhash: reportsTable.simhash,
+          lshBuckets: reportsTable.lshBuckets,
+          sectionHashes: reportsTable.sectionHashes,
+        })
+        .from(reportsTable)
+        .where(or(...lshConditions))
+        .limit(500)
+    : [];
 
   const similarityMatches = findSimilarReports(
     minhashSignature,
     simhash,
     lshBuckets,
-    existingReports as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
+    candidateReports as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
   );
 
   const sectionMatches = findSectionMatches(
     sectionHashes,
-    existingReports as Array<{ id: number; sectionHashes: Record<string, string> }>,
+    candidateReports as Array<{ id: number; sectionHashes: Record<string, string> }>,
   );
 
   const analysis = analyzeSloppiness(text);
 
-  const [report] = await db
-    .insert(reportsTable)
-    .values({
-      contentHash,
-      simhash,
-      minhashSignature,
-      lshBuckets,
-      contentText: contentMode === "full" ? analysisText : null,
-      redactedText: contentMode === "full" ? analysisText : null,
-      contentMode,
-      slopScore: analysis.score,
-      slopTier: analysis.tier,
-      similarityMatches,
-      sectionHashes,
-      sectionMatches,
-      redactionSummary,
-      feedback: analysis.feedback,
-      showInFeed,
-      fileName: safeFileName,
-      fileSize: rawFileSize,
-    })
-    .returning();
+  const report = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(reportsTable)
+      .values({
+        contentHash,
+        simhash,
+        minhashSignature,
+        lshBuckets,
+        contentText: contentMode === "full" ? analysisText : null,
+        redactedText: contentMode === "full" ? analysisText : null,
+        contentMode,
+        slopScore: analysis.score,
+        slopTier: analysis.tier,
+        similarityMatches,
+        sectionHashes,
+        sectionMatches,
+        redactionSummary,
+        feedback: analysis.feedback,
+        showInFeed,
+        fileName: safeFileName,
+        fileSize: rawFileSize,
+      })
+      .returning();
 
-  await db.insert(reportHashesTable).values([
-    { reportId: report.id, hashType: "sha256", hashValue: contentHash },
-    { reportId: report.id, hashType: "simhash", hashValue: simhash },
-  ]);
+    await tx.insert(reportHashesTable).values([
+      { reportId: inserted.id, hashType: "sha256", hashValue: contentHash },
+      { reportId: inserted.id, hashType: "simhash", hashValue: simhash },
+    ]);
 
-  if (similarityMatches.length > 0) {
-    await db.insert(similarityResultsTable).values(
-      similarityMatches.map(m => ({
-        sourceReportId: report.id,
-        matchedReportId: m.reportId,
-        similarityScore: m.similarity / 100,
-        matchType: m.matchType,
-      }))
-    );
-  }
+    if (similarityMatches.length > 0) {
+      await tx.insert(similarityResultsTable).values(
+        similarityMatches.map(m => ({
+          sourceReportId: inserted.id,
+          matchedReportId: m.reportId,
+          similarityScore: m.similarity / 100,
+          matchType: m.matchType,
+        }))
+      );
+    }
 
-  await db
-    .insert(reportStatsTable)
-    .values({ key: "total_reports", value: 1 })
-    .onConflictDoUpdate({
-      target: reportStatsTable.key,
-      set: { value: sql`${reportStatsTable.value} + 1` },
-    });
-
-  if (similarityMatches.length > 0) {
-    await db
+    await tx
       .insert(reportStatsTable)
-      .values({ key: "duplicates_detected", value: 1 })
+      .values({ key: "total_reports", value: 1 })
       .onConflictDoUpdate({
         target: reportStatsTable.key,
         set: { value: sql`${reportStatsTable.value} + 1` },
       });
-  }
+
+    if (similarityMatches.length > 0) {
+      await tx
+        .insert(reportStatsTable)
+        .values({ key: "duplicates_detected", value: 1 })
+        .onConflictDoUpdate({
+          target: reportStatsTable.key,
+          set: { value: sql`${reportStatsTable.value} + 1` },
+        });
+    }
+
+    return inserted;
+  });
 
   const response = GetReportResponse.parse({
     id: report.id,

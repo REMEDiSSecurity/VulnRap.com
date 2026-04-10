@@ -52,9 +52,10 @@ export function computeMinHash(text: string): number[] {
   const signature: number[] = new Array(NUM_HASHES).fill(Infinity);
 
   for (const shingleHash of shingleHashes) {
+    const sh = BigInt(shingleHash);
     for (let i = 0; i < NUM_HASHES; i++) {
       const { a, b } = hashCoefficients[i];
-      const hashVal = ((a * shingleHash + b) % LARGE_PRIME) >>> 0;
+      const hashVal = Number((BigInt(a) * sh + BigInt(b)) % BigInt(LARGE_PRIME));
       if (hashVal < signature[i]) {
         signature[i] = hashVal;
       }
