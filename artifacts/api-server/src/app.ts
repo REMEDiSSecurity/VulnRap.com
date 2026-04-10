@@ -6,6 +6,7 @@ import pinoHttp from "pino-http";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yamljs";
+import fs from "fs";
 import path from "path";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -91,11 +92,23 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 let swaggerDocument: Record<string, unknown> | null = null;
-try {
-  const specPath = path.resolve(__dirname, "..", "..", "..", "lib", "api-spec", "openapi.yaml");
-  swaggerDocument = YAML.load(specPath) as Record<string, unknown>;
-} catch {
-  logger.warn("Could not load OpenAPI spec for Swagger UI");
+const specCandidates = [
+  path.resolve(__dirname, "openapi.yaml"),
+  path.resolve(__dirname, "..", "openapi.yaml"),
+  path.resolve(__dirname, "..", "..", "..", "lib", "api-spec", "openapi.yaml"),
+];
+for (const candidate of specCandidates) {
+  try {
+    if (fs.existsSync(candidate)) {
+      swaggerDocument = YAML.load(candidate) as Record<string, unknown>;
+      break;
+    }
+  } catch {
+    continue;
+  }
+}
+if (!swaggerDocument) {
+  logger.warn("Could not load OpenAPI spec for Swagger UI from any candidate path");
 }
 
 if (swaggerDocument) {
