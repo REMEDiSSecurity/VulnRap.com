@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2 } from "lucide-react";
+import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play } from "lucide-react";
 import { LogoBeams } from "@/components/laser-effects";
 import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,40 @@ function validateFile(file: File): string | null {
     return "File is empty. Please select a file with content.";
   }
   return null;
+}
+
+function VideoSection() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="max-w-2xl mx-auto w-full">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl glass-card hover:bg-primary/5 transition-colors group"
+      >
+        <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">
+          <Play className="w-4 h-4" />
+          Watch the intro
+        </span>
+        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="mt-2 rounded-xl glass-card-accent overflow-hidden">
+          <video
+            className="w-full"
+            controls
+            playsInline
+            autoPlay
+            preload="metadata"
+          >
+            <source src={`${import.meta.env.BASE_URL}vulnrap-intro.mp4`} type="video/mp4" />
+            Your browser does not support video playback.
+          </video>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Explainer({ text }: { text: string }) {
@@ -255,17 +289,7 @@ export default function Home() {
         </p>
       </div>
 
-      <div className="rounded-xl glass-card-accent overflow-hidden">
-        <video
-          className="w-full"
-          controls
-          playsInline
-          preload="metadata"
-        >
-          <source src={`${import.meta.env.BASE_URL}vulnrap-intro.mp4`} type="video/mp4" />
-          Your browser does not support video playback.
-        </video>
-      </div>
+      <VideoSection />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="feature-card flex items-start gap-3 p-5 rounded-xl glass-card">
