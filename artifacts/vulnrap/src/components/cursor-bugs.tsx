@@ -18,9 +18,9 @@ interface Point {
 }
 
 const MAX_PATH_POINTS = 120;
-const MAX_BUGS = 4;
-const SPAWN_DISTANCE = 180;
-const BUG_FADE_RATE = 0.003;
+const MAX_BUGS = 3;
+const SPAWN_DISTANCE = 300;
+const BUG_FADE_RATE = 0.0015;
 
 function drawBug(
   ctx: CanvasRenderingContext2D,
@@ -39,64 +39,81 @@ function drawBug(
 
   const s = size;
 
-  ctx.fillStyle = "#0e7070";
+  ctx.fillStyle = "#052e2e";
   ctx.beginPath();
-  ctx.ellipse(0, 0, s * 0.55, s * 0.35, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, s * 0.45, s * 0.32, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = "#0a4f4f";
+  ctx.fillStyle = "#073838";
   ctx.beginPath();
-  ctx.ellipse(s * 0.45, 0, s * 0.25, s * 0.28, 0, 0, Math.PI * 2);
+  ctx.ellipse(-s * 0.35, 0, s * 0.22, s * 0.2, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = `rgba(0, 255, 255, ${opacity * 0.6})`;
-  ctx.lineWidth = 0.7;
+  ctx.strokeStyle = `rgba(0, 200, 200, ${opacity * 0.15})`;
+  ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.1, 0);
+  ctx.lineTo(s * 0.35, 0);
+  ctx.stroke();
 
-  const legAngles = [-0.7, -0.15, 0.4];
-  const wobbleOffset = Math.sin(wobble) * 0.15;
+  ctx.fillStyle = "#041e1e";
+  ctx.beginPath();
+  ctx.ellipse(s * 0.48, 0, s * 0.15, s * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-  for (let i = 0; i < legAngles.length; i++) {
-    const baseAngle = legAngles[i];
-    const wo = i % 2 === 0 ? wobbleOffset : -wobbleOffset;
+  ctx.strokeStyle = `rgba(0, 180, 180, ${opacity * 0.25})`;
+  ctx.lineWidth = 0.5;
+
+  const legPairs = [
+    { bodyX: -s * 0.2, spread: 0.55 },
+    { bodyX: 0, spread: 0.65 },
+    { bodyX: s * 0.2, spread: 0.5 },
+  ];
+  const wo = Math.sin(wobble) * 0.08;
+
+  for (let i = 0; i < legPairs.length; i++) {
+    const leg = legPairs[i];
+    const phase = i % 2 === 0 ? wo : -wo;
+    const endSpread = leg.spread + phase;
 
     ctx.beginPath();
-    ctx.moveTo(s * -0.1 + i * s * 0.2, s * 0.3);
+    ctx.moveTo(leg.bodyX, s * 0.28);
     ctx.quadraticCurveTo(
-      s * 0.1 + i * s * 0.15,
-      s * 0.6 + wo * s,
-      s * -0.2 + i * s * 0.3,
-      s * 0.7 + Math.sin(baseAngle + wo) * s * 0.15
+      leg.bodyX + s * 0.05,
+      s * (0.4 + phase * 0.3),
+      leg.bodyX - s * 0.05,
+      s * endSpread
     );
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(s * -0.1 + i * s * 0.2, -s * 0.3);
+    ctx.moveTo(leg.bodyX, -s * 0.28);
     ctx.quadraticCurveTo(
-      s * 0.1 + i * s * 0.15,
-      -s * 0.6 - wo * s,
-      s * -0.2 + i * s * 0.3,
-      -s * 0.7 - Math.sin(baseAngle + wo) * s * 0.15
+      leg.bodyX + s * 0.05,
+      -s * (0.4 + phase * 0.3),
+      leg.bodyX - s * 0.05,
+      -s * endSpread
     );
     ctx.stroke();
   }
 
-  ctx.fillStyle = `rgba(0, 255, 255, ${opacity * 0.9})`;
+  ctx.fillStyle = `rgba(0, 200, 210, ${opacity * 0.5})`;
   ctx.beginPath();
-  ctx.arc(s * 0.55, -s * 0.1, s * 0.06, 0, Math.PI * 2);
+  ctx.arc(s * 0.52, -s * 0.07, s * 0.03, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(s * 0.55, s * 0.1, s * 0.06, 0, Math.PI * 2);
+  ctx.arc(s * 0.52, s * 0.07, s * 0.03, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = `rgba(0, 255, 255, ${opacity * 0.3})`;
-  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = `rgba(0, 180, 180, ${opacity * 0.15})`;
+  ctx.lineWidth = 0.35;
   ctx.beginPath();
-  ctx.moveTo(s * 0.6, -s * 0.08);
-  ctx.quadraticCurveTo(s * 0.85, -s * 0.35, s * 0.75, -s * 0.5);
+  ctx.moveTo(s * 0.58, -s * 0.05);
+  ctx.quadraticCurveTo(s * 0.78, -s * 0.25, s * 0.7, -s * 0.4);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(s * 0.6, s * 0.08);
-  ctx.quadraticCurveTo(s * 0.85, s * 0.35, s * 0.75, s * 0.5);
+  ctx.moveTo(s * 0.58, s * 0.05);
+  ctx.quadraticCurveTo(s * 0.78, s * 0.25, s * 0.7, s * 0.4);
   ctx.stroke();
 
   ctx.restore();
@@ -119,11 +136,11 @@ export function CursorBugs() {
       id: idCounterRef.current++,
       pathIndex: pathRef.current.length - 1,
       progress: 0,
-      speed: 0.6 + Math.random() * 0.8,
-      opacity: 0.45 + Math.random() * 0.2,
-      size: 5 + Math.random() * 4,
+      speed: 0.15 + Math.random() * 0.2,
+      opacity: 0.2 + Math.random() * 0.12,
+      size: 5 + Math.random() * 3,
       wobble: Math.random() * Math.PI * 2,
-      wobbleSpeed: 3 + Math.random() * 4,
+      wobbleSpeed: 1.5 + Math.random() * 1.5,
       flipX: Math.random() > 0.5,
     });
   }, []);
@@ -192,7 +209,7 @@ export function CursorBugs() {
 
       for (let i = bugs.length - 1; i >= 0; i--) {
         const bug = bugs[i];
-        bug.wobble += bug.wobbleSpeed * dt * 0.05;
+        bug.wobble += bug.wobbleSpeed * dt * 0.04;
         bug.pathIndex -= bug.speed * dt;
         bug.opacity -= BUG_FADE_RATE * dt;
 
