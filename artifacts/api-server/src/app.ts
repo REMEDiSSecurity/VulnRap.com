@@ -125,7 +125,7 @@ app.use("/api", router);
 if (process.env.NODE_ENV === "production") {
   const frontendDir = path.resolve(__dirname, "..", "..", "vulnrap", "dist", "public");
   app.use(express.static(frontendDir, { maxAge: "1d" }));
-  app.get("*", (_req, res) => {
+  app.use((_req, res) => {
     res.sendFile(path.join(frontendDir, "index.html"));
   });
 }

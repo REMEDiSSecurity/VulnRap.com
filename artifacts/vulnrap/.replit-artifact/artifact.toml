@@ -17,15 +17,6 @@ localPort = 20749
 [services.development]
 run = "pnpm --filter @workspace/vulnrap run dev"
 
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/vulnrap", "run", "build" ]
-publicDir = "artifacts/vulnrap/dist/public"
-serve = "static"
-
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
-
 [services.env]
 PORT = "20749"
 BASE_PATH = "/"
