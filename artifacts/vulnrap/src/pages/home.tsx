@@ -397,7 +397,7 @@ export default function Home() {
                 <div className="flex items-start gap-3">
                   <RadioGroupItem value={SubmitReportBodyContentMode.full} id="full" className="mt-1" />
                   <div className="space-y-1">
-                    <Label htmlFor="full" className="font-bold cursor-pointer">Share with the community</Label>
+                    <Label htmlFor="full" className="font-bold cursor-pointer">Share with the community <span className="font-normal text-muted-foreground">(this is the only way this site can work)</span></Label>
                     <p className="text-xs text-muted-foreground leading-relaxed">Your report (with PII and secrets auto-removed) is saved and helps everyone detect duplicates. Best for most submissions.</p>
                   </div>
                 </div>
