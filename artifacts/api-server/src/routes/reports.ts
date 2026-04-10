@@ -284,24 +284,32 @@ router.post("/reports/check", async (req, res): Promise<void> => {
   const lshBuckets = computeLSHBuckets(minhashSignature);
   const { sectionHashes } = parseSections(analysisText);
 
-  const existingReports = await db
-    .select({
-      id: reportsTable.id,
-      minhashSignature: reportsTable.minhashSignature,
-      simhash: reportsTable.simhash,
-      lshBuckets: reportsTable.lshBuckets,
-      sectionHashes: reportsTable.sectionHashes,
-    })
-    .from(reportsTable);
+  const checkLshConditions = lshBuckets.map(bucket =>
+    dsql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
+  );
+
+  const checkCandidates = checkLshConditions.length > 0
+    ? await db
+        .select({
+          id: reportsTable.id,
+          minhashSignature: reportsTable.minhashSignature,
+          simhash: reportsTable.simhash,
+          lshBuckets: reportsTable.lshBuckets,
+          sectionHashes: reportsTable.sectionHashes,
+        })
+        .from(reportsTable)
+        .where(or(...checkLshConditions))
+        .limit(500)
+    : [];
 
   const similarityMatches = findSimilarReports(
     minhashSignature, simhash, lshBuckets,
-    existingReports as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
+    checkCandidates as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
   );
 
   const sectionMatches = findSectionMatches(
     sectionHashes,
-    existingReports as Array<{ id: number; sectionHashes: Record<string, string> }>,
+    checkCandidates as Array<{ id: number; sectionHashes: Record<string, string> }>,
   );
 
   const analysis = analyzeSloppiness(text);
