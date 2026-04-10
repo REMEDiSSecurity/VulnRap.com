@@ -52,7 +52,17 @@ export default function Home() {
       },
       onError: (err: unknown) => {
         setStage("error");
-        const message = err && typeof err === "object" && "error" in err ? String((err as Record<string, unknown>).error) : "An error occurred during analysis.";
+        let message = "An error occurred during analysis.";
+        if (err && typeof err === "object") {
+          const e = err as Record<string, unknown>;
+          if ("data" in e && e.data && typeof e.data === "object" && "error" in (e.data as Record<string, unknown>)) {
+            message = String((e.data as Record<string, unknown>).error);
+          } else if ("message" in e && typeof e.message === "string") {
+            message = e.message;
+          } else if ("error" in e) {
+            message = String(e.error);
+          }
+        }
         toast({
           title: "Upload failed",
           description: message,

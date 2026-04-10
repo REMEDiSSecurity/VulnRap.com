@@ -13,7 +13,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
-- **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + wouter routing
+- **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + React Router v7
 - **UI library**: Radix UI + shadcn/ui components
 - **Data fetching**: TanStack React Query + Orval-generated hooks
 - **Database**: PostgreSQL + Drizzle ORM
@@ -33,7 +33,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
   - `/stats` — Platform statistics dashboard (metrics, distribution histogram, recent activity)
   - `/privacy` — Privacy & security explanation page
 - Uses generated API hooks from `@workspace/api-client-react`
-- File upload supports .txt, .md, .pdf (20MB max)
+- File upload supports .txt, .md (20MB max, client-side validated)
 
 ### Similarity Engine (`artifacts/api-server/src/lib/similarity.ts`)
 - MinHash + Locality Sensitive Hashing (LSH) for near-duplicate detection
