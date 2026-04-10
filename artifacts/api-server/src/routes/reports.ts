@@ -346,6 +346,7 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   });
 
   const response = GetReportFeedResponse.parse({ reports: mapped });
+  res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
   res.json(response);
 });
 

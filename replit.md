@@ -21,14 +21,17 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (API server), Vite (frontend)
 - **Security**: helmet.js, express-rate-limit, multer (file uploads)
+- **Compression**: compression middleware on API server
 - **API docs**: swagger-ui-express served at `/api/docs`
 
 ## Architecture
 
 ### Frontend (`artifacts/vulnrap/`)
 - React + Vite app at root path "/"
+- Route-level code splitting with React.lazy() + Suspense for faster initial load
 - Dark terminal-inspired aesthetic with cyan/violet accents, Space Mono font
-- Custom AI-generated logo: synthetic bug inspected by lasers (`src/assets/logo.png`)
+- Animated laser visual effects: background beams, ambient flashes, scan line (respects prefers-reduced-motion)
+- Custom AI-generated logo: synthetic bug inspected by lasers (`src/assets/logo.png`, compressed to ~355KB)
 - Pages:
   - `/` — Home/submit with logo hero, 3 feature explainer cards, drag-and-drop upload, privacy mode selector, "How It Works" steps, hover hint tooltips
   - `/results/:id` — Analysis results: slop score, auto-redaction summary, similarity matches, section-level analysis with per-section hashes, feedback, expandable redacted report view, verification badge with copy buttons

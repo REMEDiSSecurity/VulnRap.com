@@ -13,6 +13,7 @@
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
+    "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
     "drizzle-orm": "catalog:",
@@ -28,6 +29,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { sql, gte, and } from "drizzle-orm";
+import { sql, gte } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { reportsTable } from "@workspace/db";
 import {
@@ -57,6 +57,7 @@ router.get("/stats", async (_req, res): Promise<void> => {
     reportsThisWeek: weekCounts.count,
   });
 
+  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
   res.json(response);
 });
 
@@ -94,7 +95,7 @@ router.get("/stats/recent", async (_req, res): Promise<void> => {
 });
 
 router.get("/stats/distribution", async (_req, res): Promise<void> => {
-  const buckets = [
+  const bucketDefs = [
     { label: "Probably Legit", min: 0, max: 14 },
     { label: "Mildly Suspicious", min: 15, max: 29 },
     { label: "Questionable", min: 30, max: 49 },
@@ -102,32 +103,26 @@ router.get("/stats/distribution", async (_req, res): Promise<void> => {
     { label: "Pure Slop", min: 70, max: 100 },
   ];
 
-  const results = await Promise.all(
-    buckets.map(async (bucket) => {
-      const [result] = await db
-        .select({
-          count: sql<number>`count(*)::int`,
-        })
-        .from(reportsTable)
-        .where(
-          and(
-            gte(reportsTable.slopScore, bucket.min),
-            sql`${reportsTable.slopScore} <= ${bucket.max}`
-          )
-        );
-      return { ...bucket, count: result.count };
+  const [row] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      b0: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 0 and ${reportsTable.slopScore} <= 14)::int`,
+      b1: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 15 and ${reportsTable.slopScore} <= 29)::int`,
+      b2: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 30 and ${reportsTable.slopScore} <= 49)::int`,
+      b3: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 50 and ${reportsTable.slopScore} <= 69)::int`,
+      b4: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 70 and ${reportsTable.slopScore} <= 100)::int`,
     })
-  );
-
-  const [total] = await db
-    .select({ count: sql<number>`count(*)::int` })
     .from(reportsTable);
 
+  const counts = [row.b0, row.b1, row.b2, row.b3, row.b4];
+  const buckets = bucketDefs.map((def, i) => ({ ...def, count: counts[i] }));
+
   const response = GetSlopDistributionResponse.parse({
-    buckets: results,
-    totalReports: total.count,
+    buckets,
+    totalReports: row.total,
   });
 
+  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
   res.json(response);
 });
 
