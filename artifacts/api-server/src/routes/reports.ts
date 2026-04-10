@@ -6,15 +6,12 @@ import { reportsTable, reportHashesTable, similarityResultsTable, reportStatsTab
 import {
   GetReportParams,
   GetReportResponse,
+  GetVerificationParams,
+  GetVerificationResponse,
+  CheckReportResponse,
   LookupByHashParams,
   LookupByHashResponse,
 } from "@workspace/api-zod";
-import { z } from "zod/v4";
-
-const SubmitReportBodySchema = z.object({
-  file: z.string(),
-  contentMode: z.enum(["full", "similarity_only"]).default("full"),
-});
 import { computeMinHash, computeSimhash, computeContentHash, computeLSHBuckets, findSimilarReports } from "../lib/similarity";
 import { analyzeSloppiness } from "../lib/sloppiness";
 import { redactReport } from "../lib/redactor";
@@ -211,6 +208,185 @@ router.post("/reports", async (req, res): Promise<void> => {
   });
 
   res.status(201).json(response);
+});
+
+function anonymizeId(id: number): string {
+  return `VR-${id.toString(16).padStart(4, "0").toUpperCase()}`;
+}
+
+router.post("/reports/check", (req, res, next): void => {
+  upload.single("file")(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({ error: "File exceeds 20MB limit." });
+        return;
+      }
+      res.status(400).json({ error: err.message || "Upload failed." });
+      return;
+    }
+    next();
+  });
+});
+
+router.post("/reports/check", async (req, res): Promise<void> => {
+  let text: string;
+  const rawText = typeof req.body.rawText === "string" ? req.body.rawText : "";
+
+  if (req.file) {
+    const fileName = req.file.originalname.toLowerCase();
+    if (fileName.endsWith(".pdf") || req.file.mimetype === "application/pdf") {
+      const pdfResult = await extractTextFromPdf(req.file.buffer);
+      if (!pdfResult.success) {
+        res.status(400).json({ error: pdfResult.error });
+        return;
+      }
+      text = sanitizeText(pdfResult.text);
+    } else {
+      text = sanitizeText(req.file.buffer.toString("utf-8"));
+    }
+  } else if (rawText.length > 0) {
+    text = sanitizeText(rawText);
+    if (Buffer.byteLength(rawText, "utf-8") > MAX_FILE_SIZE) {
+      res.status(413).json({ error: "Text exceeds 20MB limit." });
+      return;
+    }
+  } else {
+    res.status(400).json({ error: "No content provided. Upload a file or paste report text." });
+    return;
+  }
+
+  if (text.length === 0) {
+    res.status(400).json({ error: "Content is empty or contains no readable text." });
+    return;
+  }
+
+  const { redactedText, summary: redactionSummary } = redactReport(text);
+  const analysisText = redactedText;
+
+  const contentHash = computeContentHash(analysisText);
+  const simhash = computeSimhash(analysisText);
+  const minhashSignature = computeMinHash(analysisText);
+  const lshBuckets = computeLSHBuckets(minhashSignature);
+  const { sectionHashes } = parseSections(analysisText);
+
+  const existingReports = await db
+    .select({
+      id: reportsTable.id,
+      minhashSignature: reportsTable.minhashSignature,
+      simhash: reportsTable.simhash,
+      lshBuckets: reportsTable.lshBuckets,
+      sectionHashes: reportsTable.sectionHashes,
+    })
+    .from(reportsTable);
+
+  const similarityMatches = findSimilarReports(
+    minhashSignature, simhash, lshBuckets,
+    existingReports as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
+  );
+
+  const sectionMatches = findSectionMatches(
+    sectionHashes,
+    existingReports as Array<{ id: number; sectionHashes: Record<string, string> }>,
+  );
+
+  const analysis = analyzeSloppiness(text);
+
+  const [existingReport] = await db
+    .select({ id: reportsTable.id })
+    .from(reportsTable)
+    .where(eq(reportsTable.contentHash, contentHash));
+
+  const response = CheckReportResponse.parse({
+    slopScore: analysis.score,
+    slopTier: analysis.tier,
+    similarityMatches,
+    sectionHashes,
+    sectionMatches,
+    redactionSummary,
+    feedback: analysis.feedback,
+    previouslySubmitted: !!existingReport,
+    existingReportId: existingReport?.id ?? null,
+  });
+
+  res.json(response);
+});
+
+router.get("/reports/lookup/:hash", async (req, res): Promise<void> => {
+  const params = LookupByHashParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [report] = await db
+    .select()
+    .from(reportsTable)
+    .where(eq(reportsTable.contentHash, params.data.hash));
+
+  if (!report) {
+    const response = LookupByHashResponse.parse({
+      found: false,
+      reportId: null,
+      slopScore: null,
+      slopTier: null,
+      matchCount: 0,
+      firstSeen: null,
+    });
+    res.json(response);
+    return;
+  }
+
+  const matches = (report.similarityMatches as Array<{ reportId: number; similarity: number; matchType: string }>);
+
+  const response = LookupByHashResponse.parse({
+    found: true,
+    reportId: report.id,
+    slopScore: report.slopScore,
+    slopTier: report.slopTier,
+    matchCount: matches.length,
+    firstSeen: report.createdAt,
+  });
+
+  res.json(response);
+});
+
+router.get("/reports/:id/verify", async (req, res): Promise<void> => {
+  const params = GetVerificationParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [report] = await db
+    .select()
+    .from(reportsTable)
+    .where(eq(reportsTable.id, params.data.id));
+
+  if (!report) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+
+  const matches = (report.similarityMatches as Array<{ reportId: number }>) || [];
+  const secMatches = (report.sectionMatches as Array<{ sectionTitle: string }>) || [];
+
+  const host = req.get("host") || "vulnrap.com";
+  const protocol = req.get("x-forwarded-proto") || req.protocol;
+  const verifyUrl = `${protocol}://${host}/verify/${report.id}`;
+
+  const response = GetVerificationResponse.parse({
+    id: report.id,
+    reportCode: anonymizeId(report.id),
+    slopScore: report.slopScore,
+    slopTier: report.slopTier,
+    similarityMatchCount: matches.length,
+    sectionMatchCount: secMatches.length,
+    contentHash: report.contentHash,
+    verifyUrl,
+    createdAt: report.createdAt,
+  });
+
+  res.json(response);
 });
 
 router.get("/reports/:id", async (req, res): Promise<void> => {

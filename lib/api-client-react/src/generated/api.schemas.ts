@@ -83,6 +83,39 @@ export interface ReportAnalysis {
   createdAt: string;
 }
 
+export interface VerificationBadge {
+  id: number;
+  /** Human-readable report code (e.g. VR-000B) */
+  reportCode: string;
+  slopScore: number;
+  slopTier: string;
+  similarityMatchCount: number;
+  sectionMatchCount: number;
+  contentHash: string;
+  /** Public URL to verify this report */
+  verifyUrl: string;
+  createdAt: string;
+}
+
+export type CheckResultSectionHashes = { [key: string]: string };
+
+export interface CheckResult {
+  slopScore: number;
+  slopTier: string;
+  similarityMatches: SimilarityMatch[];
+  sectionHashes: CheckResultSectionHashes;
+  sectionMatches: SectionMatchItem[];
+  redactionSummary: RedactionSummary;
+  feedback: string[];
+  /** Whether this exact report was found in the database */
+  previouslySubmitted: boolean;
+  /**
+   * If previously submitted, the existing report ID
+   * @nullable
+   */
+  existingReportId?: number | null;
+}
+
 export interface HashLookupResult {
   found: boolean;
   /** @nullable */
@@ -153,4 +186,11 @@ export type SubmitReportBody = {
   rawText?: string;
   /** Privacy mode — full shares content, similarity_only stores only hashes */
   contentMode: SubmitReportBodyContentMode;
+};
+
+export type CheckReportBody = {
+  /** The vulnerability report file (.txt, .md, .pdf) */
+  file?: Blob;
+  /** Plain text content of the vulnerability report */
+  rawText?: string;
 };

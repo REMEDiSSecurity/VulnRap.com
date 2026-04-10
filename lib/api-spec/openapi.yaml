@@ -108,6 +108,67 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /reports/{id}/verify:
+    get:
+      operationId: getVerification
+      tags: [reports]
+      summary: Get verification badge data for a report
+      description: Returns a lightweight verification summary for embedding in bug reports
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Verification data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationBadge"
+        "404":
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reports/check:
+    post:
+      operationId: checkReport
+      tags: [reports]
+      summary: Check a report against the database without storing it
+      description: For report receivers -- analyze a report for similarity and sloppiness without adding it to the database
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The vulnerability report file (.txt, .md, .pdf)
+                rawText:
+                  type: string
+                  description: Plain text content of the vulnerability report
+              required: []
+      responses:
+        "200":
+          description: Check results (not stored)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /reports/lookup/{hash}:
     get:
       operationId: lookupByHash
@@ -296,6 +357,82 @@ components:
         - feedback
         - fileSize
         - createdAt
+
+    VerificationBadge:
+      type: object
+      properties:
+        id:
+          type: integer
+        reportCode:
+          type: string
+          description: Human-readable report code (e.g. VR-000B)
+        slopScore:
+          type: integer
+        slopTier:
+          type: string
+        similarityMatchCount:
+          type: integer
+        sectionMatchCount:
+          type: integer
+        contentHash:
+          type: string
+        verifyUrl:
+          type: string
+          description: Public URL to verify this report
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - reportCode
+        - slopScore
+        - slopTier
+        - similarityMatchCount
+        - sectionMatchCount
+        - contentHash
+        - verifyUrl
+        - createdAt
+
+    CheckResult:
+      type: object
+      properties:
+        slopScore:
+          type: integer
+        slopTier:
+          type: string
+        similarityMatches:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimilarityMatch"
+        sectionHashes:
+          type: object
+          additionalProperties:
+            type: string
+        sectionMatches:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectionMatchItem"
+        redactionSummary:
+          $ref: "#/components/schemas/RedactionSummary"
+        feedback:
+          type: array
+          items:
+            type: string
+        previouslySubmitted:
+          type: boolean
+          description: Whether this exact report was found in the database
+        existingReportId:
+          type: ["integer", "null"]
+          description: If previously submitted, the existing report ID
+      required:
+        - slopScore
+        - slopTier
+        - similarityMatches
+        - sectionHashes
+        - sectionMatches
+        - redactionSummary
+        - feedback
+        - previouslySubmitted
 
     HashLookupResult:
       type: object

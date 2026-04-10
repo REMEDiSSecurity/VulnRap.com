@@ -1,11 +1,11 @@
 import { useParams } from "react-router-dom";
-import { useGetReport, getGetReportQueryKey } from "@workspace/api-client-react";
+import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers } from "lucide-react";
+import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -82,6 +82,13 @@ export default function Results() {
     }
   });
 
+  const { data: verification } = useGetVerification(id, {
+    query: {
+      enabled: !!id,
+      queryKey: getGetVerificationQueryKey(id),
+    },
+  });
+
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     toast({ title: "Link copied", description: "Shareable link copied to clipboard." });
@@ -90,6 +97,28 @@ export default function Results() {
   const copyHash = (hash: string) => {
     navigator.clipboard.writeText(hash);
     toast({ title: "Hash copied", description: "Hash copied to clipboard." });
+  };
+
+  const copyBadgeMarkdown = () => {
+    if (!verification) return;
+    const md = `**VulnRap Verified** | Score: ${verification.slopScore}/100 (${verification.slopTier}) | ${verification.similarityMatchCount} similar reports | Verify: ${verification.verifyUrl}`;
+    navigator.clipboard.writeText(md);
+    toast({ title: "Badge copied", description: "Paste this into your bug report submission." });
+  };
+
+  const copyBadgePlain = () => {
+    if (!verification) return;
+    const lines = [
+      `--- VulnRap Verification ---`,
+      `Report: ${verification.reportCode}`,
+      `Slop Score: ${verification.slopScore}/100 (${verification.slopTier})`,
+      `Similar Reports: ${verification.similarityMatchCount}`,
+      `Hash: ${verification.contentHash}`,
+      `Verify: ${verification.verifyUrl}`,
+      `---`,
+    ].join("\n");
+    navigator.clipboard.writeText(lines);
+    toast({ title: "Badge copied", description: "Paste this into your bug report submission." });
   };
 
   if (isLoading) {

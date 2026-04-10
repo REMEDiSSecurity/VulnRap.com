@@ -98,6 +98,81 @@ export const GetReportResponse = zod.object({
 });
 
 /**
+ * Returns a lightweight verification summary for embedding in bug reports
+ * @summary Get verification badge data for a report
+ */
+export const GetVerificationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetVerificationResponse = zod.object({
+  id: zod.number(),
+  reportCode: zod
+    .string()
+    .describe("Human-readable report code (e.g. VR-000B)"),
+  slopScore: zod.number(),
+  slopTier: zod.string(),
+  similarityMatchCount: zod.number(),
+  sectionMatchCount: zod.number(),
+  contentHash: zod.string(),
+  verifyUrl: zod.string().describe("Public URL to verify this report"),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * For report receivers -- analyze a report for similarity and sloppiness without adding it to the database
+ * @summary Check a report against the database without storing it
+ */
+export const CheckReportBody = zod.object({
+  file: zod
+    .instanceof(File)
+    .optional()
+    .describe("The vulnerability report file (.txt, .md, .pdf)"),
+  rawText: zod
+    .string()
+    .optional()
+    .describe("Plain text content of the vulnerability report"),
+});
+
+export const CheckReportResponse = zod.object({
+  slopScore: zod.number(),
+  slopTier: zod.string(),
+  similarityMatches: zod.array(
+    zod.object({
+      reportId: zod.number(),
+      similarity: zod.number().describe("Similarity percentage (0-100)"),
+      matchType: zod.enum([
+        "near-duplicate",
+        "high-similarity",
+        "structural",
+        "semantic",
+      ]),
+    }),
+  ),
+  sectionHashes: zod.record(zod.string(), zod.string()),
+  sectionMatches: zod.array(
+    zod.object({
+      sectionTitle: zod.string(),
+      matchedReportId: zod.number(),
+      matchedSectionTitle: zod.string(),
+      similarity: zod.number(),
+    }),
+  ),
+  redactionSummary: zod.object({
+    totalRedactions: zod.number(),
+    categories: zod.record(zod.string(), zod.number()),
+  }),
+  feedback: zod.array(zod.string()),
+  previouslySubmitted: zod
+    .boolean()
+    .describe("Whether this exact report was found in the database"),
+  existingReportId: zod
+    .number()
+    .nullish()
+    .describe("If previously submitted, the existing report ID"),
+});
+
+/**
  * Check if a report with the given SHA-256 content hash has been seen before
  * @summary Look up a report by content hash
  */

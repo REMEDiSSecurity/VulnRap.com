@@ -17,6 +17,8 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  CheckReportBody,
+  CheckResult,
   ErrorResponse,
   HashLookupResult,
   HealthStatus,
@@ -25,6 +27,7 @@ import type {
   ReportAnalysis,
   SlopDistribution,
   SubmitReportBody,
+  VerificationBadge,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -292,6 +295,188 @@ export function useGetReport<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Returns a lightweight verification summary for embedding in bug reports
+ * @summary Get verification badge data for a report
+ */
+export const getGetVerificationUrl = (id: number) => {
+  return `/api/reports/${id}/verify`;
+};
+
+export const getVerification = async (
+  id: number,
+  options?: RequestInit,
+): Promise<VerificationBadge> => {
+  return customFetch<VerificationBadge>(getGetVerificationUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetVerificationQueryKey = (id: number) => {
+  return [`/api/reports/${id}/verify`] as const;
+};
+
+export const getGetVerificationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getVerification>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getVerification>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetVerificationQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getVerification>>> = ({
+    signal,
+  }) => getVerification(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getVerification>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetVerificationQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getVerification>>
+>;
+export type GetVerificationQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get verification badge data for a report
+ */
+
+export function useGetVerification<
+  TData = Awaited<ReturnType<typeof getVerification>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getVerification>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetVerificationQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * For report receivers -- analyze a report for similarity and sloppiness without adding it to the database
+ * @summary Check a report against the database without storing it
+ */
+export const getCheckReportUrl = () => {
+  return `/api/reports/check`;
+};
+
+export const checkReport = async (
+  checkReportBody: CheckReportBody,
+  options?: RequestInit,
+): Promise<CheckResult> => {
+  const formData = new FormData();
+  if (checkReportBody.file !== undefined) {
+    formData.append(`file`, checkReportBody.file);
+  }
+  if (checkReportBody.rawText !== undefined) {
+    formData.append(`rawText`, checkReportBody.rawText);
+  }
+
+  return customFetch<CheckResult>(getCheckReportUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getCheckReportMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkReport>>,
+    TError,
+    { data: BodyType<CheckReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkReport>>,
+  TError,
+  { data: BodyType<CheckReportBody> },
+  TContext
+> => {
+  const mutationKey = ["checkReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkReport>>,
+    { data: BodyType<CheckReportBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return checkReport(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CheckReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkReport>>
+>;
+export type CheckReportMutationBody = BodyType<CheckReportBody>;
+export type CheckReportMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Check a report against the database without storing it
+ */
+export const useCheckReport = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkReport>>,
+    TError,
+    { data: BodyType<CheckReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof checkReport>>,
+  TError,
+  { data: BodyType<CheckReportBody> },
+  TContext
+> => {
+  return useMutation(getCheckReportMutationOptions(options));
+};
 
 /**
  * Check if a report with the given SHA-256 content hash has been seen before

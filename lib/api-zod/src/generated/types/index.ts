@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./checkReportBody";
+export * from "./checkResult";
+export * from "./checkResultSectionHashes";
 export * from "./errorResponse";
 export * from "./hashLookupResult";
 export * from "./healthStatus";
@@ -25,3 +28,4 @@ export * from "./slopDistribution";
 export * from "./slopDistributionBucketsItem";
 export * from "./submitReportBody";
 export * from "./submitReportBodyContentMode";
+export * from "./verificationBadge";
