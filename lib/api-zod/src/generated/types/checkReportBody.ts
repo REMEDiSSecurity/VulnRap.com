@@ -11,4 +11,6 @@ export type CheckReportBody = {
   file?: Blob;
   /** Plain text content of the vulnerability report */
   rawText?: string;
+  /** HTTPS URL to a plain-text report (GitHub raw, Gist, GitLab, Pastebin, etc.). Auto-converts GitHub blob URLs to raw. Max 5MB. */
+  reportUrl?: string;
 };

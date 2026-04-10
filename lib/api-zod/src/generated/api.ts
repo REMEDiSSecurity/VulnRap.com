@@ -33,7 +33,13 @@ export const SubmitReportBody = zod.object({
     .string()
     .optional()
     .describe(
-      "Plain text content of the vulnerability report. Either file or rawText must be provided.",
+      "Plain text content of the vulnerability report. Either file, rawText, or reportUrl must be provided.",
+    ),
+  reportUrl: zod
+    .string()
+    .optional()
+    .describe(
+      "HTTPS URL to a plain-text report (GitHub raw, Gist, GitLab, Pastebin, etc.). Auto-converts GitHub blob URLs to raw. Max 5MB.",
     ),
   contentMode: zod
     .enum(["full", "similarity_only"])
@@ -137,6 +143,12 @@ export const CheckReportBody = zod.object({
     .string()
     .optional()
     .describe("Plain text content of the vulnerability report"),
+  reportUrl: zod
+    .string()
+    .optional()
+    .describe(
+      "HTTPS URL to a plain-text report (GitHub raw, Gist, GitLab, Pastebin, etc.). Auto-converts GitHub blob URLs to raw. Max 5MB.",
+    ),
 });
 
 export const CheckReportResponse = zod.object({

@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X } from "lucide-react";
+import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2 } from "lucide-react";
 import { LogoBeams } from "@/components/laser-effects";
 import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ function timeAgo(date: string): string {
   return new Date(date).toLocaleDateString();
 }
 
-type InputMode = "file" | "text";
+type InputMode = "file" | "text" | "link";
 type UploadStage = "idle" | "uploading" | "analyzing" | "done" | "error";
 
 function validateFile(file: File): string | null {
@@ -78,6 +78,7 @@ export default function Home() {
   const [inputMode, setInputMode] = useState<InputMode>("file");
   const [file, setFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState("");
+  const [reportUrl, setReportUrl] = useState("");
   const [fileError, setFileError] = useState<string | null>(null);
   const [mode, setMode] = useState<SubmitReportBodyContentMode>(SubmitReportBodyContentMode.full);
   const [showInFeed, setShowInFeed] = useState(true);
@@ -155,6 +156,7 @@ export default function Home() {
   };
 
   const handleSubmit = () => {
+    const feedVal = (mode === "full" && showInFeed) ? "true" : "false";
     if (inputMode === "file") {
       if (!file) {
         toast({ title: "No file selected", description: "Please select a report file first.", variant: "destructive" });
@@ -166,7 +168,18 @@ export default function Home() {
         toast({ title: "Invalid file", description: error, variant: "destructive" });
         return;
       }
-      submitMutation.mutate({ data: { file, contentMode: mode, showInFeed: (mode === "full" && showInFeed) ? "true" : "false" } });
+      submitMutation.mutate({ data: { file, contentMode: mode, showInFeed: feedVal } });
+    } else if (inputMode === "link") {
+      const trimmedUrl = reportUrl.trim();
+      if (!trimmedUrl) {
+        toast({ title: "No URL entered", description: "Please enter a link to a report.", variant: "destructive" });
+        return;
+      }
+      try { new URL(trimmedUrl); } catch {
+        toast({ title: "Invalid URL", description: "Please enter a valid HTTPS URL.", variant: "destructive" });
+        return;
+      }
+      submitMutation.mutate({ data: { reportUrl: trimmedUrl, contentMode: mode, showInFeed: feedVal } as any });
     } else {
       const trimmed = rawText.trim();
       if (trimmed.length === 0) {
@@ -177,11 +190,11 @@ export default function Home() {
         toast({ title: "Text too large", description: "Pasted text exceeds the 20MB limit.", variant: "destructive" });
         return;
       }
-      submitMutation.mutate({ data: { rawText: trimmed, contentMode: mode, showInFeed: (mode === "full" && showInFeed) ? "true" : "false" } });
+      submitMutation.mutate({ data: { rawText: trimmed, contentMode: mode, showInFeed: feedVal } });
     }
   };
 
-  const hasContent = inputMode === "file" ? !!file : rawText.trim().length > 0;
+  const hasContent = inputMode === "file" ? !!file : inputMode === "link" ? reportUrl.trim().length > 0 : rawText.trim().length > 0;
   const isProcessing = stage === "uploading" || stage === "analyzing" || stage === "done";
 
   const getButtonContent = () => {
@@ -291,7 +304,7 @@ export default function Home() {
             Submit Report
             <Explainer text="Submit a vulnerability report for analysis. Upload a file or paste your report text directly. We'll analyze it for AI-generated content and check it against previously submitted reports for similarity." />
           </CardTitle>
-          <CardDescription>Upload a file or paste text directly (Max 20MB)</CardDescription>
+          <CardDescription>Upload a file, paste text, or link to a report (Max 20MB)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
           <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 px-4 py-3 text-xs text-muted-foreground leading-relaxed">
@@ -325,6 +338,20 @@ export default function Home() {
             >
               <ClipboardPaste className="w-4 h-4" />
               Paste Text
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-all border-l border-border/30",
+                inputMode === "link"
+                  ? "bg-primary text-primary-foreground glow-button"
+                  : "hover:bg-muted/30 text-muted-foreground"
+              )}
+              onClick={() => { setInputMode("link"); setStage("idle"); }}
+              data-testid="tab-link"
+            >
+              <Link2 className="w-4 h-4" />
+              Link
             </button>
           </div>
 
@@ -383,7 +410,7 @@ export default function Home() {
               </>
             )}
           </div>
-          ) : (
+          ) : inputMode === "text" ? (
           <div className="space-y-2">
             <textarea
               data-testid="input-rawtext"
@@ -406,6 +433,37 @@ export default function Home() {
                   Clear text
                 </button>
               )}
+            </div>
+          </div>
+          ) : (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <input
+                type="url"
+                data-testid="input-url"
+                className="w-full rounded-xl glass-card px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/40 bg-transparent"
+                placeholder="https://github.com/user/repo/blob/main/report.md"
+                value={reportUrl}
+                onChange={(e) => { setReportUrl(e.target.value); setStage("idle"); }}
+                spellCheck={false}
+                autoComplete="off"
+              />
+              {reportUrl.trim().length > 0 && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                    onClick={() => { setReportUrl(""); setStage("idle"); }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="rounded-lg bg-muted/30 px-4 py-3 text-xs text-muted-foreground leading-relaxed space-y-1.5">
+              <p className="font-medium text-foreground/80">Supported sources:</p>
+              <p>GitHub (blob URLs auto-converted to raw), GitHub Gists, GitLab, Pastebin, dpaste, hastebin, paste.debian.net</p>
+              <p>HTTPS only — max 5MB. The URL must point to plain text, not an HTML page.</p>
             </div>
           </div>
           )}

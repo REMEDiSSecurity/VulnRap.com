@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { UploadCloud, Shield, Loader2, CheckCircle, XCircle, Search, AlertTriangle, ClipboardPaste, Hash, Layers, Lightbulb, ShieldCheck, HelpCircle, ExternalLink } from "lucide-react";
+import { UploadCloud, Shield, Loader2, CheckCircle, XCircle, Search, AlertTriangle, ClipboardPaste, Hash, Layers, Lightbulb, ShieldCheck, HelpCircle, ExternalLink, Link2 } from "lucide-react";
 import { useCheckReport } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { Link } from "react-router-dom";
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
 
-type InputMode = "file" | "text";
+type InputMode = "file" | "text" | "link";
 
 function validateFile(file: File): string | null {
   const ext = file.name.toLowerCase();
@@ -74,6 +74,7 @@ export default function Check() {
   const [inputMode, setInputMode] = useState<InputMode>("text");
   const [file, setFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState("");
+  const [reportUrl, setReportUrl] = useState("");
   const [fileError, setFileError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +110,17 @@ export default function Check() {
       const error = validateFile(file);
       if (error) { setFileError(error); return; }
       checkMutation.mutate({ data: { file } });
+    } else if (inputMode === "link") {
+      const trimmedUrl = reportUrl.trim();
+      if (!trimmedUrl) {
+        toast({ title: "No URL entered", description: "Please enter a link to a report.", variant: "destructive" });
+        return;
+      }
+      try { new URL(trimmedUrl); } catch {
+        toast({ title: "Invalid URL", description: "Please enter a valid HTTPS URL.", variant: "destructive" });
+        return;
+      }
+      checkMutation.mutate({ data: { reportUrl: trimmedUrl } as any });
     } else {
       const trimmed = rawText.trim();
       if (!trimmed) {
@@ -119,7 +131,7 @@ export default function Check() {
     }
   };
 
-  const hasContent = inputMode === "file" ? !!file : rawText.trim().length > 0;
+  const hasContent = inputMode === "file" ? !!file : inputMode === "link" ? reportUrl.trim().length > 0 : rawText.trim().length > 0;
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -138,7 +150,7 @@ export default function Check() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Search className="w-5 h-5 text-primary" />
-            Paste or Upload the Report
+            Paste, Upload, or Link the Report
             <Hint text="This check runs the full analysis pipeline (redaction, similarity, slop scoring) but does NOT store the report in our database. Use this to validate incoming reports without contributing to the corpus." />
           </CardTitle>
           <CardDescription>Auto-redacted during analysis, then discarded -- nothing is saved</CardDescription>
@@ -170,6 +182,17 @@ export default function Check() {
               <UploadCloud className="w-4 h-4" />
               Upload File
             </button>
+            <button
+              type="button"
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-all border-l border-border/30",
+                inputMode === "link" ? "bg-primary text-primary-foreground glow-button" : "hover:bg-muted/30 text-muted-foreground"
+              )}
+              onClick={() => setInputMode("link")}
+            >
+              <Link2 className="w-4 h-4" />
+              Link
+            </button>
           </div>
 
           {inputMode === "text" ? (
@@ -189,6 +212,32 @@ export default function Check() {
                     Clear
                   </button>
                 )}
+              </div>
+            </div>
+          ) : inputMode === "link" ? (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <input
+                  type="url"
+                  className="w-full rounded-xl glass-card px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/40 bg-transparent"
+                  placeholder="https://github.com/user/repo/blob/main/report.md"
+                  value={reportUrl}
+                  onChange={(e) => setReportUrl(e.target.value)}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                {reportUrl.trim().length > 0 && (
+                  <div className="flex justify-end">
+                    <button type="button" className="text-xs text-muted-foreground hover:text-destructive transition-colors" onClick={() => setReportUrl("")}>
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="rounded-lg bg-muted/30 px-4 py-3 text-xs text-muted-foreground leading-relaxed space-y-1.5">
+                <p className="font-medium text-foreground/80">Supported sources:</p>
+                <p>GitHub (blob URLs auto-converted to raw), GitHub Gists, GitLab, Pastebin, dpaste, hastebin, paste.debian.net</p>
+                <p>HTTPS only — max 5MB. The URL must point to plain text, not an HTML page.</p>
               </div>
             </div>
           ) : (

@@ -50,7 +50,10 @@ paths:
                   description: The vulnerability report file (.txt, .md, .pdf). Either file or rawText must be provided.
                 rawText:
                   type: string
-                  description: Plain text content of the vulnerability report. Either file or rawText must be provided.
+                  description: Plain text content of the vulnerability report. Either file, rawText, or reportUrl must be provided.
+                reportUrl:
+                  type: string
+                  description: HTTPS URL to a plain-text report (GitHub raw, Gist, GitLab, Pastebin, etc.). Auto-converts GitHub blob URLs to raw. Max 5MB.
                 contentMode:
                   type: string
                   enum: [full, similarity_only]
@@ -161,6 +164,9 @@ paths:
                 rawText:
                   type: string
                   description: Plain text content of the vulnerability report
+                reportUrl:
+                  type: string
+                  description: HTTPS URL to a plain-text report (GitHub raw, Gist, GitLab, Pastebin, etc.). Auto-converts GitHub blob URLs to raw. Max 5MB.
               required: []
       responses:
         "200":

@@ -36,8 +36,14 @@ const endpoints = [
     description: "Upload a vulnerability report for full analysis — similarity matching, AI slop scoring, auto-redaction, and section-level hashing.",
     badge: "Write",
     badgeColor: "border-green-500 text-green-500",
-    example: `curl -X POST https://vulnrap.com/api/reports \\
+    example: `# Upload a file
+curl -X POST https://vulnrap.com/api/reports \\
   -F "file=@my-report.txt" \\
+  -F "contentMode=full"
+
+# Or submit via URL (GitHub, Gist, GitLab, Pastebin, etc.)
+curl -X POST https://vulnrap.com/api/reports \\
+  -F "reportUrl=https://github.com/user/repo/blob/main/report.md" \\
   -F "contentMode=full"`,
     responseHint: "Returns report ID, slop score, similarity matches, redaction summary",
   },
@@ -48,8 +54,13 @@ const endpoints = [
     description: "Run the full analysis pipeline without storing anything. Ideal for PSIRT teams validating incoming reports.",
     badge: "Read-Only",
     badgeColor: "border-cyan-500 text-cyan-500",
-    example: `curl -X POST https://vulnrap.com/api/reports/check \\
-  -F "rawText=Your report text here..."`,
+    example: `# Paste text directly
+curl -X POST https://vulnrap.com/api/reports/check \\
+  -F "rawText=Your report text here..."
+
+# Or check via URL
+curl -X POST https://vulnrap.com/api/reports/check \\
+  -F "reportUrl=https://gist.github.com/user/abc123"`,
     responseHint: "Returns slop score, similarity matches, section hashes — nothing saved",
   },
   {

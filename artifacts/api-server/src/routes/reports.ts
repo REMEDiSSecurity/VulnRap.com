@@ -20,8 +20,133 @@ import { parseSections, findSectionMatches } from "../lib/section-parser";
 import { sanitizeText, sanitizeFileName } from "../lib/sanitize";
 import { extractTextFromPdf } from "../lib/pdf";
 import { sql } from "drizzle-orm";
+import { logger } from "../lib/logger";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_URL_SIZE = 5 * 1024 * 1024;
+const URL_TIMEOUT_MS = 15_000;
+
+const ALLOWED_URL_HOSTS = [
+  "raw.githubusercontent.com",
+  "github.com",
+  "gist.githubusercontent.com",
+  "gist.github.com",
+  "gitlab.com",
+  "pastebin.com",
+  "dpaste.org",
+  "hastebin.com",
+  "paste.debian.net",
+  "bpa.st",
+];
+
+function normalizeGitHubUrl(url: string): string {
+  const ghBlobMatch = url.match(
+    /^https?:\/\/github\.com\/([^/]+\/[^/]+)\/blob\/(.+)$/
+  );
+  if (ghBlobMatch) {
+    return `https://raw.githubusercontent.com/${ghBlobMatch[1]}/${ghBlobMatch[2]}`;
+  }
+  const gistMatch = url.match(
+    /^https?:\/\/gist\.github\.com\/([^/]+\/[a-f0-9]+)\/?$/
+  );
+  if (gistMatch) {
+    return `https://gist.githubusercontent.com/${gistMatch[1]}/raw`;
+  }
+  return url;
+}
+
+async function fetchUrlContent(rawUrl: string): Promise<{ text: string; sourceUrl: string } | { error: string }> {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(rawUrl);
+  } catch {
+    return { error: "Invalid URL format." };
+  }
+
+  if (parsedUrl.protocol !== "https:") {
+    return { error: "Only HTTPS URLs are accepted." };
+  }
+
+  const normalizedUrl = normalizeGitHubUrl(rawUrl);
+  let normalizedHost: string;
+  try {
+    normalizedHost = new URL(normalizedUrl).hostname;
+  } catch {
+    return { error: "Failed to parse normalized URL." };
+  }
+
+  if (!ALLOWED_URL_HOSTS.includes(normalizedHost)) {
+    return { error: `Unsupported host. Allowed sources: ${ALLOWED_URL_HOSTS.join(", ")}` };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), URL_TIMEOUT_MS);
+  const MAX_REDIRECTS = 5;
+
+  try {
+    let currentUrl = normalizedUrl;
+    let response: Response | null = null;
+
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      response = await fetch(currentUrl, {
+        signal: controller.signal,
+        headers: { "User-Agent": "VulnRap/1.0 (report-fetcher)" },
+        redirect: "manual",
+      });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location) {
+          return { error: "Redirect without Location header." };
+        }
+        const redirectUrl = new URL(location, currentUrl);
+        if (redirectUrl.protocol !== "https:") {
+          return { error: "Redirect to non-HTTPS URL blocked." };
+        }
+        if (!ALLOWED_URL_HOSTS.includes(redirectUrl.hostname)) {
+          return { error: `Redirect to disallowed host (${redirectUrl.hostname}) blocked.` };
+        }
+        currentUrl = redirectUrl.toString();
+        continue;
+      }
+      break;
+    }
+
+    if (!response || (response.status >= 300 && response.status < 400)) {
+      return { error: "Too many redirects." };
+    }
+
+    if (!response.ok) {
+      return { error: `Failed to fetch URL: HTTP ${response.status} ${response.statusText}` };
+    }
+
+    const contentLength = response.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_URL_SIZE) {
+      return { error: `Remote file too large (${(parseInt(contentLength, 10) / 1024 / 1024).toFixed(1)}MB). Max 5MB for URL imports.` };
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("text/html") && !contentType.includes("text/plain")) {
+      return { error: "URL returned HTML instead of plain text. Use a raw/plain-text link (e.g. GitHub raw URL)." };
+    }
+
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > MAX_URL_SIZE) {
+      return { error: `Remote file too large (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB). Max 5MB for URL imports.` };
+    }
+
+    const text = new TextDecoder("utf-8").decode(buffer);
+    return { text, sourceUrl: currentUrl };
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return { error: "URL fetch timed out after 15 seconds." };
+    }
+    logger.error({ err }, "URL fetch failed");
+    return { error: "Failed to fetch content from URL." };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 const ALLOWED_EXTENSIONS = [".txt", ".md", ".pdf"];
 
@@ -68,6 +193,7 @@ router.post("/reports", async (req, res): Promise<void> => {
   let rawFileSize: number;
 
   const rawText = typeof req.body.rawText === "string" ? req.body.rawText : "";
+  const reportUrl = typeof req.body.reportUrl === "string" ? req.body.reportUrl.trim() : "";
 
   if (req.file) {
     const fileName = req.file.originalname.toLowerCase();
@@ -83,6 +209,15 @@ router.post("/reports", async (req, res): Promise<void> => {
     }
     safeFileName = req.file.originalname ? sanitizeFileName(req.file.originalname) : null;
     rawFileSize = req.file.size;
+  } else if (reportUrl.length > 0) {
+    const urlResult = await fetchUrlContent(reportUrl);
+    if ("error" in urlResult) {
+      res.status(400).json({ error: urlResult.error });
+      return;
+    }
+    text = sanitizeText(urlResult.text);
+    safeFileName = `linked-${new URL(urlResult.sourceUrl).pathname.split("/").pop() || "report"}.txt`;
+    rawFileSize = Buffer.byteLength(urlResult.text, "utf-8");
   } else if (rawText.length > 0) {
     text = sanitizeText(rawText);
     safeFileName = "pasted-text.txt";
@@ -92,7 +227,7 @@ router.post("/reports", async (req, res): Promise<void> => {
       return;
     }
   } else {
-    res.status(400).json({ error: "No content provided. Upload a file or paste report text." });
+    res.status(400).json({ error: "No content provided. Upload a file, paste text, or provide a URL." });
     return;
   }
 
@@ -246,6 +381,7 @@ router.post("/reports/check", (req, res, next): void => {
 router.post("/reports/check", async (req, res): Promise<void> => {
   let text: string;
   const rawText = typeof req.body.rawText === "string" ? req.body.rawText : "";
+  const reportUrl = typeof req.body.reportUrl === "string" ? req.body.reportUrl.trim() : "";
 
   if (req.file) {
     const fileName = req.file.originalname.toLowerCase();
@@ -259,6 +395,13 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     } else {
       text = sanitizeText(req.file.buffer.toString("utf-8"));
     }
+  } else if (reportUrl.length > 0) {
+    const urlResult = await fetchUrlContent(reportUrl);
+    if ("error" in urlResult) {
+      res.status(400).json({ error: urlResult.error });
+      return;
+    }
+    text = sanitizeText(urlResult.text);
   } else if (rawText.length > 0) {
     text = sanitizeText(rawText);
     if (Buffer.byteLength(rawText, "utf-8") > MAX_FILE_SIZE) {
@@ -266,7 +409,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       return;
     }
   } else {
-    res.status(400).json({ error: "No content provided. Upload a file or paste report text." });
+    res.status(400).json({ error: "No content provided. Upload a file, paste text, or provide a URL." });
     return;
   }
 

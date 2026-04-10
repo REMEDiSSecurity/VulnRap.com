@@ -138,6 +138,9 @@ export const submitReport = async (
   if (submitReportBody.rawText !== undefined) {
     formData.append(`rawText`, submitReportBody.rawText);
   }
+  if (submitReportBody.reportUrl !== undefined) {
+    formData.append(`reportUrl`, submitReportBody.reportUrl);
+  }
   formData.append(`contentMode`, submitReportBody.contentMode);
   if (submitReportBody.showInFeed !== undefined) {
     formData.append(`showInFeed`, submitReportBody.showInFeed);
@@ -409,6 +412,9 @@ export const checkReport = async (
   }
   if (checkReportBody.rawText !== undefined) {
     formData.append(`rawText`, checkReportBody.rawText);
+  }
+  if (checkReportBody.reportUrl !== undefined) {
+    formData.append(`reportUrl`, checkReportBody.reportUrl);
   }
 
   return customFetch<CheckResult>(getCheckReportUrl(), {

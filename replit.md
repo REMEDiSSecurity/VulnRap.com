@@ -45,7 +45,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
   - `/terms` — Terms of service: funding model, user agreements, promises, disclaimers, content removal
   - `/privacy` — Honest privacy policy: explains auto-redaction, what gets stored and compared, how comparison works, data lifecycle
 - Uses generated API hooks from `@workspace/api-client-react`
-- Dual input: file upload (.txt, .md, 20MB max) or direct text paste via plain-text textarea
+- Triple input: file upload (.txt, .md, 20MB max), direct text paste, or URL link (GitHub, Gist, GitLab, Pastebin — HTTPS only, 5MB max, redirect-safe with per-hop allowlist validation)
 - Hover explainer tooltips on all key UI elements
 - Text paste field is plain text only -- no HTML rendering, no script execution, content auto-escaped by React JSX
 

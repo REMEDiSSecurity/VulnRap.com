@@ -238,8 +238,10 @@ export const SubmitReportBodyShowInFeed = {
 export type SubmitReportBody = {
   /** The vulnerability report file (.txt, .md, .pdf). Either file or rawText must be provided. */
   file?: Blob;
-  /** Plain text content of the vulnerability report. Either file or rawText must be provided. */
+  /** Plain text content of the vulnerability report. Either file, rawText, or reportUrl must be provided. */
   rawText?: string;
+  /** HTTPS URL to a plain-text report (GitHub raw, Gist, GitLab, Pastebin, etc.). Auto-converts GitHub blob URLs to raw. Max 5MB. */
+  reportUrl?: string;
   /** Privacy mode — full shares content, similarity_only stores only hashes */
   contentMode: SubmitReportBodyContentMode;
   /** Whether to show this report in the public recent reports feed */
@@ -251,6 +253,8 @@ export type CheckReportBody = {
   file?: Blob;
   /** Plain text content of the vulnerability report */
   rawText?: string;
+  /** HTTPS URL to a plain-text report (GitHub raw, Gist, GitLab, Pastebin, etc.). Auto-converts GitHub blob URLs to raw. Max 5MB. */
+  reportUrl?: string;
 };
 
 export type GetReportFeedParams = {
