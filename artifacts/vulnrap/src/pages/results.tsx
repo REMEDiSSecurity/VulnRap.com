@@ -5,9 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Hash, Clock, Search } from "lucide-react";
+import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+
+function anonymizeId(id: number): string {
+  const hex = id.toString(16).padStart(4, "0");
+  return `VR-${hex.toUpperCase()}`;
+}
 
 function getSlopColor(score: number) {
   if (score < 30) return "text-green-500";
@@ -164,7 +169,7 @@ export default function Results() {
                 <div key={i} className="space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="font-mono text-sm">
-                      Report <span className="text-primary">#{match.reportId}</span>
+                      Match <span className="text-primary">{anonymizeId(match.reportId)}</span>
                     </span>
                     <Badge variant={match.similarity > 80 ? "destructive" : "secondary"}>
                       {match.matchType}
