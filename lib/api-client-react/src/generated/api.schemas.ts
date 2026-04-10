@@ -190,6 +190,29 @@ export interface SlopDistribution {
   totalReports: number;
 }
 
+export interface SubmitFeedbackBody {
+  /** The report ID this feedback is about (optional) */
+  reportId?: number;
+  /**
+   * Rating from 1 (not useful) to 5 (very useful)
+   * @minimum 1
+   * @maximum 5
+   */
+  rating: number;
+  /** Whether the tool was helpful overall */
+  helpful: boolean;
+  /**
+   * Optional free-text suggestions for improvement
+   * @maxLength 1000
+   */
+  comment?: string;
+}
+
+export interface FeedbackResponse {
+  id: number;
+  message: string;
+}
+
 /**
  * Privacy mode — full shares content, similarity_only stores only hashes
  */

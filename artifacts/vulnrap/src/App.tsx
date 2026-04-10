@@ -6,13 +6,28 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Layout } from "@/components/layout";
 
-const Home = lazy(() => import("@/pages/home"));
-const Results = lazy(() => import("@/pages/results"));
-const Stats = lazy(() => import("@/pages/stats"));
-const Privacy = lazy(() => import("@/pages/privacy"));
-const Verify = lazy(() => import("@/pages/verify"));
-const Check = lazy(() => import("@/pages/check"));
-const NotFound = lazy(() => import("@/pages/not-found"));
+function lazyRetry(importFn: () => Promise<{ default: React.ComponentType }>) {
+  return lazy(() =>
+    importFn().catch(() =>
+      new Promise<{ default: React.ComponentType }>((resolve) => {
+        setTimeout(() => {
+          resolve(importFn().catch(() => ({ default: () => {
+            window.location.reload();
+            return null;
+          }})));
+        }, 1500);
+      })
+    )
+  );
+}
+
+const Home = lazyRetry(() => import("@/pages/home"));
+const Results = lazyRetry(() => import("@/pages/results"));
+const Stats = lazyRetry(() => import("@/pages/stats"));
+const Privacy = lazyRetry(() => import("@/pages/privacy"));
+const Verify = lazyRetry(() => import("@/pages/verify"));
+const Check = lazyRetry(() => import("@/pages/check"));
+const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
 

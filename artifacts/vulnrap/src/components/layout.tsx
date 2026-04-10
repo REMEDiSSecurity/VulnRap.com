@@ -49,7 +49,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 w-full">
             <div className="flex items-center gap-2.5">
               <img src={logoSrc} alt="" className="w-5 h-5 rounded-sm opacity-50" />
-              <span className="text-muted-foreground/70">VulnRap // Free & Anonymous Vulnerability Report Validation</span>
+              <span className="text-muted-foreground/70">VulnRap // Free & Anonymous Vulnerability Report Validation — made by and for frustrated PSIRTlings</span>
             </div>
             <div className="flex gap-5">
               <Link to="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>

@@ -1,6 +1,7 @@
 export * from "./generated/api";
 export type {
   ErrorResponse,
+  FeedbackResponse,
   HashLookupResult,
   HealthStatus,
   PlatformStats,
@@ -13,6 +14,7 @@ export type {
   SimilarityMatchMatchType,
   SlopDistribution,
   SlopDistributionBucketsItem,
+  SubmitFeedbackBody,
   SubmitReportBody,
   SubmitReportBodyContentMode,
 } from "./generated/types";

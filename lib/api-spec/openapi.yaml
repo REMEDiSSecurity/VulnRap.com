@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: reports
     description: Report submission and analysis
+  - name: feedback
+    description: User feedback
   - name: stats
     description: Platform statistics
 paths:
@@ -219,6 +221,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReportFeed"
+
+  /feedback:
+    post:
+      operationId: submitFeedback
+      tags: [feedback]
+      summary: Submit user feedback about the tool
+      description: Allows users to share whether the tool was helpful and suggest improvements
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitFeedbackBody"
+      responses:
+        "201":
+          description: Feedback submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /stats:
     get:
@@ -603,3 +631,36 @@ components:
       required:
         - buckets
         - totalReports
+
+    SubmitFeedbackBody:
+      type: object
+      properties:
+        reportId:
+          type: integer
+          description: The report ID this feedback is about (optional)
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Rating from 1 (not useful) to 5 (very useful)
+        helpful:
+          type: boolean
+          description: Whether the tool was helpful overall
+        comment:
+          type: string
+          maxLength: 1000
+          description: Optional free-text suggestions for improvement
+      required:
+        - rating
+        - helpful
+
+    FeedbackResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        message:
+          type: string
+      required:
+        - id
+        - message

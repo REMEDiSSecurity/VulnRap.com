@@ -233,6 +233,32 @@ export const GetReportFeedResponse = zod.object({
 });
 
 /**
+ * Allows users to share whether the tool was helpful and suggest improvements
+ * @summary Submit user feedback about the tool
+ */
+export const submitFeedbackBodyRatingMax = 5;
+
+export const submitFeedbackBodyCommentMax = 1000;
+
+export const SubmitFeedbackBody = zod.object({
+  reportId: zod
+    .number()
+    .optional()
+    .describe("The report ID this feedback is about (optional)"),
+  rating: zod
+    .number()
+    .min(1)
+    .max(submitFeedbackBodyRatingMax)
+    .describe("Rating from 1 (not useful) to 5 (very useful)"),
+  helpful: zod.boolean().describe("Whether the tool was helpful overall"),
+  comment: zod
+    .string()
+    .max(submitFeedbackBodyCommentMax)
+    .optional()
+    .describe("Optional free-text suggestions for improvement"),
+});
+
+/**
  * Returns aggregate statistics for the platform
  * @summary Get platform statistics
  */

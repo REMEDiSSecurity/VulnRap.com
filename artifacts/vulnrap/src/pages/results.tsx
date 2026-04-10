@@ -9,6 +9,7 @@ import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search,
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import FeedbackForm from "@/components/feedback-form";
 
 function anonymizeId(id: number): string {
   const hex = id.toString(16).padStart(4, "0");
@@ -478,6 +479,8 @@ export default function Results() {
           </CardContent>
         </Card>
       )}
+
+      <FeedbackForm reportId={id} />
     </div>
   );
 }

@@ -34,7 +34,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - Custom AI-generated logo: synthetic bug inspected by lasers (`src/assets/logo.png`, compressed to ~355KB)
 - Pages:
   - `/` — Home/submit with logo hero, 3 feature explainer cards, drag-and-drop upload, privacy mode selector, "How It Works" steps, hover hint tooltips
-  - `/results/:id` — Analysis results: slop score, auto-redaction summary, similarity matches, section-level analysis with per-section hashes, feedback, expandable redacted report view, verification badge with copy buttons
+  - `/results/:id` — Analysis results: slop score, auto-redaction summary, similarity matches, section-level analysis with per-section hashes, feedback, expandable redacted report view, verification badge with copy buttons, user feedback form (rating + helpful + suggestions)
   - `/check` — Receiver flow: paste/upload a report for read-only analysis (no storage), shows slop score, duplicates, redaction analysis
   - `/verify/:id` — Public verification page: lightweight badge view with slop score, match counts, content hash, submission date
   - `/stats` — Platform statistics dashboard (metrics, distribution histogram, recent activity)
@@ -87,6 +87,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `report_hashes` table: indexed hash lookup (sha256, simhash per report)
 - `similarity_results` table: pairwise similarity scores
 - `report_stats` table: aggregate counters
+- `user_feedback` table: id, report_id (optional FK to reports), rating (1-5), helpful (boolean), comment (text), created_at
 
 ### User Flows
 - **Submitters**: Upload/paste a report → get analysis results → copy verification badge (markdown or plain text) → share with bug bounty program
@@ -102,6 +103,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `GET /api/stats` — Platform-wide statistics
 - `GET /api/stats/recent` — Recent submission activity
 - `GET /api/stats/distribution` — Slop score distribution histogram
+- `POST /api/feedback` — Submit user feedback (rating 1-5, helpful boolean, optional comment)
 - `GET /api/healthz` — Health check
 - `GET /api/docs` — Swagger UI interactive API documentation
 
