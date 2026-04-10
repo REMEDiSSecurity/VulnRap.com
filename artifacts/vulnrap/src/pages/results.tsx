@@ -237,6 +237,45 @@ export default function Results() {
         </Card>
       </div>
 
+      {verification && (
+        <Card className="border-primary/20 bg-card/40 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Award className="w-5 h-5 text-primary" />
+              Verification Badge
+              <Hint text="Copy this badge and paste it into your bug bounty submission. It gives the receiver a link to independently verify your report's slop score and uniqueness." />
+            </CardTitle>
+            <CardDescription>Include this in your bug report to prove it was validated</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-muted/50 rounded-lg p-4 border border-border space-y-1">
+              <div className="flex items-center gap-2 text-sm">
+                <ShieldCheck className="w-4 h-4 text-green-500" />
+                <strong>VulnRap Verified</strong>
+                <span className="text-muted-foreground">|</span>
+                <span>Report {verification.reportCode}</span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Score: <span className={getSlopColor(verification.slopScore)}>{verification.slopScore}/100</span> ({verification.slopTier})
+                {" | "}{verification.similarityMatchCount} similar report{verification.similarityMatchCount !== 1 ? "s" : ""}
+                {" | "}{verification.sectionMatchCount} section match{verification.sectionMatchCount !== 1 ? "es" : ""}
+              </div>
+              <div className="text-xs text-primary font-mono truncate">{verification.verifyUrl}</div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="gap-2" onClick={copyBadgeMarkdown}>
+                <Copy className="w-3.5 h-3.5" />
+                Copy as Markdown
+              </Button>
+              <Button variant="outline" size="sm" className="gap-2" onClick={copyBadgePlain}>
+                <Copy className="w-3.5 h-3.5" />
+                Copy as Plain Text
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {redactionSummary && redactionSummary.totalRedactions > 0 && (
         <Card className="bg-card/40 backdrop-blur border-green-500/20">
           <CardHeader>

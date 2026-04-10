@@ -9,6 +9,8 @@ import Home from "@/pages/home";
 import Results from "@/pages/results";
 import Stats from "@/pages/stats";
 import Privacy from "@/pages/privacy";
+import Verify from "@/pages/verify";
+import Check from "@/pages/check";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +21,8 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/results/:id" element={<Results />} />
+          <Route path="/verify/:id" element={<Verify />} />
+          <Route path="/check" element={<Check />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="*" element={<NotFound />} />

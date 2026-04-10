@@ -370,9 +370,10 @@ router.get("/reports/:id/verify", async (req, res): Promise<void> => {
   const matches = (report.similarityMatches as Array<{ reportId: number }>) || [];
   const secMatches = (report.sectionMatches as Array<{ sectionTitle: string }>) || [];
 
-  const host = req.get("host") || "vulnrap.com";
-  const protocol = req.get("x-forwarded-proto") || req.protocol;
-  const verifyUrl = `${protocol}://${host}/verify/${report.id}`;
+  const baseUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : process.env.PUBLIC_URL || "https://vulnrap.com";
+  const verifyUrl = `${baseUrl}/verify/${report.id}`;
 
   const response = GetVerificationResponse.parse({
     id: report.id,
@@ -421,45 +422,6 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
-  });
-
-  res.json(response);
-});
-
-router.get("/reports/lookup/:hash", async (req, res): Promise<void> => {
-  const params = LookupByHashParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const [report] = await db
-    .select()
-    .from(reportsTable)
-    .where(eq(reportsTable.contentHash, params.data.hash));
-
-  if (!report) {
-    const response = LookupByHashResponse.parse({
-      found: false,
-      reportId: null,
-      slopScore: null,
-      slopTier: null,
-      matchCount: 0,
-      firstSeen: null,
-    });
-    res.json(response);
-    return;
-  }
-
-  const matches = (report.similarityMatches as Array<{ reportId: number; similarity: number; matchType: string }>);
-
-  const response = LookupByHashResponse.parse({
-    found: true,
-    reportId: report.id,
-    slopScore: report.slopScore,
-    slopTier: report.slopTier,
-    matchCount: matches.length,
-    firstSeen: report.createdAt,
   });
 
   res.json(response);

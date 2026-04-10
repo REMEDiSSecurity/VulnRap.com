@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Activity, Shield } from "lucide-react";
+import { Activity, Shield, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 
@@ -16,7 +16,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
           <nav className="flex items-center gap-6">
             <Link to="/" className={cn("text-sm font-medium transition-colors hover:text-primary", pathname === "/" ? "text-primary" : "text-muted-foreground")}>
-              Analyze
+              Submit
+            </Link>
+            <Link to="/check" className={cn("text-sm font-medium transition-colors hover:text-primary flex items-center gap-1", pathname === "/check" ? "text-primary" : "text-muted-foreground")}>
+              <Search className="w-4 h-4" /> Check
             </Link>
             <Link to="/stats" className={cn("text-sm font-medium transition-colors hover:text-primary flex items-center gap-1", pathname === "/stats" ? "text-primary" : "text-muted-foreground")}>
               <Activity className="w-4 h-4" /> Stats

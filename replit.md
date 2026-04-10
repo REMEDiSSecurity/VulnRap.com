@@ -30,8 +30,10 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - Dark terminal-inspired aesthetic with cyan/violet accents, Space Mono font
 - Custom AI-generated logo: synthetic bug inspected by lasers (`src/assets/logo.png`)
 - Pages:
-  - `/` — Home/upload with logo hero, 3 feature explainer cards, drag-and-drop upload, privacy mode selector, "How It Works" steps, hover hint tooltips
-  - `/results/:id` — Analysis results: slop score, auto-redaction summary, similarity matches, section-level analysis with per-section hashes, feedback, expandable redacted report view
+  - `/` — Home/submit with logo hero, 3 feature explainer cards, drag-and-drop upload, privacy mode selector, "How It Works" steps, hover hint tooltips
+  - `/results/:id` — Analysis results: slop score, auto-redaction summary, similarity matches, section-level analysis with per-section hashes, feedback, expandable redacted report view, verification badge with copy buttons
+  - `/check` — Receiver flow: paste/upload a report for read-only analysis (no storage), shows slop score, duplicates, redaction analysis
+  - `/verify/:id` — Public verification page: lightweight badge view with slop score, match counts, content hash, submission date
   - `/stats` — Platform statistics dashboard (metrics, distribution histogram, recent activity)
   - `/privacy` — Honest privacy policy: explains auto-redaction, what gets stored and compared, how comparison works, data lifecycle
 - Uses generated API hooks from `@workspace/api-client-react`
@@ -83,9 +85,16 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `similarity_results` table: pairwise similarity scores
 - `report_stats` table: aggregate counters
 
+### User Flows
+- **Submitters**: Upload/paste a report → get analysis results → copy verification badge (markdown or plain text) → share with bug bounty program
+- **Receivers**: Paste/upload an incoming report on `/check` → see slop score, duplicates, redaction analysis → nothing stored (read-only check)
+- **Verification**: Anyone with a verify link (`/verify/:id`) can independently confirm a report's slop score and uniqueness
+
 ### API Endpoints
 - `POST /api/reports` — Submit a report for analysis (multipart: file upload or rawText field, 20MB limit)
+- `POST /api/reports/check` — Check a report without storing (receiver flow, read-only analysis)
 - `GET /api/reports/:id` — Get report analysis results (includes redacted text, section hashes, redaction summary)
+- `GET /api/reports/:id/verify` — Lightweight verification badge data (slop score, match counts, verify URL)
 - `GET /api/reports/lookup/:hash` — Look up by SHA-256 hash
 - `GET /api/stats` — Platform-wide statistics
 - `GET /api/stats/recent` — Recent submission activity
