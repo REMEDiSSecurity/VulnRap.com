@@ -22,7 +22,9 @@ export const HealthCheckResponse = zod.object({
 export const submitReportBodyContentModeDefault = `full`;
 
 export const SubmitReportBody = zod.object({
-  file: zod.string().describe("The vulnerability report file (txt, md)"),
+  file: zod
+    .instanceof(File)
+    .describe("The vulnerability report file (.txt, .md, .pdf)"),
   contentMode: zod
     .enum(["full", "similarity_only"])
     .default(submitReportBodyContentModeDefault)

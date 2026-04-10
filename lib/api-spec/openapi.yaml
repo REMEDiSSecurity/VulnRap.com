@@ -44,7 +44,8 @@ paths:
               properties:
                 file:
                   type: string
-                  description: The vulnerability report file (txt, md)
+                  format: binary
+                  description: The vulnerability report file (.txt, .md, .pdf)
                 contentMode:
                   type: string
                   enum: [full, similarity_only]

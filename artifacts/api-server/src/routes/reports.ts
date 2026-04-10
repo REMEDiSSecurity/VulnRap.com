@@ -24,13 +24,6 @@ import { sql } from "drizzle-orm";
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 const ALLOWED_EXTENSIONS = [".txt", ".md", ".pdf"];
-const ALLOWED_MIMETYPES = [
-  "text/plain",
-  "text/markdown",
-  "text/x-markdown",
-  "application/pdf",
-  "application/octet-stream",
-];
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -38,13 +31,13 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     const ext = file.originalname.toLowerCase();
     const hasValidExt = ALLOWED_EXTENSIONS.some(e => ext.endsWith(e));
-    const hasValidMime = ALLOWED_MIMETYPES.includes(file.mimetype);
 
-    if (hasValidExt || hasValidMime) {
-      cb(null, true);
-    } else {
+    if (!hasValidExt) {
       cb(new Error("Unsupported file type. Accepted formats: .txt, .md, .pdf"));
+      return;
     }
+
+    cb(null, true);
   },
 });
 

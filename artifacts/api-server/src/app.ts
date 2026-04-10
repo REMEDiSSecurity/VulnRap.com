@@ -47,7 +47,7 @@ const allOrigins = [...allowedOrigins, ...replitDomains, ...replitDevDomain];
 app.use(cors({
   origin: allOrigins.length > 0
     ? (origin, callback) => {
-        if (!origin || allOrigins.some(o => origin.startsWith(o))) {
+        if (!origin || allOrigins.includes(origin)) {
           callback(null, true);
         } else {
           callback(null, false);

@@ -118,8 +118,8 @@ export const SubmitReportBodyContentMode = {
 } as const;
 
 export type SubmitReportBody = {
-  /** The vulnerability report file (txt, md) */
-  file: string;
+  /** The vulnerability report file (.txt, .md, .pdf) */
+  file: Blob;
   /** Privacy mode — full shares content, similarity_only stores only hashes */
   contentMode: SubmitReportBodyContentMode;
 };

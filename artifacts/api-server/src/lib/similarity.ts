@@ -27,13 +27,19 @@ function hashShingle(shingle: string): number {
   return hash.readUInt32BE(0);
 }
 
-const hashCoefficients: Array<{ a: number; b: number }> = [];
-for (let i = 0; i < NUM_HASHES; i++) {
-  hashCoefficients.push({
-    a: Math.floor(Math.random() * (LARGE_PRIME - 1)) + 1,
-    b: Math.floor(Math.random() * (LARGE_PRIME - 1)) + 1,
-  });
+function generateDeterministicCoefficients(): Array<{ a: number; b: number }> {
+  const coefficients: Array<{ a: number; b: number }> = [];
+  for (let i = 0; i < NUM_HASHES; i++) {
+    const seedA = crypto.createHash("sha256").update(`vulnrap-minhash-a-${i}`).digest();
+    const seedB = crypto.createHash("sha256").update(`vulnrap-minhash-b-${i}`).digest();
+    const a = (seedA.readUInt32BE(0) % (LARGE_PRIME - 1)) + 1;
+    const b = (seedB.readUInt32BE(0) % (LARGE_PRIME - 1)) + 1;
+    coefficients.push({ a, b });
+  }
+  return coefficients;
 }
+
+const hashCoefficients = generateDeterministicCoefficients();
 
 export function computeMinHash(text: string): number[] {
   const shingles = getShingles(text);
