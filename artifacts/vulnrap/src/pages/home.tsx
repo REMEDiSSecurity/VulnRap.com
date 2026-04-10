@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX } from "lucide-react";
+import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste } from "lucide-react";
 import { useSubmitReport, SubmitReportBodyContentMode } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -11,8 +11,10 @@ import { useToast } from "@/hooks/use-toast";
 import logoSrc from "@/assets/logo.png";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_TEXT_LENGTH = 20 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
 
+type InputMode = "file" | "text";
 type UploadStage = "idle" | "uploading" | "analyzing" | "done" | "error";
 
 function validateFile(file: File): string | null {
@@ -44,7 +46,9 @@ function Explainer({ text }: { text: string }) {
 export default function Home() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [inputMode, setInputMode] = useState<InputMode>("file");
   const [file, setFile] = useState<File | null>(null);
+  const [rawText, setRawText] = useState("");
   const [fileError, setFileError] = useState<string | null>(null);
   const [mode, setMode] = useState<SubmitReportBodyContentMode>(SubmitReportBodyContentMode.similarity_only);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -121,19 +125,33 @@ export default function Home() {
   };
 
   const handleSubmit = () => {
-    if (!file) {
-      toast({ title: "No file selected", description: "Please select a report file first.", variant: "destructive" });
-      return;
+    if (inputMode === "file") {
+      if (!file) {
+        toast({ title: "No file selected", description: "Please select a report file first.", variant: "destructive" });
+        return;
+      }
+      const error = validateFile(file);
+      if (error) {
+        setFileError(error);
+        toast({ title: "Invalid file", description: error, variant: "destructive" });
+        return;
+      }
+      submitMutation.mutate({ data: { file, contentMode: mode } });
+    } else {
+      const trimmed = rawText.trim();
+      if (trimmed.length === 0) {
+        toast({ title: "No text entered", description: "Please paste your report text first.", variant: "destructive" });
+        return;
+      }
+      if (new Blob([trimmed]).size > MAX_TEXT_LENGTH) {
+        toast({ title: "Text too large", description: "Pasted text exceeds the 20MB limit.", variant: "destructive" });
+        return;
+      }
+      submitMutation.mutate({ data: { rawText: trimmed, contentMode: mode } });
     }
-    const error = validateFile(file);
-    if (error) {
-      setFileError(error);
-      toast({ title: "Invalid file", description: error, variant: "destructive" });
-      return;
-    }
-    submitMutation.mutate({ data: { file, contentMode: mode } });
   };
 
+  const hasContent = inputMode === "file" ? !!file : rawText.trim().length > 0;
   const isProcessing = stage === "uploading" || stage === "analyzing" || stage === "done";
 
   const getButtonContent = () => {
@@ -210,12 +228,44 @@ export default function Home() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-primary" />
-            Upload Report
-            <Explainer text="Upload a vulnerability report file. We'll analyze it for AI-generated content and check it against previously submitted reports for similarity." />
+            Submit Report
+            <Explainer text="Submit a vulnerability report for analysis. Upload a file or paste your report text directly. We'll analyze it for AI-generated content and check it against previously submitted reports for similarity." />
           </CardTitle>
-          <CardDescription>Supported formats: .txt, .md (Max 20MB)</CardDescription>
+          <CardDescription>Upload a file or paste text directly (Max 20MB)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            <button
+              type="button"
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors",
+                inputMode === "file"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card hover:bg-muted text-muted-foreground"
+              )}
+              onClick={() => { setInputMode("file"); setStage("idle"); }}
+              data-testid="tab-file"
+            >
+              <UploadCloud className="w-4 h-4" />
+              Upload File
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors border-l border-border",
+                inputMode === "text"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card hover:bg-muted text-muted-foreground"
+              )}
+              onClick={() => { setInputMode("text"); setStage("idle"); }}
+              data-testid="tab-text"
+            >
+              <ClipboardPaste className="w-4 h-4" />
+              Paste Text
+            </button>
+          </div>
+
+          {inputMode === "file" ? (
           <div
             data-testid="dropzone"
             className={cn(
@@ -265,11 +315,37 @@ export default function Home() {
                 </div>
                 <div className="text-center">
                   <p className="font-medium">Drag & drop your report here</p>
-                  <p className="text-sm text-muted-foreground mt-1">or click to browse files</p>
+                  <p className="text-sm text-muted-foreground mt-1">or click to browse files (.txt, .md)</p>
                 </div>
               </>
             )}
           </div>
+          ) : (
+          <div className="space-y-2">
+            <textarea
+              data-testid="input-rawtext"
+              className="w-full h-64 rounded-lg border border-border bg-background p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary placeholder:text-muted-foreground/50"
+              placeholder="Paste your vulnerability report text here...&#10;&#10;This field accepts plain text only. All content is treated as text -- no HTML, markdown rendering, or code execution."
+              value={rawText}
+              onChange={(e) => { setRawText(e.target.value); setStage("idle"); }}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <div className="flex justify-between items-center text-xs text-muted-foreground">
+              <span>{rawText.length > 0 ? `${rawText.length.toLocaleString()} characters` : "No text entered"}</span>
+              {rawText.length > 0 && (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  onClick={() => { setRawText(""); setStage("idle"); }}
+                  data-testid="button-clear-text"
+                >
+                  Clear text
+                </button>
+              )}
+            </div>
+          </div>
+          )}
 
           <div className="space-y-4">
             <h3 className="font-medium flex items-center gap-2">
@@ -303,7 +379,7 @@ export default function Home() {
           <Button
             className="w-full h-12 text-lg font-bold gap-2"
             onClick={handleSubmit}
-            disabled={!file || isProcessing || !!fileError}
+            disabled={!hasContent || isProcessing || !!fileError}
             data-testid="button-submit"
           >
             {getButtonContent()}
@@ -322,9 +398,9 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="space-y-2">
             <div className="text-3xl font-bold text-primary/30">01</div>
-            <h3 className="font-medium text-sm">Upload</h3>
+            <h3 className="font-medium text-sm">Submit</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Submit your vulnerability report as a .txt or .md file. We extract the text and begin processing immediately.
+              Upload a .txt or .md file, or paste your report text directly. We extract the content and begin processing immediately.
             </p>
           </div>
           <div className="space-y-2">

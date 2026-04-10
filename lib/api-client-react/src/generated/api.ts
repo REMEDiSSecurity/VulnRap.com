@@ -125,7 +125,12 @@ export const submitReport = async (
   options?: RequestInit,
 ): Promise<ReportAnalysis> => {
   const formData = new FormData();
-  formData.append(`file`, submitReportBody.file);
+  if (submitReportBody.file !== undefined) {
+    formData.append(`file`, submitReportBody.file);
+  }
+  if (submitReportBody.rawText !== undefined) {
+    formData.append(`rawText`, submitReportBody.rawText);
+  }
   formData.append(`contentMode`, submitReportBody.contentMode);
 
   return customFetch<ReportAnalysis>(getSubmitReportUrl(), {

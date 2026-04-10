@@ -8,8 +8,10 @@
 import type { SubmitReportBodyContentMode } from "./submitReportBodyContentMode";
 
 export type SubmitReportBody = {
-  /** The vulnerability report file (.txt, .md, .pdf) */
-  file: Blob;
+  /** The vulnerability report file (.txt, .md, .pdf). Either file or rawText must be provided. */
+  file?: Blob;
+  /** Plain text content of the vulnerability report. Either file or rawText must be provided. */
+  rawText?: string;
   /** Privacy mode — full shares content, similarity_only stores only hashes */
   contentMode: SubmitReportBodyContentMode;
 };

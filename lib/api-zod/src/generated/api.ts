@@ -24,7 +24,16 @@ export const submitReportBodyContentModeDefault = `full`;
 export const SubmitReportBody = zod.object({
   file: zod
     .instanceof(File)
-    .describe("The vulnerability report file (.txt, .md, .pdf)"),
+    .optional()
+    .describe(
+      "The vulnerability report file (.txt, .md, .pdf). Either file or rawText must be provided.",
+    ),
+  rawText: zod
+    .string()
+    .optional()
+    .describe(
+      "Plain text content of the vulnerability report. Either file or rawText must be provided.",
+    ),
   contentMode: zod
     .enum(["full", "similarity_only"])
     .default(submitReportBodyContentModeDefault)

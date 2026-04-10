@@ -106,9 +106,12 @@ const COMPANY_INDICATORS = [
   /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\s+(?:Inc|Corp|LLC|Ltd|Co)\b\.?/g,
 ];
 
-const USERNAME_PATTERNS = [
-  /\b(?:user(?:name)?|login|account)\s*[:=]\s*['"]?([^\s'"]{3,})['"]?/gi,
-  /\b(?:reported\s+by|author|researcher|discoverer|finder)\s*[:=]?\s*['"]?([A-Za-z][A-Za-z0-9._-]{2,})['"]?/gi,
+const USERNAME_KV_PATTERNS = [
+  /\b((?:user(?:name)?|login|account)\s*[:=]\s*)['"]?([^\s'"]{3,})['"]?/gi,
+];
+
+const USERNAME_ATTRIBUTION_PATTERNS = [
+  /\b((?:reported\s+by|author|researcher|discoverer|finder)\s*[:=]?\s*)['"]?([A-Za-z][A-Za-z0-9._ -]{2,})['"]?/gi,
 ];
 
 export function redactReport(text: string): RedactionResult {
@@ -140,12 +143,24 @@ export function redactReport(text: string): RedactionResult {
     }
   }
 
-  for (const usernamePattern of USERNAME_PATTERNS) {
-    const regex = new RegExp(usernamePattern.source, usernamePattern.flags);
+  for (const kvPattern of USERNAME_KV_PATTERNS) {
+    const regex = new RegExp(kvPattern.source, kvPattern.flags);
     let count = 0;
-    redactedText = redactedText.replace(regex, (match, _username) => {
+    redactedText = redactedText.replace(regex, (_match, prefix) => {
       count++;
-      return match.replace(/[:=]\s*['"]?[^\s'"]{3,}['"]?/, ": [REDACTED_USERNAME]");
+      return `${prefix}[REDACTED_USERNAME]`;
+    });
+    if (count > 0) {
+      categories["username"] = (categories["username"] || 0) + count;
+    }
+  }
+
+  for (const attrPattern of USERNAME_ATTRIBUTION_PATTERNS) {
+    const regex = new RegExp(attrPattern.source, attrPattern.flags);
+    let count = 0;
+    redactedText = redactedText.replace(regex, (_match, prefix) => {
+      count++;
+      return `${prefix}[REDACTED_USERNAME]`;
     });
     if (count > 0) {
       categories["username"] = (categories["username"] || 0) + count;

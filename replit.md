@@ -35,8 +35,9 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
   - `/stats` — Platform statistics dashboard (metrics, distribution histogram, recent activity)
   - `/privacy` — Honest privacy policy: explains auto-redaction, what gets stored and compared, how comparison works, data lifecycle
 - Uses generated API hooks from `@workspace/api-client-react`
-- File upload supports .txt, .md (20MB max, client-side validated)
+- Dual input: file upload (.txt, .md, 20MB max) or direct text paste via plain-text textarea
 - Hover explainer tooltips on all key UI elements
+- Text paste field is plain text only -- no HTML rendering, no script execution, content auto-escaped by React JSX
 
 ### Auto-Redaction Engine (`artifacts/api-server/src/lib/redactor.ts`)
 - Deterministic regex-based redaction (same input = same output)
@@ -64,7 +65,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - Returns actionable feedback strings
 
 ### Upload Pipeline
-1. User uploads .txt/.md file
+1. User uploads .txt/.md file OR pastes text directly (plain text only, sanitized server-side)
 2. Auto-redaction engine scrubs PII/secrets from raw text
 3. All hashing (SHA-256, MinHash, Simhash, LSH, section hashes) runs on redacted text only
 4. Similarity comparison against existing redacted reports
@@ -83,7 +84,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `report_stats` table: aggregate counters
 
 ### API Endpoints
-- `POST /api/reports` — Upload a report for analysis (multipart, 20MB limit)
+- `POST /api/reports` — Submit a report for analysis (multipart: file upload or rawText field, 20MB limit)
 - `GET /api/reports/:id` — Get report analysis results (includes redacted text, section hashes, redaction summary)
 - `GET /api/reports/lookup/:hash` — Look up by SHA-256 hash
 - `GET /api/stats` — Platform-wide statistics

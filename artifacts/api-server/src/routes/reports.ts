@@ -60,39 +60,45 @@ router.post("/reports", (req, res, next): void => {
 });
 
 router.post("/reports", async (req, res): Promise<void> => {
-  if (!req.file) {
-    res.status(400).json({ error: "No file uploaded. Please attach a .txt, .md, or .pdf file." });
-    return;
-  }
-
-  const bodyValidation = SubmitReportBodySchema.safeParse({
-    file: req.file.originalname,
-    contentMode: req.body.contentMode,
-  });
-
-  if (!bodyValidation.success) {
-    res.status(400).json({ error: bodyValidation.error.message });
-    return;
-  }
-
-  const contentMode = bodyValidation.data.contentMode;
+  const contentMode = (req.body.contentMode === "full" || req.body.contentMode === "similarity_only")
+    ? req.body.contentMode
+    : "full";
 
   let text: string;
-  const fileName = req.file.originalname.toLowerCase();
+  let safeFileName: string | null = null;
+  let rawFileSize: number;
 
-  if (fileName.endsWith(".pdf") || req.file.mimetype === "application/pdf") {
-    const pdfResult = await extractTextFromPdf(req.file.buffer);
-    if (!pdfResult.success) {
-      res.status(400).json({ error: pdfResult.error });
+  const rawText = typeof req.body.rawText === "string" ? req.body.rawText : "";
+
+  if (req.file) {
+    const fileName = req.file.originalname.toLowerCase();
+    if (fileName.endsWith(".pdf") || req.file.mimetype === "application/pdf") {
+      const pdfResult = await extractTextFromPdf(req.file.buffer);
+      if (!pdfResult.success) {
+        res.status(400).json({ error: pdfResult.error });
+        return;
+      }
+      text = sanitizeText(pdfResult.text);
+    } else {
+      text = sanitizeText(req.file.buffer.toString("utf-8"));
+    }
+    safeFileName = req.file.originalname ? sanitizeFileName(req.file.originalname) : null;
+    rawFileSize = req.file.size;
+  } else if (rawText.length > 0) {
+    text = sanitizeText(rawText);
+    safeFileName = "pasted-text.txt";
+    rawFileSize = Buffer.byteLength(rawText, "utf-8");
+    if (rawFileSize > MAX_FILE_SIZE) {
+      res.status(413).json({ error: "Text exceeds 20MB limit." });
       return;
     }
-    text = sanitizeText(pdfResult.text);
   } else {
-    text = sanitizeText(req.file.buffer.toString("utf-8"));
+    res.status(400).json({ error: "No content provided. Upload a file or paste report text." });
+    return;
   }
 
   if (text.length === 0) {
-    res.status(400).json({ error: "File is empty or contains no readable text." });
+    res.status(400).json({ error: "Content is empty or contains no readable text." });
     return;
   }
 
@@ -131,8 +137,6 @@ router.post("/reports", async (req, res): Promise<void> => {
 
   const analysis = analyzeSloppiness(text);
 
-  const safeFileName = req.file.originalname ? sanitizeFileName(req.file.originalname) : null;
-
   const [report] = await db
     .insert(reportsTable)
     .values({
@@ -151,7 +155,7 @@ router.post("/reports", async (req, res): Promise<void> => {
       redactionSummary,
       feedback: analysis.feedback,
       fileName: safeFileName,
-      fileSize: req.file.size,
+      fileSize: rawFileSize,
     })
     .returning();
 

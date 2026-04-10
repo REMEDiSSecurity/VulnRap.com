@@ -45,24 +45,19 @@ export function parseSections(text: string): SectionAnalysis {
   const sections: ReportSection[] = [];
 
   const headerPattern = /^(#{1,4})\s+(.+)$/gm;
-  const headers: Array<{ title: string; start: number; end: number }> = [];
+  const headerMatches: Array<{ title: string; matchIndex: number; matchLength: number }> = [];
 
   let match;
   while ((match = headerPattern.exec(text)) !== null) {
-    headers.push({
+    headerMatches.push({
       title: match[2].trim(),
-      start: match.index + match[0].length,
-      end: text.length,
+      matchIndex: match.index,
+      matchLength: match[0].length,
     });
   }
 
-  if (headers.length > 0) {
-    for (let i = 0; i < headers.length; i++) {
-      const nextStart = i < headers.length - 1 ? headers[i + 1].start - headers[i + 1].title.length - 3 : text.length;
-      headers[i].end = nextStart;
-    }
-
-    const preContent = text.substring(0, headers[0].start - headers[0].title.length - 2).trim();
+  if (headerMatches.length > 0) {
+    const preContent = text.substring(0, headerMatches[0].matchIndex).trim();
     if (preContent.length > 20) {
       sections.push({
         title: "Preamble",
@@ -72,14 +67,16 @@ export function parseSections(text: string): SectionAnalysis {
       });
     }
 
-    for (const header of headers) {
-      const content = text.substring(header.start, header.end).trim();
+    for (let i = 0; i < headerMatches.length; i++) {
+      const contentStart = headerMatches[i].matchIndex + headerMatches[i].matchLength;
+      const contentEnd = i < headerMatches.length - 1 ? headerMatches[i + 1].matchIndex : text.length;
+      const content = text.substring(contentStart, contentEnd).trim();
       if (content.length > 10) {
         sections.push({
-          title: header.title,
+          title: headerMatches[i].title,
           content,
           hash: hashSection(content),
-          weight: classifyWeight(header.title),
+          weight: classifyWeight(headerMatches[i].title),
         });
       }
     }
@@ -124,8 +121,12 @@ export function parseSections(text: string): SectionAnalysis {
   }
 
   const sectionHashes: Record<string, string> = {};
+  const titleCounts: Record<string, number> = {};
   for (const section of sections) {
-    sectionHashes[section.title] = section.hash;
+    const count = titleCounts[section.title] || 0;
+    titleCounts[section.title] = count + 1;
+    const key = count > 0 ? `${section.title} (${count + 1})` : section.title;
+    sectionHashes[key] = section.hash;
   }
 
   sectionHashes["__full_document"] = hashSection(text);

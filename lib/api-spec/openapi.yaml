@@ -45,14 +45,16 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: The vulnerability report file (.txt, .md, .pdf)
+                  description: The vulnerability report file (.txt, .md, .pdf). Either file or rawText must be provided.
+                rawText:
+                  type: string
+                  description: Plain text content of the vulnerability report. Either file or rawText must be provided.
                 contentMode:
                   type: string
                   enum: [full, similarity_only]
                   default: full
                   description: Privacy mode — full shares content, similarity_only stores only hashes
               required:
-                - file
                 - contentMode
       responses:
         "201":
