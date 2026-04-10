@@ -11,7 +11,7 @@ function FirstPost() {
       <div className="space-y-3">
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <Badge variant="outline" className="border-primary/30 text-primary text-[10px]">Launch</Badge>
-          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> April 2025</span>
+          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> April 2026</span>
           <span>by the REMEDiS Security team</span>
         </div>
         <h2 className="text-2xl font-bold tracking-tight">

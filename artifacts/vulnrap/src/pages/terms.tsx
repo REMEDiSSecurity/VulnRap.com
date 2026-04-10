@@ -119,7 +119,7 @@ export default function Terms() {
           <p>
             If we change these terms, we will update this page. We are not going to bury changes in fine print or send you emails you did not ask for (we do not have your email anyway).
           </p>
-          <p className="text-xs text-muted-foreground/50">Last updated: April 2025</p>
+          <p className="text-xs text-muted-foreground/50">Last updated: April 2026</p>
         </CardContent>
       </Card>
 
