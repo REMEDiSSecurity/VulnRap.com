@@ -9,45 +9,55 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="laser-content-layer min-h-screen bg-background text-foreground flex flex-col font-mono selection:bg-primary selection:text-primary-foreground">
+      <div className="cyber-grid" aria-hidden="true" />
       <LaserEffects />
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className="nav-glass sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 text-primary hover:opacity-80 transition-opacity">
-            <img src={logoSrc} alt="VulnRap" className="w-8 h-8 rounded-sm" />
-            <span className="font-bold text-xl tracking-tight uppercase">VulnRap</span>
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <img src={logoSrc} alt="VulnRap" className="w-8 h-8 rounded-sm transition-transform group-hover:scale-110" />
+            <span className="font-bold text-xl tracking-tight uppercase text-primary glow-text-sm transition-all group-hover:glow-text">VulnRap</span>
           </Link>
-          <nav className="flex items-center gap-6">
-            <Link to="/" className={cn("text-sm font-medium transition-colors hover:text-primary", pathname === "/" ? "text-primary" : "text-muted-foreground")}>
-              Submit
-            </Link>
-            <Link to="/check" className={cn("text-sm font-medium transition-colors hover:text-primary flex items-center gap-1", pathname === "/check" ? "text-primary" : "text-muted-foreground")}>
-              <Search className="w-4 h-4" /> Check
-            </Link>
-            <Link to="/stats" className={cn("text-sm font-medium transition-colors hover:text-primary flex items-center gap-1", pathname === "/stats" ? "text-primary" : "text-muted-foreground")}>
-              <Activity className="w-4 h-4" /> Stats
-            </Link>
-            <Link to="/privacy" className={cn("text-sm font-medium transition-colors hover:text-primary flex items-center gap-1", pathname === "/privacy" ? "text-primary" : "text-muted-foreground")}>
-              <Shield className="w-4 h-4" /> Privacy
-            </Link>
+          <nav className="flex items-center gap-1">
+            {[
+              { to: "/", label: "Submit", icon: null, match: pathname === "/" },
+              { to: "/check", label: "Check", icon: <Search className="w-3.5 h-3.5" />, match: pathname === "/check" },
+              { to: "/stats", label: "Stats", icon: <Activity className="w-3.5 h-3.5" />, match: pathname === "/stats" },
+              { to: "/privacy", label: "Privacy", icon: <Shield className="w-3.5 h-3.5" />, match: pathname === "/privacy" },
+            ].map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  "text-sm font-medium transition-all px-3 py-1.5 rounded-md flex items-center gap-1.5",
+                  item.match
+                    ? "text-primary bg-primary/10 glow-text-sm"
+                    : "text-muted-foreground hover:text-primary hover:bg-primary/5"
+                )}
+              >
+                {item.icon}
+                {item.label}
+              </Link>
+            ))}
           </nav>
         </div>
       </header>
       <main className="flex-1 container mx-auto px-4 py-8">
         {children}
       </main>
-      <footer className="border-t border-border py-8 mt-auto">
+      <footer className="footer-gradient py-10 mt-auto">
         <div className="container mx-auto px-4 flex flex-col items-center gap-4 text-xs text-muted-foreground">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 w-full">
-            <div className="flex items-center gap-2">
-              <img src={logoSrc} alt="" className="w-4 h-4 rounded-sm opacity-60" />
-              <span>VulnRap // Free & Anonymous Vulnerability Report Validation</span>
+            <div className="flex items-center gap-2.5">
+              <img src={logoSrc} alt="" className="w-5 h-5 rounded-sm opacity-50" />
+              <span className="text-muted-foreground/70">VulnRap // Free & Anonymous Vulnerability Report Validation</span>
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-5">
               <Link to="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
               <Link to="/stats" className="hover:text-primary transition-colors">Platform Stats</Link>
             </div>
           </div>
-          <span className="text-[10px] text-muted-foreground/40">Funded and developed by the creators of <a href="https://complitt.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/60 transition-colors">COMPLiTT.com</a> and <a href="https://remedissecurity.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/60 transition-colors">REMEDiSSecurity.com</a></span>
+          <div className="w-16 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+          <span className="text-[10px] text-muted-foreground/30">Funded and developed by the creators of <a href="https://complitt.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/50 transition-colors">COMPLiTT.com</a> and <a href="https://remedissecurity.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/50 transition-colors">REMEDiSSecurity.com</a></span>
         </div>
       </footer>
     </div>

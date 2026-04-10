@@ -29,7 +29,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ### Frontend (`artifacts/vulnrap/`)
 - React + Vite app at root path "/"
 - Route-level code splitting with React.lazy() + Suspense for faster initial load
-- Dark terminal-inspired aesthetic with cyan/violet accents, Space Mono font
+- Cyberpunk glassmorphism design system: glass cards with backdrop blur, glow text effects, gradient borders (static + animated), colored icon glow backgrounds, cyber grid background, gradient histogram bars, colored stat accent borders, glass navbar/footer
 - Animated laser visual effects: background beams, ambient flashes, scan line (respects prefers-reduced-motion)
 - Custom AI-generated logo: synthetic bug inspected by lasers (`src/assets/logo.png`, compressed to ~355KB)
 - Pages:

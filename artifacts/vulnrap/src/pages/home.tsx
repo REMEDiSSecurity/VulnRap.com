@@ -205,20 +205,21 @@ export default function Home() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-10">
-      <div className="space-y-5 text-center pt-4">
+      <div className="space-y-6 text-center pt-6">
         <div className="relative flex justify-center">
           <div className="relative">
             <LogoBeams />
-            <img src={logoSrc} alt="VulnRap" className="relative z-10 w-20 h-20 md:w-24 md:h-24 rounded-lg shadow-lg shadow-primary/20 border border-primary/20" />
+            <div className="absolute inset-0 rounded-xl bg-primary/10 blur-3xl scale-150 z-0" />
+            <img src={logoSrc} alt="VulnRap" className="relative z-10 w-24 h-24 md:w-28 md:h-28 rounded-xl logo-glow gradient-border" />
           </div>
         </div>
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-primary uppercase" data-testid="text-heading">Report Validation</h1>
+        <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-primary uppercase glow-text" data-testid="text-heading">Report Validation</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
           Validate your bug bounty reports before submission. We check for similarities against known reports and analyze your content for AI-generated "slop".
         </p>
       </div>
 
-      <div className="rounded-lg border border-primary/20 bg-card/30 overflow-hidden">
+      <div className="rounded-xl glass-card-accent overflow-hidden">
         <video
           className="w-full"
           controls
@@ -226,42 +227,41 @@ export default function Home() {
           preload="metadata"
         >
           <source src={`${import.meta.env.BASE_URL}vulnrap-intro.mp4`} type="video/mp4" />
-          <source src={`${import.meta.env.BASE_URL}vulnrap-intro.mov`} type="video/quicktime" />
           Your browser does not support video playback.
         </video>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="flex items-start gap-3 p-4 rounded-lg border border-border/50 bg-card/30">
-          <div className="p-2 rounded-md bg-primary/10">
-            <ShieldCheck className="w-5 h-5 text-green-500" />
+        <div className="feature-card flex items-start gap-3 p-5 rounded-xl glass-card">
+          <div className="p-2.5 rounded-lg icon-glow-green flex-shrink-0">
+            <ShieldCheck className="w-5 h-5 text-green-400" />
           </div>
           <div>
-            <h3 className="text-sm font-bold mb-1">Auto-Redaction</h3>
+            <h3 className="text-sm font-bold mb-1.5">Auto-Redaction</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">PII, secrets, credentials, and company names are automatically scrubbed before your report is stored or compared.</p>
           </div>
         </div>
-        <div className="flex items-start gap-3 p-4 rounded-lg border border-border/50 bg-card/30">
-          <div className="p-2 rounded-md bg-primary/10">
-            <Fingerprint className="w-5 h-5 text-primary" />
+        <div className="feature-card flex items-start gap-3 p-5 rounded-xl glass-card">
+          <div className="p-2.5 rounded-lg icon-glow-cyan flex-shrink-0">
+            <Fingerprint className="w-5 h-5 text-cyan-400" />
           </div>
           <div>
-            <h3 className="text-sm font-bold mb-1">Section-Level Hashing</h3>
+            <h3 className="text-sm font-bold mb-1.5">Section-Level Hashing</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">Each section of your report is hashed independently, detecting partial matches even when full documents differ.</p>
           </div>
         </div>
-        <div className="flex items-start gap-3 p-4 rounded-lg border border-border/50 bg-card/30">
-          <div className="p-2 rounded-md bg-primary/10">
-            <Eye className="w-5 h-5 text-primary" />
+        <div className="feature-card flex items-start gap-3 p-5 rounded-xl glass-card">
+          <div className="p-2.5 rounded-lg icon-glow-violet flex-shrink-0">
+            <Eye className="w-5 h-5 text-violet-400" />
           </div>
           <div>
-            <h3 className="text-sm font-bold mb-1">AI Slop Detection</h3>
+            <h3 className="text-sm font-bold mb-1.5">AI Slop Detection</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">Structural and linguistic analysis scores how likely your report is AI-generated, with actionable feedback.</p>
           </div>
         </div>
       </div>
 
-      <Card className="border-primary/20 bg-card/40 backdrop-blur">
+      <Card className="glass-card-accent rounded-xl overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-primary" />
@@ -271,14 +271,14 @@ export default function Home() {
           <CardDescription>Upload a file or paste text directly (Max 20MB)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
-          <div className="flex rounded-lg border border-border overflow-hidden">
+          <div className="flex rounded-xl overflow-hidden glass-card">
             <button
               type="button"
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors",
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-all",
                 inputMode === "file"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card hover:bg-muted text-muted-foreground"
+                  ? "bg-primary text-primary-foreground glow-button"
+                  : "hover:bg-muted/30 text-muted-foreground"
               )}
               onClick={() => { setInputMode("file"); setStage("idle"); }}
               data-testid="tab-file"
@@ -289,10 +289,10 @@ export default function Home() {
             <button
               type="button"
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors border-l border-border",
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-all border-l border-border/30",
                 inputMode === "text"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card hover:bg-muted text-muted-foreground"
+                  ? "bg-primary text-primary-foreground glow-button"
+                  : "hover:bg-muted/30 text-muted-foreground"
               )}
               onClick={() => { setInputMode("text"); setStage("idle"); }}
               data-testid="tab-text"
@@ -306,9 +306,9 @@ export default function Home() {
           <div
             data-testid="dropzone"
             className={cn(
-              "border-2 border-dashed rounded-lg p-12 flex flex-col items-center justify-center gap-4 transition-colors cursor-pointer",
-              isDragging ? "border-primary bg-primary/5" : "border-muted hover:border-primary/50",
-              file && !fileError ? "border-primary/50 bg-primary/5" : "",
+              "border-2 border-dashed rounded-xl p-12 flex flex-col items-center justify-center gap-4 transition-all cursor-pointer",
+              isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/20 hover:border-primary/40",
+              file && !fileError ? "border-primary/40 bg-primary/5" : "",
               fileError ? "border-destructive bg-destructive/5" : ""
             )}
             onDrop={handleDrop}
@@ -361,7 +361,7 @@ export default function Home() {
           <div className="space-y-2">
             <textarea
               data-testid="input-rawtext"
-              className="w-full h-64 rounded-lg border border-border bg-background p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary placeholder:text-muted-foreground/50"
+              className="w-full h-64 rounded-xl glass-card p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/40 bg-transparent"
               placeholder="Paste your vulnerability report text here...&#10;&#10;This field accepts plain text only. All content is treated as text -- no HTML, markdown rendering, or code execution."
               value={rawText}
               onChange={(e) => { setRawText(e.target.value); setStage("idle"); }}
@@ -424,7 +424,7 @@ export default function Home() {
         </CardContent>
         <CardFooter className="flex flex-col gap-3">
           <Button
-            className="w-full h-12 text-lg font-bold gap-2"
+            className="w-full h-12 text-lg font-bold gap-2 glow-button"
             onClick={handleSubmit}
             disabled={!hasContent || isProcessing || !!fileError}
             data-testid="button-submit"
@@ -437,35 +437,35 @@ export default function Home() {
         </CardFooter>
       </Card>
 
-      <div className="border border-border/50 rounded-lg p-6 bg-card/20 space-y-4">
+      <div className="glass-card rounded-xl p-6 space-y-5">
         <h2 className="text-lg font-bold flex items-center gap-2">
           <Zap className="w-5 h-5 text-primary" />
           How It Works
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="space-y-2">
-            <div className="text-3xl font-bold text-primary/30">01</div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="space-y-2 p-4 rounded-xl glass-card feature-card">
+            <div className="text-3xl font-bold step-number">01</div>
             <h3 className="font-medium text-sm">Submit</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Upload a .txt or .md file, or paste your report text directly. We extract the content and begin processing immediately.
             </p>
           </div>
-          <div className="space-y-2">
-            <div className="text-3xl font-bold text-primary/30">02</div>
+          <div className="space-y-2 p-4 rounded-xl glass-card feature-card">
+            <div className="text-3xl font-bold step-number">02</div>
             <h3 className="font-medium text-sm">Auto-Redact</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               PII, secrets, credentials, and company names are automatically scrubbed. Only the redacted version is used from this point.
             </p>
           </div>
-          <div className="space-y-2">
-            <div className="text-3xl font-bold text-primary/30">03</div>
+          <div className="space-y-2 p-4 rounded-xl glass-card feature-card">
+            <div className="text-3xl font-bold step-number">03</div>
             <h3 className="font-medium text-sm">Analyze</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               We hash each section independently, compare against all existing reports, and score AI-generation likelihood.
             </p>
           </div>
-          <div className="space-y-2">
-            <div className="text-3xl font-bold text-primary/30">04</div>
+          <div className="space-y-2 p-4 rounded-xl glass-card feature-card">
+            <div className="text-3xl font-bold step-number">04</div>
             <h3 className="font-medium text-sm">Results</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Get your slop score, similarity matches, section-level hash analysis, redaction summary, and improvement feedback.
@@ -485,14 +485,14 @@ function RecentReportsFeed() {
 
   if (isLoading) {
     return (
-      <div className="border border-border/50 rounded-lg p-6 bg-card/20 space-y-4">
+      <div className="glass-card rounded-xl p-6 space-y-4">
         <h2 className="text-lg font-bold flex items-center gap-2">
           <Clock className="w-5 h-5 text-primary" />
           Recent Reports
         </h2>
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 rounded-lg bg-muted/30 animate-pulse" />
+            <div key={i} className="h-14 rounded-lg bg-muted/20 animate-pulse" />
           ))}
         </div>
       </div>
@@ -501,7 +501,7 @@ function RecentReportsFeed() {
 
   if (!reports || reports.length === 0) {
     return (
-      <div className="border border-border/50 rounded-lg p-6 bg-card/20 space-y-4">
+      <div className="glass-card rounded-xl p-6 space-y-4">
         <h2 className="text-lg font-bold flex items-center gap-2">
           <Clock className="w-5 h-5 text-primary" />
           Recent Reports
@@ -514,7 +514,7 @@ function RecentReportsFeed() {
   }
 
   return (
-    <div className="border border-border/50 rounded-lg p-6 bg-card/20 space-y-4">
+    <div className="glass-card rounded-xl p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold flex items-center gap-2">
           <Clock className="w-5 h-5 text-primary" />
@@ -527,10 +527,10 @@ function RecentReportsFeed() {
           <Link
             key={report.id}
             to={`/verify/${report.id}`}
-            className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-card/30 hover:border-primary/50 hover:bg-card/60 transition-all group"
+            className="flex items-center justify-between p-3 rounded-lg glass-card hover:border-primary/20 transition-all group"
           >
             <div className="flex items-center gap-3 min-w-0">
-              <span className="font-mono text-sm text-primary font-medium">{report.reportCode}</span>
+              <span className="font-mono text-sm text-primary font-medium glow-text-sm">{report.reportCode}</span>
               <Badge variant="secondary" className="text-[10px] hidden sm:inline-flex">
                 {report.contentMode === "full" ? "Shared" : "Private"}
               </Badge>

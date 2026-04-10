@@ -28,7 +28,7 @@ function Hint({ text }: { text: string }) {
   return (
     <span className="group relative inline-flex ml-1 cursor-help">
       <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-primary transition-colors" />
-      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-popover border border-border px-3 py-2 text-xs text-popover-foreground opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg text-left font-normal normal-case">
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md glass-card px-3 py-2 text-xs text-popover-foreground opacity-0 group-hover:opacity-100 transition-opacity z-50 glow-border text-left font-normal normal-case">
         {text}
       </span>
     </span>
@@ -128,16 +128,17 @@ export default function Check() {
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="space-y-2 pt-4">
-        <h1 className="text-3xl font-bold tracking-tight text-primary uppercase flex items-center gap-3">
+        <h1 className="text-3xl font-bold tracking-tight text-primary uppercase flex items-center gap-3 glow-text">
           <Shield className="w-8 h-8" />
           Check a Report
         </h1>
         <p className="text-muted-foreground max-w-2xl">
           For bug bounty programs and report receivers. Check an incoming vulnerability report against our database for duplicates and AI-generated content. Nothing is stored -- this is a read-only check.
         </p>
+        <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
 
-      <Card className="border-primary/20 bg-card/40 backdrop-blur">
+      <Card className="glass-card-accent rounded-xl overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Search className="w-5 h-5 text-primary" />
@@ -147,12 +148,12 @@ export default function Check() {
           <CardDescription>Analysis only -- nothing is stored or saved</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex rounded-lg border border-border overflow-hidden">
+          <div className="flex rounded-xl overflow-hidden glass-card">
             <button
               type="button"
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors",
-                inputMode === "text" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted text-muted-foreground"
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-all",
+                inputMode === "text" ? "bg-primary text-primary-foreground glow-button" : "hover:bg-muted/30 text-muted-foreground"
               )}
               onClick={() => setInputMode("text")}
             >
@@ -162,8 +163,8 @@ export default function Check() {
             <button
               type="button"
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors border-l border-border",
-                inputMode === "file" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted text-muted-foreground"
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-all border-l border-border/30",
+                inputMode === "file" ? "bg-primary text-primary-foreground glow-button" : "hover:bg-muted/30 text-muted-foreground"
               )}
               onClick={() => setInputMode("file")}
             >
@@ -175,7 +176,7 @@ export default function Check() {
           {inputMode === "text" ? (
             <div className="space-y-2">
               <textarea
-                className="w-full h-48 rounded-lg border border-border bg-background p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary placeholder:text-muted-foreground/50"
+                className="w-full h-48 rounded-xl glass-card p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/40 bg-transparent"
                 placeholder="Paste the vulnerability report text here...&#10;&#10;Plain text only. Content is analyzed but never stored."
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
@@ -194,9 +195,9 @@ export default function Check() {
           ) : (
             <div
               className={cn(
-                "border-2 border-dashed rounded-lg p-10 flex flex-col items-center justify-center gap-3 transition-colors cursor-pointer",
-                isDragging ? "border-primary bg-primary/5" : "border-muted hover:border-primary/50",
-                file && !fileError ? "border-primary/50 bg-primary/5" : "",
+                "border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer",
+                isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/20 hover:border-primary/40",
+                file && !fileError ? "border-primary/40 bg-primary/5" : "",
                 fileError ? "border-destructive bg-destructive/5" : ""
               )}
               onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files?.[0]) { const f = e.dataTransfer.files[0]; const err = validateFile(f); if (err) { setFileError(err); setFile(null); } else { setFile(f); setFileError(null); } } }}
@@ -224,7 +225,7 @@ export default function Check() {
         </CardContent>
         <CardFooter>
           <Button
-            className="w-full h-12 text-lg font-bold gap-2"
+            className="w-full h-12 text-lg font-bold gap-2 glow-button"
             onClick={handleSubmit}
             disabled={!hasContent || checkMutation.isPending}
           >
@@ -246,7 +247,7 @@ export default function Check() {
           </h2>
 
           {result.previouslySubmitted && (
-            <div className="flex items-center gap-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+            <div className="flex items-center gap-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 glass-card">
               <AlertTriangle className="w-6 h-6 text-yellow-500 flex-shrink-0" />
               <div>
                 <div className="font-medium text-sm">Previously Submitted</div>
@@ -261,12 +262,12 @@ export default function Check() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="border-primary/20 bg-card/40">
+            <Card className="glass-card-accent rounded-xl">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">AI Sloppiness Score</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col items-center py-4">
-                <div className={`text-5xl font-bold font-mono ${getSlopColor(result.slopScore)}`}>{result.slopScore}</div>
+                <div className={`text-5xl font-bold font-mono ${getSlopColor(result.slopScore)} glow-text`}>{result.slopScore}</div>
                 <div className="mt-2 text-sm font-medium uppercase">{result.slopTier}</div>
                 <div className="w-full max-w-xs mt-4">
                   <Progress value={result.slopScore} className="h-2" indicatorClassName={getSlopProgressColor(result.slopScore)} />
@@ -274,7 +275,7 @@ export default function Check() {
               </CardContent>
             </Card>
 
-            <Card className="bg-card/40">
+            <Card className="glass-card rounded-xl">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">Similarity Check</CardTitle>
               </CardHeader>
@@ -283,7 +284,7 @@ export default function Check() {
                   <div className="space-y-3">
                     {result.similarityMatches.map((match, i) => (
                       <div key={i} className="flex items-center justify-between">
-                        <span className="font-mono text-sm text-primary">{anonymizeId(match.reportId)}</span>
+                        <span className="font-mono text-sm text-primary glow-text-sm">{anonymizeId(match.reportId)}</span>
                         <div className="flex items-center gap-2">
                           <Progress value={match.similarity} className="w-24 h-2" indicatorClassName={match.similarity > 80 ? "bg-destructive" : "bg-primary"} />
                           <span className="font-mono text-sm w-12 text-right">{Math.round(match.similarity)}%</span>
@@ -293,7 +294,9 @@ export default function Check() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center py-4 text-center">
-                    <CheckCircle className="w-8 h-8 text-green-500 mb-2" />
+                    <div className="p-3 rounded-full icon-glow-green mb-2">
+                      <CheckCircle className="w-8 h-8 text-green-400" />
+                    </div>
                     <span className="text-sm font-medium">No duplicates found</span>
                     <span className="text-xs text-muted-foreground">Unique in our database</span>
                   </div>
@@ -303,10 +306,10 @@ export default function Check() {
           </div>
 
           {result.redactionSummary.totalRedactions > 0 && (
-            <Card className="bg-card/40 border-green-500/20">
+            <Card className="glass-card rounded-xl" style={{ borderColor: "rgba(34, 197, 94, 0.15)" }}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <ShieldCheck className="w-4 h-4 text-green-500" />
+                  <ShieldCheck className="w-4 h-4 text-green-400" />
                   Redaction Analysis
                 </CardTitle>
                 <CardDescription>{result.redactionSummary.totalRedactions} items would be redacted</CardDescription>
@@ -324,7 +327,7 @@ export default function Check() {
           )}
 
           {result.sectionMatches.length > 0 && (
-            <Card className="bg-card/40">
+            <Card className="glass-card rounded-xl">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Layers className="w-4 h-4 text-primary" />
@@ -333,7 +336,7 @@ export default function Check() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {result.sectionMatches.map((match, i) => (
-                  <div key={i} className="bg-yellow-500/10 border border-yellow-500/20 rounded p-3 text-sm flex justify-between items-center">
+                  <div key={i} className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm flex justify-between items-center">
                     <span><strong>{match.sectionTitle}</strong> matches {anonymizeId(match.matchedReportId)}</span>
                     <Badge variant="secondary" className="font-mono">{match.similarity}%</Badge>
                   </div>
@@ -343,7 +346,7 @@ export default function Check() {
           )}
 
           {result.feedback.length > 0 && (
-            <Card className="bg-card/40">
+            <Card className="glass-card rounded-xl">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Lightbulb className="w-4 h-4 text-primary" />
