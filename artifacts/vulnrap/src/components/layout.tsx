@@ -3,6 +3,7 @@ import { Activity, Shield, Search, Code } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
+import { CursorBugs } from "@/components/cursor-bugs";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
@@ -11,6 +12,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="laser-content-layer min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary selection:text-primary-foreground">
       <div className="cyber-grid" aria-hidden="true" />
       <LaserEffects />
+      <CursorBugs />
       <header className="nav-glass sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 group">
