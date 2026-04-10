@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: VulnRap.com API — Vulnerability Report Validation Platform
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: reports
+    description: Report submission and analysis
+  - name: stats
+    description: Platform statistics
 paths:
   /healthz:
     get:
@@ -24,6 +28,147 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /reports:
+    post:
+      operationId: submitReport
+      tags: [reports]
+      summary: Submit a vulnerability report for analysis
+      description: Upload a vulnerability report file for similarity checking and sloppiness scoring
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  description: The vulnerability report file (txt, md)
+                contentMode:
+                  type: string
+                  enum: [full, similarity_only]
+                  default: full
+                  description: Privacy mode — full shares content, similarity_only stores only hashes
+              required:
+                - file
+                - contentMode
+      responses:
+        "201":
+          description: Report submitted and analyzed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportAnalysis"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reports/{id}:
+    get:
+      operationId: getReport
+      tags: [reports]
+      summary: Get report analysis results
+      description: Retrieve the full analysis for a previously submitted report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Report analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportAnalysis"
+        "404":
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reports/lookup/{hash}:
+    get:
+      operationId: lookupByHash
+      tags: [reports]
+      summary: Look up a report by content hash
+      description: Check if a report with the given SHA-256 content hash has been seen before
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 64
+            maxLength: 64
+      responses:
+        "200":
+          description: Hash lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HashLookupResult"
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Get platform statistics
+      description: Returns aggregate statistics for the platform
+      responses:
+        "200":
+          description: Platform statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformStats"
+
+  /stats/recent:
+    get:
+      operationId: getRecentActivity
+      tags: [stats]
+      summary: Get recent submission activity
+      description: Returns a summary of recent report submissions
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentActivity"
+
+  /stats/distribution:
+    get:
+      operationId: getSlopDistribution
+      tags: [stats]
+      summary: Get slop score distribution
+      description: Returns the distribution of slop scores across all reports
+      responses:
+        "200":
+          description: Score distribution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlopDistribution"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +179,175 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SimilarityMatch:
+      type: object
+      properties:
+        reportId:
+          type: integer
+        similarity:
+          type: integer
+          description: Similarity percentage (0-100)
+        matchType:
+          type: string
+          enum: [near-duplicate, high-similarity, structural, semantic]
+      required:
+        - reportId
+        - similarity
+        - matchType
+
+    ReportAnalysis:
+      type: object
+      properties:
+        id:
+          type: integer
+        contentHash:
+          type: string
+        contentMode:
+          type: string
+          enum: [full, similarity_only]
+        slopScore:
+          type: integer
+          description: Sloppiness score 0-100 (higher = more suspicious)
+        slopTier:
+          type: string
+          description: Human-readable sloppiness tier
+        similarityMatches:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimilarityMatch"
+        feedback:
+          type: array
+          items:
+            type: string
+        fileName:
+          type: ["string", "null"]
+        fileSize:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - contentHash
+        - contentMode
+        - slopScore
+        - slopTier
+        - similarityMatches
+        - feedback
+        - fileSize
+        - createdAt
+
+    HashLookupResult:
+      type: object
+      properties:
+        found:
+          type: boolean
+        reportId:
+          type: ["integer", "null"]
+        slopScore:
+          type: ["integer", "null"]
+        slopTier:
+          type: ["string", "null"]
+        matchCount:
+          type: integer
+          description: Number of similar reports found
+        firstSeen:
+          type: ["string", "null"]
+          format: date-time
+      required:
+        - found
+        - matchCount
+
+    PlatformStats:
+      type: object
+      properties:
+        totalReports:
+          type: integer
+        duplicatesDetected:
+          type: integer
+        avgSlopScore:
+          type: number
+        reportsByMode:
+          type: object
+          properties:
+            full:
+              type: integer
+            similarity_only:
+              type: integer
+          required:
+            - full
+            - similarity_only
+        reportsToday:
+          type: integer
+        reportsThisWeek:
+          type: integer
+      required:
+        - totalReports
+        - duplicatesDetected
+        - avgSlopScore
+        - reportsByMode
+        - reportsToday
+        - reportsThisWeek
+
+    RecentActivity:
+      type: object
+      properties:
+        recentReports:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              slopScore:
+                type: integer
+              slopTier:
+                type: string
+              matchCount:
+                type: integer
+              createdAt:
+                type: string
+                format: date-time
+            required:
+              - id
+              - slopScore
+              - slopTier
+              - matchCount
+              - createdAt
+      required:
+        - recentReports
+
+    SlopDistribution:
+      type: object
+      properties:
+        buckets:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              min:
+                type: integer
+              max:
+                type: integer
+              count:
+                type: integer
+            required:
+              - label
+              - min
+              - max
+              - count
+        totalReports:
+          type: integer
+      required:
+        - buckets
+        - totalReports
