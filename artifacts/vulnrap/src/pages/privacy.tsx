@@ -26,12 +26,12 @@ export default function Privacy() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
           <p>
-            Vulnerability programs are drowning in low-quality, duplicate, and AI-generated reports. Triage teams waste hours filtering noise while legitimate researchers wait longer for their reports to be reviewed. VulnRap exists to help both sides:
+            Vulnerability programs are drowning in low-quality, duplicate, and AI-generated reports. Triage teams waste hours filtering noise instead of focusing on legitimate findings. VulnRap exists to give your team better tools:
           </p>
           <ul className="space-y-2 list-disc pl-5">
-            <li><strong className="text-foreground">For researchers:</strong> Check if your report has been submitted before, get an honest assessment of quality, and improve your report before submission.</li>
-            <li><strong className="text-foreground">For the ecosystem:</strong> Every report analyzed improves our fingerprint corpus. When a researcher discovers their report matches an existing one, that saves everyone time.</li>
-            <li><strong className="text-foreground">For trust:</strong> Platforms can point researchers here as a pre-submission check, reducing duplicate submissions and AI slop before they clog the pipeline.</li>
+            <li><strong className="text-foreground">For triage teams:</strong> Screen incoming reports for AI-generated content, detect duplicates across submissions, and prioritize analyst time on reports that matter.</li>
+            <li><strong className="text-foreground">For the ecosystem:</strong> Every report analyzed improves the fingerprint corpus. When a duplicate is caught automatically, that saves your team from re-triaging the same issue.</li>
+            <li><strong className="text-foreground">For trust:</strong> Integrate VulnRap into your intake process as a pre-screening step, reducing duplicate submissions and AI slop before they reach your queue.</li>
           </ul>
         </CardContent>
       </Card>
@@ -150,7 +150,7 @@ export default function Privacy() {
               <ul className="text-sm space-y-1.5 text-muted-foreground">
                 <li className="flex items-start gap-2"><span className="text-primary mt-1 flex-shrink-0">--</span> Enables richer semantic matching beyond structural fingerprints</li>
                 <li className="flex items-start gap-2"><span className="text-primary mt-1 flex-shrink-0">--</span> Improves sloppiness scoring with real-world examples</li>
-                <li className="flex items-start gap-2"><span className="text-primary mt-1 flex-shrink-0">--</span> Builds a larger corpus so future researchers get better duplicate detection</li>
+                <li className="flex items-start gap-2"><span className="text-primary mt-1 flex-shrink-0">--</span> Builds a larger corpus so triage teams get better duplicate detection on incoming reports</li>
                 <li className="flex items-start gap-2"><span className="text-primary mt-1 flex-shrink-0">--</span> Helps identify common patterns in AI-generated reports</li>
               </ul>
             </div>

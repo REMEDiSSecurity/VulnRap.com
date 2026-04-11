@@ -50,7 +50,7 @@ export default function Terms() {
             <li>Reports submitted in "Share with the community" mode will be auto-redacted and made available for similarity comparison by other users. That is the whole point — this only works if people contribute.</li>
             <li>You will not use automated tools to flood the platform. We have rate limits (100 requests per 15 minutes) and we will block abusive traffic.</li>
             <li>You understand that auto-redaction is regex-based and not perfect. If your report contains sensitive information in unusual formats, the redactor might miss it. When in doubt, pre-sanitize your report before uploading.</li>
-            <li>You will not use VulnRap to harass, track, or de-anonymize other users or researchers.</li>
+            <li>You will not use VulnRap to harass, track, or de-anonymize other users.</li>
           </ul>
         </CardContent>
       </Card>

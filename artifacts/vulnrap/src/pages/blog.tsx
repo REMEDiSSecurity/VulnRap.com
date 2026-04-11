@@ -34,10 +34,10 @@ function FirstPost() {
             If you work in PSIRT, run a VDP, or manage a vulnerability program, you already know the pain. Your inbox is a mix of legitimate vulnerability reports, near-identical duplicates, and an increasing volume of reports that read like someone asked an AI to "write a critical vulnerability report about SQL injection" and submitted whatever came out.
           </p>
           <p>
-            The AI-generated reports are the worst part. They are just plausible enough to require reading, but they waste your time because the researcher never actually found a vulnerability — they described a theoretical one. You read three paragraphs of "It is important to note that SQL injection vulnerabilities can have devastating consequences" before you realize there are no reproduction steps, no version numbers, and no proof of concept.
+            The AI-generated reports are the worst part. They are just plausible enough to require reading, but they waste your time because the submitter never actually found a vulnerability — they described a theoretical one. You read three paragraphs of "It is important to note that SQL injection vulnerabilities can have devastating consequences" before you realize there are no reproduction steps, no version numbers, and no proof of concept.
           </p>
           <p>
-            Duplicates are the second problem. A researcher finds a real bug, writes a solid report, and submits it. Then four more researchers find the same bug and submit slightly different versions of the same report. The triager reads all five, realizes they are the same thing, and closes four of them. Everyone wasted time.
+            Duplicates are the second problem. Someone finds a real bug, writes a solid report, and submits it. Then four more people find the same bug and submit slightly different versions of the same report. Your team reads all five, realizes they are the same thing, and closes four of them. Everyone wasted time.
           </p>
         </div>
 
@@ -89,7 +89,7 @@ function FirstPost() {
             A plagiarism detector will tell you that two XSS reports are "similar" because they both mention <code className="text-primary font-mono text-xs">document.cookie</code>. That is not useful. VulnRap understands the structure of vulnerability reports — it knows that "Steps to Reproduce" sections should be unique, that "Impact" sections might reasonably overlap, and that technical terms are not plagiarism.
           </p>
           <p>
-            An AI content detector trained on essays does not know that "The application fails to properly sanitize user input" is a perfectly normal thing for a human security researcher to write. VulnRap's slop detection is tuned specifically for vulnerability reports. It flags the filler, not the technical language.
+            An AI content detector trained on essays does not know that "The application fails to properly sanitize user input" is a perfectly normal thing for a human to write in a vulnerability report. VulnRap's slop detection is tuned specifically for vulnerability reports. It flags the filler, not the technical language.
           </p>
         </div>
 
@@ -99,7 +99,7 @@ function FirstPost() {
             How You Can Help
           </h3>
           <p>
-            VulnRap only works if people use it. The similarity detection gets better with every report in the database. If you are a security researcher, run your reports through VulnRap before you submit them. If you are a triager, use the Check page on incoming reports. Every report analyzed makes the system more useful for everyone.
+            VulnRap only works if teams use it. The similarity detection gets better with every report in the database. If you run a PSIRT or triage team, use the Check page on incoming reports or integrate the API into your intake pipeline. Every report analyzed makes the system more useful for the entire community.
           </p>
           <p>
             If you are a developer, the project is open source and we welcome contributions. The slop detection heuristics can always be improved, the redaction patterns can always catch more edge cases, and the section parser can always handle more report formats.
