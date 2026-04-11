@@ -965,8 +965,8 @@ export default function Home() {
                 <div className="flex items-start gap-3">
                   <RadioGroupItem value={SubmitReportBodyContentMode.full} id="full" className="mt-1" />
                   <div className="space-y-1">
-                    <Label htmlFor="full" className="font-bold cursor-pointer">Share with the community <span className="font-normal text-muted-foreground">(this is the only way this site can work)</span></Label>
-                    <p className="text-xs text-muted-foreground leading-relaxed">Your report (with PII and secrets auto-removed) is saved and helps everyone detect duplicates. Best for most submissions.</p>
+                    <Label htmlFor="full" className="font-bold cursor-pointer">Share with the community</Label>
+                    <p className="text-xs text-muted-foreground leading-relaxed">We understand that the only way this works is with trust — and data in the form of reports that can be compared. Your report (with PII and secrets auto-removed) is saved and helps the entire community detect duplicates and AI slop. If you'd be willing to gift us some training data — rejected AI slop, or examples of what you look for in a valid report — the community as a whole benefits. Please <a href="mailto:remedisllc@gmail.com" className="text-primary hover:underline">reach out</a> if you can!</p>
                   </div>
                 </div>
                 {mode === "full" && (
