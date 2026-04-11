@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle, Trash2 } from "lucide-react";
+import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle, Trash2, Mail } from "lucide-react";
 import { LogoBeams } from "@/components/laser-effects";
 import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -108,6 +108,24 @@ const redactionCategories = [
   },
 ];
 
+function MethodologySuggestionFooter({ topic }: { topic: string }) {
+  const subject = encodeURIComponent(`Methodology Suggestion: ${topic}`);
+  return (
+    <div className="border-t border-border/30 pt-3 flex items-center justify-between gap-3">
+      <p className="text-[10px] text-muted-foreground leading-relaxed">
+        Have a better idea for how we handle <span className="text-foreground">{topic}</span>? We're always looking to improve our methodology.
+      </p>
+      <a
+        href={`mailto:remedisllc@gmail.com?subject=${subject}`}
+        className="flex-shrink-0 inline-flex items-center gap-1.5 text-[10px] text-primary/70 hover:text-primary transition-colors border border-primary/20 hover:border-primary/40 rounded-md px-2.5 py-1"
+      >
+        <Mail className="w-2.5 h-2.5" />
+        Suggest a change
+      </a>
+    </div>
+  );
+}
+
 function AutoRedactionCard() {
   const [expanded, setExpanded] = useState(false);
 
@@ -159,6 +177,7 @@ function AutoRedactionCard() {
           <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border/50 pt-3">
             All patterns are applied in order. Company names are detected by suffix (Inc, Corp, LLC, Ltd, etc.). Usernames are caught in key-value pairs (<code className="text-[10px] bg-muted/50 px-1 rounded">username: jdoe</code>) and attribution lines (<code className="text-[10px] bg-muted/50 px-1 rounded">reported by: Jane</code>). Redaction happens server-side before any text is stored or compared.
           </p>
+          <MethodologySuggestionFooter topic="Auto-Redaction" />
         </div>
       )}
     </div>
@@ -290,6 +309,7 @@ function SectionHashingCard() {
               The final similarity score is the maximum of Jaccard and SimHash scores. Only reports exceeding the 15% threshold appear in results. Top 10 matches are returned, sorted by similarity.
             </p>
           </div>
+          <MethodologySuggestionFooter topic="Similarity Detection" />
         </div>
       )}
     </div>
@@ -477,6 +497,7 @@ function SlopDetectionCard() {
               Neither layer alone is definitive. A high score means the report has characteristics commonly seen in AI-generated text — it does not prove the report was AI-written. A low score means the report looks human-written, not that the vulnerability is real or valid.
             </p>
           </div>
+          <MethodologySuggestionFooter topic="Slop Detection" />
         </div>
       )}
     </div>
