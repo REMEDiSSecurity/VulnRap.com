@@ -335,6 +335,29 @@ const slopSignals = [
   },
 ];
 
+const llmDimensions = [
+  {
+    label: "Technical Specificity",
+    description: "Are version numbers, endpoints, and payloads real and consistent, or vague and generic?",
+    example: "\"/api/v2/users/profile\" vs \"the API endpoint\"",
+  },
+  {
+    label: "Internal Coherence",
+    description: "Does the PoC actually demonstrate the claimed vulnerability? Do reproduction steps follow logically from the described issue?",
+    example: "SQLi PoC that doesn't include a SQL payload",
+  },
+  {
+    label: "Genericity",
+    description: "Could this report describe any application, or is it clearly tied to a specific target with concrete observations?",
+    example: "\"the login form\" vs \"/admin/login on myapp.example.com v3.1.2\"",
+  },
+  {
+    label: "Narrative Credibility",
+    description: "Does it read like someone who actually found and verified this issue, or like an AI hallucinating a plausible-sounding structure?",
+    example: "Describing behavior seen in actual testing vs. invented outcomes",
+  },
+];
+
 const slopTiers = [
   { tier: "Probably Legit", range: "0–14", color: "text-green-400", bg: "bg-green-400/10" },
   { tier: "Mildly Suspicious", range: "15–29", color: "text-yellow-400", bg: "bg-yellow-400/10" },
@@ -366,46 +389,78 @@ function SlopDetectionCard() {
       </button>
 
       {expanded && (
-        <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2">
+        <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+
+          <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2.5 space-y-1">
+            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Two-Layer Scoring Architecture</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              The slop score is a penalty-based system (0–100). Points are added for each red flag found. Lower is better. The score is deterministic — the same input always produces the same score.
+              Every report runs through both a deterministic rule engine and an LLM semantic analyzer simultaneously. The final score is a weighted blend: <span className="text-foreground font-mono">40% heuristic + 60% LLM</span>. If the LLM scorer is unavailable, the score falls back to pure heuristic. A badge on your results page shows which method was used.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {slopSignals.map((signal) => (
-              <div key={signal.label} className="space-y-2 rounded-lg bg-muted/20 p-3">
-                <h4 className={`text-xs font-bold ${signal.color}`}>{signal.label}</h4>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">{signal.description}</p>
-                {"phrases" in signal && (
-                  <>
-                    <div className="flex flex-wrap gap-1">
-                      {signal.phrases.map((phrase) => (
-                        <span key={phrase} className="text-[9px] bg-violet-500/10 text-violet-300 px-1.5 py-0.5 rounded font-mono">
-                          {phrase}
-                        </span>
-                      ))}
-                      <span className="text-[9px] text-muted-foreground px-1.5 py-0.5">+18 more...</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">{signal.scoring}</p>
-                  </>
-                )}
-                {"checks" in signal && (
-                  <div className="space-y-1">
-                    {signal.checks.map((check) => (
-                      <div key={check.what} className="rounded-md bg-muted/30 px-2 py-1">
-                        <div className="flex justify-between items-baseline gap-2">
-                          <span className="text-[10px] font-medium text-foreground">{check.what}</span>
-                          <span className="text-[9px] text-orange-400/80 font-mono whitespace-nowrap">{check.points}</span>
-                        </div>
-                        <p className="text-[9px] text-muted-foreground mt-0.5">{check.example}</p>
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400/60" />
+              Layer 1 — Heuristic Engine (deterministic)
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {slopSignals.map((signal) => (
+                <div key={signal.label} className="space-y-2 rounded-lg bg-muted/20 p-3">
+                  <h4 className={`text-xs font-bold ${signal.color}`}>{signal.label}</h4>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">{signal.description}</p>
+                  {"phrases" in signal && (
+                    <>
+                      <div className="flex flex-wrap gap-1">
+                        {(signal as { phrases: string[] }).phrases.map((phrase) => (
+                          <span key={phrase} className="text-[9px] bg-violet-500/10 text-violet-300 px-1.5 py-0.5 rounded font-mono">
+                            {phrase}
+                          </span>
+                        ))}
+                        <span className="text-[9px] text-muted-foreground px-1.5 py-0.5">+18 more...</span>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+                      <p className="text-[10px] text-muted-foreground">{(signal as { scoring: string }).scoring}</p>
+                    </>
+                  )}
+                  {"checks" in signal && (
+                    <div className="space-y-1">
+                      {(signal as { checks: { what: string; points: string; example: string }[] }).checks.map((check) => (
+                        <div key={check.what} className="rounded-md bg-muted/30 px-2 py-1">
+                          <div className="flex justify-between items-baseline gap-2">
+                            <span className="text-[10px] font-medium text-foreground">{check.what}</span>
+                            <span className="text-[9px] text-orange-400/80 font-mono whitespace-nowrap">{check.points}</span>
+                          </div>
+                          <p className="text-[9px] text-muted-foreground mt-0.5">{check.example}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2 border-t border-border/30 pt-4">
+            <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60" />
+              Layer 2 — LLM Semantic Analyzer (gpt-5-nano)
+            </h4>
+            <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
+              The LLM reads the report and scores four semantic dimensions that regex fundamentally cannot evaluate. It returns a 0–100 score and 2–4 concrete observations specific to the report content.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {llmDimensions.map((dim) => (
+                <div key={dim.label} className="rounded-lg bg-cyan-500/5 border border-cyan-500/10 p-3 space-y-1">
+                  <p className="text-[11px] font-bold text-cyan-300">{dim.label}</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">{dim.description}</p>
+                  <p className="text-[10px] text-muted-foreground/60 italic">e.g. {dim.example}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-md bg-muted/20 px-3 py-2 mt-1">
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                <span className="text-foreground font-medium">Blending:</span> Final score = <span className="font-mono text-cyan-400">(heuristic × 0.4) + (LLM × 0.6)</span>, clamped to 0–100. The tier label is re-derived from the blended score. The LLM raw score and its observations are shown separately on the results page.
+              </p>
+            </div>
           </div>
 
           <div className="border-t border-border/50 pt-3 space-y-2">
@@ -419,7 +474,7 @@ function SlopDetectionCard() {
               ))}
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              This is heuristic analysis, not a definitive judgment. A high score means the report has characteristics commonly seen in AI-generated text — it does not prove the report was AI-written. A low score means the report looks like a human wrote it, not that the vulnerability is valid.
+              Neither layer alone is definitive. A high score means the report has characteristics commonly seen in AI-generated text — it does not prove the report was AI-written. A low score means the report looks human-written, not that the vulnerability is real or valid.
             </p>
           </div>
         </div>

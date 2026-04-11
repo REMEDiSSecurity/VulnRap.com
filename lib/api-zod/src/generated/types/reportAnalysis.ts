@@ -32,7 +32,20 @@ export interface ReportAnalysis {
    */
   redactedText?: string | null;
   redactionSummary: RedactionSummary;
+  /** Heuristic feedback strings — specific issues flagged by the rule-based engine */
   feedback: string[];
+  /**
+   * LLM-enhanced slop score (0–100). Null when LLM analysis is unavailable or timed out. When present, the final slopScore is a weighted blend (40% heuristic + 60% LLM).
+   * @nullable
+   */
+  llmSlopScore?: number | null;
+  /**
+   * Semantic observations from the LLM scorer — covers technical specificity, coherence, genericity, and narrative credibility. Null when LLM analysis is unavailable.
+   * @nullable
+   */
+  llmFeedback?: string[] | null;
+  /** True when LLM analysis contributed to the final slopScore. False means the score is purely heuristic. */
+  llmEnhanced: boolean;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;

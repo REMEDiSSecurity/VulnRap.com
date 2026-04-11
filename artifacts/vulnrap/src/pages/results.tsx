@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -253,9 +253,20 @@ export default function Results() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 glass-card-accent rounded-xl">
           <CardHeader>
-            <CardTitle className="uppercase tracking-wide text-sm text-muted-foreground flex items-center">
+            <CardTitle className="uppercase tracking-wide text-sm text-muted-foreground flex items-center gap-2">
               AI Sloppiness Score
-              <Hint text="A heuristic score from 0-100 measuring how likely your report is AI-generated. Based on phrase patterns, structural analysis, vocabulary diversity, and presence of technical details like reproduction steps and code blocks." />
+              {report.llmEnhanced ? (
+                <Badge variant="outline" className="border-cyan-500/50 text-cyan-400 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 normal-case">
+                  <Brain className="w-2.5 h-2.5" />
+                  LLM Enhanced
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="border-violet-500/40 text-violet-400/70 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 normal-case">
+                  <Cpu className="w-2.5 h-2.5" />
+                  Heuristic
+                </Badge>
+              )}
+              <Hint text={report.llmEnhanced ? "Blended score: 40% heuristic rule engine + 60% LLM semantic analysis. Both layers ran simultaneously. See score breakdown below." : "Heuristic-only score — 0–100 based on phrase patterns, structural analysis, vocabulary diversity, and presence of technical details. LLM enhancement unavailable for this submission."} />
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center py-6">
@@ -272,6 +283,28 @@ export default function Results() {
               </div>
               <Progress value={report.slopScore} className="h-2" indicatorClassName={getSlopProgressColor(report.slopScore)} />
             </div>
+            {report.llmEnhanced && report.llmSlopScore != null && (
+              <div className="w-full max-w-md mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 px-3 py-2 text-center">
+                  <div className="text-[10px] text-violet-400 uppercase tracking-wide mb-1 flex items-center justify-center gap-1">
+                    <Cpu className="w-2.5 h-2.5" />
+                    Heuristic
+                  </div>
+                  <div className={`text-lg font-bold font-mono ${getSlopColor(report.slopScore)}`}>
+                    {Math.round((report.slopScore - report.llmSlopScore * 0.6) / 0.4)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-cyan-500/5 border border-cyan-500/15 px-3 py-2 text-center">
+                  <div className="text-[10px] text-cyan-400 uppercase tracking-wide mb-1 flex items-center justify-center gap-1">
+                    <Brain className="w-2.5 h-2.5" />
+                    LLM
+                  </div>
+                  <div className={`text-lg font-bold font-mono ${getSlopColor(report.llmSlopScore)}`}>
+                    {report.llmSlopScore}
+                  </div>
+                </div>
+              </div>
+            )}
             <p className="mt-6 text-xs text-muted-foreground text-center max-w-md leading-relaxed">
               {getSlopExplainer(report.slopScore)}
             </p>
@@ -501,10 +534,14 @@ export default function Results() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Lightbulb className="w-5 h-5 text-primary" />
-            Analysis Feedback
-            <Hint text="Actionable suggestions based on structural and linguistic patterns in your report. These indicate areas where your report could be improved to appear more thorough and less likely to be flagged as AI-generated." />
+            Heuristic Feedback
+            <Badge variant="outline" className="border-violet-500/40 text-violet-400/70 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 normal-case">
+              <Cpu className="w-2.5 h-2.5" />
+              Rule Engine
+            </Badge>
+            <Hint text="Actionable suggestions from the deterministic rule engine — based on structural and linguistic patterns. Same input always produces the same feedback." />
           </CardTitle>
-          <CardDescription>Observations and suggestions to improve your report</CardDescription>
+          <CardDescription>Structural and linguistic flags from the heuristic engine</CardDescription>
         </CardHeader>
         <CardContent>
           {report.feedback && report.feedback.length > 0 ? (
@@ -522,11 +559,38 @@ export default function Results() {
                 <CheckCircle className="w-10 h-10 text-green-400" />
               </div>
               <p className="font-medium text-foreground">Looking good</p>
-              <p className="text-sm">No specific improvements suggested for this report.</p>
+              <p className="text-sm">No structural issues flagged by the heuristic engine.</p>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {report.llmEnhanced && report.llmFeedback && report.llmFeedback.length > 0 && (
+        <Card className="glass-card rounded-xl border-cyan-500/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-cyan-400" />
+              LLM Semantic Analysis
+              <Badge variant="outline" className="border-cyan-500/50 text-cyan-400 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 normal-case">
+                <Brain className="w-2.5 h-2.5" />
+                LLM Enhanced
+              </Badge>
+              <Hint text="Semantic observations from the LLM analyzer (gpt-5-nano). This layer evaluates technical specificity, internal coherence, genericity, and narrative credibility — signals that regex cannot detect. Score weighted at 60% in the final blend." />
+            </CardTitle>
+            <CardDescription>Semantic observations across four credibility dimensions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-3">
+              {report.llmFeedback.map((item, i) => (
+                <li key={i} className="flex items-start gap-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10 p-3">
+                  <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-cyan-400/60 flex-shrink-0" />
+                  <span className="text-sm leading-relaxed">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {report.redactedText && (
         <Card className="glass-card rounded-xl">

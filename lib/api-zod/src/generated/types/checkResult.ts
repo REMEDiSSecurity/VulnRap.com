@@ -17,7 +17,20 @@ export interface CheckResult {
   sectionHashes: CheckResultSectionHashes;
   sectionMatches: SectionMatchItem[];
   redactionSummary: RedactionSummary;
+  /** Heuristic feedback strings — specific issues flagged by the rule-based engine */
   feedback: string[];
+  /**
+   * LLM-enhanced slop score (0–100). Null when LLM analysis is unavailable or timed out.
+   * @nullable
+   */
+  llmSlopScore?: number | null;
+  /**
+   * Semantic observations from the LLM scorer. Null when LLM analysis is unavailable.
+   * @nullable
+   */
+  llmFeedback?: string[] | null;
+  /** True when LLM analysis contributed to the final slopScore. */
+  llmEnhanced: boolean;
   /** Whether this exact report was found in the database */
   previouslySubmitted: boolean;
   /**

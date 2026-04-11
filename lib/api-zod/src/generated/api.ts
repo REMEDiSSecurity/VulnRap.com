@@ -108,7 +108,28 @@ export const GetReportResponse = zod.object({
     totalRedactions: zod.number(),
     categories: zod.record(zod.string(), zod.number()),
   }),
-  feedback: zod.array(zod.string()),
+  feedback: zod
+    .array(zod.string())
+    .describe(
+      "Heuristic feedback strings — specific issues flagged by the rule-based engine",
+    ),
+  llmSlopScore: zod
+    .number()
+    .nullish()
+    .describe(
+      "LLM-enhanced slop score (0–100). Null when LLM analysis is unavailable or timed out. When present, the final slopScore is a weighted blend (40% heuristic + 60% LLM).",
+    ),
+  llmFeedback: zod
+    .array(zod.string())
+    .nullish()
+    .describe(
+      "Semantic observations from the LLM scorer — covers technical specificity, coherence, genericity, and narrative credibility. Null when LLM analysis is unavailable.",
+    ),
+  llmEnhanced: zod
+    .boolean()
+    .describe(
+      "True when LLM analysis contributed to the final slopScore. False means the score is purely heuristic.",
+    ),
   fileName: zod.string().nullish(),
   fileSize: zod.number(),
   createdAt: zod.coerce.date(),
@@ -203,7 +224,26 @@ export const CheckReportResponse = zod.object({
     totalRedactions: zod.number(),
     categories: zod.record(zod.string(), zod.number()),
   }),
-  feedback: zod.array(zod.string()),
+  feedback: zod
+    .array(zod.string())
+    .describe(
+      "Heuristic feedback strings — specific issues flagged by the rule-based engine",
+    ),
+  llmSlopScore: zod
+    .number()
+    .nullish()
+    .describe(
+      "LLM-enhanced slop score (0–100). Null when LLM analysis is unavailable or timed out.",
+    ),
+  llmFeedback: zod
+    .array(zod.string())
+    .nullish()
+    .describe(
+      "Semantic observations from the LLM scorer. Null when LLM analysis is unavailable.",
+    ),
+  llmEnhanced: zod
+    .boolean()
+    .describe("True when LLM analysis contributed to the final slopScore."),
   previouslySubmitted: zod
     .boolean()
     .describe("Whether this exact report was found in the database"),

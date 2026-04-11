@@ -45,7 +45,7 @@ curl -X POST https://vulnrap.com/api/reports \\
 curl -X POST https://vulnrap.com/api/reports \\
   -F "reportUrl=https://github.com/user/repo/blob/main/report.md" \\
   -F "contentMode=full"`,
-    responseHint: "Returns report ID, delete token, slop score, similarity matches, redaction summary",
+    responseHint: "Returns report ID, delete token, slopScore (blended), llmSlopScore, llmEnhanced flag, llmFeedback, heuristic feedback, similarity matches, redaction summary",
   },
   {
     method: "DELETE",
@@ -73,7 +73,7 @@ curl -X POST https://vulnrap.com/api/reports/check \\
 # Or check via URL
 curl -X POST https://vulnrap.com/api/reports/check \\
   -F "reportUrl=https://gist.github.com/user/abc123"`,
-    responseHint: "Returns slop score, similarity matches, section hashes — nothing saved",
+    responseHint: "Returns slopScore (blended), llmSlopScore, llmEnhanced, llmFeedback, similarity matches, section hashes — nothing saved",
   },
   {
     method: "GET",

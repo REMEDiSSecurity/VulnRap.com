@@ -18,6 +18,7 @@ import {
 } from "@workspace/api-zod";
 import { computeMinHash, computeSimhash, computeContentHash, computeLSHBuckets, findSimilarReports } from "../lib/similarity";
 import { analyzeSloppiness } from "../lib/sloppiness";
+import { analyzeSlopWithLLM, blendSlopScores, getSlopTier, isLLMAvailable } from "../lib/llm-slop";
 import { redactReport } from "../lib/redactor";
 import { parseSections, findSectionMatches } from "../lib/section-parser";
 import { sanitizeText, sanitizeFileName } from "../lib/sanitize";
@@ -280,7 +281,17 @@ router.post("/reports", async (req, res): Promise<void> => {
     candidateReports as Array<{ id: number; sectionHashes: Record<string, string> }>,
   );
 
-  const analysis = analyzeSloppiness(text);
+  const [analysis, llmResult] = await Promise.all([
+    Promise.resolve(analyzeSloppiness(text)),
+    analyzeSlopWithLLM(text),
+  ]);
+
+  const finalSlopScore = llmResult
+    ? blendSlopScores(analysis.score, llmResult.llmSlopScore)
+    : analysis.score;
+  const finalSlopTier = llmResult
+    ? getSlopTier(finalSlopScore)
+    : analysis.tier;
 
   const deleteToken = crypto.randomBytes(32).toString("hex");
 
@@ -296,13 +307,15 @@ router.post("/reports", async (req, res): Promise<void> => {
         contentText: contentMode === "full" ? analysisText : null,
         redactedText: contentMode === "full" ? analysisText : null,
         contentMode,
-        slopScore: analysis.score,
-        slopTier: analysis.tier,
+        slopScore: finalSlopScore,
+        slopTier: finalSlopTier,
         similarityMatches,
         sectionHashes,
         sectionMatches,
         redactionSummary,
         feedback: analysis.feedback,
+        llmSlopScore: llmResult ? llmResult.llmSlopScore : null,
+        llmFeedback: llmResult ? llmResult.llmFeedback : null,
         showInFeed,
         fileName: safeFileName,
         fileSize: rawFileSize,
@@ -359,6 +372,9 @@ router.post("/reports", async (req, res): Promise<void> => {
     redactedText: report.redactedText,
     redactionSummary: report.redactionSummary ?? { totalRedactions: 0, categories: {} },
     feedback: report.feedback,
+    llmSlopScore: report.llmSlopScore ?? null,
+    llmFeedback: report.llmFeedback ?? null,
+    llmEnhanced: report.llmSlopScore != null,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
@@ -462,21 +478,34 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     checkCandidates as Array<{ id: number; sectionHashes: Record<string, string> }>,
   );
 
-  const analysis = analyzeSloppiness(text);
+  const [[analysis, llmCheckResult], [existingReport]] = await Promise.all([
+    Promise.all([
+      Promise.resolve(analyzeSloppiness(text)),
+      analyzeSlopWithLLM(text),
+    ]),
+    db.select({ id: reportsTable.id })
+      .from(reportsTable)
+      .where(eq(reportsTable.contentHash, contentHash)),
+  ]);
 
-  const [existingReport] = await db
-    .select({ id: reportsTable.id })
-    .from(reportsTable)
-    .where(eq(reportsTable.contentHash, contentHash));
+  const checkFinalScore = llmCheckResult
+    ? blendSlopScores(analysis.score, llmCheckResult.llmSlopScore)
+    : analysis.score;
+  const checkFinalTier = llmCheckResult
+    ? getSlopTier(checkFinalScore)
+    : analysis.tier;
 
   const response = CheckReportResponse.parse({
-    slopScore: analysis.score,
-    slopTier: analysis.tier,
+    slopScore: checkFinalScore,
+    slopTier: checkFinalTier,
     similarityMatches,
     sectionHashes,
     sectionMatches,
     redactionSummary,
     feedback: analysis.feedback,
+    llmSlopScore: llmCheckResult ? llmCheckResult.llmSlopScore : null,
+    llmFeedback: llmCheckResult ? llmCheckResult.llmFeedback : null,
+    llmEnhanced: llmCheckResult != null,
     previouslySubmitted: !!existingReport,
     existingReportId: existingReport?.id ?? null,
   });
@@ -628,6 +657,9 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     redactedText: report.redactedText,
     redactionSummary: report.redactionSummary ?? { totalRedactions: 0, categories: {} },
     feedback: report.feedback,
+    llmSlopScore: report.llmSlopScore ?? null,
+    llmFeedback: report.llmFeedback ?? null,
+    llmEnhanced: report.llmSlopScore != null,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,

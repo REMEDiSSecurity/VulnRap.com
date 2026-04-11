@@ -2,7 +2,9 @@
 
 ## Overview
 
-VulnRap.com — a vulnerability report validation platform (like VirusTotal for bug reports). Allows anonymous users to upload vulnerability reports to check for similarity with other reports and score them for potential AI-generated sloppiness. Reports are auto-redacted before storage to remove PII, secrets, and identifying information.
+VulnRap.com — a vulnerability report validation platform (like VirusTotal for bug reports). Allows anonymous users to upload vulnerability reports to check for similarity with other reports and score them for potential AI-generated sloppiness using a two-layer scoring engine (deterministic heuristics + LLM semantic analysis via gpt-5-nano). Reports are auto-redacted before storage to remove PII, secrets, and identifying information.
+
+**Current version: 1.1.0** — LLM-enhanced slop detection, security fixes, API + docs improvements.
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 

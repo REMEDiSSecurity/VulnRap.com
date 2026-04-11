@@ -1,12 +1,57 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe } from "lucide-react";
+import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain } from "lucide-react";
 
-export const CURRENT_VERSION = "1.0.0";
+export const CURRENT_VERSION = "1.1.0";
 export const RELEASE_DATE = "2026-04-11";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.1.0",
+    date: "2026-04-11",
+    label: "LLM Enhancement",
+    labelColor: "border-cyan-500 text-cyan-400",
+    sections: [
+      {
+        icon: <Brain className="w-4 h-4 text-cyan-400" />,
+        title: "LLM-Enhanced Slop Detection",
+        type: "feature",
+        items: [
+          "Two-layer scoring architecture: deterministic heuristic engine (40%) + LLM semantic analyzer (60%)",
+          "LLM layer evaluates four semantic dimensions: Technical Specificity, Internal Coherence, Genericity, and Narrative Credibility",
+          "LLM returns 2–4 concrete, report-specific observations shown in a dedicated 'LLM Semantic Analysis' section on results",
+          "Results page shows LLM Enhanced / Heuristic badge on the score card and a side-by-side score breakdown (heuristic vs LLM raw scores)",
+          "Graceful fallback: if LLM is unavailable the system runs heuristic-only and sets llmEnhanced: false with no user-visible error",
+          "LLM score and observations stored in the database (llmSlopScore, llmFeedback) and returned in the GET /api/reports/:id and check endpoints",
+          "Model: gpt-5-nano via Replit AI integration (zero API key config for Replit-hosted deployments)",
+          "Home page 'How Slop Detection Works' card expanded to explain both layers with a dedicated LLM Semantic Analyzer section",
+        ],
+      },
+      {
+        icon: <Shield className="w-4 h-4 text-green-400" />,
+        title: "Security Fixes",
+        type: "fix",
+        items: [
+          "Fixed buffer length mismatch crash in timingSafeEqual — length is now checked before comparison to prevent RangeError",
+          "user_feedback FK updated to onDelete: cascade — deleting a report now cleans up all associated feedback rows",
+          "Transparency section copy corrected — no longer incorrectly states that the delete token is hashed",
+        ],
+      },
+      {
+        icon: <Code2 className="w-4 h-4 text-orange-400" />,
+        title: "API & Docs",
+        type: "improvement",
+        items: [
+          "POST /api/reports response now includes llmSlopScore, llmEnhanced, and llmFeedback fields",
+          "POST /api/reports/check endpoint also returns LLM fields",
+          "Developers page updated with DELETE endpoint documentation, curl example, and LLM response fields",
+          "Privacy page Data Lifecycle section updated to document delete token behavior",
+          "Vite dev proxy configured: /api/* forwarded to port 8080 so Playwright tests can run against frontend URL",
+        ],
+      },
+    ],
+  },
   {
     version: "1.0.0",
     date: "2026-04-11",
@@ -137,7 +182,7 @@ const CHANGELOG: ChangelogEntry[] = [
   },
 ];
 
-type SectionType = "feature" | "fix" | "security";
+type SectionType = "feature" | "fix" | "security" | "improvement";
 
 interface ChangelogSection {
   icon: React.ReactNode;
@@ -158,6 +203,7 @@ const TYPE_COLORS: Record<SectionType, string> = {
   feature: "text-primary",
   fix: "text-yellow-400",
   security: "text-red-400",
+  improvement: "text-orange-400",
 };
 
 export default function Changelog() {

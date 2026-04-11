@@ -24,6 +24,8 @@ export const reportsTable = pgTable("reports", {
   sectionMatches: jsonb("section_matches").$type<SectionMatch[]>().default([]),
   redactionSummary: jsonb("redaction_summary").$type<RedactionSummary>().default({ totalRedactions: 0, categories: {} }),
   feedback: jsonb("feedback").notNull().$type<string[]>().default([]),
+  llmSlopScore: integer("llm_slop_score"),
+  llmFeedback: jsonb("llm_feedback").$type<string[]>(),
   showInFeed: boolean("show_in_feed").notNull().default(false),
   fileName: varchar("file_name", { length: 255 }),
   fileSize: integer("file_size").notNull(),

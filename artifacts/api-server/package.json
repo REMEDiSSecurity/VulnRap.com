@@ -21,6 +21,7 @@
     "express-rate-limit": "^8.3.2",
     "helmet": "^8.1.0",
     "multer": "^2.1.1",
+    "openai": "^6.34.0",
     "pdf-parse-new": "^2.0.0",
     "pino": "^9",
     "pino-http": "^10",
