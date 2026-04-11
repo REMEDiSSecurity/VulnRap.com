@@ -68,8 +68,8 @@ Upload/Paste → Sanitize → Auto-Redact PII/Secrets
 ### Automated Setup
 
 ```bash
-git clone https://github.com/remedisllc/vulnrap.git
-cd vulnrap
+git clone https://github.com/REMEDiSSecurity/VulnRapcom.git
+cd VulnRapcom
 ./setup.sh
 ```
 
@@ -87,8 +87,8 @@ The setup script checks prerequisites, installs dependencies, configures the dat
 
 ```bash
 # Clone and install
-git clone https://github.com/remedisllc/vulnrap.git
-cd vulnrap
+git clone https://github.com/REMEDiSSecurity/VulnRapcom.git
+cd VulnRapcom
 pnpm install
 
 # Start PostgreSQL (if you don't have one running)
@@ -129,9 +129,9 @@ OPENAI_API_KEY=sk-...
 To download VulnRap as a ZIP archive without git history:
 
 ```bash
-curl -L https://github.com/remedisllc/vulnrap/archive/refs/heads/main.zip -o vulnrap.zip
+curl -L https://github.com/REMEDiSSecurity/VulnRapcom/archive/refs/heads/main.zip -o vulnrap.zip
 unzip vulnrap.zip
-cd vulnrap-main
+cd VulnRapcom-main
 ./setup.sh
 ```
 
@@ -246,7 +246,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
 
 ## Security
 
-If you find a security vulnerability in VulnRap itself, please report it responsibly via the contact in [/.well-known/security.txt](https://vulnrap.com/.well-known/security.txt) rather than opening a public issue.
+If you find a security vulnerability in VulnRap itself, please report it responsibly via the contact in [/.well-known/security.txt](https://vulnrap.com/.well-known/security.txt) rather than opening a public issue. See [SECURITY.md](https://github.com/REMEDiSSecurity/VulnRapcom/security/policy) for details.
 
 ## License
 

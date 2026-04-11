@@ -72,7 +72,7 @@ function FirstPost() {
             <li><strong className="text-foreground">No accounts.</strong> We do not know who you are. There are no user accounts, no email collection, no tracking cookies, no analytics. We literally could not identify you if we wanted to.</li>
             <li><strong className="text-foreground">Auto-redaction first.</strong> Before anything is stored, we strip emails, IPs, API keys, credentials, phone numbers, company names, and other identifying information. The redaction engine uses deterministic regex patterns — same input always produces the same output.</li>
             <li><strong className="text-foreground">Privacy modes.</strong> If you do not want even the redacted text stored, use "Keep it private" mode. We will only store mathematical fingerprints — enough for similarity comparison, but no text at all.</li>
-            <li><strong className="text-foreground">Open source.</strong> The entire codebase is public. You can read the redaction patterns, the hashing algorithms, the slop detection heuristics, and the database schema. There is nothing hidden.</li>
+            <li><strong className="text-foreground">Open source.</strong> The entire codebase is <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">public on GitHub</a>. You can read the redaction patterns, the hashing algorithms, the slop detection heuristics, and the database schema. There is nothing hidden.</li>
             <li><strong className="text-foreground">No business model.</strong> VulnRap is funded directly by REMEDiS Security and COMPLiTT because we use it ourselves. There are no investors, no ad revenue, no data monetization. If we can not keep funding it, the code is open source and someone else can run it.</li>
           </ul>
         </div>
@@ -102,7 +102,7 @@ function FirstPost() {
             VulnRap only works if teams use it. The similarity detection gets better with every report in the database. If you run a PSIRT or triage team, use the Check page on incoming reports or integrate the API into your intake pipeline. Every report analyzed makes the system more useful for the entire community.
           </p>
           <p>
-            If you are a developer, the project is open source and we welcome contributions. The slop detection heuristics can always be improved, the redaction patterns can always catch more edge cases, and the section parser can always handle more report formats.
+            If you are a developer, the <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">project is open source</a> and we welcome contributions. The slop detection heuristics can always be improved, the redaction patterns can always catch more edge cases, and the section parser can always handle more report formats.
           </p>
           <p>
             If you find a security vulnerability in VulnRap itself, please <Link to="/security" className="text-primary hover:underline">report it responsibly</Link>. We are security people — we will take it seriously and fix it quickly.
@@ -143,7 +143,7 @@ export default function Blog() {
       </Card>
 
       <div className="text-center text-xs text-muted-foreground/50 pb-4">
-        <p>More posts coming as we ship new features. Follow the project on GitHub to stay updated.</p>
+        <p>More posts coming as we ship new features. <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Follow the project on GitHub</a> to stay updated.</p>
       </div>
     </div>
   );

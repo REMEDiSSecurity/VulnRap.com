@@ -31,7 +31,7 @@ export default function Terms() {
             We built this because we work in PSIRT and vulnerability disclosure ourselves. We got tired of wading through AI-generated garbage and duplicate reports. We figured if we were frustrated, other people were too. So we built the tool we wished existed and made it free.
           </p>
           <p>
-            The project is open source. If it turns out we can not keep funding it forever, the code is there for anyone to run their own instance.
+            The <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">project is open source</a>. If it turns out we can not keep funding it forever, the code is there for anyone to run their own instance.
           </p>
         </CardContent>
       </Card>
@@ -68,7 +68,7 @@ export default function Terms() {
             <li>We will never add tracking, analytics cookies, or advertising to VulnRap.</li>
             <li>We will never require user accounts, email verification, or any form of identification.</li>
             <li>We will keep the core functionality free. If we ever add premium features, the analysis, comparison, and redaction tools will remain free and open.</li>
-            <li>We will keep the project open source so anyone can verify these claims or run their own instance.</li>
+            <li>We will keep the <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">project open source</a> so anyone can verify these claims or run their own instance.</li>
           </ul>
         </CardContent>
       </Card>

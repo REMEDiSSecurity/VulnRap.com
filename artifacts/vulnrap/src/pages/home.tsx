@@ -1137,7 +1137,7 @@ function TransparencySection() {
           </div>
 
           <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border/50 pt-3">
-            We use no third-party analytics, tracking pixels, or CDNs. The entire application is self-contained. If you want to verify any of this, the redaction, hashing, and scoring logic is documented in the expandable cards above with exact algorithm details and thresholds.
+            We use no third-party analytics, tracking pixels, or CDNs. The entire application is self-contained. If you want to verify any of this, the redaction, hashing, and scoring logic is documented in the expandable cards above with exact algorithm details and thresholds. The full source code is <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">available on GitHub</a>.
           </p>
         </div>
       )}

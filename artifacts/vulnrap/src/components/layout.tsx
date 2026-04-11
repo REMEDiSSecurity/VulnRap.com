@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Activity, Search, Code, BookOpen, Target, MessageSquare, Menu, X } from "lucide-react";
+import { Activity, Search, Code, BookOpen, Target, MessageSquare, Menu, X, Github } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
@@ -159,6 +159,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             v{CURRENT_VERSION}
             <span className="text-muted-foreground/25 group-hover:text-primary/40 transition-colors">— view changelog</span>
           </Link>
+          <a
+            href="https://github.com/REMEDiSSecurity/VulnRapcom"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-muted-foreground/50 hover:text-primary transition-colors group"
+          >
+            <Github className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+            <span>Open Source on GitHub</span>
+          </a>
           <div className="w-16 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
           <span className="text-[10px] text-muted-foreground/30 text-center leading-relaxed">Funded and developed by the creators of <a href="https://complitt.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/50 transition-colors">COMPLiTT.com</a> and <a href="https://remedissecurity.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/50 transition-colors">REMEDiSSecurity.com</a></span>
         </div>
