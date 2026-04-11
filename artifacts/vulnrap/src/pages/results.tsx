@@ -1,11 +1,11 @@
-import { useParams } from "react-router-dom";
-import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey } from "@workspace/api-client-react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award } from "lucide-react";
+import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -66,11 +66,49 @@ const REDACTION_LABELS: Record<string, string> = {
   username: "Usernames",
 };
 
+function getDeleteToken(reportId: number): string | null {
+  try {
+    const tokens = JSON.parse(sessionStorage.getItem("vulnrap_delete_tokens") || "{}");
+    return tokens[reportId] || null;
+  } catch {
+    return null;
+  }
+}
+
+function removeDeleteToken(reportId: number) {
+  try {
+    const tokens = JSON.parse(sessionStorage.getItem("vulnrap_delete_tokens") || "{}");
+    delete tokens[reportId];
+    sessionStorage.setItem("vulnrap_delete_tokens", JSON.stringify(tokens));
+  } catch {}
+}
+
 export default function Results() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id || "0", 10);
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [showFullReport, setShowFullReport] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const deleteToken = getDeleteToken(id);
+
+  const deleteMutation = useDeleteReport({
+    mutation: {
+      onSuccess: () => {
+        removeDeleteToken(id);
+        toast({ title: "Report deleted", description: "Your report and all associated data have been permanently removed." });
+        setTimeout(() => navigate("/"), 1500);
+      },
+      onError: () => {
+        toast({ title: "Delete failed", description: "Could not delete the report. The delete token may be invalid.", variant: "destructive" });
+      },
+    },
+  });
+
+  const handleDelete = () => {
+    if (!deleteToken) return;
+    deleteMutation.mutate({ id, data: { deleteToken } });
+  };
 
   const { data: report, isLoading, isError } = useGetReport(id, {
     query: {
@@ -163,12 +201,54 @@ export default function Results() {
             </span>
           </div>
         </div>
-        <Button variant="outline" onClick={copyLink} className="gap-2 glass-card hover:border-primary/30">
-          <Copy className="w-4 h-4" />
-          Share Link
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={copyLink} className="gap-2 glass-card hover:border-primary/30">
+            <Copy className="w-4 h-4" />
+            Share Link
+          </Button>
+          {deleteToken && (
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="gap-2 glass-card hover:border-destructive/30 text-destructive hover:text-destructive"
+              disabled={deleteMutation.isPending}
+            >
+              <Trash2 className="w-4 h-4" />
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          )}
+        </div>
       </div>
       <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent -mt-4" />
+
+      {showDeleteConfirm && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-destructive">Permanently delete this report?</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                This will permanently remove the report, all hashes, similarity data, and redacted text from our database. This action cannot be undone. Once deleted, the verification badge link will stop working.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowDeleteConfirm(false)} className="glass-card">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              className="gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {deleteMutation.isPending ? "Deleting..." : "Yes, delete permanently"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 glass-card-accent rounded-xl">

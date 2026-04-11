@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
+import crypto from "crypto";
 import multer from "multer";
-import { eq, or, sql as dsql } from "drizzle-orm";
+import { eq, or, and, sql as dsql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { reportsTable, reportHashesTable, similarityResultsTable, reportStatsTable } from "@workspace/db";
 import {
@@ -12,6 +13,8 @@ import {
   LookupByHashParams,
   LookupByHashResponse,
   GetReportFeedResponse,
+  DeleteReportBody,
+  DeleteReportResponse,
 } from "@workspace/api-zod";
 import { computeMinHash, computeSimhash, computeContentHash, computeLSHBuckets, findSimilarReports } from "../lib/similarity";
 import { analyzeSloppiness } from "../lib/sloppiness";
@@ -279,10 +282,13 @@ router.post("/reports", async (req, res): Promise<void> => {
 
   const analysis = analyzeSloppiness(text);
 
+  const deleteToken = crypto.randomBytes(32).toString("hex");
+
   const report = await db.transaction(async (tx) => {
     const [inserted] = await tx
       .insert(reportsTable)
       .values({
+        deleteToken,
         contentHash,
         simhash,
         minhashSignature,
@@ -342,6 +348,7 @@ router.post("/reports", async (req, res): Promise<void> => {
 
   const response = GetReportResponse.parse({
     id: report.id,
+    deleteToken,
     contentHash: report.contentHash,
     contentMode: report.contentMode,
     slopScore: report.slopScore,
@@ -624,6 +631,58 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
+  });
+
+  res.json(response);
+});
+
+router.delete("/reports/:id", async (req, res): Promise<void> => {
+  const params = GetReportParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = DeleteReportBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Missing or invalid deleteToken." });
+    return;
+  }
+
+  const [report] = await db
+    .select({ id: reportsTable.id, deleteToken: reportsTable.deleteToken })
+    .from(reportsTable)
+    .where(eq(reportsTable.id, params.data.id));
+
+  if (!report) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+
+  if (!report.deleteToken || report.deleteToken.length === 0) {
+    res.status(403).json({ error: "This report cannot be deleted (no delete token was issued)." });
+    return;
+  }
+
+  const storedToken = report.deleteToken;
+  const providedToken = body.data.deleteToken;
+
+  if (typeof providedToken !== "string" || providedToken.length !== storedToken.length) {
+    res.status(403).json({ error: "Invalid delete token." });
+    return;
+  }
+
+  if (!crypto.timingSafeEqual(Buffer.from(storedToken, "utf-8"), Buffer.from(providedToken, "utf-8"))) {
+    res.status(403).json({ error: "Invalid delete token." });
+    return;
+  }
+
+  await db.delete(reportsTable).where(eq(reportsTable.id, params.data.id));
+
+  logger.info({ reportId: params.data.id }, "Report deleted by user");
+
+  const response = DeleteReportResponse.parse({
+    message: "Report and all associated data have been permanently deleted.",
   });
 
   res.json(response);

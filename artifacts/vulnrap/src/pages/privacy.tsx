@@ -261,10 +261,10 @@ export default function Privacy() {
               <div className="space-y-3">
                 <h3 className="text-sm font-bold flex items-center gap-2">
                   <Trash2 className="w-4 h-4 text-primary" />
-                  Data Lifecycle
+                  Data Lifecycle & Deletion
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Raw (pre-redaction) content is never written to disk or database. It exists only in process memory during analysis. Hashes and redacted content are stored indefinitely.
+                  Raw (pre-redaction) content is never written to disk or database. It exists only in process memory during analysis. Hashes and redacted content are stored until deleted. When you submit a report, you receive a one-time delete token stored in your browser session. You can use it to permanently delete your report and all associated data (hashes, similarity records, redacted text) from the results page. Once your browser session ends, the token is lost and cannot be recovered.
                 </p>
               </div>
             </div>

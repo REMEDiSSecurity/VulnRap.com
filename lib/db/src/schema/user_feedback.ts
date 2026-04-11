@@ -3,7 +3,7 @@ import { reportsTable } from "./reports";
 
 export const userFeedbackTable = pgTable("user_feedback", {
   id: serial("id").primaryKey(),
-  reportId: integer("report_id").references(() => reportsTable.id),
+  reportId: integer("report_id").references(() => reportsTable.id, { onDelete: "cascade" }),
   rating: integer("rating").notNull(),
   helpful: boolean("helpful").notNull(),
   comment: text("comment"),

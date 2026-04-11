@@ -32,6 +32,7 @@ const Security = lazyRetry(() => import("@/pages/security"));
 const UseCases = lazyRetry(() => import("@/pages/use-cases"));
 const Terms = lazyRetry(() => import("@/pages/terms"));
 const Blog = lazyRetry(() => import("@/pages/blog"));
+const Changelog = lazyRetry(() => import("@/pages/changelog"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -61,6 +62,7 @@ function AppRoutes() {
             <Route path="/terms" element={<Terms />} />
             <Route path="/blog" element={<Blog />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/changelog" element={<Changelog />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

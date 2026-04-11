@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle } from "lucide-react";
+import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle, Trash2 } from "lucide-react";
 import { LogoBeams } from "@/components/laser-effects";
 import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -495,6 +495,13 @@ export default function Home() {
       },
       onSuccess: (data) => {
         setStage("done");
+        if (data.deleteToken) {
+          try {
+            const tokens = JSON.parse(sessionStorage.getItem("vulnrap_delete_tokens") || "{}");
+            tokens[data.id] = data.deleteToken;
+            sessionStorage.setItem("vulnrap_delete_tokens", JSON.stringify(tokens));
+          } catch {}
+        }
         toast({ title: "Analysis complete", description: "Navigating to results..." });
         setTimeout(() => navigate(`/results/${data.id}`), 600);
       },
@@ -925,7 +932,114 @@ export default function Home() {
         </div>
       </div>
 
+      <TransparencySection />
+
       <RecentReportsFeed />
+    </div>
+  );
+}
+
+function TransparencySection() {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="glass-card rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full p-4 sm:p-6 flex items-center justify-between text-left cursor-pointer"
+      >
+        <h2 className="text-lg font-bold flex items-center gap-2">
+          <Lock className="w-5 h-5 text-primary" />
+          Transparency: Where Your Data Goes
+        </h2>
+        <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+      </button>
+
+      {expanded && (
+        <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-xl bg-cyan-500/5 border border-cyan-500/20 p-4 space-y-3">
+              <h3 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                What Happens in Your Browser
+              </h3>
+              <ul className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">1.</span>You select a file, paste text, or enter a URL — your raw content stays in your browser until you hit Submit.</li>
+                <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">2.</span>File type validation (.txt, .md, .pdf) and size checks (20MB max) run entirely in the browser.</li>
+                <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">3.</span>No content is sent to our server until you explicitly submit. There is no background upload, no preview processing, no analytics on your text.</li>
+                <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">4.</span>After submission, a one-time delete token is stored in your browser's session storage. This token lets you delete your report — it is never sent to any third party and is lost when you close the tab.</li>
+              </ul>
+            </div>
+
+            <div className="rounded-xl bg-violet-500/5 border border-violet-500/20 p-4 space-y-3">
+              <h3 className="text-sm font-bold text-violet-400 flex items-center gap-2">
+                <Zap className="w-4 h-4" />
+                What Happens on Our Server
+              </h3>
+              <ul className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">1.</span>Your raw text is received over HTTPS. For URLs, we fetch the content server-side (HTTPS only, allowlisted hosts).</li>
+                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">2.</span>The redaction engine runs immediately — regex patterns strip PII, secrets, credentials, and company names. The raw text is discarded and never stored.</li>
+                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">3.</span>All analysis (hashing, similarity, slop scoring) runs on the redacted text only.</li>
+                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The slop score uses the original text (for phrase detection accuracy) but this text is held only in server memory during processing and is never written to disk or database.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-green-500/5 border border-green-500/20 p-4 space-y-3">
+            <h3 className="text-sm font-bold text-green-400 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              What We Store (and What We Don't)
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-foreground">Stored in PostgreSQL</h4>
+                <ul className="space-y-1.5 text-xs text-muted-foreground">
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>SHA-256 content hash (of redacted text)</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>SimHash fingerprint (64-bit structural hash)</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>MinHash signature (128 integer array)</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>LSH bucket keys (16 band hashes)</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>Per-section SHA-256 hashes</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>Slop score, tier, and feedback</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>Similarity match results</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>Redaction summary (counts, not content)</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>Redacted text (only in "full" mode)</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>File name and size</li>
+                  <li className="flex gap-2"><span className="text-green-400">&#10003;</span>Delete token (for owner-initiated deletion)</li>
+                </ul>
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-foreground">Never Stored</h4>
+                <ul className="space-y-1.5 text-xs text-muted-foreground">
+                  <li className="flex gap-2"><span className="text-red-400">&#10007;</span>Your original (pre-redaction) text</li>
+                  <li className="flex gap-2"><span className="text-red-400">&#10007;</span>Your IP address or browser fingerprint</li>
+                  <li className="flex gap-2"><span className="text-red-400">&#10007;</span>Cookies, login tokens, or session IDs</li>
+                  <li className="flex gap-2"><span className="text-red-400">&#10007;</span>Any PII that was redacted</li>
+                  <li className="flex gap-2"><span className="text-red-400">&#10007;</span>Analytics, tracking, or telemetry data</li>
+                  <li className="flex gap-2"><span className="text-red-400">&#10007;</span>Source URLs (if you linked a report)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-orange-500/5 border border-orange-500/20 p-4 space-y-3">
+            <h3 className="text-sm font-bold text-orange-400 flex items-center gap-2">
+              <Trash2 className="w-4 h-4" />
+              Deleting Your Report
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              When you submit a report, we return a one-time <strong className="text-foreground">delete token</strong> stored in your browser's session storage. As long as your browser session is active (you haven't closed the tab or cleared storage), you can delete your report from the results page. Deletion is permanent — it removes the report row, all associated hashes, similarity records, and redacted text from our database. We use timing-safe comparison to validate the token, so brute-force attacks are not practical.
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <strong className="text-foreground">Important:</strong> If you close your tab or clear session storage, the delete token is gone. We cannot recover it, and we cannot delete the report on your behalf — by design, we have no way to identify who submitted what.
+            </p>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border/50 pt-3">
+            We use no third-party analytics, tracking pixels, or CDNs. The entire application is self-contained. If you want to verify any of this, the redaction, hashing, and scoring logic is documented in the expandable cards above with exact algorithm details and thresholds.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -117,6 +117,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteReport
+      tags: [reports]
+      summary: Delete a previously submitted report
+      description: Permanently deletes a report and all associated data. Requires the delete token returned at submission time.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteReportBody"
+      responses:
+        "200":
+          description: Report deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteReportResponse"
+        "403":
+          description: Invalid delete token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /reports/{id}/verify:
     get:
@@ -360,11 +396,31 @@ components:
         - totalRedactions
         - categories
 
+    DeleteReportBody:
+      type: object
+      properties:
+        deleteToken:
+          type: string
+          description: The delete token returned when the report was submitted
+      required:
+        - deleteToken
+
+    DeleteReportResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
     ReportAnalysis:
       type: object
       properties:
         id:
           type: integer
+        deleteToken:
+          type: string
+          description: Secret token for deleting this report. Only returned on initial submission. Store it — it cannot be recovered.
         contentHash:
           type: string
         contentMode:

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
 import { CursorBugs } from "@/components/cursor-bugs";
+import { CURRENT_VERSION, RELEASE_DATE } from "@/pages/changelog";
 
 function feedbackMailto(page: string) {
   const subject = encodeURIComponent("VulnRap Feedback");
@@ -105,6 +106,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
               <Link to="/terms" className="hover:text-primary transition-colors">Terms</Link>
               <Link to="/stats" className="hover:text-primary transition-colors">Stats</Link>
+              <Link to="/changelog" className="hover:text-primary transition-colors">Changelog</Link>
             </div>
           </div>
           <div className="w-16 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
@@ -115,6 +117,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <MessageSquare className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
             <span>Send us feedback</span>
           </a>
+          <div className="w-16 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+          <Link
+            to="/changelog"
+            className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground/40 hover:text-primary/70 transition-colors font-mono group"
+            title={`Released ${RELEASE_DATE}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/40 group-hover:bg-primary/80 transition-colors" />
+            v{CURRENT_VERSION}
+            <span className="text-muted-foreground/25 group-hover:text-primary/40 transition-colors">— view changelog</span>
+          </Link>
           <div className="w-16 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
           <span className="text-[10px] text-muted-foreground/30 text-center leading-relaxed">Funded and developed by the creators of <a href="https://complitt.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/50 transition-colors">COMPLiTT.com</a> and <a href="https://remedissecurity.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/50 transition-colors">REMEDiSSecurity.com</a></span>
         </div>

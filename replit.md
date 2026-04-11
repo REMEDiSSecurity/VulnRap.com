@@ -88,7 +88,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **similarity_only**: Stores only hashes/fingerprints, no text at all
 
 ### Database Schema (`lib/db/src/schema/`)
-- `reports` table: id, content_hash, simhash, minhash_signature, content_text (nullable), redacted_text (nullable), content_mode, slop_score, slop_tier, similarity_matches (jsonb), section_hashes (jsonb), section_matches (jsonb), redaction_summary (jsonb), feedback (jsonb), file_name, file_size, created_at
+- `reports` table: id, delete_token, content_hash, simhash, minhash_signature, content_text (nullable), redacted_text (nullable), content_mode, slop_score, slop_tier, similarity_matches (jsonb), section_hashes (jsonb), section_matches (jsonb), redaction_summary (jsonb), feedback (jsonb), file_name, file_size, created_at
 - `report_hashes` table: indexed hash lookup (sha256, simhash per report)
 - `similarity_results` table: pairwise similarity scores
 - `report_stats` table: aggregate counters
@@ -100,7 +100,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Verification**: Anyone with a verify link (`/verify/:id`) can independently confirm a report's slop score and uniqueness
 
 ### API Endpoints
-- `POST /api/reports` — Submit a report for analysis (multipart: file upload or rawText field, 20MB limit)
+- `POST /api/reports` — Submit a report for analysis (multipart: file upload or rawText field, 20MB limit). Returns a one-time delete token.
+- `DELETE /api/reports/:id` — Delete a report (requires delete token in body). Cascades to hashes, similarity records.
 - `POST /api/reports/check` — Check a report without storing (receiver flow, read-only analysis)
 - `GET /api/reports/:id` — Get report analysis results (includes redacted text, section hashes, redaction summary)
 - `GET /api/reports/:id/verify` — Lightweight verification badge data (slop score, match counts, verify URL)

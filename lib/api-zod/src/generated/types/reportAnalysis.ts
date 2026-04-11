@@ -13,6 +13,8 @@ import type { SimilarityMatch } from "./similarityMatch";
 
 export interface ReportAnalysis {
   id: number;
+  /** Secret token for deleting this report. Only returned on initial submission. Store it — it cannot be recovered. */
+  deleteToken?: string;
   contentHash: string;
   contentMode: ReportAnalysisContentMode;
   /** Sloppiness score 0-100 (higher = more suspicious) */

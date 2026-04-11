@@ -44,6 +44,15 @@ export interface RedactionSummary {
   categories: RedactionSummaryCategories;
 }
 
+export interface DeleteReportBody {
+  /** The delete token returned when the report was submitted */
+  deleteToken: string;
+}
+
+export interface DeleteReportResponse {
+  message: string;
+}
+
 export type ReportAnalysisContentMode =
   (typeof ReportAnalysisContentMode)[keyof typeof ReportAnalysisContentMode];
 
@@ -59,6 +68,8 @@ export type ReportAnalysisSectionHashes = { [key: string]: string };
 
 export interface ReportAnalysis {
   id: number;
+  /** Secret token for deleting this report. Only returned on initial submission. Store it — it cannot be recovered. */
+  deleteToken?: string;
   contentHash: string;
   contentMode: ReportAnalysisContentMode;
   /** Sloppiness score 0-100 (higher = more suspicious) */

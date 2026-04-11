@@ -63,6 +63,12 @@ export const GetReportParams = zod.object({
 
 export const GetReportResponse = zod.object({
   id: zod.number(),
+  deleteToken: zod
+    .string()
+    .optional()
+    .describe(
+      "Secret token for deleting this report. Only returned on initial submission. Store it — it cannot be recovered.",
+    ),
   contentHash: zod.string(),
   contentMode: zod.enum(["full", "similarity_only"]),
   slopScore: zod
@@ -106,6 +112,24 @@ export const GetReportResponse = zod.object({
   fileName: zod.string().nullish(),
   fileSize: zod.number(),
   createdAt: zod.coerce.date(),
+});
+
+/**
+ * Permanently deletes a report and all associated data. Requires the delete token returned at submission time.
+ * @summary Delete a previously submitted report
+ */
+export const DeleteReportParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteReportBody = zod.object({
+  deleteToken: zod
+    .string()
+    .describe("The delete token returned when the report was submitted"),
+});
+
+export const DeleteReportResponse = zod.object({
+  message: zod.string(),
 });
 
 /**

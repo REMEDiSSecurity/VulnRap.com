@@ -45,7 +45,19 @@ curl -X POST https://vulnrap.com/api/reports \\
 curl -X POST https://vulnrap.com/api/reports \\
   -F "reportUrl=https://github.com/user/repo/blob/main/report.md" \\
   -F "contentMode=full"`,
-    responseHint: "Returns report ID, slop score, similarity matches, redaction summary",
+    responseHint: "Returns report ID, delete token, slop score, similarity matches, redaction summary",
+  },
+  {
+    method: "DELETE",
+    path: "/api/reports/:id",
+    title: "Delete a Report",
+    description: "Permanently delete a report and all associated data (hashes, similarity records, redacted text). Requires the delete token returned at submission time.",
+    badge: "Write",
+    badgeColor: "border-red-500 text-red-500",
+    example: `curl -X DELETE https://vulnrap.com/api/reports/42 \\
+  -H "Content-Type: application/json" \\
+  -d '{"deleteToken": "your-token-here"}'`,
+    responseHint: "Returns confirmation message. Deletion is permanent and irreversible.",
   },
   {
     method: "POST",

@@ -1,5 +1,7 @@
 export * from "./generated/api";
 export type {
+  DeleteReportBody as DeleteReportBodyType,
+  DeleteReportResponse as DeleteReportResponseType,
   ErrorResponse,
   FeedbackResponse,
   HashLookupResult,

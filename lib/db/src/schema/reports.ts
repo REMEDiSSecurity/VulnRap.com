@@ -9,6 +9,7 @@ export interface RedactionSummary {
 
 export const reportsTable = pgTable("reports", {
   id: serial("id").primaryKey(),
+  deleteToken: varchar("delete_token", { length: 64 }).notNull().default(""),
   contentHash: varchar("content_hash", { length: 64 }).notNull(),
   simhash: varchar("simhash", { length: 128 }).notNull(),
   minhashSignature: jsonb("minhash_signature").notNull().$type<number[]>(),

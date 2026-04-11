@@ -19,6 +19,8 @@ import type {
 import type {
   CheckReportBody,
   CheckResult,
+  DeleteReportBody,
+  DeleteReportResponse,
   ErrorResponse,
   FeedbackResponse,
   GetReportFeedParams,
@@ -305,6 +307,94 @@ export function useGetReport<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Permanently deletes a report and all associated data. Requires the delete token returned at submission time.
+ * @summary Delete a previously submitted report
+ */
+export const getDeleteReportUrl = (id: number) => {
+  return `/api/reports/${id}`;
+};
+
+export const deleteReport = async (
+  id: number,
+  deleteReportBody: DeleteReportBody,
+  options?: RequestInit,
+): Promise<DeleteReportResponse> => {
+  return customFetch<DeleteReportResponse>(getDeleteReportUrl(id), {
+    ...options,
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(deleteReportBody),
+  });
+};
+
+export const getDeleteReportMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReport>>,
+    TError,
+    { id: number; data: BodyType<DeleteReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteReport>>,
+  TError,
+  { id: number; data: BodyType<DeleteReportBody> },
+  TContext
+> => {
+  const mutationKey = ["deleteReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteReport>>,
+    { id: number; data: BodyType<DeleteReportBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return deleteReport(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteReport>>
+>;
+export type DeleteReportMutationBody = BodyType<DeleteReportBody>;
+export type DeleteReportMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete a previously submitted report
+ */
+export const useDeleteReport = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReport>>,
+    TError,
+    { id: number; data: BodyType<DeleteReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteReport>>,
+  TError,
+  { id: number; data: BodyType<DeleteReportBody> },
+  TContext
+> => {
+  return useMutation(getDeleteReportMutationOptions(options));
+};
 
 /**
  * Returns a lightweight verification summary for embedding in bug reports
