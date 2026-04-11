@@ -692,7 +692,7 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
     matchedReport: {
       id: mtch.id,
       reportCode: anonymizeId(mtch.id),
-      snippet: mtch.redactedText ? mtch.redactedText.slice(0, snippetLength) : null,
+      snippet: mtch.contentMode === "full" && mtch.redactedText ? mtch.redactedText.slice(0, snippetLength) : null,
       slopScore: mtch.slopScore,
       slopTier: mtch.slopTier,
       contentMode: mtch.contentMode,
