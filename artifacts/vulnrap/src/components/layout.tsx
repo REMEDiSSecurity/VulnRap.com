@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Activity, Shield, Search, Code, BookOpen, Target, MessageSquare, Menu, X } from "lucide-react";
+import { Activity, Search, Code, BookOpen, Target, MessageSquare, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
@@ -28,24 +28,38 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileMenuOpen]);
+
   return (
-    <div className="laser-content-layer min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary selection:text-primary-foreground">
+    <div className="laser-content-layer min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary selection:text-primary-foreground overflow-x-hidden">
       <div className="cyber-grid" aria-hidden="true" />
       <LaserEffects />
       <CursorBugs />
       <header className="nav-glass sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 sm:gap-2.5 group" onClick={() => setMobileMenuOpen(false)}>
-            <img src={logoSrc} alt="VulnRap" className="w-7 h-7 sm:w-8 sm:h-8 rounded-sm transition-transform group-hover:scale-110" />
-            <span className="font-bold text-lg sm:text-xl tracking-tight uppercase text-primary glow-text-sm transition-all group-hover:glow-text">VulnRap</span>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+          <Link to="/" className="flex items-center gap-2 shrink-0 group" onClick={() => setMobileMenuOpen(false)}>
+            <img src={logoSrc} alt="VulnRap" className="w-7 h-7 rounded-sm transition-transform group-hover:scale-110" />
+            <span className="font-bold text-base tracking-tight uppercase text-primary glow-text-sm transition-all group-hover:glow-text whitespace-nowrap">VulnRap</span>
           </Link>
-          <nav className="hidden md:flex items-center gap-1">
+
+          <nav className="hidden lg:flex items-center gap-0.5">
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  "text-sm font-medium transition-all px-3 py-1.5 rounded-md flex items-center gap-1.5",
+                  "text-sm font-medium transition-all px-3 py-1.5 rounded-md flex items-center gap-1.5 whitespace-nowrap",
                   (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to))
                     ? "text-primary bg-primary/10 glow-text-sm"
                     : "text-muted-foreground hover:text-primary hover:bg-primary/5"
@@ -56,47 +70,58 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
+
           <button
             type="button"
-            className="md:hidden p-2 -mr-2 text-muted-foreground hover:text-primary transition-colors"
+            className="lg:hidden p-2 -mr-2 text-muted-foreground hover:text-primary transition-colors shrink-0"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
-        {mobileMenuOpen && (
-          <nav className="md:hidden border-t border-border/20 bg-background/95 backdrop-blur-md">
-            <div className="container mx-auto px-4 py-2 flex flex-col">
+
+        <div
+          className={cn(
+            "lg:hidden fixed inset-0 top-14 z-40 transition-all duration-200",
+            mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          )}
+        >
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
+          <nav className="relative bg-background/95 backdrop-blur-md border-b border-border/20 shadow-xl">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col gap-1">
               {NAV_ITEMS.map((item) => (
                 <Link
                   key={item.to}
                   to={item.to}
                   onClick={() => setMobileMenuOpen(false)}
                   className={cn(
-                    "flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                    "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all",
                     (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to))
                       ? "text-primary bg-primary/10"
                       : "text-muted-foreground hover:text-primary hover:bg-primary/5"
                   )}
                 >
-                  {item.icon}
+                  <span className="w-5 flex items-center justify-center">{item.icon}</span>
                   {item.label}
                 </Link>
               ))}
             </div>
           </nav>
-        )}
+        </div>
       </header>
-      <main className="flex-1 container mx-auto px-4 py-6 sm:py-8">
+
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {children}
       </main>
+
       <footer className="footer-gradient py-8 sm:py-10 mt-auto">
-        <div className="container mx-auto px-4 flex flex-col items-center gap-4 text-xs text-muted-foreground">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col items-center gap-4 text-xs text-muted-foreground">
           <div className="flex flex-col items-center gap-4 w-full">
             <div className="flex items-center gap-2.5 text-center">
               <img src={logoSrc} alt="" className="w-5 h-5 rounded-sm opacity-50 shrink-0" />
-              <span className="text-muted-foreground/70 leading-relaxed">VulnRap // Free & Anonymous Vulnerability Report Validation — made by and for frustrated PSIRTlings</span>
+              <span className="text-muted-foreground/70 leading-relaxed">VulnRap — Free & Anonymous Vulnerability Report Validation</span>
             </div>
             <div className="flex flex-wrap gap-x-4 sm:gap-x-5 gap-y-1.5 justify-center">
               <Link to="/use-cases" className="hover:text-primary transition-colors">Use Cases</Link>
