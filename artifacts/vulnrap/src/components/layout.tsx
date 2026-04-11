@@ -81,36 +81,43 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
+      </header>
 
+      {mobileMenuOpen && (
         <div
-          className={cn(
-            "lg:hidden fixed inset-0 top-14 z-40 transition-all duration-200",
-            mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-          )}
+          className="lg:hidden fixed inset-0 top-14"
+          style={{ zIndex: 9999 }}
         >
-          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileMenuOpen(false)} />
-          <nav className="relative bg-background border-b border-primary/10 shadow-2xl shadow-black/50">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col gap-0.5">
+          <div
+            className="absolute inset-0"
+            style={{ backgroundColor: "rgba(0, 0, 0, 0.7)" }}
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <nav
+            className="relative border-b border-primary/15"
+            style={{ backgroundColor: "hsl(220, 30%, 6%)" }}
+          >
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-1">
               {NAV_ITEMS.map((item) => (
                 <Link
                   key={item.to}
                   to={item.to}
                   onClick={() => setMobileMenuOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-4 py-3.5 rounded-lg text-base font-medium transition-all",
+                    "flex items-center gap-3 px-4 py-3.5 rounded-lg text-base font-semibold transition-all",
                     (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to))
-                      ? "text-primary bg-primary/10 glow-text-sm"
-                      : "text-foreground/80 hover:text-primary hover:bg-primary/5"
+                      ? "text-primary bg-primary/15 glow-text-sm"
+                      : "text-white/90 hover:text-primary hover:bg-primary/5"
                   )}
                 >
-                  <span className="w-5 flex items-center justify-center opacity-70">{item.icon}</span>
+                  <span className="w-5 flex items-center justify-center">{item.icon}</span>
                   {item.label}
                 </Link>
               ))}
             </div>
           </nav>
         </div>
-      </header>
+      )}
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {children}
@@ -121,7 +128,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex flex-col items-center gap-4 w-full">
             <div className="flex items-center gap-2.5 text-center">
               <img src={logoSrc} alt="" className="w-5 h-5 rounded-sm opacity-50 shrink-0" />
-              <span className="text-muted-foreground/70 leading-relaxed">VulnRap — Free & Anonymous Vulnerability Report Validation</span>
+              <span className="text-muted-foreground/70 leading-relaxed">VulnRap // Free & Anonymous Vulnerability Report Validation — made by and for frustrated PSIRTlings</span>
             </div>
             <div className="flex flex-wrap gap-x-4 sm:gap-x-5 gap-y-1.5 justify-center">
               <Link to="/use-cases" className="hover:text-primary transition-colors">Use Cases</Link>
