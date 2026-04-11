@@ -96,7 +96,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex flex-col items-center gap-4 w-full">
             <div className="flex items-center gap-2.5 text-center">
               <img src={logoSrc} alt="" className="w-5 h-5 rounded-sm opacity-50 shrink-0" />
-              <span className="text-muted-foreground/70 leading-relaxed">VulnRap // Free & Anonymous Vulnerability Report Validation</span>
+              <span className="text-muted-foreground/70 leading-relaxed">VulnRap // Free & Anonymous Vulnerability Report Validation — made by and for frustrated PSIRTlings</span>
             </div>
             <div className="flex flex-wrap gap-x-4 sm:gap-x-5 gap-y-1.5 justify-center">
               <Link to="/use-cases" className="hover:text-primary transition-colors">Use Cases</Link>
