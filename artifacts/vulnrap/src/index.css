@@ -443,81 +443,87 @@
 .laser-beam {
   position: absolute;
   left: 50%;
-  top: 200px;
+  top: 180px;
   width: 1px;
-  transform-origin: top center;
+  height: 300vh;
+  margin-top: -150vh;
+  transform-origin: center center;
 }
 
 .laser-beam-1 {
-  height: 140vh;
   background: linear-gradient(
     180deg,
-    rgba(0, 255, 255, 0.06) 0%,
-    rgba(0, 255, 255, 0.04) 30%,
-    rgba(0, 255, 255, 0.02) 60%,
+    rgba(0, 255, 255, 0) 0%,
+    rgba(0, 255, 255, 0.03) 30%,
+    rgba(0, 255, 255, 0.06) 48%,
+    rgba(0, 255, 255, 0.06) 52%,
+    rgba(0, 255, 255, 0.03) 70%,
     rgba(0, 255, 255, 0) 100%
   );
-  transform: rotate(-25deg);
+  transform: rotate(73deg);
   animation: beam-drift-1 20s ease-in-out infinite;
 }
 
 .laser-beam-2 {
-  height: 140vh;
   background: linear-gradient(
     180deg,
-    rgba(200, 50, 255, 0.05) 0%,
-    rgba(200, 50, 255, 0.03) 30%,
-    rgba(200, 50, 255, 0.015) 60%,
+    rgba(200, 50, 255, 0) 0%,
+    rgba(200, 50, 255, 0.025) 30%,
+    rgba(200, 50, 255, 0.05) 48%,
+    rgba(200, 50, 255, 0.05) 52%,
+    rgba(200, 50, 255, 0.025) 70%,
     rgba(200, 50, 255, 0) 100%
   );
-  transform: rotate(20deg);
+  transform: rotate(-70deg);
   animation: beam-drift-2 25s ease-in-out infinite;
 }
 
 .laser-beam-3 {
-  height: 150vh;
   background: linear-gradient(
     180deg,
-    rgba(0, 255, 255, 0.04) 0%,
-    rgba(0, 255, 255, 0.03) 35%,
-    rgba(0, 255, 255, 0.01) 65%,
+    rgba(0, 255, 255, 0) 0%,
+    rgba(0, 255, 255, 0.02) 32%,
+    rgba(0, 255, 255, 0.04) 48%,
+    rgba(0, 255, 255, 0.04) 52%,
+    rgba(0, 255, 255, 0.02) 68%,
     rgba(0, 255, 255, 0) 100%
   );
-  transform: rotate(-10deg);
+  transform: rotate(65deg);
   animation: beam-drift-3 22s ease-in-out infinite;
 }
 
 .laser-beam-4 {
-  height: 130vh;
   background: linear-gradient(
     180deg,
-    rgba(200, 50, 255, 0.04) 0%,
-    rgba(200, 50, 255, 0.025) 30%,
-    rgba(200, 50, 255, 0.01) 55%,
+    rgba(200, 50, 255, 0) 0%,
+    rgba(200, 50, 255, 0.02) 32%,
+    rgba(200, 50, 255, 0.04) 48%,
+    rgba(200, 50, 255, 0.04) 52%,
+    rgba(200, 50, 255, 0.02) 68%,
     rgba(200, 50, 255, 0) 100%
   );
-  transform: rotate(35deg);
+  transform: rotate(-62deg);
   animation: beam-drift-4 28s ease-in-out infinite;
 }
 
 @keyframes beam-drift-1 {
-  0%, 100% { transform: rotate(-25deg); opacity: 0.6; }
-  50% { transform: rotate(-23deg); opacity: 1; }
+  0%, 100% { transform: rotate(73deg); opacity: 0.6; }
+  50% { transform: rotate(75deg); opacity: 1; }
 }
 
 @keyframes beam-drift-2 {
-  0%, 100% { transform: rotate(20deg); opacity: 0.5; }
-  50% { transform: rotate(22deg); opacity: 0.8; }
+  0%, 100% { transform: rotate(-70deg); opacity: 0.5; }
+  50% { transform: rotate(-72deg); opacity: 0.8; }
 }
 
 @keyframes beam-drift-3 {
-  0%, 100% { transform: rotate(-10deg); opacity: 0.4; }
-  50% { transform: rotate(-8deg); opacity: 0.7; }
+  0%, 100% { transform: rotate(65deg); opacity: 0.4; }
+  50% { transform: rotate(67deg); opacity: 0.7; }
 }
 
 @keyframes beam-drift-4 {
-  0%, 100% { transform: rotate(35deg); opacity: 0.3; }
-  50% { transform: rotate(33deg); opacity: 0.6; }
+  0%, 100% { transform: rotate(-62deg); opacity: 0.3; }
+  50% { transform: rotate(-64deg); opacity: 0.6; }
 }
 
 /* Ambient laser flashes */
