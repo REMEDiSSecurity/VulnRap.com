@@ -24,7 +24,7 @@ const CHANGELOG: ChangelogEntry[] = [
           "Results page shows LLM Enhanced / Heuristic badge on the score card and a side-by-side score breakdown (heuristic vs LLM raw scores)",
           "Graceful fallback: if LLM is unavailable the system runs heuristic-only and sets llmEnhanced: false with no user-visible error",
           "LLM score and observations stored in the database (llmSlopScore, llmFeedback) and returned in the GET /api/reports/:id and check endpoints",
-          "Model: gpt-5-nano via Replit AI integration (zero API key config for Replit-hosted deployments)",
+          "Model: configurable via OPENAI_MODEL env var (default: gpt-4o-mini); works with any OpenAI-compatible API",
           "Home page 'How Slop Detection Works' card expanded to explain both layers with a dedicated LLM Semantic Analyzer section",
         ],
       },

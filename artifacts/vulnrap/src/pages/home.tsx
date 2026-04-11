@@ -467,7 +467,7 @@ function SlopDetectionCard() {
           <div className="space-y-2 border-t border-border/30 pt-4">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60" />
-              Layer 2 — LLM Semantic Analyzer (gpt-5-nano)
+              Layer 2 — LLM Semantic Analyzer
             </h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
               The LLM evaluates reports from a PSIRT triage perspective across five semantic dimensions that regex fundamentally cannot assess. It returns a 0–100 score and 2–4 concrete observations specific to the report content.

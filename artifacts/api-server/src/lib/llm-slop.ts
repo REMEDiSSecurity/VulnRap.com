@@ -9,9 +9,8 @@ export interface LLMSlopResult {
 const LLM_TIMEOUT_MS = 20_000;
 
 function buildClient(): OpenAI | null {
-  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey =
-    process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
+  const baseURL = process.env.OPENAI_BASE_URL;
 
   if (!apiKey) return null;
 
@@ -22,9 +21,7 @@ function buildClient(): OpenAI | null {
 }
 
 export function isLLMAvailable(): boolean {
-  return !!(
-    process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
-  );
+  return !!process.env.OPENAI_API_KEY;
 }
 
 const SYSTEM_PROMPT = `You are a PSIRT (Product Security Incident Response Team) triage analyst evaluating incoming vulnerability reports. Your job is to score how likely a report is AI-generated "slop" vs. genuine human security research — helping triage teams decide where to invest limited review time.
@@ -80,7 +77,7 @@ export async function analyzeSlopWithLLM(
   try {
     const response = await client.chat.completions.create(
       {
-        model: "gpt-5-nano",
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
         max_completion_tokens: 512,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },

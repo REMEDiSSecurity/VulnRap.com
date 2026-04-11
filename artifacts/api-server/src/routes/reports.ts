@@ -729,9 +729,7 @@ router.get("/reports/:id/verify", async (req, res): Promise<void> => {
   const matches = (report.similarityMatches as Array<{ reportId: number }>) || [];
   const secMatches = (report.sectionMatches as Array<{ sectionTitle: string }>) || [];
 
-  const baseUrl = process.env.REPLIT_DEV_DOMAIN
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : process.env.PUBLIC_URL || "https://vulnrap.com";
+  const baseUrl = process.env.PUBLIC_URL || "https://vulnrap.com";
   const verifyUrl = `${baseUrl}/verify/${report.id}`;
 
   const response = GetVerificationResponse.parse({

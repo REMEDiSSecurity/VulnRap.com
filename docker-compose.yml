@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vulnrap
+      POSTGRES_PASSWORD: vulnrap
+      POSTGRES_DB: vulnrap
+    ports:
+      - "5432:5432"
+    volumes:
+      - vulnrap_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vulnrap"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  vulnrap_pgdata:

@@ -52,23 +52,13 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
   : [];
 
-const replitDomains = process.env.REPLIT_DOMAINS
-  ? process.env.REPLIT_DOMAINS.split(",").map(d => `https://${d.trim()}`)
-  : [];
-
-const replitDevDomain = process.env.REPLIT_DEV_DOMAIN
-  ? [`https://${process.env.REPLIT_DEV_DOMAIN}`]
-  : [];
-
-const allOrigins = [...allowedOrigins, ...replitDomains, ...replitDevDomain];
-
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) {
       callback(null, true);
       return;
     }
-    if (allOrigins.length === 0 || allOrigins.includes(origin)) {
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(null, false);

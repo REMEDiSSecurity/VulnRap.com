@@ -2,7 +2,7 @@
 
 ## Overview
 
-VulnRap.com — a vulnerability report validation platform (like VirusTotal for bug reports). Allows anonymous users to upload vulnerability reports to check for similarity with other reports and score them for potential AI-generated sloppiness using a two-layer scoring engine (deterministic heuristics + LLM semantic analysis via gpt-5-nano). Reports are auto-redacted before storage to remove PII, secrets, and identifying information.
+VulnRap.com — a vulnerability report validation platform (like VirusTotal for bug reports). Allows anonymous users to upload vulnerability reports to check for similarity with other reports and score them for potential AI-generated sloppiness using a two-layer scoring engine (deterministic heuristics + LLM semantic analysis via OpenAI-compatible API). Reports are auto-redacted before storage to remove PII, secrets, and identifying information.
 
 **Current version: 1.2.0** — PSIRT-focused LLM prompt, side-by-side similarity comparison, input hardening.
 
@@ -78,7 +78,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ### LLM Semantic Analysis (`artifacts/api-server/src/lib/llm-slop.ts`)
 - PSIRT-focused LLM prompt evaluating 5 dimensions: technical specificity, PoC validity, target specificity, narrative credibility, template/mass-submission signals
-- Uses gpt-5-nano via Replit AI integrations proxy
+- Uses any OpenAI-compatible API (set OPENAI_API_KEY, optionally OPENAI_BASE_URL and OPENAI_MODEL)
+- Default model: gpt-4o-mini (configurable via OPENAI_MODEL env var)
 - 8000 char truncation limit for analysis context
 - Blended scoring: finalScore = heuristic * 0.4 + LLM * 0.6, clamped 0-100
 - Graceful fallback to heuristic-only when LLM unavailable/timeout (20s)

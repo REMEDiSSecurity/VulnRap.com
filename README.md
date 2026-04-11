@@ -65,13 +65,25 @@ Upload/Paste → Sanitize → Auto-Redact PII/Secrets
 
 ## Quick Start
 
-### Prerequisites
+### Automated Setup
+
+```bash
+git clone https://github.com/remedisllc/vulnrap.git
+cd vulnrap
+./setup.sh
+```
+
+The setup script checks prerequisites, installs dependencies, configures the database, and optionally seeds example reports. It will walk you through each step.
+
+### Manual Setup
+
+#### Prerequisites
 
 - Node.js 20+
 - pnpm 9+
-- PostgreSQL 15+
+- PostgreSQL 15+ (or use `docker compose up -d` to start one)
 
-### Setup
+#### Steps
 
 ```bash
 # Clone and install
@@ -79,7 +91,10 @@ git clone https://github.com/remedisllc/vulnrap.git
 cd vulnrap
 pnpm install
 
-# Configure database
+# Start PostgreSQL (if you don't have one running)
+docker compose up -d
+
+# Configure environment
 cp .env.example .env
 # Edit .env with your PostgreSQL connection string
 
@@ -93,8 +108,31 @@ pnpm --filter @workspace/api-spec run codegen
 pnpm --filter @workspace/api-server run seed
 
 # Start both services
-pnpm --filter @workspace/api-server run dev  # API on port 3000
-pnpm --filter @workspace/vulnrap run dev     # Frontend on port 5173
+PORT=8080 pnpm --filter @workspace/api-server run dev
+PORT=5173 pnpm --filter @workspace/vulnrap run dev
+```
+
+### LLM Setup (Optional)
+
+VulnRap works without any AI API key — heuristic scoring is fully functional on its own. To enable the LLM semantic analysis layer, add to your `.env`:
+
+```bash
+OPENAI_API_KEY=sk-...
+# Optional: override model (default: gpt-4o-mini)
+# OPENAI_MODEL=gpt-4o
+# Optional: use a compatible API (Ollama, vLLM, Azure, etc.)
+# OPENAI_BASE_URL=http://localhost:11434/v1
+```
+
+### Download Source
+
+To download VulnRap as a ZIP archive without git history:
+
+```bash
+curl -L https://github.com/remedisllc/vulnrap/archive/refs/heads/main.zip -o vulnrap.zip
+unzip vulnrap.zip
+cd vulnrap-main
+./setup.sh
 ```
 
 ## API
@@ -145,16 +183,36 @@ Full interactive API docs: [vulnrap.com/api/docs](https://vulnrap.com/api/docs) 
 | `/developers` | API documentation and integration guide |
 | `/privacy` | Privacy policy explaining what is stored and how |
 
+## Local vs Hosted
+
+You can run VulnRap entirely on your own infrastructure within your own PSIRT. Everything works locally — report submission, auto-redaction, slop scoring, section hashing, and the full UI.
+
+The one thing a local instance **cannot** do is cross-reference reports submitted by other organizations. Community-wide similarity matching (detecting duplicates across different submitters) only works on the hosted instance at [vulnrap.com](https://vulnrap.com) because it requires a shared database of fingerprints. A local instance operates with its own independent database, so similarity matching only finds duplicates within your own submissions.
+
+If your team wants both privacy and community matching, you can use the hosted instance with **Similarity-Only** privacy mode — only mathematical fingerprints are stored, no report text.
+
 ## How Slop Detection Works
 
-The sloppiness scorer is purely heuristic — no AI models are used in the detection pipeline. It checks for:
+Two-layer scoring architecture:
 
+### 1. Heuristic Engine (40% of final score)
+Deterministic, regex-based analysis that checks for:
 - **AI filler phrases** — "It is important to note," "As an AI language model," etc.
 - **Missing technical depth** — No reproduction steps, no version info, no code blocks, no attack vectors
 - **Stylometric signals** — Unusually long sentences, low vocabulary diversity, walls of text
 - **Structure analysis** — Reports that read like essays instead of technical documents
 
-Scores are tiered:
+### 2. LLM Semantic Analyzer (60% of final score, optional)
+When `OPENAI_API_KEY` is configured, an LLM evaluates five PSIRT-specific dimensions:
+- **Technical Specificity** — Are version numbers, endpoints, and payloads concrete?
+- **PoC Validity** — Does the proof-of-concept match the claimed vulnerability class?
+- **Target Specificity** — Could this report be copy-pasted against any application?
+- **Narrative Credibility** — Does it read like someone who actually tested this?
+- **Template/Mass-Submission Signals** — Rigid template structure, boilerplate remediation advice?
+
+If the LLM is unavailable, VulnRap falls back to heuristic-only scoring automatically.
+
+### Score Tiers
 - **0-14**: Probably Legit
 - **15-29**: Mildly Suspicious
 - **30-49**: Questionable
