@@ -26,7 +26,7 @@ export default function Privacy() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
           <p>
-            Bug bounty programs are drowning in low-quality, duplicate, and AI-generated reports. Triage teams waste hours filtering noise while legitimate researchers wait longer for their reports to be reviewed. VulnRap exists to help both sides:
+            Vulnerability programs are drowning in low-quality, duplicate, and AI-generated reports. Triage teams waste hours filtering noise while legitimate researchers wait longer for their reports to be reviewed. VulnRap exists to help both sides:
           </p>
           <ul className="space-y-2 list-disc pl-5">
             <li><strong className="text-foreground">For researchers:</strong> Check if your report has been submitted before, get an honest assessment of quality, and improve your report before submission.</li>
@@ -51,7 +51,7 @@ export default function Privacy() {
             <li>When you upload a report, we <strong className="text-foreground">auto-redact</strong> sensitive information (PII, secrets, credentials, company names) and store only the redacted version.</li>
             <li>Your redacted report is <strong className="text-foreground">compared against all other reports</strong> in our database. Other users' reports are compared against yours.</li>
             <li>Similarity scores, section-level hash matches, and AI sloppiness results are <strong className="text-foreground">visible to anyone with the report link</strong>.</li>
-            <li>We do <strong className="text-foreground">not</strong> share your report with bug bounty platforms, vendors, or third parties. The comparison happens only within VulnRap.</li>
+            <li>We do <strong className="text-foreground">not</strong> share your report with vulnerability programs, vendors, or third parties. The comparison happens only within VulnRap.</li>
           </ul>
           <p>
             If you do not want your report stored and compared, do not upload it. There is no "view only" mode -- comparison is the core function of this platform.
@@ -246,7 +246,7 @@ export default function Privacy() {
                   Platform Independence
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  VulnRap is not affiliated with any bug bounty platform. We do not share data with vendors, programs, or third parties. Comparison happens only within this platform.
+                  VulnRap is not affiliated with any vulnerability platform. We do not share data with vendors, programs, or third parties. Comparison happens only within this platform.
                 </p>
               </div>
               <div className="space-y-3">

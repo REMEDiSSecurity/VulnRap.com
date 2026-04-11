@@ -6,7 +6,7 @@ const useCases = [
   {
     icon: <Bug className="w-6 h-6 text-cyan-400" />,
     iconBg: "icon-glow-cyan",
-    title: "Bug Bounty Hunters",
+    title: "Security Researchers",
     subtitle: "Before you hit Submit",
     scenarios: [
       "Run your report through VulnRap before submitting to any program. Get a slop score to make sure your report reads like a human wrote it — not like you asked ChatGPT to pad it out.",
@@ -28,7 +28,7 @@ const useCases = [
   {
     icon: <Building className="w-6 h-6 text-purple-400" />,
     iconBg: "icon-glow-purple",
-    title: "Bug Bounty Platforms",
+    title: "Vulnerability Platforms",
     subtitle: "Reduce noise at the gate",
     scenarios: [
       "Integrate VulnRap's check endpoint as a submission pre-filter. Show researchers their slop score before they submit and let them improve their report first.",

@@ -31,7 +31,7 @@ function FirstPost() {
             The Problem
           </h3>
           <p>
-            If you work in PSIRT or run a bug bounty program, you already know the pain. Your inbox is a mix of legitimate vulnerability reports, near-identical duplicates, and an increasing volume of reports that read like someone asked an AI to "write a critical vulnerability report about SQL injection" and submitted whatever came out.
+            If you work in PSIRT, run a VDP, or manage a vulnerability program, you already know the pain. Your inbox is a mix of legitimate vulnerability reports, near-identical duplicates, and an increasing volume of reports that read like someone asked an AI to "write a critical vulnerability report about SQL injection" and submitted whatever came out.
           </p>
           <p>
             The AI-generated reports are the worst part. They are just plausible enough to require reading, but they waste your time because the researcher never actually found a vulnerability — they described a theoretical one. You read three paragraphs of "It is important to note that SQL injection vulnerabilities can have devastating consequences" before you realize there are no reproduction steps, no version numbers, and no proof of concept.
@@ -99,7 +99,7 @@ function FirstPost() {
             How You Can Help
           </h3>
           <p>
-            VulnRap only works if people use it. The similarity detection gets better with every report in the database. If you are a bug bounty hunter, run your reports through VulnRap before you submit them. If you are a triager, use the Check page on incoming reports. Every report analyzed makes the system more useful for everyone.
+            VulnRap only works if people use it. The similarity detection gets better with every report in the database. If you are a security researcher, run your reports through VulnRap before you submit them. If you are a triager, use the Check page on incoming reports. Every report analyzed makes the system more useful for everyone.
           </p>
           <p>
             If you are a developer, the project is open source and we welcome contributions. The slop detection heuristics can always be improved, the redaction patterns can always catch more edge cases, and the section parser can always handle more report formats.

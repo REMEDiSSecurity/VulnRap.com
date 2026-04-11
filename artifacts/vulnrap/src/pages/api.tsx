@@ -247,7 +247,7 @@ curl -X POST https://vulnrap.com/api/reports/check \\
             </div>
             <div className="flex items-start gap-2">
               <span className="text-primary mt-0.5">--</span>
-              <span><strong className="text-foreground">Bug Bounty Platform:</strong> Integrate the check endpoint to pre-screen submissions before they enter your queue.</span>
+              <span><strong className="text-foreground">Vulnerability Platform:</strong> Integrate the check endpoint to pre-screen submissions before they enter your queue.</span>
             </div>
           </div>
         </CardContent>

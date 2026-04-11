@@ -28,7 +28,7 @@ export default function Terms() {
             VulnRap is directly funded by <a href="https://remedissecurity.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">REMEDiS Security</a> and <a href="https://complitt.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">COMPLiTT</a>. There are no investors, no venture capital, no advertising revenue, and no plans to monetize user data.
           </p>
           <p>
-            We built this because we work in PSIRT and bug bounty ourselves. We got tired of wading through AI-generated garbage and duplicate reports. We figured if we were frustrated, other people were too. So we built the tool we wished existed and made it free.
+            We built this because we work in PSIRT and vulnerability disclosure ourselves. We got tired of wading through AI-generated garbage and duplicate reports. We figured if we were frustrated, other people were too. So we built the tool we wished existed and made it free.
           </p>
           <p>
             The project is open source. If it turns out we can not keep funding it forever, the code is there for anyone to run their own instance.
@@ -46,7 +46,7 @@ export default function Terms() {
         <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
           <p className="font-medium text-foreground">By using VulnRap, you agree that:</p>
           <ul className="space-y-2 list-disc pl-5">
-            <li>You will not upload content that you do not have the right to share. If a report contains proprietary information from a private bug bounty program, make sure your program's rules allow external analysis tools.</li>
+            <li>You will not upload content that you do not have the right to share. If a report contains proprietary information from a private vulnerability program, make sure your program's rules allow external analysis tools.</li>
             <li>Reports submitted in "Share with the community" mode will be auto-redacted and made available for similarity comparison by other users. That is the whole point — this only works if people contribute.</li>
             <li>You will not use automated tools to flood the platform. We have rate limits (100 requests per 15 minutes) and we will block abusive traffic.</li>
             <li>You understand that auto-redaction is regex-based and not perfect. If your report contains sensitive information in unusual formats, the redactor might miss it. When in doubt, pre-sanitize your report before uploading.</li>

@@ -285,7 +285,7 @@ export default function Home() {
         </div>
         <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight text-primary uppercase glow-text" data-testid="text-heading">Report Validation</h1>
         <p className="text-sm sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed px-2">
-          Validate your bug bounty reports before submission. We check for similarities against known reports and analyze your content for AI-generated "slop".
+          Validate your vulnerability reports before submission. We check for similarities against known reports and analyze your content for AI-generated "slop".
         </p>
       </div>
 

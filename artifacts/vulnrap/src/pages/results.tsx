@@ -241,7 +241,7 @@ export default function Results() {
             <CardTitle className="flex items-center gap-2">
               <Award className="w-5 h-5 text-primary" />
               Verification Badge
-              <Hint text="Copy this badge and paste it into your bug bounty submission. It gives the receiver a link to independently verify your report's slop score and uniqueness." />
+              <Hint text="Copy this badge and paste it into your report submission. It gives the receiver a link to independently verify your report's slop score and uniqueness." />
             </CardTitle>
             <CardDescription>Include this in your bug report to prove it was validated</CardDescription>
           </CardHeader>
