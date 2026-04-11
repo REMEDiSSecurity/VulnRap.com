@@ -213,37 +213,43 @@ export default function Stats() {
             {distLoading ? (
               <Skeleton className="h-64 w-full" />
             ) : distribution?.buckets ? (
-              <div className="flex items-end gap-2 h-64 mt-4 pt-4 border-b border-border/30 px-2">
-                {distribution.buckets.map((bucket, i) => {
-                  const maxCount = Math.max(...distribution.buckets.map(b => b.count));
-                  const heightPct = maxCount > 0 ? (bucket.count / maxCount) * 100 : 0;
-                  const pct = distribution.totalReports > 0
-                    ? Math.round((bucket.count / distribution.totalReports) * 100)
-                    : 0;
+              <div className="mt-4 pt-4 border-b border-border/30 px-2">
+                <div className="flex items-end gap-2" style={{ height: "224px" }}>
+                  {distribution.buckets.map((bucket, i) => {
+                    const maxCount = Math.max(...distribution.buckets.map(b => b.count));
+                    const heightPct = maxCount > 0 ? (bucket.count / maxCount) * 100 : 0;
+                    const pct = distribution.totalReports > 0
+                      ? Math.round((bucket.count / distribution.totalReports) * 100)
+                      : 0;
 
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
-                      <div className="w-full flex justify-center items-end h-full">
-                        <div
-                          className="w-full bar-gradient rounded-t-sm transition-all duration-500"
-                          style={{
-                            height: `${Math.max(heightPct, 2)}%`,
-                            opacity: 0.5 + (heightPct / 200),
-                          }}
-                        />
-                      </div>
-                      <div className="text-[10px] text-muted-foreground font-mono -rotate-45 md:rotate-0 origin-top-left md:origin-center mt-2 w-full text-center whitespace-nowrap">
-                        {bucket.label}
-                      </div>
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center group relative h-full">
+                        <div className="w-full flex-1 relative">
+                          <div
+                            className="absolute bottom-0 left-0 right-0 bar-gradient rounded-t-sm transition-all duration-500"
+                            style={{
+                              height: `${Math.max(heightPct, 3)}%`,
+                              opacity: 0.5 + (heightPct / 200),
+                            }}
+                          />
+                        </div>
 
-                      <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity glass-card text-popover-foreground text-xs px-3 py-2 rounded-lg pointer-events-none z-10 glow-border space-y-0.5">
-                        <div className="font-mono font-bold text-primary">{bucket.count} reports</div>
-                        <div className="text-muted-foreground">{pct}% of total</div>
-                        <div className="text-muted-foreground/60 text-[10px]">{bucket.min}–{bucket.max} score range</div>
+                        <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity glass-card text-popover-foreground text-xs px-3 py-2 rounded-lg pointer-events-none z-10 glow-border space-y-0.5">
+                          <div className="font-mono font-bold text-primary">{bucket.count} reports</div>
+                          <div className="text-muted-foreground">{pct}% of total</div>
+                          <div className="text-muted-foreground/60 text-[10px]">{bucket.min}–{bucket.max} score range</div>
+                        </div>
                       </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-2 mt-2">
+                  {distribution.buckets.map((bucket, i) => (
+                    <div key={i} className="flex-1 text-[10px] text-muted-foreground font-mono text-center whitespace-nowrap truncate">
+                      {bucket.label}
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="h-64 flex items-center justify-center text-muted-foreground">No data available</div>
