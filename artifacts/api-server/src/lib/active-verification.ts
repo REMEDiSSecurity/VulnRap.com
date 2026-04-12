@@ -291,6 +291,14 @@ async function verifyGitHubReferences(
         weight: 0,
       });
       break;
+    } else {
+      checks.push({
+        type: "github_api_error",
+        target: `${repoSlug}:${fp}`,
+        result: "error",
+        detail: `GitHub API returned ${resp.status} while verifying "${fp}"`,
+        weight: 0,
+      });
     }
   }
 
@@ -339,6 +347,14 @@ async function verifyGitHubReferences(
         weight: 0,
       });
       break;
+    } else {
+      checks.push({
+        type: "github_api_error",
+        target: `${repoSlug}:${fn}`,
+        result: "error",
+        detail: `GitHub API returned ${resp.status} while searching for "${fn}"`,
+        weight: 0,
+      });
     }
   }
 
@@ -439,7 +455,16 @@ async function verifyCveReferences(text: string): Promise<VerificationCheck[]> {
   for (const cveId of cves.slice(0, 3)) {
     const year = parseInt(cveId.split("-")[1]);
     const currentYear = new Date().getFullYear();
-    if (year > currentYear + 1 || year < 1999) continue;
+    if (year > currentYear + 1 || year < 1999) {
+      checks.push({
+        type: "invalid_cve_year",
+        target: cveId,
+        result: "not_found",
+        detail: `${cveId} has an implausible year (${year}) — likely fabricated`,
+        weight: 25,
+      });
+      continue;
+    }
 
     const nvdResult = await nvdFetch(cveId);
     await delay(300);
