@@ -15,7 +15,7 @@ const app: Express = express();
 
 app.use(compression());
 
-app.use(helmet({
+const defaultHelmet = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -26,7 +26,27 @@ app.use(helmet({
       connectSrc: ["'self'"],
     },
   },
-}));
+});
+
+const swaggerHelmet = helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https://validator.swagger.io"],
+      connectSrc: ["'self'"],
+    },
+  },
+});
+
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/docs")) {
+    return swaggerHelmet(req, res, next);
+  }
+  return defaultHelmet(req, res, next);
+});
 
 app.use(
   pinoHttp({
