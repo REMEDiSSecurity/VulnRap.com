@@ -401,12 +401,9 @@ router.post("/reports", async (req, res): Promise<void> => {
     }
   } catch {}
 
-  if (analysisResult.triageRecommendation) {
-    analysisResult.triageRecommendation.templateMatch = templateMatch;
-    analysisResult.triageRecommendation.revision = revisionResult;
-  }
-
   const isRevision = revisionResult !== null;
+
+  const temporalSignals = analysisResult.triageRecommendation?.temporalSignals ?? [];
 
   if (templateMatch) {
     analysisResult.evidence.push({
@@ -417,16 +414,29 @@ router.post("/reports", async (req, res): Promise<void> => {
     analysisResult.slopScore = Math.min(95, analysisResult.slopScore + templateMatch.weight);
   }
 
-  if (analysisResult.triageRecommendation) {
-    for (const ts of analysisResult.triageRecommendation.temporalSignals) {
-      analysisResult.evidence.push({
-        type: "temporal_signal",
-        description: `${ts.cveId}: report submitted ${ts.hoursSincePublication.toFixed(1)}h after CVE publication (${ts.signal.replace(/_/g, " ")})`,
-        weight: ts.weight,
-      });
-      analysisResult.slopScore = Math.min(95, analysisResult.slopScore + ts.weight);
-    }
+  for (const ts of temporalSignals) {
+    analysisResult.evidence.push({
+      type: "temporal_signal",
+      description: `${ts.cveId}: report submitted ${ts.hoursSincePublication.toFixed(1)}h after CVE publication (${ts.signal.replace(/_/g, " ")})`,
+      weight: ts.weight,
+    });
+    analysisResult.slopScore = Math.min(95, analysisResult.slopScore + ts.weight);
   }
+
+  try {
+    const updatedBase = generateTriageRecommendation(
+      analysisResult.slopScore,
+      analysisResult.confidence,
+      analysisResult.verification,
+      analysisResult.evidence,
+    );
+    analysisResult.triageRecommendation = {
+      ...updatedBase,
+      temporalSignals,
+      templateMatch,
+      revision: revisionResult,
+    };
+  } catch {}
 
   const report = await db.transaction(async (tx) => {
     const [inserted] = await tx
@@ -925,7 +935,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
       verification,
       (report.evidence as EvidenceItem[]) ?? [],
     );
-    const temporalSignals = computeTemporalSignals(verification);
+    const temporalSignals = computeTemporalSignals(verification, report.createdAt);
 
     let templateMatch: TriageRecommendation["templateMatch"] = null;
     if (report.templateHash) {
@@ -1037,7 +1047,7 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       verification,
       (report.evidence as EvidenceItem[]) ?? [],
     );
-    const temporalSignals = computeTemporalSignals(verification);
+    const temporalSignals = computeTemporalSignals(verification, report.createdAt);
     let mdRevision: TriageRecommendation["revision"] = null;
     try {
       const simMatches = (report.similarityMatches ?? []) as Array<{ reportId: number; similarity: number; matchType: string }>;
