@@ -412,7 +412,7 @@ export default function Check() {
                       <div className="flex justify-between text-[10px]">
                         <span className="text-muted-foreground">Confidence</span>
                         <span className={`font-mono font-bold ${getConfidenceColor(result.confidence)}`}>
-                          {(result.confidence * 100).toFixed(0)}%
+                          {(result.confidence * 100).toFixed(0)}% — {getConfidenceLabel(result.confidence)}
                         </span>
                       </div>
                       <Progress value={result.confidence * 100} className="h-1" indicatorClassName={result.confidence >= 0.8 ? "bg-green-500" : result.confidence >= 0.5 ? "bg-yellow-500" : "bg-orange-500"} />

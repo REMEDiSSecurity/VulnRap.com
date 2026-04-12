@@ -261,7 +261,7 @@ export default function Compare() {
                           <div className="flex items-center gap-1 text-[10px]">
                             <Gauge className="w-3 h-3 text-muted-foreground" />
                             <span className={`font-mono ${getConfidenceColor(result!.confidence)}`}>
-                              {(result!.confidence * 100).toFixed(0)}% confidence
+                              {(result!.confidence * 100).toFixed(0)}% — {result!.confidence >= 0.8 ? "High" : result!.confidence >= 0.5 ? "Medium" : "Low"}
                             </span>
                           </div>
                         )}
