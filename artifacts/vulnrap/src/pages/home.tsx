@@ -742,6 +742,12 @@ export default function Home() {
     try { sessionStorage.setItem("vulnrap-mirror-dismissed", "1"); } catch {}
   };
 
+  useEffect(() => {
+    if (mirrorBannerDismissed) return;
+    const timer = setTimeout(dismissMirrorBanner, 13370);
+    return () => clearTimeout(timer);
+  }, [mirrorBannerDismissed]);
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 sm:space-y-10">
       {!mirrorBannerDismissed && (
