@@ -812,6 +812,15 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  let verification: VerificationResult | null = null;
+  if (report.redactedText) {
+    try {
+      verification = await performActiveVerification(report.redactedText);
+    } catch {
+      verification = null;
+    }
+  }
+
   const response = GetReportResponse.parse({
     id: report.id,
     contentHash: report.contentHash,
@@ -833,7 +842,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     llmFeedback: report.llmFeedback ?? null,
     llmBreakdown: report.llmBreakdown ?? null,
     llmEnhanced: report.llmSlopScore != null,
-    verification: null,
+    verification,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,

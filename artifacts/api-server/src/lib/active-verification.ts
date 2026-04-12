@@ -87,9 +87,6 @@ const KNOWN_PROJECTS: Record<string, string> = {
   elasticsearch: "elastic/elasticsearch",
   grafana: "grafana/grafana",
   jenkins: "jenkinsci/jenkins",
-  chromium: "nicedoc/chromium",
-  firefox: "nicedoc/gecko-dev",
-  sqlite: "nicedoc/sqlite",
   tomcat: "apache/tomcat",
   spring: "spring-projects/spring-framework",
   rails: "rails/rails",
@@ -624,6 +621,19 @@ export async function performActiveVerification(text: string): Promise<Verificat
   const githubProjects = detectedProjects.filter(
     (p) => p.source === "github_url" || p.source === "known_project"
   );
+  const nonGithubProjects = detectedProjects.filter(
+    (p) => p.source === "gitlab_url" || p.source === "npm_package" || p.source === "pypi_package"
+  );
+
+  for (const project of nonGithubProjects) {
+    allChecks.push({
+      type: "project_detected",
+      target: project.name,
+      result: "skipped",
+      detail: `Detected ${project.source.replace("_", " ")} "${project.name}" — GitHub verification not applicable`,
+      weight: -2,
+    });
+  }
 
   if (githubProjects.length > 0 && (codeRefs.functions.length > 0 || codeRefs.filePaths.length > 0)) {
     let totalGhChecks = 0;
