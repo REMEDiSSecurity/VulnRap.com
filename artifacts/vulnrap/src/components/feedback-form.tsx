@@ -47,7 +47,7 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
             <CheckCircle className="w-10 h-10 text-green-400" />
           </div>
           <p className="font-medium text-foreground text-lg">Thanks for your feedback!</p>
-          <p className="text-sm text-muted-foreground mt-1">Your input helps us make VulnRap better.</p>
+          <p className="text-sm text-muted-foreground mt-1">Your input helps us sharpen the analysis for the whole community.</p>
         </CardContent>
       </Card>
     );
@@ -58,14 +58,14 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageSquare className="w-5 h-5 text-primary" />
-          Help Us Improve
+          How Did We Do on This One?
         </CardTitle>
-        <CardDescription>Quick feedback — was this analysis useful?</CardDescription>
+        <CardDescription>Quick feedback — did the slop detection and similarity matching help your triage?</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-3">
           <Label className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            Was this helpful?
+            Did this analysis help you triage this report?
           </Label>
           <div className="flex gap-3">
             <Button
@@ -76,7 +76,7 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
               onClick={() => setHelpful(true)}
             >
               <ThumbsUp className="w-4 h-4" />
-              Yes, it helped
+              Yes, useful for triage
             </Button>
             <Button
               type="button"
@@ -86,14 +86,14 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
               onClick={() => setHelpful(false)}
             >
               <ThumbsDown className="w-4 h-4" />
-              Not really
+              Missed the mark
             </Button>
           </div>
         </div>
 
         <div className="space-y-3">
           <Label className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            Rate your experience
+            Rate the analysis accuracy
           </Label>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((star) => (
@@ -116,11 +116,11 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
             ))}
             {rating > 0 && (
               <span className="ml-2 text-sm text-muted-foreground self-center">
-                {rating === 1 && "Not useful"}
+                {rating === 1 && "Way off"}
                 {rating === 2 && "Needs work"}
-                {rating === 3 && "It's okay"}
-                {rating === 4 && "Pretty good"}
-                {rating === 5 && "Love it!"}
+                {rating === 3 && "Decent"}
+                {rating === 4 && "Solid analysis"}
+                {rating === 5 && "Nailed it"}
               </span>
             )}
           </div>
@@ -132,7 +132,7 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
           </Label>
           <textarea
             className="w-full min-h-[80px] rounded-lg glass-card p-3 text-sm bg-transparent border border-border/50 focus:border-primary/50 focus:outline-none resize-none placeholder:text-muted-foreground/40 transition-colors"
-            placeholder="What could we do better? Any features you'd like to see?"
+            placeholder="False positive? Missed obvious slop? What would help your triage workflow?"
             maxLength={1000}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
