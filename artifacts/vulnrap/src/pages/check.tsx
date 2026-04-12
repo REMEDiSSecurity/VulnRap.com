@@ -66,6 +66,19 @@ function getConfidenceColor(confidence: number): string {
   return "text-orange-400";
 }
 
+function LlmDimensionBar({ label, score }: { label: string; score: number }) {
+  const color = score >= 50 ? "bg-destructive" : score >= 25 ? "bg-yellow-500" : "bg-green-500";
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className={`font-mono font-bold ${score >= 50 ? "text-destructive" : score >= 25 ? "text-yellow-500" : "text-green-500"}`}>{score}</span>
+      </div>
+      <Progress value={score} className="h-1" indicatorClassName={color} />
+    </div>
+  );
+}
+
 const REDACTION_LABELS: Record<string, string> = {
   email: "Email Addresses", ipv4: "IPv4 Addresses", ipv6: "IPv6 Addresses",
   api_key: "API Keys", bearer_token: "Bearer Tokens", jwt: "JWT Tokens",
@@ -535,6 +548,30 @@ export default function Check() {
                     {showAllEvidence ? <><ChevronUp className="w-3 h-3 mr-1" /> Show fewer</> : <><ChevronDown className="w-3 h-3 mr-1" /> Show all {result.evidence.length}</>}
                   </Button>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {result.llmEnhanced && result.llmBreakdown && (
+            <Card className="glass-card rounded-xl border-cyan-500/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Brain className="w-4 h-4 text-cyan-400" />
+                  LLM Dimension Scores
+                  <Badge variant="outline" className="border-cyan-500/50 text-cyan-400 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 normal-case">
+                    <Brain className="w-2.5 h-2.5" />
+                    LLM Enhanced
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+                  {result.llmBreakdown.specificity != null && <LlmDimensionBar label="Specificity" score={result.llmBreakdown.specificity} />}
+                  {result.llmBreakdown.originality != null && <LlmDimensionBar label="Originality" score={result.llmBreakdown.originality} />}
+                  {result.llmBreakdown.voice != null && <LlmDimensionBar label="Voice" score={result.llmBreakdown.voice} />}
+                  {result.llmBreakdown.coherence != null && <LlmDimensionBar label="Coherence" score={result.llmBreakdown.coherence} />}
+                  {result.llmBreakdown.hallucination != null && <LlmDimensionBar label="Hallucination" score={result.llmBreakdown.hallucination} />}
+                </div>
               </CardContent>
             </Card>
           )}
