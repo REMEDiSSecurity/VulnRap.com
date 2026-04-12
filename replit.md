@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Current Version**: 2.1.0 (2026-04-12) — OpenAPI spec version 2.0.0
+**Current Version**: 3.0.0 (2026-04-12) — OpenAPI spec version 3.0.0
 
 VulnRap.com is a vulnerability report validation platform designed to assess the quality and originality of bug reports. It functions similarly to VirusTotal but for vulnerability reports, allowing anonymous users to upload reports for similarity checks against existing reports and to score them for potential AI-generated content. The platform employs a multi-axis scoring engine that combines linguistic fingerprinting, factual verification, and LLM semantic analysis, fused via Noisy-OR combination. A key feature is the auto-redaction of reports to remove PII, secrets, and identifying information before storage, ensuring user privacy. VulnRap aims to provide a robust tool for bug bounty hunters, PSIRT teams, and security researchers to efficiently triage and validate vulnerability disclosures.
 
@@ -50,7 +50,7 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
 - **Auto-Redaction Engine**: Deterministic regex-based redaction of PII/secrets, applied before analysis or storage.
 - **Section Parser**: Parses reports into logical sections, hashes them with SHA-256, and classifies their value.
 - **Similarity Engine**: Uses MinHash + Locality Sensitive Hashing (LSH), Simhash, and SHA-256 for near-duplicate and exact-match detection.
-- **Multi-Axis Scoring Engine (v2.0)**:
+- **Multi-Axis Scoring Engine (v3.0)**:
     - **Axis 1 — Linguistic AI Fingerprinting** (`linguistic-analysis.ts`): Lexical markers (~50 weighted AI phrases), statistical text analysis (sentence length variance, passive voice ratio, contraction absence, bigram entropy), template detection ("dear security team", dependency dumps, OWASP padding).
     - **Axis 2 — Quality vs Slop Separation** (`sloppiness.ts`): Produces `qualityScore` (report completeness: version info, code blocks, repro steps) and heuristic `feedback` strings. Quality signals are intentionally separated from AI provenance signals.
     - **Axis 3 — Factual Verification** (`factual-verification.ts`): Severity inflation (CVSS 9.8 without RCE/auth-bypass), placeholder URLs (example.com, target.com), fabricated debug output (fake ASan addresses, GDB registers), fabricated CVE detection (sequential IDs, round numbers, unusually long IDs), hallucinated function names (generic CamelCase soup, mixed naming conventions).

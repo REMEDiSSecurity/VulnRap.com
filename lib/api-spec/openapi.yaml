@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 2.0.0
+  version: 3.0.0
   description: VulnRap.com API — Vulnerability Report Validation Platform
 servers:
   - url: /api
@@ -529,7 +529,7 @@ components:
           description: Heuristic feedback strings — specific issues flagged by the rule-based engine
         llmSlopScore:
           type: ["integer", "null"]
-          description: LLM analysis slop score (0–100), weighted from 5 dimensions (specificity, originality, voice, coherence, hallucination). Null when LLM is unavailable. Contributes to the fused slopScore via multi-axis Bayesian combination.
+          description: LLM analysis slop score (0–100), weighted from 5 dimensions (specificity, originality, voice, coherence, hallucination). Null when LLM is unavailable. Contributes to the fused slopScore via multi-axis Noisy-OR combination.
         llmFeedback:
           type: ["array", "null"]
           items:

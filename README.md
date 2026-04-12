@@ -4,10 +4,13 @@
 
 VulnRap is a free, anonymous vulnerability report validation platform built for PSIRT and triage teams receiving vulnerability reports. Upload an incoming report and instantly get:
 
-- **AI Slop Detection** — Multi-axis scoring (0-100) fusing linguistic fingerprinting, factual verification, LLM semantic analysis, and template detection via Bayesian combination
+- **AI Slop Detection** — Multi-axis scoring (0-100) fusing linguistic fingerprinting, factual verification, LLM semantic analysis, template detection, and active content verification via Noisy-OR fusion
 - **Similarity Matching** — MinHash + LSH + SimHash fingerprinting catches near-duplicate and structurally similar submissions across the entire database
 - **Section-Level Hashing** — Individual sections are hashed independently, so copied "Steps to Reproduce" blocks get flagged even when the rest differs
 - **Auto-Redaction** — PII, secrets, API keys, credentials, and identifying information are stripped before anything is stored or compared
+
+- **PSIRT Triage Workflow** — Automated triage recommendations (AUTO_CLOSE / CHALLENGE_REPORTER / MANUAL_REVIEW / PRIORITIZE), challenge questions, temporal signals, template reuse detection
+- **AI Triage Assistant** — Reproduction guidance for 8 vulnerability classes, gap analysis, don't-miss warnings, and reporter behavior assessment with merged LLM + heuristic insights
 
 Reports are auto-redacted, then compared. Nothing identifies you. No accounts required.
 
@@ -56,10 +59,14 @@ Upload/Paste → Sanitize → Auto-Redact PII/Secrets
   → Section Parsing → Per-Section SHA-256 (granular matching)
   → Multi-Axis Scoring:
       Axis 1: Linguistic AI Fingerprinting (phrases, statistics, templates)
-      Axis 2: Factual Verification (CVEs, functions, URLs, debug output)
-      Axis 3: LLM Semantic Analysis (5 dimensions, optional)
-      Axis 4: Template Detection (mass-submission patterns)
-  → Score Fusion (Bayesian combination → slopScore + qualityScore + confidence)
+      Axis 2: Quality vs Slop Separation (completeness scoring)
+      Axis 3: Factual Verification (CVEs, functions, URLs, debug output)
+      Axis 4: LLM Semantic Analysis (5 dimensions + triage guidance, optional)
+      Axis 5: Active Content Verification (GitHub/NVD/PoC plausibility)
+      Human Indicator Detection (contractions, terse style, commit refs)
+  → Score Fusion (Noisy-OR combination → slopScore + qualityScore + confidence)
+  → Triage Recommendation (AUTO_CLOSE / CHALLENGE / REVIEW / PRIORITIZE)
+  → Triage Assistant (repro guidance, gap analysis, don't-miss, reporter feedback)
   → Store redacted text + fingerprints (or fingerprints only in private mode)
 ```
 
@@ -171,6 +178,9 @@ Full interactive API docs: [vulnrap.com/api/docs](https://vulnrap.com/api/docs) 
 | `POST` | `/api/reports/check` | Analyze without storing (receiver flow) |
 | `GET` | `/api/reports/:id` | Get full analysis results |
 | `GET` | `/api/reports/:id/verify` | Lightweight verification badge data |
+| `GET` | `/api/reports/:id/triage-report` | Exportable markdown triage report |
+| `DELETE` | `/api/reports/:id` | Delete a report (requires delete token) |
+| `GET` | `/api/reports/:id/compare/:matchId` | Compare two reports side by side |
 | `GET` | `/api/reports/lookup/:hash` | Find report by SHA-256 content hash |
 | `GET` | `/api/stats` | Platform-wide statistics |
 | `POST` | `/api/feedback` | Submit user feedback |
@@ -198,22 +208,26 @@ If your team wants both privacy and community matching, you can use the hosted i
 
 ## How Slop Detection Works
 
-Multi-axis score fusion architecture (v2.0):
+Multi-axis score fusion architecture (v3.0):
 
-### Axis 1: Linguistic AI Fingerprinting (weight: 0.25)
+### Axis 1: Linguistic AI Fingerprinting
 Deterministic analysis that checks for:
 - **AI filler phrases** — ~50 weighted phrases ("It is important to note," "As an AI language model," etc.)
 - **Statistical text analysis** — Sentence length variance, passive voice ratio, contraction absence, bigram entropy
 - **Template detection** — "Dear security team" openings, dependency dumps, OWASP padding
 
-### Axis 2: Factual Verification (weight: 0.30)
+### Axis 2: Quality vs Slop Separation
+- **qualityScore** (0-100) — Report completeness: version info, code blocks, repro steps
+- **Separated from AI detection** — A terse real report can have low quality but also low slop
+
+### Axis 3: Factual Verification
 - **Severity inflation** — Critical CVSS claims (9.8) without RCE/auth-bypass evidence
 - **Placeholder URLs** — example.com, target.com, and other generic domains
 - **Fabricated debug output** — Fake ASan addresses, GDB register values
 - **Fabricated CVEs** — Sequential IDs, round numbers, unusually long digits
 - **Hallucinated function names** — Generic CamelCase compositions, mixed naming conventions
 
-### Axis 3: LLM Semantic Analysis (weight: 0.35, optional)
+### Axis 4: LLM Semantic Analysis (optional)
 When `OPENAI_API_KEY` is configured, an LLM evaluates five weighted dimensions:
 - **Specificity** (0.15) — Are version numbers, endpoints, and payloads concrete?
 - **Originality** (0.25) — Unique observations vs. rehashed vulnerability descriptions?
@@ -221,16 +235,24 @@ When `OPENAI_API_KEY` is configured, an LLM evaluates five weighted dimensions:
 - **Coherence** (0.15) — Internal consistency, reproduction steps match claims?
 - **Hallucination** (0.25) — Fabricated details, invented function names, made-up CVEs?
 
-### Axis 4: Template Detection (weight: 0.10)
-Mass-submission pattern detection from the linguistic analysis module.
+The LLM also produces **triage guidance** (reproduction steps, missing information, don't-miss warnings, reporter feedback) in the same call.
 
-### Score Fusion
-- **Bayesian combination** of all axes with dynamic weight adjustment
-- **Fabrication boost**: Factual axis automatically boosted to 0.50 when `fabricated_cve`, `hallucinated_function`, `future_cve`, or `fake_asan` evidence detected
-- **No-LLM redistribution**: When LLM unavailable, weights become Linguistic 39%, Factual 44%, Template 17%
-- **Confidence**: `min(1.0, 0.3 + evidenceCount × 0.07 + 0.2 if LLM)`
-- **Final slopScore**: `rawScore × confidence + 50 × (1 − confidence)` — low-confidence scores regress toward 50
-- **qualityScore**: Separate 0-100 metric for report completeness (version info, code blocks, repro steps) — does not affect slopScore
+### Axis 5: Active Content Verification
+- **GitHub API verification** — Checks if referenced file paths and function names actually exist in the target repo
+- **NVD 2.0 cross-referencing** — Validates CVE IDs, detects plagiarism from NVD descriptions (>30% overlap)
+- **PoC plausibility** — Flags placeholder domains and textbook payloads
+- **Project detection** — Recognizes 40+ known OSS projects, GitHub/GitLab URLs, npm/PyPI packages
+
+### Human Indicator Detection
+- Detects contractions, terse/informal style, informal abbreviations (btw/fwiw/iirc), commit/PR references, patched version references
+- Human indicators produce negative weights that reduce slop score
+
+### Score Fusion (Noisy-OR)
+- **Noisy-OR combination**: Active axes converted to probabilities, combined via `1 − ∏(1 − pᵢ)` with prior=15, floor=5, ceiling=95
+- **Fabrication boost**: Factual axis probability ×1.3 when fabricated_cve or hallucinated_function detected
+- **Verified reference bonus**: Each verified check provides additional −3 slop reduction
+- **Human indicator reduction**: Applied post-fusion with floor=5
+- **Score spread**: ~85pts (slop→90, legit→5)
 
 ### Score Tiers
 - **0-20**: Clean
@@ -238,6 +260,24 @@ Mass-submission pattern detection from the linguistic analysis module.
 - **36-55**: Questionable
 - **56-75**: Likely Slop
 - **76-100**: Slop
+
+## PSIRT Triage Workflow
+
+### Triage Recommendations
+Automated decision engine for PSIRT teams:
+- **AUTO_CLOSE** — Score ≥75 + confidence ≥0.7
+- **CHALLENGE_REPORTER** — 2+ references not found in live sources
+- **MANUAL_REVIEW** — Score ≥55
+- **PRIORITIZE** — Score ≤25 + 2+ verified references
+- **STANDARD_TRIAGE** — Default
+
+Includes challenge questions, temporal signal detection (suspiciously fast CVE turnaround), template reuse detection, and revision tracking.
+
+### AI Triage Assistant
+- **Reproduction guidance** for 8 vulnerability classes (XSS, SQLi, SSRF, deserialization, buffer overflow, path traversal, auth bypass, race condition)
+- **Gap analysis** — Identifies missing elements (PoC, versions, environment, HTTP details, auth context, network position, dependency versions)
+- **Don't-miss warnings** — Dependency tree, source file verification, endpoint validation, attack chain analysis, RCE verification
+- **Reporter assessment** — Structured strengths, prioritized improvements, slop-specific warnings
 
 ## How Similarity Detection Works
 

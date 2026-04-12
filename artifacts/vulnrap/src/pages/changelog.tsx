@@ -1,12 +1,113 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain } from "lucide-react";
+import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target } from "lucide-react";
 
-export const CURRENT_VERSION = "2.0.0";
+export const CURRENT_VERSION = "3.0.0";
 export const RELEASE_DATE = "2026-04-12";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.0.0",
+    date: "2026-04-12",
+    label: "PSIRT Triage Engine",
+    labelColor: "border-indigo-500 text-indigo-400",
+    sections: [
+      {
+        icon: <Crosshair className="w-4 h-4 text-indigo-400" />,
+        title: "AI Triage Assistant",
+        type: "feature",
+        items: [
+          "New triage assistant panel with tabbed UI (Reproduce / Gaps / Don't Miss / Reporter Feedback) on results and check pages",
+          "8 vulnerability class templates with tailored reproduction steps: XSS, SQLi, SSRF, insecure deserialization, buffer overflow, path traversal, auth bypass, and race condition",
+          "Heuristic reproduction guidance enriched with LLM-suggested steps — merged into a single unified step list with source badges (heuristic vs AI)",
+          "Gap analysis engine identifies missing report elements (PoC, versions, environment, repro steps, HTTP details, auth context, network position, CVSS, dependency versions, source locations) with severity levels (critical/important/minor) and audience tags (triager/reporter/both)",
+          "Don't-miss warnings: always-on dependency tree reminder, source file verification, endpoint validation, attack chain evaluation, RCE claim verification, fabricated debug output, ambiguous score zone, scope creep detection",
+          "Reporter behavior assessment with structured strengths, prioritized improvements, and slop-specific warnings sorted by priority",
+          "Copy-to-clipboard for full markdown triage summary on both results and check pages",
+          "LLM prompt expanded to produce triage_guidance (repro steps, missing info, don't-miss, reporter feedback) alongside slop scoring in a single call",
+        ],
+      },
+      {
+        icon: <Target className="w-4 h-4 text-yellow-400" />,
+        title: "PSIRT Triage Recommendations",
+        type: "feature",
+        items: [
+          "Automated triage action engine for PSIRT teams: AUTO_CLOSE, CHALLENGE_REPORTER, MANUAL_REVIEW, PRIORITIZE, or STANDARD_TRIAGE",
+          "Decision tree: score ≥75 + confidence ≥0.7 → AUTO_CLOSE; 2+ not-found references → CHALLENGE_REPORTER; score ≥55 → MANUAL_REVIEW; score ≤25 + 2+ verified → PRIORITIZE",
+          "Challenge question generator with 4 categories: missing_file, nvd_plagiarism, placeholder_poc, severity_inflation",
+          "Temporal signal detection: suspiciously fast CVE turnaround (<2h = weight 12, <24h = weight 5)",
+          "Template hash computation: normalize CVEs/URLs/versions/names → placeholders, SHA-256 hash, cross-report template reuse detection",
+          "Revision detection: >70% similarity to recent submissions within 48h window, with score direction tracking (improved/degraded)",
+          "Exportable markdown triage report at GET /reports/:id/triage-report with all signals",
+        ],
+      },
+      {
+        icon: <Search className="w-4 h-4 text-green-400" />,
+        title: "Active Content Verification (Axis 5)",
+        type: "feature",
+        items: [
+          "New analysis axis: real-time verification of technical claims against live sources",
+          "GitHub API integration: verifies file paths and function names referenced in reports (up to 5 checks per report, 200ms rate-limited, cached)",
+          "NVD 2.0 API cross-referencing: validates CVE IDs and detects phrase-level plagiarism from NVD descriptions (>30% overlap flagged)",
+          "PoC plausibility checking: flags placeholder domains (example.com, target.com) and textbook payloads",
+          "Project detection engine: recognizes GitHub/GitLab URLs, npm/PyPI packages, and 40+ known OSS projects",
+          "Verification axis score: 0-100 (50=neutral, below=human signals from verified refs, above=slop signals from missing refs/NVD plagiarism)",
+          "Works without GITHUB_TOKEN (unauthenticated: 60 req/hr; authenticated: 5,000 req/hr)",
+          "All API results cached by content hash (30min TTL, 500 entries)",
+        ],
+      },
+      {
+        icon: <Sparkles className="w-4 h-4 text-cyan-400" />,
+        title: "Score Fusion v2.1 — Noisy-OR",
+        type: "improvement",
+        items: [
+          "Replaced Bayesian combination with Noisy-OR fusion: prior=15, floor=5, ceiling=95",
+          "Active axes (score > threshold) converted to probability, combined via 1−∏(1−pᵢ), mapped to 5-95 range",
+          "Fabrication boost: factual axis probability ×1.3 when fabricated_cve or hallucinated_function detected",
+          "Verified reference bonus: each verified check provides additional −3 slop reduction",
+          "New score tiers: Clean (≤20), Likely Human (≤35), Questionable (≤55), Likely Slop (≤75), Slop (>75)",
+          "Score spread ~85pts (slop→90, legit→5) for better differentiation",
+        ],
+      },
+      {
+        icon: <Eye className="w-4 h-4 text-purple-400" />,
+        title: "Human Indicator Detection",
+        type: "feature",
+        items: [
+          "New human-indicators.ts module that detects genuine human writing signals",
+          "Detects: contractions, terse/informal style, informal abbreviations (btw/fwiw/iirc), commit/PR references, patched version references, absence of AI pleasantries",
+          "Human indicators produce negative weights that reduce slop score for genuinely human reports",
+          "Displayed as a separate 'Human Signals' section on the results page",
+        ],
+      },
+      {
+        icon: <Eye className="w-4 h-4 text-primary" />,
+        title: "Frontend Enhancements",
+        type: "improvement",
+        items: [
+          "Client-side sensitivity tuning: Lenient / Balanced / Strict presets that adjust axis weights locally without changing the backend score",
+          "Report comparison feature: side-by-side comparison of two reports with similarity breakdown",
+          "Session history: track previously analyzed reports in the current browser session",
+          "Batch upload support for analyzing multiple reports at once",
+        ],
+      },
+      {
+        icon: <Code2 className="w-4 h-4 text-orange-400" />,
+        title: "API & Schema",
+        type: "improvement",
+        items: [
+          "OpenAPI spec updated to v3.0.0 with TriageAssistant, ReproGuidance, GapItem, DontMissItem, ReporterFeedbackItem, LLMTriageGuidance, ReproStep, TriageRecommendation schemas",
+          "triageAssistant and triageRecommendation fields added to POST /reports, POST /reports/check, and GET /reports/:id responses",
+          "New GET /reports/:id/triage-report endpoint returns exportable markdown triage report",
+          "GET /reports/:id/compare/:matchId endpoint for side-by-side report comparison",
+          "DELETE /reports/:id endpoint with timing-safe token validation",
+          "LLM max_tokens increased from 600→1500, input text limit from 4000→6000 chars",
+          "verification, humanIndicators fields added to all report responses; templateHash included in triageRecommendation",
+        ],
+      },
+    ],
+  },
   {
     version: "2.0.0",
     date: "2026-04-12",

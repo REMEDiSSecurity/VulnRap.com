@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * VulnRap.com API — Vulnerability Report Validation Platform
- * OpenAPI spec version: 2.0.0
+ * OpenAPI spec version: 3.0.0
  */
 import * as zod from "zod";
 
@@ -172,7 +172,7 @@ export const GetReportResponse = zod.object({
     .number()
     .nullish()
     .describe(
-      "LLM analysis slop score (0–100), weighted from 5 dimensions (specificity, originality, voice, coherence, hallucination). Null when LLM is unavailable. Contributes to the fused slopScore via multi-axis Bayesian combination.",
+      "LLM analysis slop score (0–100), weighted from 5 dimensions (specificity, originality, voice, coherence, hallucination). Null when LLM is unavailable. Contributes to the fused slopScore via multi-axis Noisy-OR combination.",
     ),
   llmFeedback: zod
     .array(zod.string())

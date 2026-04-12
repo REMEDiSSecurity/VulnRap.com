@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * VulnRap.com API — Vulnerability Report Validation Platform
- * OpenAPI spec version: 2.0.0
+ * OpenAPI spec version: 3.0.0
  */
 
 export interface ChallengeQuestion {

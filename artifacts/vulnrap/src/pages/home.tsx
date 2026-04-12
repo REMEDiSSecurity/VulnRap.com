@@ -417,9 +417,9 @@ function SlopDetectionCard() {
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
 
           <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2.5 space-y-1">
-            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Multi-Axis Score Fusion (v2.1)</p>
+            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Multi-Axis Score Fusion (v3.0)</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Every report is analyzed across four independent axes: <span className="text-foreground font-mono">Linguistic (0.25) + Factual (0.30) + LLM (0.35) + Template (0.10)</span>. Each axis score is converted to a probability and combined via <span className="text-foreground font-mono">Noisy-OR fusion: 1 - ∏(1 - p_i)</span> into a single slopScore. A separate qualityScore measures report completeness independently. If the LLM axis is unavailable, weights redistribute automatically. Fabrication evidence (fake CVEs, hallucinated functions) triggers a 1.3x boost on the factual axis. Human-writing signals (contractions, terse style, commit refs) reduce the score post-fusion.
+              Every report is analyzed across five independent axes: <span className="text-foreground font-mono">Linguistic + Factual + LLM + Template + Active Verification</span>. Active axes (those with enough evidence) are converted to probabilities and combined via <span className="text-foreground font-mono">Noisy-OR fusion: 1 - ∏(1 - p_i)</span> into a single slopScore. A separate qualityScore measures report completeness independently. If the LLM axis is unavailable, the remaining axes still produce a score. Active content verification checks referenced files, CVEs, and endpoints against live sources (GitHub API, NVD). Fabrication evidence (fake CVEs, hallucinated functions) triggers a 1.3x boost on the factual axis. Verified references reduce the score. Human-writing signals (contractions, terse style, commit refs) reduce the score post-fusion.
             </p>
           </div>
 
