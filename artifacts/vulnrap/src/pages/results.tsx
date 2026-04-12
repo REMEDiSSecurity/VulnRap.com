@@ -833,6 +833,23 @@ export default function Results() {
       )}
 
       <FeedbackForm reportId={id} />
+
+      <Card className="glass-card rounded-xl">
+        <CardContent className="flex flex-col sm:flex-row items-center justify-center gap-3 py-6">
+          <Button onClick={() => navigate("/")} className="gap-2 w-full sm:w-auto">
+            <FileText className="w-4 h-4" />
+            Submit Another Report
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/check")} className="gap-2 glass-card hover:border-primary/30 w-full sm:w-auto">
+            <Search className="w-4 h-4" />
+            Check Another
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/compare")} className="gap-2 glass-card hover:border-primary/30 w-full sm:w-auto">
+            <GitCompare className="w-4 h-4" />
+            Compare Two Reports
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

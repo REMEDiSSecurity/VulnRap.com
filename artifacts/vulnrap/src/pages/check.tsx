@@ -427,6 +427,23 @@ export default function Check() {
               </CardContent>
             </Card>
           )}
+
+          <div className="flex justify-center">
+            <Button
+              variant="outline"
+              className="gap-2 glass-card hover:border-primary/30"
+              onClick={() => {
+                setResult(null);
+                setRawText("");
+                setFile(null);
+                setReportUrl("");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              <Search className="w-4 h-4" />
+              Check Another Report
+            </Button>
+          </div>
         </div>
       )}
     </div>

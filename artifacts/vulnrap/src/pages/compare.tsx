@@ -278,6 +278,23 @@ export default function Compare() {
               );
             })}
           </div>
+
+          <div className="flex justify-center pt-2">
+            <Button
+              variant="outline"
+              className="gap-2 glass-card hover:border-primary/30"
+              onClick={() => {
+                setTextA("");
+                setTextB("");
+                setResultA(null);
+                setResultB(null);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              <GitCompare className="w-4 h-4" />
+              Compare Another Pair
+            </Button>
+          </div>
         </div>
       )}
     </div>
