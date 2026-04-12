@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { UploadCloud, Shield, Loader2, CheckCircle, XCircle, Search, AlertTriangle, ClipboardPaste, Hash, Layers, Lightbulb, ShieldCheck, HelpCircle, ExternalLink, Link2, BarChart3, Target, Brain, Cpu, FileText, Eye, Gauge, AlertCircle, ChevronDown, ChevronUp, Leaf, MessageSquareWarning, Copy, RefreshCw, Fingerprint, Timer } from "lucide-react";
-import { useCheckReport } from "@workspace/api-client-react";
+import { useCheckReport, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type CheckReportBody } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +63,51 @@ function getConfidenceColor(confidence: number): string {
   if (confidence >= 0.8) return "text-green-400";
   if (confidence >= 0.5) return "text-yellow-400";
   return "text-orange-400";
+}
+
+function CheckVerificationPanel({ checks, summary }: { checks: VerificationCheck[]; summary?: VerificationSummary }) {
+  const [expanded, setExpanded] = useState(true);
+  return (
+    <Card className="glass-card rounded-xl">
+      <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Shield className="w-4 h-4 text-primary" />
+          Active Verification
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{checks.length} checks</Badge>
+          <span className="ml-auto">{expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</span>
+        </CardTitle>
+        <CardDescription className="text-xs">Live verification of referenced files, CVEs, and resources</CardDescription>
+      </CardHeader>
+      {expanded && (
+        <CardContent className="space-y-2">
+          {summary && (
+            <div className="flex items-center gap-3 mb-2 text-xs">
+              {(summary.verified ?? 0) > 0 && <span className="flex items-center gap-1 text-green-400"><CheckCircle className="w-3 h-3" />{summary.verified} verified</span>}
+              {(summary.notFound ?? 0) > 0 && <span className="flex items-center gap-1 text-destructive"><AlertCircle className="w-3 h-3" />{summary.notFound} not found</span>}
+              {(summary.warnings ?? 0) > 0 && <span className="flex items-center gap-1 text-yellow-500"><AlertTriangle className="w-3 h-3" />{summary.warnings} warnings</span>}
+            </div>
+          )}
+          {checks.map((check, i) => (
+            <div key={i} className={`rounded-lg border p-2.5 flex items-start gap-2.5 ${
+              check.result === "verified" ? "bg-green-500/5 border-green-500/15" :
+              check.result === "not_found" ? "bg-destructive/5 border-destructive/15" :
+              "bg-yellow-500/5 border-yellow-500/15"
+            }`}>
+              {check.result === "verified"
+                ? <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0 mt-0.5" />
+                : check.result === "not_found"
+                  ? <AlertCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0 mt-0.5" />
+                  : <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0 mt-0.5" />}
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{check.type.replace(/_/g, " ")}</span>
+                <p className="text-xs leading-relaxed">{check.detail}</p>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      )}
+    </Card>
+  );
 }
 
 function CheckScoreContent({ result, sensitivity, onSensitivityChange }: {
@@ -209,6 +254,8 @@ interface CheckResultData {
   feedback: string[];
   previouslySubmitted: boolean;
   existingReportId?: number | null;
+  verification?: Verification;
+  triageRecommendation?: TriageRecommendation;
 }
 
 export default function Check() {
@@ -281,7 +328,7 @@ export default function Check() {
         toast({ title: "Invalid URL", description: "Please enter a valid HTTPS URL.", variant: "destructive" });
         return;
       }
-      checkMutation.mutate({ data: { reportUrl: trimmedUrl } as any });
+      checkMutation.mutate({ data: { reportUrl: trimmedUrl } as CheckReportBody });
     } else {
       const trimmed = rawText.trim();
       if (!trimmed) {
@@ -635,135 +682,92 @@ export default function Check() {
             </Card>
           )}
 
-          {result.verification && (
-            <Card className="glass-card rounded-xl">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Shield className="w-4 h-4 text-primary" />
-                  Active Verification
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                    {(result.verification as any).checks?.length ?? 0} checks
-                  </Badge>
-                </CardTitle>
-                <CardDescription className="text-xs">Live verification of referenced files, CVEs, and resources</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {(() => {
-                  const v = result.verification as any;
-                  const checks = (v?.checks ?? []) as Array<{ type: string; target: string; result: string; detail: string; weight: number }>;
-                  const summary = v?.summary as { verified?: number; notFound?: number; warnings?: number } | undefined;
-                  return (
-                    <>
-                      {summary && (
-                        <div className="flex items-center gap-3 mb-2 text-xs">
-                          {(summary.verified ?? 0) > 0 && <span className="flex items-center gap-1 text-green-400"><CheckCircle className="w-3 h-3" />{summary.verified} verified</span>}
-                          {(summary.notFound ?? 0) > 0 && <span className="flex items-center gap-1 text-destructive"><AlertCircle className="w-3 h-3" />{summary.notFound} not found</span>}
-                          {(summary.warnings ?? 0) > 0 && <span className="flex items-center gap-1 text-yellow-500"><AlertTriangle className="w-3 h-3" />{summary.warnings} warnings</span>}
-                        </div>
-                      )}
-                      {checks.map((check, i) => (
-                        <div key={i} className={`rounded-lg border p-2.5 flex items-start gap-2.5 ${
-                          check.result === "verified" ? "bg-green-500/5 border-green-500/15" :
-                          check.result === "not_found" ? "bg-destructive/5 border-destructive/15" :
-                          "bg-yellow-500/5 border-yellow-500/15"
-                        }`}>
-                          {check.result === "verified"
-                            ? <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0 mt-0.5" />
-                            : check.result === "not_found"
-                              ? <AlertCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0 mt-0.5" />
-                              : <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0 mt-0.5" />}
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{check.type.replace(/_/g, " ")}</span>
-                            <p className="text-xs leading-relaxed">{check.detail}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          )}
+          {result.verification && (() => {
+            const v = result.verification;
+            const checks = v.checks ?? [];
+            const summary = v.summary;
+            return (
+              <CheckVerificationPanel checks={checks} summary={summary} />
+            );
+          })()}
 
-          {result.triageRecommendation && (
+          {result.triageRecommendation && (() => {
+            const tr = result.triageRecommendation;
+            const questions = tr.challengeQuestions ?? [];
+            const temporal = tr.temporalSignals ?? [];
+            return (
             <Card className={`glass-card rounded-xl ${
-              (result.triageRecommendation as any).action === "AUTO_CLOSE" ? "border-destructive/30" :
-              (result.triageRecommendation as any).action === "PRIORITIZE" ? "border-green-500/30" :
-              (result.triageRecommendation as any).action === "CHALLENGE_REPORTER" ? "border-yellow-500/30" : ""
+              tr.action === "AUTO_CLOSE" ? "border-destructive/30" :
+              tr.action === "PRIORITIZE" ? "border-green-500/30" :
+              tr.action === "CHALLENGE_REPORTER" ? "border-yellow-500/30" : ""
             }`}>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <MessageSquareWarning className="w-4 h-4 text-primary" />
                   Triage Recommendation
                   <Badge variant={
-                    (result.triageRecommendation as any).action === "AUTO_CLOSE" ? "destructive" :
-                    (result.triageRecommendation as any).action === "PRIORITIZE" ? "default" :
-                    (result.triageRecommendation as any).action === "CHALLENGE_REPORTER" ? "secondary" : "outline"
+                    tr.action === "AUTO_CLOSE" ? "destructive" :
+                    tr.action === "PRIORITIZE" ? "default" :
+                    tr.action === "CHALLENGE_REPORTER" ? "secondary" : "outline"
                   } className="text-[10px] px-1.5 py-0 h-4 uppercase">
-                    {((result.triageRecommendation as any).action as string).replace(/_/g, " ")}
+                    {tr.action.replace(/_/g, " ")}
                   </Badge>
                 </CardTitle>
-                <CardDescription className="text-xs">{(result.triageRecommendation as any).reason}</CardDescription>
+                <CardDescription className="text-xs">{tr.reason}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="glass-card rounded-lg p-3 text-xs leading-relaxed">
-                  {(result.triageRecommendation as any).note}
+                  {tr.note}
                 </div>
-                {(() => {
-                  const triage = result.triageRecommendation as any;
-                  const questions = (triage.challengeQuestions ?? []) as Array<{ category: string; question: string; context: string }>;
-                  const temporal = (triage.temporalSignals ?? []) as Array<{ cveId: string; signal: string; hoursSincePublication: number; weight: number }>;
-                  return (
-                    <>
-                      {questions.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-bold flex items-center gap-1.5">
-                              <HelpCircle className="w-3.5 h-3.5 text-yellow-500" />
-                              Challenge Questions ({questions.length})
-                            </h4>
-                            <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => {
-                              const text = questions.map((q, i) => `${i + 1}. ${q.question}`).join("\n\n");
-                              navigator.clipboard.writeText(text);
-                              toast({ title: "Copied", description: "Challenge questions copied." });
-                            }}>
-                              <Copy className="w-3 h-3" /> Copy All
-                            </Button>
-                          </div>
-                          {questions.map((q, i) => (
-                            <div key={i} className="rounded-lg bg-yellow-500/5 border border-yellow-500/15 p-2.5">
-                              <span className="text-[10px] font-bold uppercase text-yellow-500/70">{q.category.replace(/_/g, " ")}</span>
-                              <p className="text-xs leading-relaxed">{q.question}</p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5 italic">{q.context}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {temporal.length > 0 && (
-                        <div className="space-y-1.5">
-                          <h4 className="text-xs font-bold flex items-center gap-1.5">
-                            <Timer className="w-3.5 h-3.5 text-primary" /> Temporal Signals
-                          </h4>
-                          {temporal.map((s, i) => (
-                            <div key={i} className={`rounded-lg border p-2.5 flex items-center justify-between text-xs ${
-                              s.signal === "suspiciously_fast" ? "bg-destructive/5 border-destructive/15" :
-                              s.signal === "fast_turnaround" ? "bg-yellow-500/5 border-yellow-500/15" :
-                              "bg-muted/20 border-border/30"
-                            }`}>
-                              <span><span className="font-mono text-primary">{s.cveId}</span> <span className="text-muted-foreground">{s.hoursSincePublication.toFixed(1)}h after pub</span></span>
-                              <Badge variant={s.signal === "suspiciously_fast" ? "destructive" : s.signal === "fast_turnaround" ? "secondary" : "outline"} className="text-[9px]">
-                                {s.signal.replace(/_/g, " ")}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
+
+                {questions.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold flex items-center gap-1.5">
+                        <HelpCircle className="w-3.5 h-3.5 text-yellow-500" />
+                        Challenge Questions ({questions.length})
+                      </h4>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" onClick={() => {
+                        const text = questions.map((q, i) => `${i + 1}. ${q.question}`).join("\n\n");
+                        navigator.clipboard.writeText(text);
+                        toast({ title: "Copied", description: "Challenge questions copied." });
+                      }}>
+                        <Copy className="w-3 h-3" /> Copy All
+                      </Button>
+                    </div>
+                    {questions.map((q, i) => (
+                      <div key={i} className="rounded-lg bg-yellow-500/5 border border-yellow-500/15 p-2.5">
+                        <span className="text-[10px] font-bold uppercase text-yellow-500/70">{q.category.replace(/_/g, " ")}</span>
+                        <p className="text-xs leading-relaxed">{q.question}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 italic">{q.context}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {temporal.length > 0 && (
+                  <div className="space-y-1.5">
+                    <h4 className="text-xs font-bold flex items-center gap-1.5">
+                      <Timer className="w-3.5 h-3.5 text-primary" /> Temporal Signals
+                    </h4>
+                    {temporal.map((s, i) => (
+                      <div key={i} className={`rounded-lg border p-2.5 flex items-center justify-between text-xs ${
+                        s.signal === "suspiciously_fast" ? "bg-destructive/5 border-destructive/15" :
+                        s.signal === "fast_turnaround" ? "bg-yellow-500/5 border-yellow-500/15" :
+                        "bg-muted/20 border-border/30"
+                      }`}>
+                        <span><span className="font-mono text-primary">{s.cveId}</span> <span className="text-muted-foreground">{s.hoursSincePublication.toFixed(1)}h after pub</span></span>
+                        <Badge variant={s.signal === "suspiciously_fast" ? "destructive" : s.signal === "fast_turnaround" ? "secondary" : "outline"} className="text-[9px]">
+                          {s.signal.replace(/_/g, " ")}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
+            );
+          })()}
 
           {result.llmEnhanced && result.llmBreakdown && (
             <Card className="glass-card rounded-xl border-cyan-500/20">

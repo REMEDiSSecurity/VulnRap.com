@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey } from "@workspace/api-client-react";
+import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -157,6 +157,197 @@ function LlmDimensionBar({ label, score }: { label: string; score: number }) {
       </div>
       <Progress value={score} className="h-1" indicatorClassName={color} />
     </div>
+  );
+}
+
+function VerificationPanel({ checks, summary }: { checks: VerificationCheck[]; summary?: VerificationSummary }) {
+  const [expanded, setExpanded] = useState(true);
+  return (
+    <Card className="glass-card rounded-xl">
+      <CardHeader className="cursor-pointer" onClick={() => setExpanded(!expanded)}>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="w-5 h-5 text-primary" />
+          Active Verification
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{checks.length} checks</Badge>
+          <Hint text="VulnRap actively verified referenced file paths, CVE IDs, and PoC resources against live sources (GitHub, NVD, npm, PyPI). Green = confirmed to exist. Red = could not be found. Yellow = partial match or warning." />
+          <span className="ml-auto">{expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</span>
+        </CardTitle>
+        <CardDescription>Live verification of referenced files, CVEs, and resources</CardDescription>
+      </CardHeader>
+      {expanded && (
+        <CardContent className="space-y-2">
+          {summary && (
+            <div className="flex items-center gap-4 mb-3 text-xs">
+              {(summary.verified ?? 0) > 0 && <span className="flex items-center gap-1 text-green-400"><CheckCircle className="w-3.5 h-3.5" />{summary.verified} verified</span>}
+              {(summary.notFound ?? 0) > 0 && <span className="flex items-center gap-1 text-destructive"><AlertCircle className="w-3.5 h-3.5" />{summary.notFound} not found</span>}
+              {(summary.warnings ?? 0) > 0 && <span className="flex items-center gap-1 text-yellow-500"><AlertTriangle className="w-3.5 h-3.5" />{summary.warnings} warning{(summary.warnings ?? 0) !== 1 ? "s" : ""}</span>}
+            </div>
+          )}
+          {checks.map((check, i) => {
+            const icon = check.result === "verified"
+              ? <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+              : check.result === "not_found"
+                ? <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
+                : <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />;
+            const bg = check.result === "verified"
+              ? "bg-green-500/5 border-green-500/15"
+              : check.result === "not_found"
+                ? "bg-destructive/5 border-destructive/15"
+                : "bg-yellow-500/5 border-yellow-500/15";
+            return (
+              <div key={i} className={`rounded-lg border p-3 flex items-start gap-3 ${bg}`}>
+                <div className="mt-0.5">{icon}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{check.type.replace(/_/g, " ")}</span>
+                    <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 ${
+                      check.result === "verified" ? "border-green-500/40 text-green-400" :
+                      check.result === "not_found" ? "border-destructive/40 text-destructive" :
+                      "border-yellow-500/40 text-yellow-500"
+                    }`}>
+                      {check.result.replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                  <p className="text-sm leading-relaxed">{check.detail}</p>
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+function TriageCard({ triage, challengeQuestions, temporalSignals, templateMatch, revision, toast }: {
+  triage: TriageRecommendation;
+  challengeQuestions: ChallengeQuestion[];
+  temporalSignals: TemporalSignal[];
+  templateMatch: TemplateMatch | null;
+  revision: RevisionResult | null;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  return (
+    <Card className={`glass-card rounded-xl ${
+      triage.action === "AUTO_CLOSE" ? "border-destructive/30" :
+      triage.action === "PRIORITIZE" ? "border-green-500/30" :
+      triage.action === "CHALLENGE_REPORTER" ? "border-yellow-500/30" : ""
+    }`}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquareWarning className="w-5 h-5 text-primary" />
+          Triage Recommendation
+          <Badge variant={
+            triage.action === "AUTO_CLOSE" ? "destructive" :
+            triage.action === "PRIORITIZE" ? "default" :
+            triage.action === "CHALLENGE_REPORTER" ? "secondary" : "outline"
+          } className="text-[10px] px-1.5 py-0 h-4 uppercase">
+            {triage.action.replace(/_/g, " ")}
+          </Badge>
+          <Hint text="Automated triage action based on slop score, confidence, and active verification results. AUTO_CLOSE = high AI confidence, CHALLENGE_REPORTER = send questions, MANUAL_REVIEW = assign senior triager, PRIORITIZE = likely legitimate, STANDARD_TRIAGE = follow normal process." />
+        </CardTitle>
+        <CardDescription>{triage.reason}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="glass-card rounded-lg p-4 text-sm leading-relaxed">{triage.note}</div>
+
+        {challengeQuestions.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-yellow-500" />
+                Challenge Questions ({challengeQuestions.length})
+              </h4>
+              <Button variant="outline" size="sm" className="gap-1.5 glass-card hover:border-primary/30 text-xs" onClick={() => {
+                const text = challengeQuestions.map((q, i) => `${i + 1}. ${q.question}`).join("\n\n");
+                navigator.clipboard.writeText(text);
+                toast({ title: "Copied", description: "Challenge questions copied to clipboard." });
+              }}>
+                <Copy className="w-3 h-3" /> Copy All
+              </Button>
+            </div>
+            {challengeQuestions.map((q, i) => (
+              <div key={i} className="rounded-lg bg-yellow-500/5 border border-yellow-500/15 p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-yellow-500/70">{q.category.replace(/_/g, " ")}</span>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => {
+                    navigator.clipboard.writeText(q.question);
+                    toast({ title: "Copied", description: "Question copied." });
+                  }}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="text-sm leading-relaxed">{q.question}</p>
+                <p className="text-xs text-muted-foreground mt-1 italic">{q.context}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {temporalSignals.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-bold flex items-center gap-2">
+              <Timer className="w-4 h-4 text-primary" />
+              Temporal Signals
+            </h4>
+            {temporalSignals.map((s, i) => (
+              <div key={i} className={`rounded-lg border p-3 flex items-center justify-between text-sm ${
+                s.signal === "suspiciously_fast" ? "bg-destructive/5 border-destructive/15" :
+                s.signal === "fast_turnaround" ? "bg-yellow-500/5 border-yellow-500/15" :
+                "bg-muted/20 border-border/30"
+              }`}>
+                <div>
+                  <span className="font-mono text-primary">{s.cveId}</span>
+                  <span className="text-muted-foreground ml-2">
+                    {s.hoursSincePublication < 1 ? `${Math.round(s.hoursSincePublication * 60)}min` : `${s.hoursSincePublication.toFixed(1)}h`} after publication
+                  </span>
+                </div>
+                <Badge variant={s.signal === "suspiciously_fast" ? "destructive" : s.signal === "fast_turnaround" ? "secondary" : "outline"} className="text-[10px]">
+                  {s.signal.replace(/_/g, " ")}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {templateMatch && (
+          <div className="rounded-lg bg-orange-500/5 border border-orange-500/15 p-3 flex items-center gap-3">
+            <Fingerprint className="w-5 h-5 text-orange-400 flex-shrink-0" />
+            <div>
+              <div className="text-sm font-medium">Template Reuse Detected</div>
+              <div className="text-xs text-muted-foreground">
+                Matches {templateMatch.matchedReportIds.length} previous report{templateMatch.matchedReportIds.length !== 1 ? "s" : ""} with identical structure (weight: {templateMatch.weight})
+              </div>
+            </div>
+          </div>
+        )}
+
+        {revision && (
+          <div className={`rounded-lg border p-3 flex items-center gap-3 ${
+            revision.direction === "improved" ? "bg-green-500/5 border-green-500/15" :
+            revision.direction === "worsened" ? "bg-destructive/5 border-destructive/15" :
+            "bg-muted/20 border-border/30"
+          }`}>
+            <RefreshCw className={`w-5 h-5 flex-shrink-0 ${
+              revision.direction === "improved" ? "text-green-400" :
+              revision.direction === "worsened" ? "text-destructive" : "text-muted-foreground"
+            }`} />
+            <div>
+              <div className="text-sm font-medium">
+                Revision of {anonymizeId(revision.originalReportId)}
+                <Badge variant={revision.direction === "improved" ? "default" : revision.direction === "worsened" ? "destructive" : "outline"} className="text-[10px] ml-2">
+                  {revision.direction === "improved" ? `Score dropped ${Math.abs(revision.scoreChange)} pts` :
+                   revision.direction === "worsened" ? `Score rose ${revision.scoreChange} pts` : "No change"}
+                </Badge>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {revision.similarity.toFixed(0)}% similar to original (score: {revision.originalScore})
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -467,6 +658,14 @@ export default function Results() {
   const redactionSummary = report.redactionSummary as { totalRedactions: number; categories: Record<string, number> } | undefined;
   const breakdown = report.breakdown as { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number } | undefined;
   const evidence = report.evidence as Array<{ type: string; description: string; weight: number; matched?: string | null }> | undefined;
+  const activeVerification = report.verification as Verification | null | undefined;
+  const triage = report.triageRecommendation as TriageRecommendation | null | undefined;
+  const triageChecks = activeVerification?.checks ?? [];
+  const triageSummary = activeVerification?.summary;
+  const challengeQuestions = triage?.challengeQuestions ?? [];
+  const temporalSignals = triage?.temporalSignals ?? [];
+  const templateMatch = triage?.templateMatch ?? null;
+  const revisionInfo = triage?.revision ?? null;
   const llmBreakdown = report.llmBreakdown as { specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number } | undefined;
   const humanIndicators = (report.humanIndicators ?? []) as Array<{ type: string; description: string; weight: number; matched?: string | null }>;
   const qualityScore = report.qualityScore as number | undefined;
@@ -880,236 +1079,19 @@ export default function Results() {
         </Card>
       )}
 
-      {report.verification && (
-        <Card className="glass-card rounded-xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-primary" />
-              Active Verification
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                {(report.verification as any).checks?.length ?? 0} checks
-              </Badge>
-              <Hint text="VulnRap actively verified referenced file paths, CVE IDs, and PoC resources against live sources (GitHub, NVD, npm, PyPI). Green = confirmed to exist. Red = could not be found. Yellow = partial match or warning." />
-            </CardTitle>
-            <CardDescription>
-              Live verification of referenced files, CVEs, and resources
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {(() => {
-              const v = report.verification as any;
-              const checks = (v?.checks ?? []) as Array<{ type: string; target: string; result: string; detail: string; weight: number }>;
-              const summary = v?.summary as { verified?: number; notFound?: number; warnings?: number } | undefined;
-              return (
-                <>
-                  {summary && (
-                    <div className="flex items-center gap-4 mb-3 text-xs">
-                      {(summary.verified ?? 0) > 0 && (
-                        <span className="flex items-center gap-1 text-green-400">
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          {summary.verified} verified
-                        </span>
-                      )}
-                      {(summary.notFound ?? 0) > 0 && (
-                        <span className="flex items-center gap-1 text-destructive">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          {summary.notFound} not found
-                        </span>
-                      )}
-                      {(summary.warnings ?? 0) > 0 && (
-                        <span className="flex items-center gap-1 text-yellow-500">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          {summary.warnings} warning{(summary.warnings ?? 0) !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {checks.map((check, i) => {
-                    const icon = check.result === "verified"
-                      ? <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
-                      : check.result === "not_found"
-                        ? <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
-                        : <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />;
-                    const bg = check.result === "verified"
-                      ? "bg-green-500/5 border-green-500/15"
-                      : check.result === "not_found"
-                        ? "bg-destructive/5 border-destructive/15"
-                        : "bg-yellow-500/5 border-yellow-500/15";
-                    return (
-                      <div key={i} className={`rounded-lg border p-3 flex items-start gap-3 ${bg}`}>
-                        <div className="mt-0.5">{icon}</div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{check.type.replace(/_/g, " ")}</span>
-                            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 ${
-                              check.result === "verified" ? "border-green-500/40 text-green-400" :
-                              check.result === "not_found" ? "border-destructive/40 text-destructive" :
-                              "border-yellow-500/40 text-yellow-500"
-                            }`}>
-                              {check.result.replace(/_/g, " ")}
-                            </Badge>
-                          </div>
-                          <p className="text-sm leading-relaxed">{check.detail}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              );
-            })()}
-          </CardContent>
-        </Card>
+      {activeVerification && triageChecks.length > 0 && (
+        <VerificationPanel checks={triageChecks} summary={triageSummary} />
       )}
 
-      {report.triageRecommendation && (
-        <Card className={`glass-card rounded-xl ${
-          (report.triageRecommendation as any).action === "AUTO_CLOSE" ? "border-destructive/30" :
-          (report.triageRecommendation as any).action === "PRIORITIZE" ? "border-green-500/30" :
-          (report.triageRecommendation as any).action === "CHALLENGE_REPORTER" ? "border-yellow-500/30" :
-          ""
-        }`}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquareWarning className="w-5 h-5 text-primary" />
-              Triage Recommendation
-              <Badge variant={
-                (report.triageRecommendation as any).action === "AUTO_CLOSE" ? "destructive" :
-                (report.triageRecommendation as any).action === "PRIORITIZE" ? "default" :
-                (report.triageRecommendation as any).action === "CHALLENGE_REPORTER" ? "secondary" :
-                "outline"
-              } className="text-[10px] px-1.5 py-0 h-4 uppercase">
-                {((report.triageRecommendation as any).action as string).replace(/_/g, " ")}
-              </Badge>
-              <Hint text="Automated triage action based on slop score, confidence, and active verification results. AUTO_CLOSE = high AI confidence, CHALLENGE_REPORTER = send questions, MANUAL_REVIEW = assign senior triager, PRIORITIZE = likely legitimate, STANDARD_TRIAGE = follow normal process." />
-            </CardTitle>
-            <CardDescription>{(report.triageRecommendation as any).reason}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="glass-card rounded-lg p-4 text-sm leading-relaxed">
-              {(report.triageRecommendation as any).note}
-            </div>
-
-            {(() => {
-              const triage = report.triageRecommendation as any;
-              const questions = (triage.challengeQuestions ?? []) as Array<{ category: string; question: string; context: string }>;
-              const temporal = (triage.temporalSignals ?? []) as Array<{ cveId: string; signal: string; hoursSincePublication: number; weight: number }>;
-              const templateMatch = triage.templateMatch as { templateHash: string; matchedReportIds: number[]; weight: number } | null;
-              const revision = triage.revision as { originalReportId: number; originalScore: number; similarity: number; scoreChange: number; direction: string } | null;
-              return (
-                <>
-                  {questions.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold flex items-center gap-2">
-                          <HelpCircle className="w-4 h-4 text-yellow-500" />
-                          Challenge Questions ({questions.length})
-                        </h4>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 glass-card hover:border-primary/30 text-xs"
-                          onClick={() => {
-                            const text = questions.map((q, i) => `${i + 1}. ${q.question}`).join("\n\n");
-                            navigator.clipboard.writeText(text);
-                            toast({ title: "Copied", description: "Challenge questions copied to clipboard." });
-                          }}
-                        >
-                          <Copy className="w-3 h-3" />
-                          Copy All
-                        </Button>
-                      </div>
-                      {questions.map((q, i) => (
-                        <div key={i} className="rounded-lg bg-yellow-500/5 border border-yellow-500/15 p-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-yellow-500/70">{q.category.replace(/_/g, " ")}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5"
-                              onClick={() => {
-                                navigator.clipboard.writeText(q.question);
-                                toast({ title: "Copied", description: "Question copied." });
-                              }}
-                            >
-                              <Copy className="w-3 h-3" />
-                            </Button>
-                          </div>
-                          <p className="text-sm leading-relaxed">{q.question}</p>
-                          <p className="text-xs text-muted-foreground mt-1 italic">{q.context}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {temporal.length > 0 && (
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-bold flex items-center gap-2">
-                        <Timer className="w-4 h-4 text-primary" />
-                        Temporal Signals
-                      </h4>
-                      {temporal.map((s, i) => (
-                        <div key={i} className={`rounded-lg border p-3 flex items-center justify-between text-sm ${
-                          s.signal === "suspiciously_fast" ? "bg-destructive/5 border-destructive/15" :
-                          s.signal === "fast_turnaround" ? "bg-yellow-500/5 border-yellow-500/15" :
-                          "bg-muted/20 border-border/30"
-                        }`}>
-                          <div>
-                            <span className="font-mono text-primary">{s.cveId}</span>
-                            <span className="text-muted-foreground ml-2">
-                              {s.hoursSincePublication < 1 ? `${Math.round(s.hoursSincePublication * 60)}min` : `${s.hoursSincePublication.toFixed(1)}h`} after publication
-                            </span>
-                          </div>
-                          <Badge variant={s.signal === "suspiciously_fast" ? "destructive" : s.signal === "fast_turnaround" ? "secondary" : "outline"} className="text-[10px]">
-                            {s.signal.replace(/_/g, " ")}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {templateMatch && (
-                    <div className="rounded-lg bg-orange-500/5 border border-orange-500/15 p-3 flex items-center gap-3">
-                      <Fingerprint className="w-5 h-5 text-orange-400 flex-shrink-0" />
-                      <div>
-                        <div className="text-sm font-medium">Template Reuse Detected</div>
-                        <div className="text-xs text-muted-foreground">
-                          Matches {templateMatch.matchedReportIds.length} previous report{templateMatch.matchedReportIds.length !== 1 ? "s" : ""} with identical structure (weight: {templateMatch.weight})
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {revision && (
-                    <div className={`rounded-lg border p-3 flex items-center gap-3 ${
-                      revision.direction === "improved" ? "bg-green-500/5 border-green-500/15" :
-                      revision.direction === "worsened" ? "bg-destructive/5 border-destructive/15" :
-                      "bg-muted/20 border-border/30"
-                    }`}>
-                      <RefreshCw className={`w-5 h-5 flex-shrink-0 ${
-                        revision.direction === "improved" ? "text-green-400" :
-                        revision.direction === "worsened" ? "text-destructive" :
-                        "text-muted-foreground"
-                      }`} />
-                      <div>
-                        <div className="text-sm font-medium">
-                          Revision of {anonymizeId(revision.originalReportId)}
-                          <Badge variant={revision.direction === "improved" ? "default" : revision.direction === "worsened" ? "destructive" : "outline"} className="text-[10px] ml-2">
-                            {revision.direction === "improved" ? `Score dropped ${Math.abs(revision.scoreChange)} pts` :
-                             revision.direction === "worsened" ? `Score rose ${revision.scoreChange} pts` :
-                             "No change"}
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {revision.similarity.toFixed(0)}% similar to original (score: {revision.originalScore})
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </CardContent>
-        </Card>
+      {triage && (
+        <TriageCard
+          triage={triage}
+          challengeQuestions={challengeQuestions}
+          temporalSignals={temporalSignals}
+          templateMatch={templateMatch}
+          revision={revisionInfo}
+          toast={toast}
+        />
       )}
 
       {verification && (

@@ -65,14 +65,14 @@ export function generateTriageRecommendation(
     action = "AUTO_CLOSE";
     reason = `High slop score (${slopScore}) with high confidence (${(confidence * 100).toFixed(0)}%) — strong AI-generation indicators across multiple axes.`;
     note = "This report exhibits overwhelming AI-generation signals. Consider auto-closing with a template response requesting original research. If your policy requires manual review of all closures, escalate to a senior triager.";
-  } else if (notFoundCount >= 2) {
-    action = "CHALLENGE_REPORTER";
-    reason = `${notFoundCount} referenced items could not be verified — the reporter may be fabricating technical details.`;
-    note = "Send the generated challenge questions below. A legitimate researcher will be able to answer specifics about their environment, exact reproduction steps, and how they discovered the issue. Set a 48-hour response deadline.";
   } else if (slopScore >= 55) {
     action = "MANUAL_REVIEW";
     reason = `Moderate slop score (${slopScore}) — some AI-generation indicators present but not conclusive.`;
     note = "Assign to a senior triager for manual assessment. Check for concrete reproduction steps, unique observations, and domain-specific details that AI typically cannot fabricate.";
+  } else if (notFoundCount >= 2) {
+    action = "CHALLENGE_REPORTER";
+    reason = `${notFoundCount} referenced items could not be verified — the reporter may be fabricating technical details.`;
+    note = "Send the generated challenge questions below. A legitimate researcher will be able to answer specifics about their environment, exact reproduction steps, and how they discovered the issue. Set a 48-hour response deadline.";
   } else if (slopScore <= 25 && verifiedCount >= 2) {
     action = "PRIORITIZE";
     reason = `Low slop score (${slopScore}) with ${verifiedCount} verified references — strong indicators of legitimate, well-researched report.`;

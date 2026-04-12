@@ -377,7 +377,7 @@ router.post("/reports", async (req, res): Promise<void> => {
       templateMatch = {
         templateHash,
         matchedReportIds: templateDuplicates.map(r => r.id),
-        weight: Math.min(templateDuplicates.length * 3, 15),
+        weight: 25,
       };
     }
   } catch {}
@@ -386,11 +386,12 @@ router.post("/reports", async (req, res): Promise<void> => {
   try {
     const highSimMatch = similarityMatches.find(m => m.similarity >= 70);
     if (highSimMatch) {
+      const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
       const [matchedRow] = await db
-        .select({ id: reportsTable.id, slopScore: reportsTable.slopScore })
+        .select({ id: reportsTable.id, slopScore: reportsTable.slopScore, createdAt: reportsTable.createdAt })
         .from(reportsTable)
         .where(eq(reportsTable.id, highSimMatch.reportId));
-      if (matchedRow) {
+      if (matchedRow && matchedRow.createdAt >= cutoff48h) {
         revisionResult = detectRevision(analysisResult.slopScore, {
           id: matchedRow.id,
           slopScore: matchedRow.slopScore ?? 50,
@@ -914,7 +915,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
         templateMatch = {
           templateHash: report.templateHash as string,
           matchedReportIds: others.map(r => r.id),
-          weight: Math.min(others.length * 3, 15),
+          weight: 25,
         };
       }
     }
@@ -1053,6 +1054,16 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     lines.push("");
     for (const e of evidence) {
       lines.push(`- **[${e.type}]** ${e.description} (weight: ${e.weight})`);
+    }
+    lines.push("");
+  }
+
+  const humanIndicators = (report.humanIndicators as EvidenceItem[]) ?? [];
+  if (humanIndicators.length > 0) {
+    lines.push("## Human Signals");
+    lines.push("");
+    for (const h of humanIndicators) {
+      lines.push(`- **[${h.type}]** ${h.description} (weight: ${h.weight})`);
     }
     lines.push("");
   }
