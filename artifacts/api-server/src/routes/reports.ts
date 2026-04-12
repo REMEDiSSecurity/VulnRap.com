@@ -1048,6 +1048,24 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       (report.evidence as EvidenceItem[]) ?? [],
     );
     const temporalSignals = computeTemporalSignals(verification, report.createdAt);
+
+    let mdTemplateMatch: TriageRecommendation["templateMatch"] = null;
+    if (report.templateHash) {
+      const templateDuplicates = await db
+        .select({ id: reportsTable.id })
+        .from(reportsTable)
+        .where(eq(reportsTable.templateHash, report.templateHash as string))
+        .limit(10);
+      const others = templateDuplicates.filter(r => r.id !== report.id);
+      if (others.length > 0) {
+        mdTemplateMatch = {
+          templateHash: report.templateHash as string,
+          matchedReportIds: others.map(r => r.id),
+          weight: 25,
+        };
+      }
+    }
+
     let mdRevision: TriageRecommendation["revision"] = null;
     try {
       const simMatches = (report.similarityMatches ?? []) as Array<{ reportId: number; similarity: number; matchType: string }>;
@@ -1068,7 +1086,7 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       }
     } catch {}
 
-    triageRecommendation = { ...base, temporalSignals, templateMatch: null, revision: mdRevision };
+    triageRecommendation = { ...base, temporalSignals, templateMatch: mdTemplateMatch, revision: mdRevision };
   } catch {}
 
   const lines: string[] = [];
@@ -1106,6 +1124,16 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       for (const s of triageRecommendation.temporalSignals) {
         lines.push(`- **${s.cveId}**: ${s.signal} (${s.hoursSincePublication.toFixed(1)}h since publication, weight ${s.weight})`);
       }
+      lines.push("");
+    }
+
+    if (triageRecommendation.templateMatch) {
+      const tm = triageRecommendation.templateMatch;
+      lines.push("## Template Reuse");
+      lines.push("");
+      lines.push(`- **Template Hash**: \`${tm.templateHash}\``);
+      lines.push(`- **Matched Reports**: ${tm.matchedReportIds.length} previous submission(s)`);
+      lines.push(`- **Weight**: +${tm.weight}`);
       lines.push("");
     }
 
