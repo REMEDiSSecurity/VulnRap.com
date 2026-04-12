@@ -109,11 +109,11 @@ export default function Stats() {
     : 0;
 
   const getSlopTier = (score: number) => {
-    if (score < 15) return "Probably Legit";
-    if (score < 30) return "Mildly Suspicious";
-    if (score < 50) return "Questionable";
-    if (score < 70) return "Highly Suspicious";
-    return "Pure Slop";
+    if (score <= 20) return "Clean";
+    if (score <= 35) return "Likely Human";
+    if (score <= 55) return "Questionable";
+    if (score <= 75) return "Likely Slop";
+    return "Slop";
   };
 
   return (

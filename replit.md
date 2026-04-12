@@ -55,7 +55,8 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
     - **Axis 2 — Quality vs Slop Separation** (`sloppiness.ts`): Produces `qualityScore` (report completeness: version info, code blocks, repro steps) and heuristic `feedback` strings. Quality signals are intentionally separated from AI provenance signals.
     - **Axis 3 — Factual Verification** (`factual-verification.ts`): Severity inflation (CVSS 9.8 without RCE/auth-bypass), placeholder URLs (example.com, target.com), fabricated debug output (fake ASan addresses, GDB registers), fabricated CVE detection (sequential IDs, round numbers, unusually long IDs), hallucinated function names (generic CamelCase soup, mixed naming conventions).
     - **Axis 4 — LLM Semantic Analysis** (`llm-slop.ts`): 5-dimension evaluation: Specificity (0.15), Originality (0.25), Voice (0.20), Coherence (0.15), Hallucination (0.25). Uses OpenAI-compatible API. Graceful null return when unavailable.
-    - **Score Fusion** (`score-fusion.ts`): Bayesian combination with base weights: Linguistic 0.25, Factual 0.30, LLM 0.35, Template 0.10. Dynamic boost to Factual 0.50 when `fabricated_cve` or `hallucinated_function` evidence detected. No-LLM redistribution: Linguistic 39%, Factual 44%, Template 17%. Confidence formula: `min(1.0, 0.3 + evidenceCount*0.07 + 0.2 if llm)`. Final slopScore: `rawScore*confidence + 50*(1-confidence)`.
+    - **Human Indicator Detection** (`human-indicators.ts`): Detects contractions, terse style, informal abbreviations (btw/fwiw/iirc), commit/PR refs, patched version refs, absence of AI pleasantries — all produce negative weights to reduce slop score for genuinely human reports.
+    - **Score Fusion v2.1** (`score-fusion.ts`): Noisy-OR fusion (prior=15, floor=5, ceiling=95). Active axes (score > threshold) converted to probability, combined via 1-∏(1-p_i), mapped to 5-95 range. Fabrication boost: factual axis probability ×1.3 when fabricated_cve/hallucinated_function detected. Human indicator reduction applied post-fusion (floor=5). Score spread ~85pts (slop→90, legit→5).
 - **Input Sanitization**: Strips scripts, sanitizes attributes, neutralizes URIs, removes control characters, and guards against excessive input length and binary content.
 - **Upload Pipeline**: Ensures reports are redacted, hashed, compared for similarity, and analyzed by the multi-axis engine, with only redacted text (or just hashes in `similarity_only` mode) stored.
 - **Privacy Modes**: `full` (stores redacted text and hashes) and `similarity_only` (stores only hashes).
@@ -85,7 +86,8 @@ After modifying `lib/api-spec/openapi.yaml`, regenerate clients:
 - `breakdown`: `{ linguistic, factual, template, llm, quality }` per-axis scores
 - `evidence`: Array of `{ type, description, weight, matched }` signal objects
 - `llmBreakdown`: `{ specificity, originality, voice, coherence, hallucination }` (null if LLM unavailable)
-- `slopTier`: Human-readable tier (Probably Legit / Mildly Suspicious / Questionable / Highly Suspicious / Pure Slop)
+- `slopTier`: Human-readable tier (Clean ≤20 / Likely Human ≤35 / Questionable ≤55 / Likely Slop ≤75 / Slop >75)
+- `humanIndicators`: Array of detected human writing indicators (contractions, informal style, commit refs, etc.)
 - `feedback`: Heuristic feedback strings from rule-based engine (sourced from sloppiness.ts)
 
 ## External Dependencies

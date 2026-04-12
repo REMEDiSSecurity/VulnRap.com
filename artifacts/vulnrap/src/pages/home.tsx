@@ -385,11 +385,11 @@ const llmDimensions = [
 ];
 
 const slopTiers = [
-  { tier: "Probably Legit", range: "0–14", color: "text-green-400", bg: "bg-green-400/10" },
-  { tier: "Mildly Suspicious", range: "15–29", color: "text-yellow-400", bg: "bg-yellow-400/10" },
-  { tier: "Questionable", range: "30–49", color: "text-orange-400", bg: "bg-orange-400/10" },
-  { tier: "Highly Suspicious", range: "50–69", color: "text-red-400", bg: "bg-red-400/10" },
-  { tier: "Pure Slop", range: "70–100", color: "text-red-500", bg: "bg-red-500/10" },
+  { tier: "Clean", range: "0–20", color: "text-green-400", bg: "bg-green-400/10" },
+  { tier: "Likely Human", range: "21–35", color: "text-yellow-400", bg: "bg-yellow-400/10" },
+  { tier: "Questionable", range: "36–55", color: "text-orange-400", bg: "bg-orange-400/10" },
+  { tier: "Likely Slop", range: "56–75", color: "text-red-400", bg: "bg-red-400/10" },
+  { tier: "Slop", range: "76–100", color: "text-red-500", bg: "bg-red-500/10" },
 ];
 
 function SlopDetectionCard() {

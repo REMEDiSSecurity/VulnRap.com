@@ -1,6 +1,7 @@
 import type { LinguisticResult } from "./linguistic-analysis";
 import type { FactualResult } from "./factual-verification";
 import type { LLMSlopResult } from "./llm-slop";
+import { detectHumanIndicators, type HumanIndicator } from "./human-indicators";
 
 export interface ScoreBreakdown {
   linguistic: number;
@@ -23,6 +24,7 @@ export interface FusionResult {
   confidence: number;
   breakdown: ScoreBreakdown;
   evidence: EvidenceItem[];
+  humanIndicators: HumanIndicator[];
   slopTier: string;
 }
 
@@ -32,21 +34,19 @@ export interface TierThresholds {
 }
 
 const DEFAULT_THRESHOLDS: TierThresholds = {
-  low: 30,
-  high: 70,
+  low: 20,
+  high: 75,
 };
 
-const BASE_WEIGHTS = {
-  linguistic: 0.25,
-  factual: 0.30,
-  llm: 0.35,
-  template: 0.10,
-};
+const PRIOR = 15;
+const FLOOR = 5;
+const CEILING = 95;
 
-const NO_LLM_WEIGHTS = {
-  linguistic: 0.25 + 0.35 * 0.4,
-  factual: 0.30 + 0.35 * 0.4,
-  template: 0.10 + 0.35 * 0.2,
+const AXIS_THRESHOLDS: Record<string, number> = {
+  linguistic: 10,
+  factual: 10,
+  template: 5,
+  llm: 20,
 };
 
 export function loadThresholds(): TierThresholds {
@@ -68,6 +68,7 @@ export function fuseScores(
   factual: FactualResult,
   llm: LLMSlopResult | null,
   qualityScore: number,
+  originalText: string,
   thresholds?: TierThresholds,
 ): FusionResult {
   const thr = thresholds ?? loadThresholds();
@@ -103,56 +104,64 @@ export function fuseScores(
   );
   const hasFutureCve = factual.evidence.some(e => e.type === "future_cve");
   const hasFakeAsan = factual.evidence.some(e => e.type === "fake_asan");
+  const hasFabricationBoost = hasHallucinatedFunction || hasFutureCve || hasFakeAsan;
 
   const templateScore = linguistic.templateScore;
 
-  let rawScore: number;
+  const linguisticAxisScore = Math.round(
+    linguistic.lexicalScore * 0.6 + linguistic.statisticalScore * 0.4
+  );
 
+  const axisScores: { name: string; score: number }[] = [
+    { name: "linguistic", score: linguisticAxisScore },
+    { name: "factual", score: factual.score },
+    { name: "template", score: templateScore },
+  ];
   if (llm) {
-    let weights = { ...BASE_WEIGHTS };
-
-    if (hasHallucinatedFunction || hasFutureCve || hasFakeAsan) {
-      weights = {
-        linguistic: 0.15,
-        factual: 0.50,
-        llm: 0.25,
-        template: 0.10,
-      };
-    }
-
-    rawScore =
-      linguistic.lexicalScore * (weights.linguistic * 0.6) +
-      linguistic.statisticalScore * (weights.linguistic * 0.4) +
-      factual.score * weights.factual +
-      llm.llmSlopScore * weights.llm +
-      templateScore * weights.template;
-  } else {
-    let weights = { ...NO_LLM_WEIGHTS };
-
-    if (hasHallucinatedFunction || hasFutureCve || hasFakeAsan) {
-      weights = {
-        linguistic: 0.25,
-        factual: 0.55,
-        template: 0.20,
-      };
-    }
-
-    rawScore =
-      linguistic.lexicalScore * (weights.linguistic * 0.6) +
-      linguistic.statisticalScore * (weights.linguistic * 0.4) +
-      factual.score * weights.factual +
-      templateScore * weights.template;
+    axisScores.push({ name: "llm", score: llm.llmSlopScore });
   }
+
+  const activeAxes = axisScores.filter(
+    a => a.score > (AXIS_THRESHOLDS[a.name] ?? 10)
+  );
+
+  let slopScore: number;
+
+  if (activeAxes.length === 0) {
+    slopScore = PRIOR;
+  } else {
+    const probabilities = activeAxes.map(a => {
+      let p = a.score / 100;
+      if (hasFabricationBoost && a.name === "factual") {
+        p = Math.min(1, p * 1.3);
+      }
+      return Math.max(0, Math.min(0.95, p));
+    });
+
+    const combinedP = 1 - probabilities.reduce((prod, p) => prod * (1 - p), 1);
+
+    slopScore = Math.round(PRIOR + combinedP * (CEILING - PRIOR));
+  }
+
+  const humanResult = detectHumanIndicators(originalText);
+  slopScore = Math.max(FLOOR, slopScore + humanResult.totalReduction);
+
+  slopScore = Math.min(100, Math.max(0, slopScore));
 
   const evidenceCount = allEvidence.filter(e => e.weight >= 5).length;
   const confidence = Math.min(
     1.0,
-    0.3 + evidenceCount * 0.07 + (llm ? 0.2 : 0)
+    0.3 + evidenceCount * 0.07 + (llm ? 0.2 : 0) + humanResult.indicators.length * 0.03
   );
 
-  const slopScore = Math.min(100, Math.max(0, Math.round(
-    rawScore * confidence + 50 * (1 - confidence)
-  )));
+  for (const indicator of humanResult.indicators) {
+    allEvidence.push({
+      type: indicator.type,
+      description: indicator.description,
+      weight: indicator.weight,
+      matched: indicator.matched,
+    });
+  }
 
   const breakdown: ScoreBreakdown = {
     linguistic: Math.round(linguistic.score),
@@ -168,15 +177,16 @@ export function fuseScores(
     confidence: Math.round(confidence * 100) / 100,
     breakdown,
     evidence: allEvidence,
+    humanIndicators: humanResult.indicators,
     slopTier: getSlopTier(slopScore, thr),
   };
 }
 
 export function getSlopTier(score: number, thresholds?: TierThresholds): string {
   const thr = thresholds ?? DEFAULT_THRESHOLDS;
-  if (score >= thr.high) return "Pure Slop";
-  if (score >= Math.round((thr.low + thr.high) / 2)) return "Highly Suspicious";
-  if (score >= thr.low) return "Questionable";
-  if (score >= Math.round(thr.low / 2)) return "Mildly Suspicious";
-  return "Probably Legit";
+  if (score > thr.high) return "Slop";
+  if (score > 55) return "Likely Slop";
+  if (score > 35) return "Questionable";
+  if (score > thr.low) return "Likely Human";
+  return "Clean";
 }

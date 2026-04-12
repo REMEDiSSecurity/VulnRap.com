@@ -7,8 +7,8 @@ export interface VulnRapSettings {
 }
 
 const DEFAULTS: VulnRapSettings = {
-  slopThresholdLow: 30,
-  slopThresholdHigh: 70,
+  slopThresholdLow: 20,
+  slopThresholdHigh: 75,
   similarityThreshold: 80,
 };
 
@@ -42,9 +42,11 @@ export function getSlopTierCustom(
   low: number,
   high: number
 ): string {
-  if (score < low) return "Probably Legit";
-  if (score < high) return "Suspicious";
-  return "Likely AI Slop";
+  if (score <= low) return "Clean";
+  if (score <= 35) return "Likely Human";
+  if (score <= 55) return "Questionable";
+  if (score <= high) return "Likely Slop";
+  return "Slop";
 }
 
 export function getSlopColorCustom(

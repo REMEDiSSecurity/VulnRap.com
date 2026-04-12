@@ -96,21 +96,21 @@ router.get("/stats/recent", async (_req, res): Promise<void> => {
 
 router.get("/stats/distribution", async (_req, res): Promise<void> => {
   const bucketDefs = [
-    { label: "Probably Legit", min: 0, max: 14 },
-    { label: "Mildly Suspicious", min: 15, max: 29 },
-    { label: "Questionable", min: 30, max: 49 },
-    { label: "Highly Suspicious", min: 50, max: 69 },
-    { label: "Pure Slop", min: 70, max: 100 },
+    { label: "Clean", min: 0, max: 20 },
+    { label: "Likely Human", min: 21, max: 35 },
+    { label: "Questionable", min: 36, max: 55 },
+    { label: "Likely Slop", min: 56, max: 75 },
+    { label: "Slop", min: 76, max: 100 },
   ];
 
   const [row] = await db
     .select({
       total: sql<number>`count(*)::int`,
-      b0: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 0 and ${reportsTable.slopScore} <= 14)::int`,
-      b1: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 15 and ${reportsTable.slopScore} <= 29)::int`,
-      b2: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 30 and ${reportsTable.slopScore} <= 49)::int`,
-      b3: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 50 and ${reportsTable.slopScore} <= 69)::int`,
-      b4: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 70 and ${reportsTable.slopScore} <= 100)::int`,
+      b0: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 0 and ${reportsTable.slopScore} <= 20)::int`,
+      b1: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 21 and ${reportsTable.slopScore} <= 35)::int`,
+      b2: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 36 and ${reportsTable.slopScore} <= 55)::int`,
+      b3: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 56 and ${reportsTable.slopScore} <= 75)::int`,
+      b4: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 76 and ${reportsTable.slopScore} <= 100)::int`,
     })
     .from(reportsTable);
 

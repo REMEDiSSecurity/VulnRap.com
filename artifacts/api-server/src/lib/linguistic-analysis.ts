@@ -150,7 +150,7 @@ function analyzeLexicalMarkers(text: string): { score: number; evidence: Linguis
 
 function analyzeStatisticalFeatures(text: string): { score: number; evidence: LinguisticEvidence[] } {
   const evidence: LinguisticEvidence[] = [];
-  const scores: number[] = [];
+  const featureScores: { score: number; weight: number }[] = [];
 
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10);
   if (sentences.length >= 5) {
@@ -162,14 +162,28 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
 
     if (cv < 0.25) {
       const uniformScore = Math.round(Math.min(100, (0.25 - cv) * 400));
-      scores.push(uniformScore);
+      featureScores.push({ score: uniformScore, weight: 0.15 });
       evidence.push({
         type: "sentence_uniformity",
         description: `Unusually uniform sentence lengths (CV=${cv.toFixed(2)}) — AI text tends to produce regular-length sentences`,
         weight: Math.round(uniformScore / 10),
       });
     } else {
-      scores.push(0);
+      featureScores.push({ score: 0, weight: 0.15 });
+    }
+
+    let cvScore: number;
+    if (cv < 0.3) cvScore = 70;
+    else if (cv < 0.5) cvScore = 45;
+    else if (cv < 0.7) cvScore = 15;
+    else cvScore = 5;
+    featureScores.push({ score: cvScore, weight: 0.20 });
+    if (cvScore >= 40) {
+      evidence.push({
+        type: "low_sentence_cv",
+        description: `Low sentence length variation (CV=${cv.toFixed(2)}) — human text has burstier sentence lengths`,
+        weight: Math.round(cvScore / 10),
+      });
     }
   }
 
@@ -186,14 +200,14 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
   const passiveRatio = wordCount > 0 ? passiveCount / (wordCount / 20) : 0;
   if (passiveRatio > 0.3) {
     const passiveScore = Math.round(Math.min(100, (passiveRatio - 0.3) * 143));
-    scores.push(passiveScore);
+    featureScores.push({ score: passiveScore, weight: 0.15 });
     evidence.push({
       type: "passive_voice",
       description: `High passive voice usage (${(passiveRatio * 100).toFixed(0)}% of clauses) — AI-generated text overuses passive constructions`,
       weight: Math.round(passiveScore / 10),
     });
   } else {
-    scores.push(0);
+    featureScores.push({ score: 0, weight: 0.15 });
   }
 
   const contractionPatterns = /\b(?:don't|won't|can't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|doesn't|didn't|couldn't|wouldn't|shouldn't|it's|i'm|i've|i'll|we're|we've|they're|they've|that's|there's|here's|what's|who's|let's|ain't)\b/gi;
@@ -204,14 +218,14 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
 
   if (wordCount > 100 && contractionCount === 0 && formalCount >= 3) {
     const formalityScore = Math.min(100, formalCount * 15);
-    scores.push(formalityScore);
+    featureScores.push({ score: formalityScore, weight: 0.15 });
     evidence.push({
       type: "no_contractions",
       description: `Zero contractions with ${formalCount} formal expansions — AI models avoid contractions in formal text`,
       weight: Math.round(formalityScore / 10),
     });
   } else {
-    scores.push(0);
+    featureScores.push({ score: 0, weight: 0.15 });
   }
 
   const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 2);
@@ -232,20 +246,38 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
 
     if (normalizedEntropy < 0.85) {
       const entropyScore = Math.round(Math.min(100, (0.85 - normalizedEntropy) * 300));
-      scores.push(entropyScore);
+      featureScores.push({ score: entropyScore, weight: 0.10 });
       evidence.push({
         type: "low_entropy",
         description: `Low bigram entropy (${normalizedEntropy.toFixed(2)}) — repetitive phrasing patterns typical of AI generation`,
         weight: Math.round(entropyScore / 10),
       });
     } else {
-      scores.push(0);
+      featureScores.push({ score: 0, weight: 0.10 });
+    }
+
+    let bigramEntropyScore: number;
+    if (normalizedEntropy < 0.88) bigramEntropyScore = 60;
+    else if (normalizedEntropy < 0.92) bigramEntropyScore = 35;
+    else if (normalizedEntropy < 0.95) bigramEntropyScore = 15;
+    else bigramEntropyScore = 5;
+    featureScores.push({ score: bigramEntropyScore, weight: 0.20 });
+    if (bigramEntropyScore >= 30) {
+      evidence.push({
+        type: "bigram_entropy_low",
+        description: `Bigram entropy ${normalizedEntropy.toFixed(3)} falls in AI-typical range — human text has higher lexical diversity`,
+        weight: Math.round(bigramEntropyScore / 10),
+      });
     }
   }
 
-  const avgScore = scores.length > 0
-    ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-    : 0;
+  let weightedSum = 0;
+  let totalWeight = 0;
+  for (const { score, weight } of featureScores) {
+    weightedSum += score * weight;
+    totalWeight += weight;
+  }
+  const avgScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
 
   return { score: avgScore, evidence };
 }

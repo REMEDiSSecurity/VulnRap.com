@@ -37,14 +37,14 @@ function Hint({ text }: { text: string }) {
 }
 
 function getSlopColor(score: number) {
-  if (score < 30) return "text-green-500";
-  if (score < 70) return "text-yellow-500";
+  if (score <= 20) return "text-green-500";
+  if (score <= 55) return "text-yellow-500";
   return "text-destructive";
 }
 
 function getSlopProgressColor(score: number) {
-  if (score < 30) return "bg-green-500";
-  if (score < 70) return "bg-yellow-500";
+  if (score <= 20) return "bg-green-500";
+  if (score <= 55) return "bg-yellow-500";
   return "bg-destructive";
 }
 
@@ -108,6 +108,14 @@ const EVIDENCE_TYPE_LABELS: Record<string, string> = {
   fabricated_cve: "Fabricated CVE",
   hallucinated_function: "Hallucinated Function",
   statistical: "Statistical Signal",
+  low_sentence_cv: "Low Sentence Variation",
+  bigram_entropy_low: "Low Bigram Entropy",
+  human_contractions: "Human Signal: Contractions",
+  human_terse_style: "Human Signal: Terse Style",
+  human_informal_language: "Human Signal: Informal Language",
+  human_commit_refs: "Human Signal: Commit References",
+  human_patched_version: "Human Signal: Patched Version",
+  human_no_pleasantries: "Human Signal: Advisory Format",
 };
 
 interface CheckResultData {

@@ -50,10 +50,10 @@ function Hint({ text }: { text: string }) {
 }
 
 function getSlopExplainer(score: number): string {
-  if (score < 15) return "This report shows strong indicators of being human-written: specific technical details, varied sentence structure, and natural vocabulary.";
-  if (score < 30) return "Mostly looks human-written, but has a few patterns sometimes associated with AI generation. Likely fine.";
-  if (score < 50) return "Some structural patterns match known AI-generation signatures. Consider adding more specific technical details and reproduction steps.";
-  if (score < 70) return "Multiple AI-generation indicators detected. Triage teams may flag this. Significantly revise with concrete exploit details and unique observations.";
+  if (score <= 20) return "This report shows strong indicators of being human-written: specific technical details, varied sentence structure, and natural vocabulary.";
+  if (score <= 35) return "Mostly looks human-written, but has a few patterns sometimes associated with AI generation. Likely fine.";
+  if (score <= 55) return "Some structural patterns match known AI-generation signatures. Consider adding more specific technical details and reproduction steps.";
+  if (score <= 75) return "Multiple AI-generation indicators detected. Triage teams may flag this. Significantly revise with concrete exploit details and unique observations.";
   return "Strong AI-generation signals throughout. This report will likely be flagged or rejected by most triage teams. A complete rewrite with original research is recommended.";
 }
 
@@ -99,6 +99,14 @@ const EVIDENCE_TYPE_LABELS: Record<string, string> = {
   fabricated_cve: "Fabricated CVE",
   hallucinated_function: "Hallucinated Function",
   statistical: "Statistical Signal",
+  low_sentence_cv: "Low Sentence Variation",
+  bigram_entropy_low: "Low Bigram Entropy",
+  human_contractions: "Human Signal: Contractions",
+  human_terse_style: "Human Signal: Terse Style",
+  human_informal_language: "Human Signal: Informal Language",
+  human_commit_refs: "Human Signal: Commit References",
+  human_patched_version: "Human Signal: Patched Version",
+  human_no_pleasantries: "Human Signal: Advisory Format",
 };
 
 function getDeleteToken(reportId: number): string | null {

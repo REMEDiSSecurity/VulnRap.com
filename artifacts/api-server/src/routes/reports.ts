@@ -43,7 +43,7 @@ async function performAnalysis(originalText: string, redactedText: string): Prom
     analyzeSlopWithLLM(redactedText),
   ]);
 
-  const fusion = fuseScores(linguistic, factual, llmResult, heuristic.qualityScore);
+  const fusion = fuseScores(linguistic, factual, llmResult, heuristic.qualityScore, originalText);
 
   return {
     ...fusion,

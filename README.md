@@ -233,11 +233,11 @@ Mass-submission pattern detection from the linguistic analysis module.
 - **qualityScore**: Separate 0-100 metric for report completeness (version info, code blocks, repro steps) — does not affect slopScore
 
 ### Score Tiers
-- **0-14**: Probably Legit
-- **15-29**: Mildly Suspicious
-- **30-49**: Questionable
-- **50-69**: Highly Suspicious
-- **70-100**: Pure Slop
+- **0-20**: Clean
+- **21-35**: Likely Human
+- **36-55**: Questionable
+- **56-75**: Likely Slop
+- **76-100**: Slop
 
 ## How Similarity Detection Works
 
