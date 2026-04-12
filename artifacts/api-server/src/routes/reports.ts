@@ -20,7 +20,7 @@ import {
 } from "@workspace/api-zod";
 import { computeMinHash, computeSimhash, computeContentHash, computeLSHBuckets, findSimilarReports } from "../lib/similarity";
 import { analyzeSloppiness } from "../lib/sloppiness";
-import { analyzeSlopWithLLM, isLLMAvailable } from "../lib/llm-slop";
+import { analyzeSlopWithLLM, shouldCallLLM, isLLMAvailable, type LLMSlopResult } from "../lib/llm-slop";
 import { analyzeLinguistic } from "../lib/linguistic-analysis";
 import { analyzeFactual } from "../lib/factual-verification";
 import { fuseScores, type FusionResult } from "../lib/score-fusion";
@@ -36,14 +36,22 @@ interface AnalysisResult extends FusionResult {
 }
 
 async function performAnalysis(originalText: string, redactedText: string): Promise<AnalysisResult> {
-  const [heuristic, linguistic, factual, llmResult] = await Promise.all([
+  const [heuristic, linguistic, factual] = await Promise.all([
     Promise.resolve(analyzeSloppiness(originalText)),
     Promise.resolve(analyzeLinguistic(originalText)),
     Promise.resolve(analyzeFactual(originalText)),
-    analyzeSlopWithLLM(redactedText),
   ]);
 
-  const fusion = fuseScores(linguistic, factual, llmResult, heuristic.qualityScore, originalText);
+  const preliminary = fuseScores(linguistic, factual, null, heuristic.qualityScore, originalText);
+
+  let llmResult: LLMSlopResult | null = null;
+  if (shouldCallLLM(preliminary.slopScore, preliminary.confidence)) {
+    llmResult = await analyzeSlopWithLLM(redactedText);
+  }
+
+  const fusion = llmResult
+    ? fuseScores(linguistic, factual, llmResult, heuristic.qualityScore, originalText)
+    : preliminary;
 
   return {
     ...fusion,

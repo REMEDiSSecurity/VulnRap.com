@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { createHash } from "crypto";
 import { logger } from "./logger";
 
 export interface LLMSlopResult {
@@ -18,9 +19,22 @@ export interface LLMBreakdown {
 
 const LLM_TIMEOUT_MS = 30_000;
 
+const COST_GUARD_LOW = 20;
+const COST_GUARD_HIGH = 65;
+const COST_GUARD_CONFIDENCE = 0.5;
+
+const resultCache = new Map<string, { result: LLMSlopResult; ts: number }>();
+const CACHE_TTL_MS = 60 * 60 * 1000;
+const CACHE_MAX_SIZE = 500;
+
 function buildClient(): OpenAI | null {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const baseURL = process.env.OPENAI_BASE_URL;
+  const aiIntegrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const aiIntegrationUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const legacyKey = process.env.OPENAI_API_KEY;
+  const legacyUrl = process.env.OPENAI_BASE_URL;
+
+  const apiKey = aiIntegrationKey || legacyKey;
+  const baseURL = aiIntegrationUrl || legacyUrl;
 
   if (!apiKey) return null;
 
@@ -31,7 +45,40 @@ function buildClient(): OpenAI | null {
 }
 
 export function isLLMAvailable(): boolean {
-  return !!process.env.OPENAI_API_KEY;
+  return !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY);
+}
+
+export function shouldCallLLM(
+  heuristicScore: number,
+  confidence: number,
+): boolean {
+  if (!isLLMAvailable()) return false;
+  if (confidence < COST_GUARD_CONFIDENCE) return true;
+  if (heuristicScore >= COST_GUARD_LOW && heuristicScore <= COST_GUARD_HIGH) return true;
+  return false;
+}
+
+function getCacheKey(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, 32);
+}
+
+function getCachedResult(text: string): LLMSlopResult | null {
+  const key = getCacheKey(text);
+  const entry = resultCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+    resultCache.delete(key);
+    return null;
+  }
+  return entry.result;
+}
+
+function setCachedResult(text: string, result: LLMSlopResult): void {
+  if (resultCache.size >= CACHE_MAX_SIZE) {
+    const oldestKey = resultCache.keys().next().value;
+    if (oldestKey) resultCache.delete(oldestKey);
+  }
+  resultCache.set(getCacheKey(text), { result, ts: Date.now() });
 }
 
 const SYSTEM_PROMPT = `You are a PSIRT triage analyst scoring vulnerability reports for AI-generated "slop." Evaluate five dimensions and return structured JSON.
@@ -77,11 +124,18 @@ export async function analyzeSlopWithLLM(
   const truncatedText =
     text.length > 4000 ? text.slice(0, 4000) + "\n\n[truncated for analysis]" : text;
 
+  const cached = getCachedResult(truncatedText);
+  if (cached) {
+    logger.info("LLM slop: returning cached result");
+    return cached;
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
   try {
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const startMs = Date.now();
     logger.info({ model, textLength: truncatedText.length }, "LLM slop: sending request");
 
     const response = await client.chat.completions.create(
@@ -100,8 +154,9 @@ export async function analyzeSlopWithLLM(
       { signal: controller.signal }
     );
 
+    const elapsedMs = Date.now() - startMs;
     const raw = response.choices[0]?.message?.content?.trim() ?? "";
-    logger.info({ rawLength: raw.length }, "LLM slop: received response");
+    logger.info({ rawLength: raw.length, elapsedMs }, "LLM slop: received response");
 
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -183,14 +238,18 @@ export async function analyzeSlopWithLLM(
       feedback.push(`LLM analysis complete: weighted score ${weightedScore}/100`);
     }
 
-    logger.info({ weightedScore, breakdown }, "LLM slop: analysis complete");
+    logger.info({ weightedScore, breakdown, elapsedMs }, "LLM slop: analysis complete");
 
-    return {
+    const result: LLMSlopResult = {
       llmSlopScore: clamp(weightedScore),
       llmFeedback: feedback,
       llmBreakdown: breakdown,
       llmRedFlags: redFlags,
     };
+
+    setCachedResult(truncatedText, result);
+
+    return result;
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       logger.warn("LLM slop: timed out");
@@ -206,4 +265,3 @@ export async function analyzeSlopWithLLM(
 function clamp(val: number): number {
   return Math.min(100, Math.max(0, Math.round(Number(val) || 0)));
 }
-
