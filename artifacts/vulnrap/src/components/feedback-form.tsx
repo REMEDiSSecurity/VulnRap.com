@@ -18,7 +18,7 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
     mutation: {
       onSuccess: () => {
         setSubmitted(true);
-        toast({ title: "Feedback received", description: "Thanks for helping us improve!" });
+        toast({ title: "Feedback received", description: "Thanks for helping us sharpen the analysis!" });
       },
       onError: () => {
         toast({ title: "Error", description: "Failed to submit feedback. Please try again.", variant: "destructive" });
