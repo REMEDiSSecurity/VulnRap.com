@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GitCompare, Loader2, CheckCircle, AlertTriangle, Layers, Search, ShieldCheck, Lightbulb, HelpCircle, BarChart3, Target, Brain, Cpu, FileText, Gauge, AlertCircle } from "lucide-react";
+import { GitCompare, Loader2, CheckCircle, AlertTriangle, Layers, Search, ShieldCheck, Lightbulb, HelpCircle, BarChart3, Gauge, AlertCircle } from "lucide-react";
 import { useCheckReport } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,6 @@ interface CompareResult {
   redactionSummary: { totalRedactions: number; categories: Record<string, number> };
   sectionHashes: Record<string, string>;
   llmEnhanced?: boolean;
-  llmSlopScore?: number | null;
-  llmFeedback?: string[] | null;
 }
 
 function Hint({ text }: { text: string }) {

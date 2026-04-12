@@ -79,32 +79,28 @@ export const GetReportResponse = zod.object({
   slopTier: zod.string().describe("Human-readable sloppiness tier"),
   qualityScore: zod
     .number()
-    .optional()
     .describe(
       "Report quality\/completeness score 0-100 (higher = better quality). Separate from slopScore — a terse real report can have low quality but also low slop.",
     ),
   confidence: zod
     .number()
-    .optional()
     .describe(
       "Confidence in the slopScore (0.0-1.0). Low confidence means limited signals were available.",
     ),
-  breakdown: zod
-    .object({
-      linguistic: zod
-        .number()
-        .describe("Linguistic AI fingerprinting score (0-100)"),
-      factual: zod.number().describe("Factual verification score (0-100)"),
-      template: zod
-        .number()
-        .describe("Template\/mass-submission pattern score (0-100)"),
-      llm: zod
-        .number()
-        .nullish()
-        .describe("LLM analysis score (0-100), null if LLM unavailable"),
-      quality: zod.number().describe("Report quality score (0-100)"),
-    })
-    .optional(),
+  breakdown: zod.object({
+    linguistic: zod
+      .number()
+      .describe("Linguistic AI fingerprinting score (0-100)"),
+    factual: zod.number().describe("Factual verification score (0-100)"),
+    template: zod
+      .number()
+      .describe("Template\/mass-submission pattern score (0-100)"),
+    llm: zod
+      .number()
+      .nullish()
+      .describe("LLM analysis score (0-100), null if LLM unavailable"),
+    quality: zod.number().describe("Report quality score (0-100)"),
+  }),
   evidence: zod
     .array(
       zod.object({
@@ -127,7 +123,6 @@ export const GetReportResponse = zod.object({
           .describe("The specific text or pattern that was matched"),
       }),
     )
-    .optional()
     .describe("Specific signals found during analysis with their weights"),
   similarityMatches: zod.array(
     zod.object({
@@ -335,51 +330,43 @@ export const CheckReportResponse = zod.object({
   slopTier: zod.string(),
   qualityScore: zod
     .number()
-    .optional()
     .describe("Report quality\/completeness score 0-100"),
-  confidence: zod
-    .number()
-    .optional()
-    .describe("Confidence in the slopScore (0.0-1.0)"),
-  breakdown: zod
-    .object({
-      linguistic: zod
+  confidence: zod.number().describe("Confidence in the slopScore (0.0-1.0)"),
+  breakdown: zod.object({
+    linguistic: zod
+      .number()
+      .describe("Linguistic AI fingerprinting score (0-100)"),
+    factual: zod.number().describe("Factual verification score (0-100)"),
+    template: zod
+      .number()
+      .describe("Template\/mass-submission pattern score (0-100)"),
+    llm: zod
+      .number()
+      .nullish()
+      .describe("LLM analysis score (0-100), null if LLM unavailable"),
+    quality: zod.number().describe("Report quality score (0-100)"),
+  }),
+  evidence: zod.array(
+    zod.object({
+      type: zod
+        .string()
+        .describe(
+          "Evidence type identifier (e.g. ai_phrase, placeholder_url, severity_inflation)",
+        ),
+      description: zod
+        .string()
+        .describe("Human-readable description of the signal"),
+      weight: zod
         .number()
-        .describe("Linguistic AI fingerprinting score (0-100)"),
-      factual: zod.number().describe("Factual verification score (0-100)"),
-      template: zod
-        .number()
-        .describe("Template\/mass-submission pattern score (0-100)"),
-      llm: zod
-        .number()
+        .describe(
+          "Weight\/importance of this signal (higher = more significant)",
+        ),
+      matched: zod
+        .string()
         .nullish()
-        .describe("LLM analysis score (0-100), null if LLM unavailable"),
-      quality: zod.number().describe("Report quality score (0-100)"),
-    })
-    .optional(),
-  evidence: zod
-    .array(
-      zod.object({
-        type: zod
-          .string()
-          .describe(
-            "Evidence type identifier (e.g. ai_phrase, placeholder_url, severity_inflation)",
-          ),
-        description: zod
-          .string()
-          .describe("Human-readable description of the signal"),
-        weight: zod
-          .number()
-          .describe(
-            "Weight\/importance of this signal (higher = more significant)",
-          ),
-        matched: zod
-          .string()
-          .nullish()
-          .describe("The specific text or pattern that was matched"),
-      }),
-    )
-    .optional(),
+        .describe("The specific text or pattern that was matched"),
+    }),
+  ),
   similarityMatches: zod.array(
     zod.object({
       reportId: zod.number(),

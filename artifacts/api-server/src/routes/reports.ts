@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import multer from "multer";
-import { eq, or, and, sql as dsql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { reportsTable, reportHashesTable, similarityResultsTable, reportStatsTable } from "@workspace/db";
 import {
@@ -28,10 +28,14 @@ import { redactReport } from "../lib/redactor";
 import { parseSections, findSectionMatches } from "../lib/section-parser";
 import { sanitizeText, sanitizeFileName, detectBinaryContent } from "../lib/sanitize";
 import { extractTextFromPdf } from "../lib/pdf";
-import { sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
-async function performAnalysis(originalText: string, redactedText: string): Promise<FusionResult & { llmResult: Awaited<ReturnType<typeof analyzeSlopWithLLM>> }> {
+interface AnalysisResult extends FusionResult {
+  feedback: string[];
+  llmResult: Awaited<ReturnType<typeof analyzeSlopWithLLM>>;
+}
+
+async function performAnalysis(originalText: string, redactedText: string): Promise<AnalysisResult> {
   const [heuristic, linguistic, factual, llmResult] = await Promise.all([
     Promise.resolve(analyzeSloppiness(originalText)),
     Promise.resolve(analyzeLinguistic(originalText)),
@@ -43,9 +47,7 @@ async function performAnalysis(originalText: string, redactedText: string): Prom
 
   return {
     ...fusion,
-    feedback: heuristic.feedback.length > 0
-      ? heuristic.feedback
-      : fusion.feedback,
+    feedback: heuristic.feedback,
     llmResult,
   };
 }
@@ -280,7 +282,7 @@ router.post("/reports", async (req, res): Promise<void> => {
   const { sections, sectionHashes } = parseSections(analysisText);
 
   const lshConditions = lshBuckets.map(bucket =>
-    dsql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
+    sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
   );
 
   const candidateReports = lshConditions.length > 0
@@ -484,7 +486,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
   const { sectionHashes } = parseSections(analysisText);
 
   const checkLshConditions = lshBuckets.map(bucket =>
-    dsql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
+    sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
   );
 
   const checkCandidates = checkLshConditions.length > 0

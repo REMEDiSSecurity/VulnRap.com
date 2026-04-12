@@ -119,12 +119,12 @@ export interface ReportAnalysis {
   /** Human-readable sloppiness tier */
   slopTier: string;
   /** Report quality/completeness score 0-100 (higher = better quality). Separate from slopScore — a terse real report can have low quality but also low slop. */
-  qualityScore?: number;
+  qualityScore: number;
   /** Confidence in the slopScore (0.0-1.0). Low confidence means limited signals were available. */
-  confidence?: number;
-  breakdown?: ScoreBreakdown;
+  confidence: number;
+  breakdown: ScoreBreakdown;
   /** Specific signals found during analysis with their weights */
-  evidence?: EvidenceItem[];
+  evidence: EvidenceItem[];
   similarityMatches: SimilarityMatch[];
   /** SHA-256 hashes of each report section for granular similarity */
   sectionHashes: ReportAnalysisSectionHashes;
@@ -192,11 +192,11 @@ export interface CheckResult {
   slopScore: number;
   slopTier: string;
   /** Report quality/completeness score 0-100 */
-  qualityScore?: number;
+  qualityScore: number;
   /** Confidence in the slopScore (0.0-1.0) */
-  confidence?: number;
-  breakdown?: ScoreBreakdown;
-  evidence?: EvidenceItem[];
+  confidence: number;
+  breakdown: ScoreBreakdown;
+  evidence: EvidenceItem[];
   similarityMatches: SimilarityMatch[];
   sectionHashes: CheckResultSectionHashes;
   sectionMatches: SectionMatchItem[];

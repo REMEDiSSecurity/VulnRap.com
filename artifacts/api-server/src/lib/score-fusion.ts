@@ -1,5 +1,5 @@
-import type { LinguisticResult, LinguisticEvidence } from "./linguistic-analysis";
-import type { FactualResult, FactualEvidence } from "./factual-verification";
+import type { LinguisticResult } from "./linguistic-analysis";
+import type { FactualResult } from "./factual-verification";
 import type { LLMSlopResult } from "./llm-slop";
 
 export interface ScoreBreakdown {
@@ -24,7 +24,6 @@ export interface FusionResult {
   breakdown: ScoreBreakdown;
   evidence: EvidenceItem[];
   slopTier: string;
-  feedback: string[];
 }
 
 export interface TierThresholds {
@@ -163,8 +162,6 @@ export function fuseScores(
     quality: Math.round(qualityScore),
   };
 
-  const feedback: string[] = [];
-
   return {
     slopScore,
     qualityScore: Math.round(qualityScore),
@@ -172,7 +169,6 @@ export function fuseScores(
     breakdown,
     evidence: allEvidence,
     slopTier: getSlopTier(slopScore, thr),
-    feedback,
   };
 }
 

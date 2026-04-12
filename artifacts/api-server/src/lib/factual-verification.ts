@@ -1,5 +1,3 @@
-import { logger } from "./logger";
-
 export interface FactualResult {
   score: number;
   severityInflationScore: number;

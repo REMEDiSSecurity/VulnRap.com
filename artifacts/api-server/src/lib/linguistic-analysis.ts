@@ -1,5 +1,3 @@
-import { logger } from "./logger";
-
 export interface LinguisticResult {
   score: number;
   lexicalScore: number;

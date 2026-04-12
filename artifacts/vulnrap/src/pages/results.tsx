@@ -14,18 +14,6 @@ import { anonymizeId } from "@/lib/utils";
 import { SettingsButton } from "@/components/settings-panel";
 import { getSettings, getSlopColorCustom, getSlopProgressColorCustom, type VulnRapSettings } from "@/lib/settings";
 
-function getSlopColor(score: number) {
-  if (score < 30) return "text-green-500";
-  if (score < 70) return "text-yellow-500";
-  return "text-destructive";
-}
-
-function getSlopProgressColor(score: number) {
-  if (score < 30) return "bg-green-500";
-  if (score < 70) return "bg-yellow-500";
-  return "bg-destructive";
-}
-
 function getQualityColor(score: number) {
   if (score >= 70) return "text-green-500";
   if (score >= 40) return "text-yellow-500";

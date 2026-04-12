@@ -17,11 +17,11 @@ export interface CheckResult {
   slopScore: number;
   slopTier: string;
   /** Report quality/completeness score 0-100 */
-  qualityScore?: number;
+  qualityScore: number;
   /** Confidence in the slopScore (0.0-1.0) */
-  confidence?: number;
-  breakdown?: ScoreBreakdown;
-  evidence?: EvidenceItem[];
+  confidence: number;
+  breakdown: ScoreBreakdown;
+  evidence: EvidenceItem[];
   similarityMatches: SimilarityMatch[];
   sectionHashes: CheckResultSectionHashes;
   sectionMatches: SectionMatchItem[];

@@ -539,6 +539,10 @@ components:
         - contentMode
         - slopScore
         - slopTier
+        - qualityScore
+        - confidence
+        - breakdown
+        - evidence
         - similarityMatches
         - sectionHashes
         - sectionMatches
@@ -652,6 +656,10 @@ components:
       required:
         - slopScore
         - slopTier
+        - qualityScore
+        - confidence
+        - breakdown
+        - evidence
         - similarityMatches
         - sectionHashes
         - sectionMatches

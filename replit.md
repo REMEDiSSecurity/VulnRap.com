@@ -34,7 +34,7 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
 - Features route-level code splitting for performance.
 - Provides various user interfaces including:
     - Home/Submit page with drag-and-drop upload and privacy mode selection.
-    - Analysis Results page displaying slop score, redaction summary, similarity matches, and section-level analysis.
+    - Analysis Results page displaying dual scores (AI Likelihood + Report Quality), confidence indicator, per-axis breakdown (Linguistic/Factual/Template/LLM), evidence signals with weight badges, LLM dimension scores, redaction summary, similarity matches, and section-level analysis.
     - Batch Upload and Compare Two Reports functionalities.
     - Session History and Export/Download options.
     - Public verification page (`/verify/:id`) for sharing analysis results.
@@ -49,11 +49,11 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
 - **Section Parser**: Parses reports into logical sections, hashes them with SHA-256, and classifies their value.
 - **Similarity Engine**: Uses MinHash + Locality Sensitive Hashing (LSH), Simhash, and SHA-256 for near-duplicate and exact-match detection.
 - **Multi-Axis Scoring Engine (v2.0)**:
-    - **Linguistic AI Fingerprinting**: Analyzes AI-generated phrases, statistical text features, and known slop patterns.
-    - **Quality vs Slop Separation**: Distinguishes between report quality signals and AI provenance signals.
-    - **Factual Verification**: Flags severity inflation, placeholder URLs, fabricated debug output, and suspicious CVEs.
-    - **LLM Semantic Analysis**: Evaluates reports across 5 dimensions (specificity, originality, voice, coherence, hallucination) using an OpenAI-compatible API.
-    - **Score Fusion**: Combines scores from all axes using Bayesian weighting, with dynamic weight boosting for fabricated evidence and graceful degradation if the LLM is unavailable.
+    - **Axis 1 — Linguistic AI Fingerprinting** (`linguistic-analysis.ts`): Lexical markers (~50 weighted AI phrases), statistical text analysis (sentence length variance, passive voice ratio, contraction absence, bigram entropy), template detection ("dear security team", dependency dumps, OWASP padding).
+    - **Axis 2 — Quality vs Slop Separation** (`sloppiness.ts`): Produces `qualityScore` (report completeness: version info, code blocks, repro steps) and heuristic `feedback` strings. Quality signals are intentionally separated from AI provenance signals.
+    - **Axis 3 — Factual Verification** (`factual-verification.ts`): Severity inflation (CVSS 9.8 without RCE/auth-bypass), placeholder URLs (example.com, target.com), fabricated debug output (fake ASan addresses, GDB registers), fabricated CVE detection (sequential IDs, round numbers, unusually long IDs), hallucinated function names (generic CamelCase soup, mixed naming conventions).
+    - **Axis 4 — LLM Semantic Analysis** (`llm-slop.ts`): 5-dimension evaluation: Specificity (0.15), Originality (0.25), Voice (0.20), Coherence (0.15), Hallucination (0.25). Uses OpenAI-compatible API. Graceful null return when unavailable.
+    - **Score Fusion** (`score-fusion.ts`): Bayesian combination with base weights: Linguistic 0.25, Factual 0.30, LLM 0.35, Template 0.10. Dynamic boost to Factual 0.50 when `fabricated_cve` or `hallucinated_function` evidence detected. No-LLM redistribution: Linguistic 39%, Factual 44%, Template 17%. Confidence formula: `min(1.0, 0.3 + evidenceCount*0.07 + 0.2 if llm)`. Final slopScore: `rawScore*confidence + 50*(1-confidence)`.
 - **Input Sanitization**: Strips scripts, sanitizes attributes, neutralizes URIs, removes control characters, and guards against excessive input length and binary content.
 - **Upload Pipeline**: Ensures reports are redacted, hashed, compared for similarity, and analyzed by the multi-axis engine, with only redacted text (or just hashes in `similarity_only` mode) stored.
 - **Privacy Modes**: `full` (stores redacted text and hashes) and `similarity_only` (stores only hashes).
@@ -68,6 +68,23 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
 - **API Codegen**: Orval (from OpenAPI spec)
 - **Security**: helmet.js, express-rate-limit, multer
 - **Build**: esbuild (API server), Vite (frontend)
+
+### API Codegen Workflow
+After modifying `lib/api-spec/openapi.yaml`, regenerate clients:
+1. `cd lib/api-spec && pnpm run codegen` (generates React hooks + Zod schemas via Orval)
+2. `cd lib/api-client-react && npx tsc --build` (compiles TypeScript declarations)
+3. `cd lib/api-zod && npx tsc --build` (compiles Zod package)
+4. If DB schema changed: `pnpm --filter @workspace/db run push`
+
+### Key API Response Fields
+- `slopScore` (0-100): AI likelihood score (higher = more likely AI-generated)
+- `qualityScore` (0-100): Report completeness score (separate from AI detection)
+- `confidence` (0.0-1.0): Analysis confidence level
+- `breakdown`: `{ linguistic, factual, template, llm, quality }` per-axis scores
+- `evidence`: Array of `{ type, description, weight, matched }` signal objects
+- `llmBreakdown`: `{ specificity, originality, voice, coherence, hallucination }` (null if LLM unavailable)
+- `slopTier`: Human-readable tier (Probably Legit / Mildly Suspicious / Questionable / Highly Suspicious / Pure Slop)
+- `feedback`: Heuristic feedback strings from rule-based engine (sourced from sloppiness.ts)
 
 ## External Dependencies
 
