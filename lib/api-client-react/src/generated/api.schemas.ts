@@ -104,6 +104,11 @@ export interface ScoreBreakdown {
    * @nullable
    */
   llm?: number | null;
+  /**
+   * Active content verification score (0-100, 50=neutral). Null when no verifiable references found.
+   * @nullable
+   */
+  verification?: number | null;
   /** Report quality score (0-100) */
   quality: number;
 }
@@ -134,6 +139,53 @@ export interface HumanIndicator {
    * @nullable
    */
   matched?: string | null;
+}
+
+export type VerificationCheckResult =
+  (typeof VerificationCheckResult)[keyof typeof VerificationCheckResult];
+
+export const VerificationCheckResult = {
+  verified: "verified",
+  not_found: "not_found",
+  warning: "warning",
+  error: "error",
+  skipped: "skipped",
+} as const;
+
+export interface VerificationCheck {
+  /** Check type identifier (e.g. github_file_verified, cve_not_in_nvd, poc_placeholder_textbook) */
+  type: string;
+  /** The reference being verified (e.g. repo:filepath, CVE-ID) */
+  target: string;
+  result: VerificationCheckResult;
+  /** Human-readable explanation of the check result */
+  detail: string;
+  /** Score weight (negative = human signal, positive = slop signal) */
+  weight: number;
+}
+
+export interface VerificationSummary {
+  verified: number;
+  notFound: number;
+  warnings: number;
+  errors: number;
+}
+
+export interface DetectedProject {
+  name: string;
+  repoSlug: string;
+  /** How the project was detected (github_url, gitlab_url, known_project) */
+  source: string;
+}
+
+export interface Verification {
+  checks: VerificationCheck[];
+  summary: VerificationSummary;
+  /** Actionable notes for PSIRT triage based on verification results */
+  triageNotes: string[];
+  /** Verification axis score (0-100, 50=neutral, above=slop signals, below=human signals) */
+  score: number;
+  detectedProjects: DetectedProject[];
 }
 
 export interface ReportAnalysis {
@@ -195,6 +247,8 @@ export interface ReportAnalysis {
   sensitivityProfile?: ReportAnalysisSensitivityProfile;
   /** True when LLM analysis contributed to the final slopScore. False means the score is purely heuristic. */
   llmEnhanced: boolean;
+  /** Active content verification results (GitHub, NVD, PoC checks). Null when verification was not performed. */
+  verification?: Verification | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;
@@ -276,6 +330,8 @@ export interface CheckResult {
    */
   sensitivityProfile?: CheckResultSensitivityProfile;
   llmEnhanced: boolean;
+  /** Active content verification results. Null when verification was not performed. */
+  verification?: Verification | null;
   /** Whether this exact report was found in the database */
   previouslySubmitted: boolean;
   /**

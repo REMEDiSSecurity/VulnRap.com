@@ -99,6 +99,12 @@ export const GetReportResponse = zod.object({
       .number()
       .nullish()
       .describe("LLM analysis score (0-100), null if LLM unavailable"),
+    verification: zod
+      .number()
+      .nullish()
+      .describe(
+        "Active content verification score (0-100, 50=neutral). Null when no verifiable references found.",
+      ),
     quality: zod.number().describe("Report quality score (0-100)"),
   }),
   evidence: zod
@@ -227,6 +233,72 @@ export const GetReportResponse = zod.object({
     .boolean()
     .describe(
       "True when LLM analysis contributed to the final slopScore. False means the score is purely heuristic.",
+    ),
+  verification: zod
+    .union([
+      zod.object({
+        checks: zod.array(
+          zod.object({
+            type: zod
+              .string()
+              .describe(
+                "Check type identifier (e.g. github_file_verified, cve_not_in_nvd, poc_placeholder_textbook)",
+              ),
+            target: zod
+              .string()
+              .describe(
+                "The reference being verified (e.g. repo:filepath, CVE-ID)",
+              ),
+            result: zod.enum([
+              "verified",
+              "not_found",
+              "warning",
+              "error",
+              "skipped",
+            ]),
+            detail: zod
+              .string()
+              .describe("Human-readable explanation of the check result"),
+            weight: zod
+              .number()
+              .describe(
+                "Score weight (negative = human signal, positive = slop signal)",
+              ),
+          }),
+        ),
+        summary: zod.object({
+          verified: zod.number(),
+          notFound: zod.number(),
+          warnings: zod.number(),
+          errors: zod.number(),
+        }),
+        triageNotes: zod
+          .array(zod.string())
+          .describe(
+            "Actionable notes for PSIRT triage based on verification results",
+          ),
+        score: zod
+          .number()
+          .describe(
+            "Verification axis score (0-100, 50=neutral, above=slop signals, below=human signals)",
+          ),
+        detectedProjects: zod.array(
+          zod.object({
+            name: zod.string(),
+            repoSlug: zod.string(),
+            source: zod
+              .string()
+              .describe(
+                "How the project was detected (github_url, gitlab_url, known_project)",
+              ),
+          }),
+        ),
+      }),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Active content verification results (GitHub, NVD, PoC checks). Null when verification was not performed.",
     ),
   fileName: zod.string().nullish(),
   fileSize: zod.number(),
@@ -381,6 +453,12 @@ export const CheckReportResponse = zod.object({
       .number()
       .nullish()
       .describe("LLM analysis score (0-100), null if LLM unavailable"),
+    verification: zod
+      .number()
+      .nullish()
+      .describe(
+        "Active content verification score (0-100, 50=neutral). Null when no verifiable references found.",
+      ),
     quality: zod.number().describe("Report quality score (0-100)"),
   }),
   evidence: zod.array(
@@ -479,6 +557,72 @@ export const CheckReportResponse = zod.object({
       "Active sensitivity preset used for score adjustment. Null when default.",
     ),
   llmEnhanced: zod.boolean(),
+  verification: zod
+    .union([
+      zod.object({
+        checks: zod.array(
+          zod.object({
+            type: zod
+              .string()
+              .describe(
+                "Check type identifier (e.g. github_file_verified, cve_not_in_nvd, poc_placeholder_textbook)",
+              ),
+            target: zod
+              .string()
+              .describe(
+                "The reference being verified (e.g. repo:filepath, CVE-ID)",
+              ),
+            result: zod.enum([
+              "verified",
+              "not_found",
+              "warning",
+              "error",
+              "skipped",
+            ]),
+            detail: zod
+              .string()
+              .describe("Human-readable explanation of the check result"),
+            weight: zod
+              .number()
+              .describe(
+                "Score weight (negative = human signal, positive = slop signal)",
+              ),
+          }),
+        ),
+        summary: zod.object({
+          verified: zod.number(),
+          notFound: zod.number(),
+          warnings: zod.number(),
+          errors: zod.number(),
+        }),
+        triageNotes: zod
+          .array(zod.string())
+          .describe(
+            "Actionable notes for PSIRT triage based on verification results",
+          ),
+        score: zod
+          .number()
+          .describe(
+            "Verification axis score (0-100, 50=neutral, above=slop signals, below=human signals)",
+          ),
+        detectedProjects: zod.array(
+          zod.object({
+            name: zod.string(),
+            repoSlug: zod.string(),
+            source: zod
+              .string()
+              .describe(
+                "How the project was detected (github_url, gitlab_url, known_project)",
+              ),
+          }),
+        ),
+      }),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Active content verification results. Null when verification was not performed.",
+    ),
   previouslySubmitted: zod
     .boolean()
     .describe("Whether this exact report was found in the database"),

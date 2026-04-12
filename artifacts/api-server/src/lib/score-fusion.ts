@@ -2,12 +2,14 @@ import type { LinguisticResult } from "./linguistic-analysis";
 import type { FactualResult } from "./factual-verification";
 import type { LLMSlopResult } from "./llm-slop";
 import { detectHumanIndicators, type HumanIndicator } from "./human-indicators";
+import type { VerificationResult } from "./active-verification";
 
 export interface ScoreBreakdown {
   linguistic: number;
   factual: number;
   template: number;
   llm: number | null;
+  verification: number | null;
   quality: number;
 }
 
@@ -47,6 +49,7 @@ const AXIS_THRESHOLDS: Record<string, number> = {
   factual: 10,
   template: 5,
   llm: 20,
+  verification: 55,
 };
 
 export function loadThresholds(): TierThresholds {
@@ -70,6 +73,7 @@ export function fuseScores(
   qualityScore: number,
   originalText: string,
   thresholds?: TierThresholds,
+  verification?: VerificationResult | null,
 ): FusionResult {
   const thr = thresholds ?? loadThresholds();
 
@@ -99,6 +103,17 @@ export function fuseScores(
     }
   }
 
+  if (verification) {
+    for (const check of verification.checks) {
+      allEvidence.push({
+        type: check.type,
+        description: check.detail,
+        weight: check.weight,
+        matched: check.target,
+      });
+    }
+  }
+
   const hasHallucinatedFunction = factual.evidence.some(
     e => e.type === "hallucinated_function" || e.type === "fabricated_cve"
   );
@@ -119,6 +134,9 @@ export function fuseScores(
   ];
   if (llm) {
     axisScores.push({ name: "llm", score: llm.llmSlopScore });
+  }
+  if (verification && verification.checks.length > 0) {
+    axisScores.push({ name: "verification", score: verification.score });
   }
 
   const activeAxes = axisScores.filter(
@@ -144,6 +162,15 @@ export function fuseScores(
   }
 
   const humanResult = detectHumanIndicators(originalText);
+
+  if (verification) {
+    const verifiedCount = verification.checks.filter(c => c.result === "verified").length;
+    if (verifiedCount > 0) {
+      const verifiedReduction = Math.min(verifiedCount * -3, -1);
+      slopScore = Math.max(FLOOR, slopScore + verifiedReduction);
+    }
+  }
+
   slopScore = Math.max(FLOOR, slopScore + humanResult.totalReduction);
 
   slopScore = Math.min(100, Math.max(0, slopScore));
@@ -151,7 +178,7 @@ export function fuseScores(
   const evidenceCount = allEvidence.filter(e => e.weight >= 5).length;
   const confidence = Math.min(
     1.0,
-    0.3 + evidenceCount * 0.07 + (llm ? 0.2 : 0) + humanResult.indicators.length * 0.03
+    0.3 + evidenceCount * 0.07 + (llm ? 0.2 : 0) + humanResult.indicators.length * 0.03 + (verification && verification.checks.length > 0 ? 0.1 : 0)
   );
 
   for (const indicator of humanResult.indicators) {
@@ -168,6 +195,7 @@ export function fuseScores(
     factual: Math.round(factual.score),
     template: Math.round(templateScore),
     llm: llm ? Math.round(llm.llmSlopScore) : null,
+    verification: verification && verification.checks.length > 0 ? verification.score : null,
     quality: Math.round(qualityScore),
   };
 

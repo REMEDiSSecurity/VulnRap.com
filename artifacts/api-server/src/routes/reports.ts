@@ -29,20 +29,26 @@ import { parseSections, findSectionMatches } from "../lib/section-parser";
 import { sanitizeText, sanitizeFileName, detectBinaryContent } from "../lib/sanitize";
 import { extractTextFromPdf } from "../lib/pdf";
 import { logger } from "../lib/logger";
+import { performActiveVerification, type VerificationResult } from "../lib/active-verification";
 
 interface AnalysisResult extends FusionResult {
   feedback: string[];
   llmResult: Awaited<ReturnType<typeof analyzeSlopWithLLM>>;
+  verification: VerificationResult | null;
 }
 
 async function performAnalysis(originalText: string, redactedText: string): Promise<AnalysisResult> {
-  const [heuristic, linguistic, factual] = await Promise.all([
+  const [heuristic, linguistic, factual, verification] = await Promise.all([
     Promise.resolve(analyzeSloppiness(originalText)),
     Promise.resolve(analyzeLinguistic(originalText)),
     Promise.resolve(analyzeFactual(originalText)),
+    performActiveVerification(originalText).catch((err) => {
+      logger.warn({ err }, "Active verification failed, skipping");
+      return null;
+    }),
   ]);
 
-  const preliminary = fuseScores(linguistic, factual, null, heuristic.qualityScore, originalText);
+  const preliminary = fuseScores(linguistic, factual, null, heuristic.qualityScore, originalText, undefined, verification);
 
   let llmResult: LLMSlopResult | null = null;
   const llmAvailable = isLLMAvailable();
@@ -56,13 +62,14 @@ async function performAnalysis(originalText: string, redactedText: string): Prom
   }
 
   const fusion = llmResult
-    ? fuseScores(linguistic, factual, llmResult, heuristic.qualityScore, originalText)
+    ? fuseScores(linguistic, factual, llmResult, heuristic.qualityScore, originalText, undefined, verification)
     : preliminary;
 
   return {
     ...fusion,
     feedback: heuristic.feedback,
     llmResult,
+    verification,
   };
 }
 
@@ -409,7 +416,7 @@ router.post("/reports", async (req, res): Promise<void> => {
     slopTier: report.slopTier,
     qualityScore: report.qualityScore,
     confidence: report.confidence,
-    breakdown: report.breakdown ?? { linguistic: 0, factual: 0, template: 0, llm: null, quality: 50 },
+    breakdown: report.breakdown ?? { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: 50 },
     evidence: report.evidence ?? [],
     humanIndicators: report.humanIndicators ?? [],
     similarityMatches: report.similarityMatches,
@@ -422,6 +429,7 @@ router.post("/reports", async (req, res): Promise<void> => {
     llmFeedback: report.llmFeedback ?? null,
     llmBreakdown: report.llmBreakdown ?? null,
     llmEnhanced: report.llmSlopScore != null,
+    verification: analysisResult.verification ?? null,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
@@ -555,6 +563,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     llmFeedback: checkLlmResult ? checkLlmResult.llmFeedback : null,
     llmBreakdown: checkLlmResult?.llmBreakdown ?? null,
     llmEnhanced: checkLlmResult != null,
+    verification: analysisResult.verification ?? null,
     previouslySubmitted: !!existingReport,
     existingReportId: existingReport?.id ?? null,
   });
@@ -811,7 +820,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     slopTier: report.slopTier,
     qualityScore: report.qualityScore ?? 50,
     confidence: report.confidence ?? 0.5,
-    breakdown: report.breakdown ?? { linguistic: 0, factual: 0, template: 0, llm: null, quality: 50 },
+    breakdown: report.breakdown ?? { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: 50 },
     evidence: report.evidence ?? [],
     humanIndicators: report.humanIndicators ?? [],
     similarityMatches: report.similarityMatches,
@@ -824,6 +833,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     llmFeedback: report.llmFeedback ?? null,
     llmBreakdown: report.llmBreakdown ?? null,
     llmEnhanced: report.llmSlopScore != null,
+    verification: null,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,

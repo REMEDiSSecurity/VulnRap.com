@@ -14,6 +14,7 @@ import type { RedactionSummary } from "./redactionSummary";
 import type { ScoreBreakdown } from "./scoreBreakdown";
 import type { SectionMatchItem } from "./sectionMatchItem";
 import type { SimilarityMatch } from "./similarityMatch";
+import type { Verification } from "./verification";
 
 export interface CheckResult {
   slopScore: number;
@@ -49,6 +50,8 @@ export interface CheckResult {
    */
   sensitivityProfile?: CheckResultSensitivityProfile;
   llmEnhanced: boolean;
+  /** Active content verification results. Null when verification was not performed. */
+  verification?: Verification | null;
   /** Whether this exact report was found in the database */
   previouslySubmitted: boolean;
   /**

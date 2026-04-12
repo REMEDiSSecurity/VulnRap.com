@@ -538,6 +538,11 @@ components:
         llmEnhanced:
           type: boolean
           description: True when LLM analysis contributed to the final slopScore. False means the score is purely heuristic.
+        verification:
+          oneOf:
+            - $ref: "#/components/schemas/Verification"
+            - type: "null"
+          description: Active content verification results (GitHub, NVD, PoC checks). Null when verification was not performed.
         fileName:
           type: ["string", "null"]
         fileSize:
@@ -671,6 +676,11 @@ components:
           description: Active sensitivity preset used for score adjustment. Null when default.
         llmEnhanced:
           type: boolean
+        verification:
+          oneOf:
+            - $ref: "#/components/schemas/Verification"
+            - type: "null"
+          description: Active content verification results. Null when verification was not performed.
         previouslySubmitted:
           type: boolean
           description: Whether this exact report was found in the database
@@ -915,6 +925,91 @@ components:
         - identicalSections
         - totalSections
 
+    VerificationCheck:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Check type identifier (e.g. github_file_verified, cve_not_in_nvd, poc_placeholder_textbook)
+        target:
+          type: string
+          description: The reference being verified (e.g. repo:filepath, CVE-ID)
+        result:
+          type: string
+          enum: [verified, not_found, warning, error, skipped]
+        detail:
+          type: string
+          description: Human-readable explanation of the check result
+        weight:
+          type: integer
+          description: Score weight (negative = human signal, positive = slop signal)
+      required:
+        - type
+        - target
+        - result
+        - detail
+        - weight
+
+    VerificationSummary:
+      type: object
+      properties:
+        verified:
+          type: integer
+        notFound:
+          type: integer
+        warnings:
+          type: integer
+        errors:
+          type: integer
+      required:
+        - verified
+        - notFound
+        - warnings
+        - errors
+
+    DetectedProject:
+      type: object
+      properties:
+        name:
+          type: string
+        repoSlug:
+          type: string
+        source:
+          type: string
+          description: How the project was detected (github_url, gitlab_url, known_project)
+      required:
+        - name
+        - repoSlug
+        - source
+
+    Verification:
+      type: object
+      properties:
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/VerificationCheck"
+        summary:
+          $ref: "#/components/schemas/VerificationSummary"
+        triageNotes:
+          type: array
+          items:
+            type: string
+          description: Actionable notes for PSIRT triage based on verification results
+        score:
+          type: integer
+          description: Verification axis score (0-100, 50=neutral, above=slop signals, below=human signals)
+        detectedProjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectedProject"
+      required:
+        - checks
+        - summary
+        - triageNotes
+        - score
+        - detectedProjects
+
     ScoreBreakdown:
       type: object
       properties:
@@ -930,6 +1025,9 @@ components:
         llm:
           type: ["integer", "null"]
           description: LLM analysis score (0-100), null if LLM unavailable
+        verification:
+          type: ["integer", "null"]
+          description: Active content verification score (0-100, 50=neutral). Null when no verifiable references found.
         quality:
           type: integer
           description: Report quality score (0-100)

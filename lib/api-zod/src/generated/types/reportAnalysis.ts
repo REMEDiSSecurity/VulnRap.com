@@ -15,6 +15,7 @@ import type { ReportAnalysisSensitivityProfile } from "./reportAnalysisSensitivi
 import type { ScoreBreakdown } from "./scoreBreakdown";
 import type { SectionMatchItem } from "./sectionMatchItem";
 import type { SimilarityMatch } from "./similarityMatch";
+import type { Verification } from "./verification";
 
 export interface ReportAnalysis {
   id: number;
@@ -75,6 +76,8 @@ export interface ReportAnalysis {
   sensitivityProfile?: ReportAnalysisSensitivityProfile;
   /** True when LLM analysis contributed to the final slopScore. False means the score is purely heuristic. */
   llmEnhanced: boolean;
+  /** Active content verification results (GitHub, NVD, PoC checks). Null when verification was not performed. */
+  verification?: Verification | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;

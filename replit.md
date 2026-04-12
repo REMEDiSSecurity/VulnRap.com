@@ -56,7 +56,8 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
     - **Axis 3 — Factual Verification** (`factual-verification.ts`): Severity inflation (CVSS 9.8 without RCE/auth-bypass), placeholder URLs (example.com, target.com), fabricated debug output (fake ASan addresses, GDB registers), fabricated CVE detection (sequential IDs, round numbers, unusually long IDs), hallucinated function names (generic CamelCase soup, mixed naming conventions).
     - **Axis 4 — LLM Semantic Analysis** (`llm-slop.ts`): 5-dimension evaluation: Specificity (0.15), Originality (0.25), Voice (0.20), Coherence (0.15), Hallucination (0.25). Uses Replit AI Integrations (OpenAI proxy via `AI_INTEGRATIONS_OPENAI_*` env vars, falls back to `OPENAI_*`). Cost guard: skips LLM for obvious clean/slop unless confidence < 0.5. Results cached by content hash (1hr TTL, 500 entries). Graceful null return when unavailable.
     - **Human Indicator Detection** (`human-indicators.ts`): Detects contractions, terse style, informal abbreviations (btw/fwiw/iirc), commit/PR refs, patched version refs, absence of AI pleasantries — all produce negative weights to reduce slop score for genuinely human reports.
-    - **Score Fusion v2.1** (`score-fusion.ts`): Noisy-OR fusion (prior=15, floor=5, ceiling=95). Active axes (score > threshold) converted to probability, combined via 1-∏(1-p_i), mapped to 5-95 range. Fabrication boost: factual axis probability ×1.3 when fabricated_cve/hallucinated_function detected. Human indicator reduction applied post-fusion (floor=5). Score spread ~85pts (slop→90, legit→5).
+    - **Axis 5 — Active Content Verification** (`active-verification.ts`): Project detection (GitHub/GitLab URLs, npm/PyPI packages, 40+ known OSS projects). GitHub API verification of file paths and function names referenced in reports (up to 5 checks per report, 200ms rate-limited, cached). NVD 2.0 API cross-referencing of CVE IDs with phrase-level plagiarism detection (>30% overlap flagged). PoC plausibility checking (placeholder domains + textbook payloads, fabricated HTTP responses). Verification axis score: 0-100, 50=neutral, below=human signals (verified refs), above=slop signals (missing refs, NVD plagiarism). Works without GITHUB_TOKEN (unauthenticated, lower rate limit). All API results cached by content hash (30min TTL, 500 entries).
+    - **Score Fusion v2.1** (`score-fusion.ts`): Noisy-OR fusion (prior=15, floor=5, ceiling=95). Active axes (score > threshold) converted to probability, combined via 1-∏(1-p_i), mapped to 5-95 range. Fabrication boost: factual axis probability ×1.3 when fabricated_cve/hallucinated_function detected. Verified reference bonus: each verified check provides additional -3 slop reduction. Human indicator reduction applied post-fusion (floor=5). Score spread ~85pts (slop→90, legit→5).
 - **Input Sanitization**: Strips scripts, sanitizes attributes, neutralizes URIs, removes control characters, and guards against excessive input length and binary content.
 - **Upload Pipeline**: Ensures reports are redacted, hashed, compared for similarity, and analyzed by the multi-axis engine, with only redacted text (or just hashes in `similarity_only` mode) stored.
 - **Privacy Modes**: `full` (stores redacted text and hashes) and `similarity_only` (stores only hashes).
@@ -83,7 +84,8 @@ After modifying `lib/api-spec/openapi.yaml`, regenerate clients:
 - `slopScore` (0-100): AI likelihood score (higher = more likely AI-generated)
 - `qualityScore` (0-100): Report completeness score (separate from AI detection)
 - `confidence` (0.0-1.0): Analysis confidence level
-- `breakdown`: `{ linguistic, factual, template, llm, quality }` per-axis scores
+- `breakdown`: `{ linguistic, factual, template, llm, verification, quality }` per-axis scores
+- `verification`: Active content verification results (`{ checks, summary, triageNotes, score, detectedProjects }`) — GitHub file/function verification, NVD CVE cross-referencing with plagiarism detection, PoC plausibility checking. Null when no verifiable references found.
 - `evidence`: Array of `{ type, description, weight, matched }` signal objects
 - `llmBreakdown`: `{ specificity, originality, voice, coherence, hallucination }` (null if LLM unavailable)
 - `slopTier`: Human-readable tier (Clean ≤20 / Likely Human ≤35 / Questionable ≤55 / Likely Slop ≤75 / Slop >75)
@@ -93,4 +95,6 @@ After modifying `lib/api-spec/openapi.yaml`, regenerate clients:
 ## External Dependencies
 
 - **OpenAI-compatible API**: Used by the LLM Semantic Analysis axis. Configured via Replit AI Integrations (`AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY`), falls back to `OPENAI_API_KEY`/`OPENAI_BASE_URL`. Model configurable via `OPENAI_MODEL` (defaults to `gpt-4o-mini`).
+- **GitHub API**: Used by Active Content Verification for file path and code reference verification. Optional `GITHUB_TOKEN` or `GH_TOKEN` env var for higher rate limits (unauthenticated mode: 60 req/hr, authenticated: 5000 req/hr).
+- **NVD API 2.0**: Used by Active Content Verification for CVE cross-referencing and description plagiarism detection. No API key required.
 - **PostgreSQL**: The primary database for storing report data, hashes, and similarity results.

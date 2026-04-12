@@ -18,6 +18,11 @@ export interface ScoreBreakdown {
    * @nullable
    */
   llm?: number | null;
+  /**
+   * Active content verification score (0-100, 50=neutral). Null when no verifiable references found.
+   * @nullable
+   */
+  verification?: number | null;
   /** Report quality score (0-100) */
   quality: number;
 }
