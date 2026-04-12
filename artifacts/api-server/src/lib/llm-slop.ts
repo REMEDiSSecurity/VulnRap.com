@@ -19,8 +19,8 @@ export interface LLMBreakdown {
 
 const LLM_TIMEOUT_MS = 30_000;
 
-const COST_GUARD_LOW = 20;
-const COST_GUARD_HIGH = 65;
+const COST_GUARD_LOW = 25;
+const COST_GUARD_HIGH = 60;
 const COST_GUARD_CONFIDENCE = 0.5;
 
 const resultCache = new Map<string, { result: LLMSlopResult; ts: number }>();
@@ -37,6 +37,9 @@ function buildClient(): OpenAI | null {
   const baseURL = aiIntegrationUrl || legacyUrl;
 
   if (!apiKey) return null;
+
+  const source = aiIntegrationKey ? "replit-ai-integrations" : "legacy-openai";
+  logger.info({ source, hasBaseURL: !!baseURL }, "LLM slop: building client");
 
   return new OpenAI({
     apiKey,

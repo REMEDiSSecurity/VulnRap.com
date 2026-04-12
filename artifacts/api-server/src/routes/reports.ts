@@ -45,7 +45,13 @@ async function performAnalysis(originalText: string, redactedText: string): Prom
   const preliminary = fuseScores(linguistic, factual, null, heuristic.qualityScore, originalText);
 
   let llmResult: LLMSlopResult | null = null;
-  if (shouldCallLLM(preliminary.slopScore, preliminary.confidence)) {
+  const llmAvailable = isLLMAvailable();
+  const callLlm = shouldCallLLM(preliminary.slopScore, preliminary.confidence);
+  logger.info(
+    { preliminaryScore: preliminary.slopScore, confidence: preliminary.confidence, llmAvailable, callLlm },
+    "LLM decision"
+  );
+  if (callLlm) {
     llmResult = await analyzeSlopWithLLM(redactedText);
   }
 
