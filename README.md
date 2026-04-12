@@ -4,7 +4,7 @@
 
 VulnRap is a free, anonymous vulnerability report validation platform built for PSIRT and triage teams receiving vulnerability reports. Upload an incoming report and instantly get:
 
-- **AI Slop Detection** — Heuristic scoring (0-100) that flags AI-generated filler, missing technical depth, and stylometric red flags
+- **AI Slop Detection** — Multi-axis scoring (0-100) fusing linguistic fingerprinting, factual verification, LLM semantic analysis, and template detection via Bayesian combination
 - **Similarity Matching** — MinHash + LSH + SimHash fingerprinting catches near-duplicate and structurally similar submissions across the entire database
 - **Section-Level Hashing** — Individual sections are hashed independently, so copied "Steps to Reproduce" blocks get flagged even when the rest differs
 - **Auto-Redaction** — PII, secrets, API keys, credentials, and identifying information are stripped before anything is stored or compared
@@ -54,7 +54,12 @@ Upload/Paste → Sanitize → Auto-Redact PII/Secrets
   → MinHash + LSH (near-duplicate detection)
   → SimHash (structural similarity)
   → Section Parsing → Per-Section SHA-256 (granular matching)
-  → Sloppiness Scoring (AI phrase detection, stylometry, structure checks)
+  → Multi-Axis Scoring:
+      Axis 1: Linguistic AI Fingerprinting (phrases, statistics, templates)
+      Axis 2: Factual Verification (CVEs, functions, URLs, debug output)
+      Axis 3: LLM Semantic Analysis (5 dimensions, optional)
+      Axis 4: Template Detection (mass-submission patterns)
+  → Score Fusion (Bayesian combination → slopScore + qualityScore + confidence)
   → Store redacted text + fingerprints (or fingerprints only in private mode)
 ```
 
@@ -114,7 +119,7 @@ PORT=5173 pnpm --filter @workspace/vulnrap run dev
 
 ### LLM Setup (Optional)
 
-VulnRap works without any AI API key — heuristic scoring is fully functional on its own. To enable the LLM semantic analysis layer, add to your `.env`:
+VulnRap works without any AI API key — the linguistic, factual, and template axes are fully functional on their own. To enable the LLM semantic analysis axis for deeper detection, add to your `.env`:
 
 ```bash
 OPENAI_API_KEY=sk-...
@@ -193,24 +198,39 @@ If your team wants both privacy and community matching, you can use the hosted i
 
 ## How Slop Detection Works
 
-Two-layer scoring architecture:
+Multi-axis score fusion architecture (v2.0):
 
-### 1. Heuristic Engine (40% of final score)
-Deterministic, regex-based analysis that checks for:
-- **AI filler phrases** — "It is important to note," "As an AI language model," etc.
-- **Missing technical depth** — No reproduction steps, no version info, no code blocks, no attack vectors
-- **Stylometric signals** — Unusually long sentences, low vocabulary diversity, walls of text
-- **Structure analysis** — Reports that read like essays instead of technical documents
+### Axis 1: Linguistic AI Fingerprinting (weight: 0.25)
+Deterministic analysis that checks for:
+- **AI filler phrases** — ~50 weighted phrases ("It is important to note," "As an AI language model," etc.)
+- **Statistical text analysis** — Sentence length variance, passive voice ratio, contraction absence, bigram entropy
+- **Template detection** — "Dear security team" openings, dependency dumps, OWASP padding
 
-### 2. LLM Semantic Analyzer (60% of final score, optional)
-When `OPENAI_API_KEY` is configured, an LLM evaluates five PSIRT-specific dimensions:
-- **Technical Specificity** — Are version numbers, endpoints, and payloads concrete?
-- **PoC Validity** — Does the proof-of-concept match the claimed vulnerability class?
-- **Target Specificity** — Could this report be copy-pasted against any application?
-- **Narrative Credibility** — Does it read like someone who actually tested this?
-- **Template/Mass-Submission Signals** — Rigid template structure, boilerplate remediation advice?
+### Axis 2: Factual Verification (weight: 0.30)
+- **Severity inflation** — Critical CVSS claims (9.8) without RCE/auth-bypass evidence
+- **Placeholder URLs** — example.com, target.com, and other generic domains
+- **Fabricated debug output** — Fake ASan addresses, GDB register values
+- **Fabricated CVEs** — Sequential IDs, round numbers, unusually long digits
+- **Hallucinated function names** — Generic CamelCase compositions, mixed naming conventions
 
-If the LLM is unavailable, VulnRap falls back to heuristic-only scoring automatically.
+### Axis 3: LLM Semantic Analysis (weight: 0.35, optional)
+When `OPENAI_API_KEY` is configured, an LLM evaluates five weighted dimensions:
+- **Specificity** (0.15) — Are version numbers, endpoints, and payloads concrete?
+- **Originality** (0.25) — Unique observations vs. rehashed vulnerability descriptions?
+- **Voice** (0.20) — Natural human writing vs. AI-generated prose?
+- **Coherence** (0.15) — Internal consistency, reproduction steps match claims?
+- **Hallucination** (0.25) — Fabricated details, invented function names, made-up CVEs?
+
+### Axis 4: Template Detection (weight: 0.10)
+Mass-submission pattern detection from the linguistic analysis module.
+
+### Score Fusion
+- **Bayesian combination** of all axes with dynamic weight adjustment
+- **Fabrication boost**: Factual axis automatically boosted to 0.50 when `fabricated_cve`, `hallucinated_function`, `future_cve`, or `fake_asan` evidence detected
+- **No-LLM redistribution**: When LLM unavailable, weights become Linguistic 39%, Factual 44%, Template 17%
+- **Confidence**: `min(1.0, 0.3 + evidenceCount × 0.07 + 0.2 if LLM)`
+- **Final slopScore**: `rawScore × confidence + 50 × (1 − confidence)` — low-confidence scores regress toward 50
+- **qualityScore**: Separate 0-100 metric for report completeness (version info, code blocks, repro steps) — does not affect slopScore
 
 ### Score Tiers
 - **0-14**: Probably Legit

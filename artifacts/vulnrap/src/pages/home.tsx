@@ -358,29 +358,29 @@ const slopSignals = [
 
 const llmDimensions = [
   {
-    label: "Technical Specificity",
+    label: "Specificity (weight: 0.15)",
     description: "Are version numbers, endpoints, and payloads concrete and internally consistent, or vague placeholders?",
     example: "\"/api/v2/users/profile\" vs \"the API endpoint\"",
   },
   {
-    label: "PoC Validity",
-    description: "Does the proof-of-concept actually demonstrate the claimed vulnerability class? Do reproduction steps match the described issue?",
-    example: "SQLi claim with an XSS payload, or generic attack without a working exploit",
+    label: "Originality (weight: 0.25)",
+    description: "Does the report contain unique observations and original analysis, or rehash generic vulnerability descriptions?",
+    example: "Specific error messages encountered vs. textbook vulnerability definitions",
   },
   {
-    label: "Target Specificity",
-    description: "Could this report be copy-pasted against any application with minimal edits, or does it contain target-specific observations?",
-    example: "\"the login form\" vs \"/admin/login on myapp.example.com v3.1.2\"",
+    label: "Voice (weight: 0.20)",
+    description: "Does the writing have a natural, human voice with varied sentence structure, or read like AI-generated prose?",
+    example: "Casual \"I noticed the cookie wasn't httponly\" vs. \"It is important to note that the cookie lacks the HttpOnly attribute\"",
   },
   {
-    label: "Narrative Credibility",
-    description: "Does the report read like someone who actually tested this, with specific error messages and iterative discovery?",
-    example: "Describing actual error messages encountered vs. idealized attack flows",
+    label: "Coherence (weight: 0.15)",
+    description: "Is the report internally consistent? Do reproduction steps match claims? Does the narrative flow logically?",
+    example: "SQLi claim with an XSS payload, or steps that don't produce the described outcome",
   },
   {
-    label: "Template & Mass-Submission Signals",
-    description: "Does the report follow a rigid template identical to known AI-generated reports, with boilerplate remediation advice?",
-    example: "Identical section ordering across all vuln types, OWASP remediation copied verbatim",
+    label: "Hallucination (weight: 0.25)",
+    description: "Does the report contain fabricated details — invented function names, non-existent API endpoints, or made-up CVE references?",
+    example: "Referencing CVE-2024-99999 or function processSecurityValidationHandler()",
   },
 ];
 
@@ -418,16 +418,16 @@ function SlopDetectionCard() {
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
 
           <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2.5 space-y-1">
-            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Two-Layer Scoring Architecture</p>
+            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Multi-Axis Score Fusion (v2.0)</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Every report runs through both a deterministic rule engine and an LLM semantic analyzer simultaneously. The final score is a weighted blend: <span className="text-foreground font-mono">40% heuristic + 60% LLM</span>. If the LLM scorer is unavailable, the score falls back to pure heuristic. A badge on your results page shows which method was used.
+              Every report is analyzed across four independent axes: <span className="text-foreground font-mono">Linguistic (0.25) + Factual (0.30) + LLM (0.35) + Template (0.10)</span>. These are fused via Bayesian combination into a single slopScore. A separate qualityScore measures report completeness independently. If the LLM axis is unavailable, weights redistribute automatically. Fabrication evidence (fake CVEs, hallucinated functions) triggers dynamic weight boosting.
             </p>
           </div>
 
           <div className="space-y-2">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-violet-400/60" />
-              Layer 1 — Heuristic Engine (deterministic)
+              Linguistic + Factual + Template Axes (deterministic)
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {slopSignals.map((signal) => (
@@ -468,7 +468,7 @@ function SlopDetectionCard() {
           <div className="space-y-2 border-t border-border/30 pt-4">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60" />
-              Layer 2 — LLM Semantic Analyzer
+              LLM Semantic Analysis Axis (optional)
             </h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
               The LLM evaluates reports from a PSIRT triage perspective across five semantic dimensions that regex fundamentally cannot assess. It returns a 0–100 score and 2–4 concrete observations specific to the report content.
@@ -484,7 +484,7 @@ function SlopDetectionCard() {
             </div>
             <div className="rounded-md bg-muted/20 px-3 py-2 mt-1">
               <p className="text-[10px] text-muted-foreground leading-relaxed">
-                <span className="text-foreground font-medium">Blending:</span> Final score = <span className="font-mono text-cyan-400">(heuristic × 0.4) + (LLM × 0.6)</span>, clamped to 0–100. The tier label is re-derived from the blended score. The LLM raw score and its observations are shown separately on the results page.
+                <span className="text-foreground font-medium">Fusion:</span> LLM dimension scores are weighted (<span className="font-mono text-cyan-400">specificity×0.15 + originality×0.25 + voice×0.20 + coherence×0.15 + hallucination×0.25</span>) into the LLM axis score, which enters the Bayesian multi-axis fusion with weight 0.35. Per-dimension scores are shown on the results page.
               </p>
             </div>
           </div>
@@ -1100,7 +1100,7 @@ function TransparencySection() {
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">1.</span>Your raw text is received over HTTPS. For URLs, we fetch the content server-side (HTTPS only, allowlisted hosts).</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">2.</span>The redaction engine runs immediately — regex patterns strip PII, secrets, credentials, and company names. The raw text is discarded and never stored.</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">3.</span>All analysis (hashing, similarity, slop scoring) runs on the redacted text only.</li>
-                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The heuristic slop scorer uses the original text in server memory for phrase detection accuracy — this text is never written to disk or database. When the optional LLM layer is enabled, the redacted version is sent to the configured AI provider for semantic analysis.</li>
+                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The multi-axis scoring engine analyzes the original text in server memory for linguistic and factual analysis accuracy — this text is never written to disk or database. When the optional LLM axis is enabled, the redacted version is sent to the configured AI provider for semantic analysis. All axis scores are fused into a single slopScore via Bayesian combination.</li>
               </ul>
             </div>
           </div>

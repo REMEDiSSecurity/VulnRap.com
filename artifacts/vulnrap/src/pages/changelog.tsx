@@ -3,10 +3,78 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain } from "lucide-react";
 
-export const CURRENT_VERSION = "1.1.0";
-export const RELEASE_DATE = "2026-04-11";
+export const CURRENT_VERSION = "2.0.0";
+export const RELEASE_DATE = "2026-04-12";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "2.0.0",
+    date: "2026-04-12",
+    label: "Multi-Axis Scoring Engine",
+    labelColor: "border-violet-500 text-violet-400",
+    sections: [
+      {
+        icon: <Brain className="w-4 h-4 text-violet-400" />,
+        title: "Multi-Axis Score Fusion",
+        type: "feature",
+        items: [
+          "Complete scoring engine overhaul: replaced the 40/60 heuristic/LLM blend with a Bayesian multi-axis fusion system",
+          "Four independent scoring axes: Linguistic AI Fingerprinting (0.25), Factual Verification (0.30), LLM Semantic Analysis (0.35), Template Detection (0.10)",
+          "New qualityScore (0-100) separated from slopScore — a terse real report can have low quality but also low slop",
+          "Confidence indicator (0.0-1.0) reflects how much evidence was available for the score: formula min(1.0, 0.3 + evidenceCount×0.07 + 0.2 if LLM)",
+          "Dynamic weight boosting: Factual axis automatically boosted to 0.50 when fabricated CVEs, hallucinated function names, future-dated CVEs, or fake debug output are detected",
+          "Graceful LLM degradation: when LLM unavailable, weights redistribute to Linguistic 39%, Factual 44%, Template 17%",
+          "Final slopScore formula: rawScore × confidence + 50 × (1 − confidence) — low-confidence scores regress toward 50",
+        ],
+      },
+      {
+        icon: <Bug className="w-4 h-4 text-red-400" />,
+        title: "Fabrication Detection",
+        type: "feature",
+        items: [
+          "Fabricated CVE detection: flags sequential CVE IDs, suspiciously round numbers (divisible by 1000), and unusually long ID digits",
+          "Hallucinated function name detection: flags generic CamelCase compositions (ProcessDataManagerHandler) and inconsistent naming convention mixtures",
+          "Both fabrication signals trigger dynamic weight boosting in the score fusion layer",
+          "Evidence signals displayed with weight badges and matched text snippets on results",
+        ],
+      },
+      {
+        icon: <Sparkles className="w-4 h-4 text-cyan-400" />,
+        title: "LLM Dimension Overhaul",
+        type: "improvement",
+        items: [
+          "LLM now evaluates 5 weighted dimensions: Specificity (0.15), Originality (0.25), Voice (0.20), Coherence (0.15), Hallucination (0.25)",
+          "Per-dimension scores (0-100) shown in a dedicated LLM Dimension Scores card on results",
+          "Replaced legacy single-score LLM output with structured multi-dimension JSON response",
+        ],
+      },
+      {
+        icon: <Eye className="w-4 h-4 text-primary" />,
+        title: "Frontend Score Display",
+        type: "feature",
+        items: [
+          "Dual score display: AI Likelihood (slopScore) and Report Quality (qualityScore) shown side by side",
+          "Confidence bar with percentage and High/Medium/Low label",
+          "Axis Breakdown card: per-axis progress bars for Linguistic, Factual, Template, and LLM",
+          "Evidence Signals card: lists all detected signals with weight badges, type labels, and matched text",
+          "LLM Dimension Scores card: per-dimension bars for Specificity, Originality, Voice, Coherence, Hallucination",
+          "Check page and Compare page updated with same scoring display",
+          "TXT and JSON exports include all new scoring fields",
+        ],
+      },
+      {
+        icon: <Code2 className="w-4 h-4 text-orange-400" />,
+        title: "API & Schema",
+        type: "improvement",
+        items: [
+          "API responses now include qualityScore, confidence, breakdown (per-axis), evidence array, and llmBreakdown (per-dimension)",
+          "OpenAPI spec updated with ScoreBreakdown and EvidenceItem schemas, all new fields marked as required",
+          "Database schema: added quality_score, confidence, breakdown (JSONB), evidence (JSONB) columns",
+          "Dead code cleanup: removed unused imports and stale interfaces across backend and frontend",
+        ],
+      },
+    ],
+  },
   {
     version: "1.1.0",
     date: "2026-04-11",

@@ -2,6 +2,8 @@
 
 ## Overview
 
+**Current Version**: 2.0.0 (2026-04-12) — OpenAPI spec version 2.0.0
+
 VulnRap.com is a vulnerability report validation platform designed to assess the quality and originality of bug reports. It functions similarly to VirusTotal but for vulnerability reports, allowing anonymous users to upload reports for similarity checks against existing reports and to score them for potential AI-generated content. The platform employs a multi-axis scoring engine that combines linguistic fingerprinting, factual verification, and LLM semantic analysis, fused via Bayesian combination. A key feature is the auto-redaction of reports to remove PII, secrets, and identifying information before storage, ensuring user privacy. VulnRap aims to provide a robust tool for bug bounty hunters, PSIRT teams, and security researchers to efficiently triage and validate vulnerability disclosures.
 
 ## User Preferences

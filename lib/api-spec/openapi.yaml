@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
+  version: 2.0.0
   description: VulnRap.com API — Vulnerability Report Validation Platform
 servers:
   - url: /api
