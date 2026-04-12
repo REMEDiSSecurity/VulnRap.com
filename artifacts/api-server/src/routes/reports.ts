@@ -42,7 +42,7 @@ async function performAnalysis(originalText: string, redactedText: string): Prom
     Promise.resolve(analyzeSloppiness(originalText)),
     Promise.resolve(analyzeLinguistic(originalText)),
     Promise.resolve(analyzeFactual(originalText)),
-    performActiveVerification(originalText).catch((err) => {
+    performActiveVerification(redactedText).catch((err) => {
       logger.warn({ err }, "Active verification failed, skipping");
       return null;
     }),
