@@ -4,6 +4,9 @@ import { logger } from "./logger";
 
 export interface LLMTriageGuidance {
   reproSteps: string[];
+  environment: string[];
+  expectedBehavior: string;
+  testingTips: string[];
   missingInfo: string[];
   dontMiss: string[];
   reporterFeedback: string;
@@ -109,9 +112,12 @@ const SYSTEM_PROMPT = `You are a PSIRT triage analyst scoring vulnerability repo
 ## Triage Guidance
 Also produce actionable triage guidance for the PSIRT team receiving this report:
 - **repro_steps**: 2-5 concrete steps a triager should follow to reproduce this specific vulnerability (not generic steps — reference details from the report)
+- **environment**: 2-4 environment requirements for reproduction (OS, software version, configuration, prerequisites, hardware notes if relevant)
+- **expected_behavior**: 1-2 sentences describing what the triager should observe if the vulnerability is real
+- **testing_tips**: 1-3 specific testing tips relevant to this vulnerability type
 - **missing_info**: 1-4 specific pieces of information missing from the report that would be needed for reproduction
 - **dont_miss**: 1-3 warnings about things a triager might overlook when evaluating this report
-- **reporter_feedback**: One sentence assessment of the reporter's likely expertise/intent based on the report quality
+- **reporter_feedback**: 2-3 sentences assessing the reporter's likely expertise/intent, clarity of writing, and actionability of the report
 
 ## Response Format
 Respond ONLY with valid JSON:
@@ -125,9 +131,12 @@ Respond ONLY with valid JSON:
   "reasoning": "<2-3 sentence summary of your assessment>",
   "triage_guidance": {
     "repro_steps": ["<step 1>", "<step 2>", ...],
+    "environment": ["<env requirement 1>", ...],
+    "expected_behavior": "<what should happen if the vuln is real>",
+    "testing_tips": ["<tip 1>", ...],
     "missing_info": ["<missing item 1>", ...],
     "dont_miss": ["<warning 1>", ...],
-    "reporter_feedback": "<one sentence>"
+    "reporter_feedback": "<2-3 sentence assessment>"
   }
 }
 
@@ -201,6 +210,9 @@ export async function analyzeSlopWithLLM(
       observations?: string[];
       triage_guidance?: {
         repro_steps?: string[];
+        environment?: string[];
+        expected_behavior?: string;
+        testing_tips?: string[];
         missing_info?: string[];
         dont_miss?: string[];
         reporter_feedback?: string;
@@ -283,8 +295,16 @@ export async function analyzeSlopWithLLM(
         : [];
       const reporterFeedback = typeof tg.reporter_feedback === "string" ? tg.reporter_feedback.trim() : "";
 
-      if (reproSteps.length > 0 || missingInfo.length > 0 || dontMiss.length > 0 || reporterFeedback.length > 0) {
-        llmTriageGuidance = { reproSteps, missingInfo, dontMiss, reporterFeedback };
+      const environment = Array.isArray(tg.environment)
+        ? tg.environment.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 4)
+        : [];
+      const expectedBehavior = typeof tg.expected_behavior === "string" ? tg.expected_behavior.trim() : "";
+      const testingTips = Array.isArray(tg.testing_tips)
+        ? tg.testing_tips.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 3)
+        : [];
+
+      if (reproSteps.length > 0 || missingInfo.length > 0 || dontMiss.length > 0 || reporterFeedback.length > 0 || environment.length > 0 || expectedBehavior.length > 0 || testingTips.length > 0) {
+        llmTriageGuidance = { reproSteps, environment, expectedBehavior, testingTips, missingInfo, dontMiss, reporterFeedback };
       }
     }
 

@@ -8,6 +8,9 @@
 
 export interface LLMTriageGuidance {
   reproSteps: string[];
+  environment: string[];
+  expectedBehavior: string;
+  testingTips: string[];
   missingInfo: string[];
   dontMiss: string[];
   reporterFeedback: string;

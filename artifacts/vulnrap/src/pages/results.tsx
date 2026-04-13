@@ -505,6 +505,30 @@ function TriageAssistantPanel({ assistant, toast }: { assistant: TriageAssistant
                   </div>
                 </div>
               )}
+              {assistant.llmTriageGuidance && (assistant.llmTriageGuidance.expectedBehavior || assistant.llmTriageGuidance.testingTips.length > 0) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {assistant.llmTriageGuidance.expectedBehavior && (
+                    <div className="glass-card rounded-lg p-3 border border-cyan-500/15">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-cyan-400 mb-2 flex items-center gap-1.5">
+                        <Brain className="w-3 h-3" />Expected Behavior
+                      </div>
+                      <p className="text-xs leading-relaxed">{assistant.llmTriageGuidance.expectedBehavior}</p>
+                    </div>
+                  )}
+                  {assistant.llmTriageGuidance.testingTips.length > 0 && (
+                    <div className="glass-card rounded-lg p-3 border border-cyan-500/15">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-cyan-400 mb-2 flex items-center gap-1.5">
+                        <Brain className="w-3 h-3" />Testing Tips
+                      </div>
+                      <ul className="space-y-1">
+                        {assistant.llmTriageGuidance.testingTips.map((tip, i) => (
+                          <li key={i} className="text-xs flex items-start gap-1.5"><span className="w-1 h-1 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0" />{tip}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
               {!assistant.reproGuidance && (
                 <div className="text-center py-6 text-muted-foreground text-sm">
                   Could not detect a specific vulnerability class for reproduction guidance.
@@ -522,7 +546,18 @@ function TriageAssistantPanel({ assistant, toast }: { assistant: TriageAssistant
                     <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{gap.category.replace(/_/g, " ")}</span>
                   </div>
                   <p className="text-sm leading-relaxed">{gap.description}</p>
-                  <p className="text-xs text-muted-foreground mt-1.5 italic">{gap.suggestion}</p>
+                  {gap.triagerGuidance && (
+                    <div className="mt-2 rounded border border-blue-500/15 bg-blue-500/5 px-2.5 py-1.5">
+                      <span className="text-[10px] font-bold uppercase text-blue-400 tracking-wide">For Triager</span>
+                      <p className="text-xs text-blue-300/80 mt-0.5">{gap.triagerGuidance}</p>
+                    </div>
+                  )}
+                  {gap.reporterGuidance && (
+                    <div className="mt-1.5 rounded border border-amber-500/15 bg-amber-500/5 px-2.5 py-1.5">
+                      <span className="text-[10px] font-bold uppercase text-amber-400 tracking-wide">For Reporter</span>
+                      <p className="text-xs text-amber-300/80 mt-0.5">{gap.reporterGuidance}</p>
+                    </div>
+                  )}
                 </div>
               ))}
               {assistant.llmTriageGuidance && assistant.llmTriageGuidance.missingInfo.length > 0 && (
@@ -577,6 +612,26 @@ function TriageAssistantPanel({ assistant, toast }: { assistant: TriageAssistant
 
           {activeTab === "feedback" && (
             <div className="space-y-3 animate-in fade-in duration-200">
+              {assistant.reporterFeedbackSummary && (
+                <div className="rounded-lg border border-muted/30 bg-muted/10 p-3 flex items-center gap-4">
+                  <div className="text-center">
+                    <div className={`text-xl font-bold ${
+                      assistant.reporterFeedbackSummary.clarityScore >= 70 ? "text-green-400" :
+                      assistant.reporterFeedbackSummary.clarityScore >= 40 ? "text-yellow-400" :
+                      "text-red-400"
+                    }`}>{assistant.reporterFeedbackSummary.clarityScore}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Clarity</div>
+                  </div>
+                  <div className="h-8 w-px bg-muted/30" />
+                  <div className="text-center">
+                    <Badge variant="outline" className={`text-[10px] px-2 py-0.5 ${
+                      assistant.reporterFeedbackSummary.actionability === "high" ? "border-green-500/30 text-green-400" :
+                      assistant.reporterFeedbackSummary.actionability === "medium" ? "border-yellow-500/30 text-yellow-400" :
+                      "border-red-500/30 text-red-400"
+                    }`}>{assistant.reporterFeedbackSummary.actionability} actionability</Badge>
+                  </div>
+                </div>
+              )}
               {assistant.reporterFeedback.map((fb, i) => (
                 <div key={i} className={`rounded-lg border p-3 flex items-start gap-3 ${
                   fb.tone === "positive" ? "bg-green-500/5 border-green-500/15" :

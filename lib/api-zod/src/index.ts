@@ -16,7 +16,6 @@ export type {
   SimilarityMatchMatchType,
   SlopDistribution,
   SlopDistributionBucketsItem,
-  SubmitFeedbackBody,
   SubmitReportBody,
   SubmitReportBodyContentMode,
 } from "./generated/types";

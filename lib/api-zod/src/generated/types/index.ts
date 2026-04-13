@@ -44,6 +44,8 @@ export * from "./reportAnalysisSensitivityProfile";
 export * from "./reportComparison";
 export * from "./reporterFeedbackItem";
 export * from "./reporterFeedbackItemTone";
+export * from "./reporterFeedbackSummary";
+export * from "./reporterFeedbackSummaryActionability";
 export * from "./reportFeed";
 export * from "./reportFeedReportsItem";
 export * from "./reportFeedReportsItemContentMode";

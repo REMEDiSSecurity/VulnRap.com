@@ -22,6 +22,8 @@ export interface GapItem {
   severity: "critical" | "important" | "minor";
   description: string;
   suggestion: string;
+  triagerGuidance: string;
+  reporterGuidance: string;
   audience?: "triager" | "reporter" | "both";
 }
 
@@ -37,16 +39,26 @@ export interface ReporterFeedbackItem {
   priority?: number;
 }
 
+export interface ReporterFeedbackSummary {
+  items: ReporterFeedbackItem[];
+  clarityScore: number;
+  actionability: "high" | "medium" | "low";
+}
+
 export interface TriageAssistantResult {
   reproGuidance: ReproGuidance | null;
   gaps: GapItem[];
   dontMiss: DontMissItem[];
   reporterFeedback: ReporterFeedbackItem[];
+  reporterFeedbackSummary: ReporterFeedbackSummary;
   llmTriageGuidance: LLMTriageGuidance | null;
 }
 
 export interface LLMTriageGuidance {
   reproSteps: string[];
+  environment: string[];
+  expectedBehavior: string;
+  testingTips: string[];
   missingInfo: string[];
   dontMiss: string[];
   reporterFeedback: string;
@@ -313,6 +325,8 @@ export function analyzeGaps(
       severity: "critical",
       description: "No software version numbers found in the report",
       suggestion: "Ask the reporter for exact affected versions, including minor/patch level and build identifiers",
+      triagerGuidance: "Cannot determine if your deployment is affected. Check adjacent versions if a single version is provided later.",
+      reporterGuidance: "Please provide the exact software version (major.minor.patch) where you observed the vulnerability, including build identifiers if available.",
     });
   }
 
@@ -324,6 +338,8 @@ export function analyzeGaps(
       severity: "critical",
       description: "No proof-of-concept code or reproduction payload found",
       suggestion: "Request a working PoC with exact HTTP requests/responses, code snippets, or command-line steps",
+      triagerGuidance: "Without a PoC, reproduction will require building the attack from scratch. Consider asking for a self-contained reproduction script before investing time.",
+      reporterGuidance: "Please provide a working proof-of-concept: exact HTTP requests/responses, code snippets, or command-line steps that demonstrate the vulnerability.",
     });
   }
 
@@ -334,6 +350,8 @@ export function analyzeGaps(
       severity: "important",
       description: "No clear impact statement or severity justification",
       suggestion: "Ask the reporter to describe the concrete security impact: what data is exposed, what actions an attacker can perform",
+      triagerGuidance: "Actual exploitability may be lower than the vulnerability class suggests. Test for concrete impact before assigning severity.",
+      reporterGuidance: "Please describe the concrete security impact: what data is exposed, what actions can an attacker perform, and what is the blast radius?",
     });
   }
 
@@ -344,6 +362,8 @@ export function analyzeGaps(
       severity: "important",
       description: "No testing environment details provided",
       suggestion: "Request OS, browser version, server configuration, and any special setup needed to reproduce",
+      triagerGuidance: "Some vulnerabilities are OS-specific or behave differently in containers vs bare metal. Test in the reporter's stated environment first.",
+      reporterGuidance: "Please specify your testing environment: OS, browser version, server configuration, runtime version, and any special setup used.",
     });
   }
 
@@ -354,6 +374,8 @@ export function analyzeGaps(
       severity: "critical",
       description: "No explicit reproduction steps found",
       suggestion: "Request numbered step-by-step instructions starting from a clean state",
+      triagerGuidance: "Without reproduction steps, you'll need to reverse-engineer the attack. Request numbered steps starting from a clean state before proceeding.",
+      reporterGuidance: "Please provide numbered step-by-step instructions to reproduce the vulnerability, starting from a fresh installation or clean state.",
     });
   }
 
@@ -364,6 +386,8 @@ export function analyzeGaps(
       severity: "minor",
       description: "No remediation recommendation or fix suggestion provided",
       suggestion: "Optional but useful: ask if the reporter has a suggested fix or has tested any mitigations",
+      triagerGuidance: "No fix suggested — you'll need to determine the remediation approach internally.",
+      reporterGuidance: "If you have a suggested fix or have tested any mitigations, please include them. This helps accelerate the patching process.",
     });
   }
 
@@ -375,6 +399,8 @@ export function analyzeGaps(
       severity: "important",
       description: "Web vulnerability reported without HTTP request/response details",
       suggestion: "Request the full HTTP request (method, URL, headers, body) and the server response showing the vulnerability",
+      triagerGuidance: "You'll need to construct the HTTP request yourself. Capture the full request/response pair during your own reproduction.",
+      reporterGuidance: "Please provide the full HTTP request (method, URL, headers, body) and the server response that demonstrates the vulnerability.",
     });
   }
 
@@ -385,6 +411,8 @@ export function analyzeGaps(
       severity: "critical",
       description: `${placeholderEvidence.length} placeholder URL(s) or generic path(s) detected in the report`,
       suggestion: "These are strong indicators of AI-generated content. Request real URLs, paths, and endpoints from the reporter's actual testing",
+      triagerGuidance: "Placeholder domains are a strong AI-generation indicator. Do not reproduce against placeholder targets — demand real endpoints.",
+      reporterGuidance: "Your report uses placeholder domains (e.g., target.com, example.com). Please replace these with the actual URLs you tested against.",
     });
   }
 
@@ -396,6 +424,8 @@ export function analyzeGaps(
         severity: "critical",
         description: `${notFoundCount} referenced items could not be verified against live sources`,
         suggestion: "The reporter references files, functions, or CVEs that don't exist. Challenge them to provide correct references",
+        triagerGuidance: "Multiple claimed references don't exist. Send challenge questions before investing reproduction time.",
+        reporterGuidance: "We could not locate several files, functions, or CVEs you referenced. Please double-check and provide the correct references.",
       });
     }
   }
@@ -408,6 +438,8 @@ export function analyzeGaps(
         severity: "minor",
         description: "High severity claimed but no CVSS vector or score provided",
         suggestion: "Request a CVSS 3.1 vector string to validate the severity claim",
+        triagerGuidance: "Severity claim is unsupported. Calculate your own CVSS vector during triage to validate.",
+        reporterGuidance: "Please provide a CVSS 3.1 vector string (e.g., AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H) to support your severity claim.",
         audience: "reporter",
       });
     }
@@ -421,6 +453,8 @@ export function analyzeGaps(
       severity: "important",
       description: "Auth-related vulnerability described without specifying authentication requirements or user roles",
       suggestion: "Ask: what authentication state is required? What role/privilege level does the attacker need? Is it pre-auth or post-auth?",
+      triagerGuidance: "Unclear auth requirements — test both authenticated and unauthenticated. Check if exploitation requires a specific role or privilege level.",
+      reporterGuidance: "Please specify the authentication state required to exploit this: pre-auth or post-auth? What role/privilege level does the attacker need?",
       audience: "both",
     });
   }
@@ -433,6 +467,8 @@ export function analyzeGaps(
       severity: "minor",
       description: "No attacker network position specified (remote vs. adjacent vs. local)",
       suggestion: "Clarify where the attacker must be positioned: internet-facing endpoint, internal network, or localhost only?",
+      triagerGuidance: "Internet-facing, local network, or localhost only significantly affects severity. Test from the most restrictive position first.",
+      reporterGuidance: "Please specify the attacker's required network position: internet-facing, internal network, or localhost only?",
       audience: "triager",
     });
   }
@@ -445,6 +481,8 @@ export function analyzeGaps(
       severity: "important",
       description: "Dependencies mentioned but no specific versions provided",
       suggestion: "Request exact dependency versions (from lock file) to determine if the vulnerable version is actually in use",
+      triagerGuidance: "Check your lock file to confirm the dependency version in use. The vulnerable version range may not affect your deployment.",
+      reporterGuidance: "Please provide exact dependency versions (from the lock file) so we can determine if the vulnerable version is in our dependency tree.",
       audience: "reporter",
     });
   }
@@ -457,9 +495,24 @@ export function analyzeGaps(
         severity: "minor",
         description: "Source files referenced without specific line numbers or function names",
         suggestion: "Request exact file paths with line numbers and the specific vulnerable function/method for faster validation",
+        triagerGuidance: "Source files are named but without line numbers — you'll need to grep for the vulnerable pattern manually.",
+        reporterGuidance: "Please provide exact file paths with line numbers and the specific vulnerable function/method to help us locate the issue quickly.",
         audience: "reporter",
       });
     }
+  }
+
+  const hasConfig = /\b(?:config(?:uration)?|settings?|\.env|\.ini|\.ya?ml|\.conf|\.properties|default\s*(?:config|settings)|custom\s*(?:config|settings))\b/i.test(text);
+  if (!hasConfig && hasEnvironment) {
+    gaps.push({
+      category: "missing_config",
+      severity: "minor",
+      description: "No mention of whether the vulnerability requires specific configuration vs. default settings",
+      suggestion: "Clarify if the vulnerability triggers with default configuration or requires custom settings",
+      triagerGuidance: "Test with default settings first. If the vulnerability only triggers with a non-default configuration, the real-world impact may be limited.",
+      reporterGuidance: "Please specify if this vulnerability triggers with default configuration or requires specific settings. Include relevant config snippets if applicable.",
+      audience: "both",
+    });
   }
 
   return gaps.sort((a, b) => {
@@ -514,6 +567,25 @@ export function analyzeDontMiss(
         reason: "Sophisticated AI-generated reports copy-paste real file paths and CVEs, then add fabricated details. The verified items don't guarantee the vulnerability is real.",
       });
     }
+  }
+
+  const detectedClass = detectVulnClass(text);
+  if (detectedClass.vulnClass !== "unknown" && detectedClass.confidence >= 0.3 && slopScore >= 50) {
+    items.push({
+      area: "Vulnerability Class Is Real",
+      warning: `Even if this report is AI-generated, ${detectedClass.label} vulnerabilities in this type of application are common. Consider a quick manual check of the referenced endpoint before closing.`,
+      reason: "The vulnerability class described is legitimate and commonly exploited. Dismissing the report based solely on the slop score risks missing a real finding. A brief manual verification of the claimed attack surface is recommended.",
+    });
+  }
+
+  const singleCve = text.match(/CVE-\d{4}-\d{4,}/gi);
+  if (singleCve && singleCve.length >= 1 && singleCve.length <= 2 && slopScore >= 40) {
+    const cveList = singleCve.join(", ");
+    items.push({
+      area: "Real CVE Referenced",
+      warning: `This report references ${cveList}. Even if the report itself is AI-generated, verify whether your deployment is affected independently.`,
+      reason: "A real CVE reference means there may be a genuine vulnerability regardless of report quality. Check the CVE details against your own deployment before dismissing.",
+    });
   }
 
   if (slopScore >= 40 && slopScore <= 60) {
@@ -677,6 +749,53 @@ export function generateReporterFeedback(
   return feedback.sort((a, b) => (a.priority ?? 5) - (b.priority ?? 5));
 }
 
+export function computeReporterFeedbackSummary(
+  text: string,
+  slopScore: number,
+  gaps: GapItem[],
+  feedback: ReporterFeedbackItem[],
+): ReporterFeedbackSummary {
+  let clarityScore = 50;
+
+  const hasSteps = /\b(?:step\s*\d|steps?\s*to\s*reproduce)\b/i.test(text);
+  const hasCode = /```[\s\S]*?```/.test(text);
+  const hasVersions = /\b\d+\.\d+\.\d+\b/.test(text);
+  const hasImpact = /\b(?:impact|consequence|severity|risk)\b/i.test(text);
+  const hasHeaders = /^#{1,3}\s/m.test(text);
+
+  if (hasSteps) clarityScore += 12;
+  if (hasCode) clarityScore += 10;
+  if (hasVersions) clarityScore += 8;
+  if (hasImpact) clarityScore += 8;
+  if (hasHeaders) clarityScore += 7;
+
+  const words = text.split(/\s+/).length;
+  if (words >= 100 && words <= 2000) clarityScore += 5;
+  if (words < 30) clarityScore -= 15;
+
+  const criticalGaps = gaps.filter(g => g.severity === "critical").length;
+  clarityScore -= criticalGaps * 8;
+
+  if (slopScore >= 70) clarityScore -= 10;
+
+  clarityScore = Math.max(0, Math.min(100, clarityScore));
+
+  let actionability: "high" | "medium" | "low";
+  if (hasSteps && (hasCode || /\b(?:poc|proof|exploit|payload)\b/i.test(text)) && hasVersions) {
+    actionability = "high";
+  } else if (criticalGaps <= 1 && (hasSteps || hasCode)) {
+    actionability = "medium";
+  } else {
+    actionability = "low";
+  }
+
+  return {
+    items: feedback,
+    clarityScore,
+    actionability,
+  };
+}
+
 function mergeReproGuidance(
   heuristic: ReproGuidance | null,
   llmGuidance: LLMTriageGuidance | null,
@@ -738,12 +857,23 @@ export function generateTriageAssistant(
   const gaps = analyzeGaps(text, evidence, verification, slopScore);
   const dontMiss = analyzeDontMiss(text, evidence, verification, slopScore);
   const reporterFeedback = generateReporterFeedback(text, slopScore, confidence, gaps, verification);
+  const reporterFeedbackSummary = computeReporterFeedbackSummary(text, slopScore, gaps, reporterFeedback);
+
+  if (llmTriageGuidance?.environment?.length && reproGuidance) {
+    const existingEnvSet = new Set(reproGuidance.environment.map(e => e.toLowerCase().trim()));
+    for (const env of llmTriageGuidance.environment) {
+      if (!existingEnvSet.has(env.toLowerCase().trim())) {
+        reproGuidance.environment.push(env);
+      }
+    }
+  }
 
   return {
     reproGuidance,
     gaps,
     dontMiss,
     reporterFeedback,
+    reporterFeedbackSummary,
     llmTriageGuidance,
   };
 }

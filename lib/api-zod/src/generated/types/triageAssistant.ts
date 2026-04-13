@@ -9,6 +9,7 @@ import type { DontMissItem } from "./dontMissItem";
 import type { GapItem } from "./gapItem";
 import type { LLMTriageGuidance } from "./lLMTriageGuidance";
 import type { ReporterFeedbackItem } from "./reporterFeedbackItem";
+import type { ReporterFeedbackSummary } from "./reporterFeedbackSummary";
 import type { ReproGuidance } from "./reproGuidance";
 
 export interface TriageAssistant {
@@ -16,5 +17,6 @@ export interface TriageAssistant {
   gaps: GapItem[];
   dontMiss: DontMissItem[];
   reporterFeedback: ReporterFeedbackItem[];
+  reporterFeedbackSummary: ReporterFeedbackSummary;
   llmTriageGuidance?: LLMTriageGuidance | null;
 }

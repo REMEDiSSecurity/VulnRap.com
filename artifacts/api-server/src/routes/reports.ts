@@ -630,6 +630,91 @@ router.post("/reports/check", async (req, res): Promise<void> => {
   const analysisText = redactedText;
 
   const contentHash = computeContentHash(analysisText);
+
+  const cachedReports = await db
+    .select({
+      id: reportsTable.id,
+      slopScore: reportsTable.slopScore,
+      slopTier: reportsTable.slopTier,
+      qualityScore: reportsTable.qualityScore,
+      confidence: reportsTable.confidence,
+      breakdown: reportsTable.breakdown,
+      evidence: reportsTable.evidence,
+      humanIndicators: reportsTable.humanIndicators,
+      similarityMatches: reportsTable.similarityMatches,
+      sectionHashes: reportsTable.sectionHashes,
+      sectionMatches: reportsTable.sectionMatches,
+      redactionSummary: reportsTable.redactionSummary,
+      feedback: reportsTable.feedback,
+      llmSlopScore: reportsTable.llmSlopScore,
+      llmFeedback: reportsTable.llmFeedback,
+      llmBreakdown: reportsTable.llmBreakdown,
+    })
+    .from(reportsTable)
+    .where(eq(reportsTable.contentHash, contentHash))
+    .limit(1);
+
+  if (cachedReports.length > 0) {
+    const cached = cachedReports[0];
+    logger.info({ contentHash, existingId: cached.id }, "Check: returning cached result for identical content");
+
+    await db
+      .insert(reportStatsTable)
+      .values({ key: `recheck:${cached.id}`, value: 1 })
+      .onConflictDoUpdate({
+        target: reportStatsTable.key,
+        set: { value: sql`${reportStatsTable.value} + 1` },
+      })
+      .catch(() => {});
+
+    let cachedTriageRecommendation: TriageRecommendation | null = null;
+    let cachedTriageAssistant: TriageAssistantResult | null = null;
+    const cachedEvidence = (cached.evidence || []) as EvidenceItem[];
+    try {
+      const baseRec = generateTriageRecommendation(
+        cached.slopScore, cached.confidence as number, null, cachedEvidence,
+      );
+      cachedTriageRecommendation = {
+        ...baseRec,
+        temporalSignals: [],
+        templateMatch: null,
+        revision: null,
+      };
+    } catch {}
+    try {
+      cachedTriageAssistant = generateTriageAssistant(
+        analysisText, cached.slopScore, cached.confidence as number,
+        cachedEvidence, null, null,
+      );
+    } catch {}
+
+    const response = CheckReportResponse.parse({
+      slopScore: cached.slopScore,
+      slopTier: cached.slopTier,
+      qualityScore: cached.qualityScore,
+      confidence: cached.confidence,
+      breakdown: cached.breakdown,
+      evidence: cached.evidence,
+      humanIndicators: cached.humanIndicators,
+      similarityMatches: cached.similarityMatches,
+      sectionHashes: cached.sectionHashes,
+      sectionMatches: cached.sectionMatches,
+      redactionSummary: cached.redactionSummary,
+      feedback: cached.feedback,
+      llmSlopScore: cached.llmSlopScore ?? null,
+      llmFeedback: cached.llmFeedback ?? null,
+      llmBreakdown: cached.llmBreakdown ?? null,
+      llmEnhanced: cached.llmSlopScore != null,
+      verification: null,
+      triageRecommendation: cachedTriageRecommendation,
+      triageAssistant: cachedTriageAssistant,
+      previouslySubmitted: true,
+      existingReportId: cached.id,
+    });
+    res.json(response);
+    return;
+  }
+
   const simhash = computeSimhash(analysisText);
   const minhashSignature = computeMinHash(analysisText);
   const lshBuckets = computeLSHBuckets(minhashSignature);
@@ -663,12 +748,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     checkCandidates as Array<{ id: number; sectionHashes: Record<string, string> }>,
   );
 
-  const [analysisResult, [existingReport]] = await Promise.all([
-    performAnalysis(text, analysisText),
-    db.select({ id: reportsTable.id })
-      .from(reportsTable)
-      .where(eq(reportsTable.contentHash, contentHash)),
-  ]);
+  const analysisResult = await performAnalysis(text, analysisText);
 
   const { llmResult: checkLlmResult } = analysisResult;
 
@@ -692,8 +772,8 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     verification: analysisResult.verification ?? null,
     triageRecommendation: analysisResult.triageRecommendation ?? null,
     triageAssistant: analysisResult.triageAssistant ?? null,
-    previouslySubmitted: !!existingReport,
-    existingReportId: existingReport?.id ?? null,
+    previouslySubmitted: false,
+    existingReportId: null,
   });
 
   res.json(response);

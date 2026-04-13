@@ -1297,6 +1297,10 @@ components:
           type: string
         suggestion:
           type: string
+        triagerGuidance:
+          type: string
+        reporterGuidance:
+          type: string
         audience:
           type: ["string", "null"]
           enum: [triager, reporter, both, null]
@@ -1305,6 +1309,8 @@ components:
         - severity
         - description
         - suggestion
+        - triagerGuidance
+        - reporterGuidance
 
     DontMissItem:
       type: object
@@ -1341,6 +1347,16 @@ components:
           type: array
           items:
             type: string
+        environment:
+          type: array
+          items:
+            type: string
+        expectedBehavior:
+          type: string
+        testingTips:
+          type: array
+          items:
+            type: string
         missingInfo:
           type: array
           items:
@@ -1353,9 +1369,29 @@ components:
           type: string
       required:
         - reproSteps
+        - environment
+        - expectedBehavior
+        - testingTips
         - missingInfo
         - dontMiss
         - reporterFeedback
+
+    ReporterFeedbackSummary:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReporterFeedbackItem"
+        clarityScore:
+          type: integer
+        actionability:
+          type: string
+          enum: [high, medium, low]
+      required:
+        - items
+        - clarityScore
+        - actionability
 
     TriageAssistant:
       type: object
@@ -1376,6 +1412,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReporterFeedbackItem"
+        reporterFeedbackSummary:
+          $ref: "#/components/schemas/ReporterFeedbackSummary"
         llmTriageGuidance:
           oneOf:
             - $ref: "#/components/schemas/LLMTriageGuidance"
@@ -1384,6 +1422,7 @@ components:
         - gaps
         - dontMiss
         - reporterFeedback
+        - reporterFeedbackSummary
 
     SubmitFeedbackBody:
       type: object

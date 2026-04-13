@@ -327,6 +327,8 @@ export interface GapItem {
   severity: GapItemSeverity;
   description: string;
   suggestion: string;
+  triagerGuidance: string;
+  reporterGuidance: string;
   /** @nullable */
   audience?: GapItemAudience;
 }
@@ -353,8 +355,26 @@ export interface ReporterFeedbackItem {
   priority?: number | null;
 }
 
+export type ReporterFeedbackSummaryActionability =
+  (typeof ReporterFeedbackSummaryActionability)[keyof typeof ReporterFeedbackSummaryActionability];
+
+export const ReporterFeedbackSummaryActionability = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+} as const;
+
+export interface ReporterFeedbackSummary {
+  items: ReporterFeedbackItem[];
+  clarityScore: number;
+  actionability: ReporterFeedbackSummaryActionability;
+}
+
 export interface LLMTriageGuidance {
   reproSteps: string[];
+  environment: string[];
+  expectedBehavior: string;
+  testingTips: string[];
   missingInfo: string[];
   dontMiss: string[];
   reporterFeedback: string;
@@ -365,6 +385,7 @@ export interface TriageAssistant {
   gaps: GapItem[];
   dontMiss: DontMissItem[];
   reporterFeedback: ReporterFeedbackItem[];
+  reporterFeedbackSummary: ReporterFeedbackSummary;
   llmTriageGuidance?: LLMTriageGuidance | null;
 }
 

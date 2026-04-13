@@ -804,6 +804,27 @@ export default function Check() {
                   </div>
                 )}
 
+                {ta.llmTriageGuidance && (ta.llmTriageGuidance.expectedBehavior || (ta.llmTriageGuidance.testingTips && ta.llmTriageGuidance.testingTips.length > 0)) && (
+                  <div className="space-y-1.5">
+                    {ta.llmTriageGuidance.expectedBehavior && (
+                      <div className="glass-card rounded-lg p-2.5 border border-cyan-500/15">
+                        <div className="text-[9px] font-bold uppercase tracking-wide text-cyan-400 mb-1 flex items-center gap-1"><Brain className="w-2.5 h-2.5" />Expected Behavior</div>
+                        <p className="text-xs leading-relaxed">{ta.llmTriageGuidance.expectedBehavior}</p>
+                      </div>
+                    )}
+                    {ta.llmTriageGuidance.testingTips && ta.llmTriageGuidance.testingTips.length > 0 && (
+                      <div className="glass-card rounded-lg p-2.5 border border-cyan-500/15">
+                        <div className="text-[9px] font-bold uppercase tracking-wide text-cyan-400 mb-1 flex items-center gap-1"><Brain className="w-2.5 h-2.5" />Testing Tips</div>
+                        <ul className="space-y-0.5">
+                          {ta.llmTriageGuidance.testingTips.map((tip, i) => (
+                            <li key={i} className="text-xs flex items-start gap-1"><span className="w-1 h-1 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0" />{tip}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {ta.gaps.length > 0 && (
                   <div className="space-y-1.5">
                     <h4 className="text-xs font-bold flex items-center gap-1.5"><ListChecks className="w-3.5 h-3.5 text-indigo-400" />Gaps ({ta.gaps.length})</h4>
@@ -814,6 +835,18 @@ export default function Check() {
                           <span className="text-[10px] font-bold text-muted-foreground uppercase">{gap.category.replace(/_/g, " ")}</span>
                         </div>
                         <p className="text-xs leading-relaxed">{gap.description}</p>
+                        {gap.triagerGuidance && (
+                          <div className="mt-1.5 rounded border border-blue-500/15 bg-blue-500/5 px-2 py-1">
+                            <span className="text-[9px] font-bold uppercase text-blue-400 tracking-wide">Triager</span>
+                            <p className="text-[11px] text-blue-300/80">{gap.triagerGuidance}</p>
+                          </div>
+                        )}
+                        {gap.reporterGuidance && (
+                          <div className="mt-1 rounded border border-amber-500/15 bg-amber-500/5 px-2 py-1">
+                            <span className="text-[9px] font-bold uppercase text-amber-400 tracking-wide">Reporter</span>
+                            <p className="text-[11px] text-amber-300/80">{gap.reporterGuidance}</p>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -834,6 +867,22 @@ export default function Check() {
                 {ta.reporterFeedback.length > 0 && (
                   <div className="space-y-1.5">
                     <h4 className="text-xs font-bold flex items-center gap-1.5"><UserCheck className="w-3.5 h-3.5 text-blue-400" />Reporter</h4>
+                    {ta.reporterFeedbackSummary && (
+                      <div className="rounded-lg border border-muted/30 bg-muted/10 p-2 flex items-center gap-3">
+                        <div className="text-center">
+                          <div className={`text-lg font-bold ${
+                            ta.reporterFeedbackSummary.clarityScore >= 70 ? "text-green-400" :
+                            ta.reporterFeedbackSummary.clarityScore >= 40 ? "text-yellow-400" : "text-red-400"
+                          }`}>{ta.reporterFeedbackSummary.clarityScore}</div>
+                          <div className="text-[9px] text-muted-foreground uppercase">Clarity</div>
+                        </div>
+                        <div className="h-6 w-px bg-muted/30" />
+                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
+                          ta.reporterFeedbackSummary.actionability === "high" ? "border-green-500/30 text-green-400" :
+                          ta.reporterFeedbackSummary.actionability === "medium" ? "border-yellow-500/30 text-yellow-400" : "border-red-500/30 text-red-400"
+                        }`}>{ta.reporterFeedbackSummary.actionability}</Badge>
+                      </div>
+                    )}
                     {ta.reporterFeedback.map((fb, i) => (
                       <div key={i} className={`rounded-lg border p-2.5 text-xs ${fb.tone === "positive" ? "bg-green-500/5 border-green-500/15" : fb.tone === "concern" ? "bg-yellow-500/5 border-yellow-500/15" : "bg-blue-500/5 border-blue-500/15"}`}>
                         {fb.message}

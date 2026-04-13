@@ -17,9 +17,9 @@ const DEFAULTS: VulnRapSettings = {
 };
 
 export const SENSITIVITY_PRESETS: Record<SensitivityPreset, { label: string; description: string; axisMultiplier: number; humanMultiplier: number }> = {
-  lenient: { label: "Lenient", description: "Higher tolerance — fewer false positives", axisMultiplier: 0.75, humanMultiplier: 1.25 },
+  lenient: { label: "Lenient", description: "Higher tolerance — fewer false positives", axisMultiplier: 0.7, humanMultiplier: 1.5 },
   balanced: { label: "Balanced", description: "Default calibration", axisMultiplier: 1.0, humanMultiplier: 1.0 },
-  strict: { label: "Strict", description: "Lower tolerance — catches more borderline cases", axisMultiplier: 1.25, humanMultiplier: 0.75 },
+  strict: { label: "Strict", description: "Lower tolerance — catches more borderline cases", axisMultiplier: 1.5, humanMultiplier: 0.7 },
 };
 
 const PRIOR = 15;

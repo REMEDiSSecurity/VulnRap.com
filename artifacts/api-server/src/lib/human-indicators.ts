@@ -22,6 +22,8 @@ const COMMIT_PR_PATTERN = /(?:commit\s+[0-9a-f]{7,40}|(?:pull\s+request|pr|merge
 
 const PATCHED_VERSION_PATTERN = /(?:(?:fixed|patched|resolved|backported)\s+(?:in|by|as\s+of|starting\s+from)\s+(?:v(?:ersion)?\s*)?\d+\.\d+|(?:v(?:ersion)?\s*)?\d+\.\d+(?:\.\d+)?\s+(?:fixes|patches|resolves|addresses)\s+this)/gi;
 
+const NAMED_RESEARCHER_PATTERN = /\b(?:reported\s+by|discovered\s+by|found\s+by|credited?\s+to|researcher[:\s]+|author[:\s]+)\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/g;
+
 const AI_PLEASANTRIES = [
   /dear\s+(?:security\s+team|sir\/madam|team|vulnerability\s+team|security\s+researcher)/i,
   /(?:best\s+regards|kind\s+regards|sincerely|respectfully\s+submitted|warm\s+regards)/i,
@@ -50,7 +52,7 @@ export function detectHumanIndicators(text: string): HumanIndicatorResult {
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 5);
   if (sentences.length >= 3) {
     const avgSentenceLength = sentences.reduce((sum, s) => sum + s.trim().split(/\s+/).length, 0) / sentences.length;
-    if (avgSentenceLength <= 12 && wordCount >= 50) {
+    if (avgSentenceLength <= 15 && wordCount >= 50) {
       indicators.push({
         type: "human_terse_style",
         description: `Terse, direct writing style (avg ${avgSentenceLength.toFixed(1)} words/sentence) — characteristic of experienced practitioners`,
@@ -72,6 +74,16 @@ export function detectHumanIndicators(text: string): HumanIndicatorResult {
       description: `Informal abbreviation${foundAbbreviations.length > 1 ? "s" : ""} detected (${foundAbbreviations.slice(0, 3).join(", ")}) — AI models rarely use these in formal reports`,
       weight: -4,
       matched: foundAbbreviations.slice(0, 3).join(", "),
+    });
+  }
+
+  const researcherMatches = text.match(NAMED_RESEARCHER_PATTERN);
+  if (researcherMatches && researcherMatches.length >= 1) {
+    indicators.push({
+      type: "human_named_researcher",
+      description: `Named researcher credited (${researcherMatches[0].trim().slice(0, 60)}) — AI reports rarely attribute discoveries to specific individuals`,
+      weight: -3,
+      matched: researcherMatches[0].trim().slice(0, 60),
     });
   }
 

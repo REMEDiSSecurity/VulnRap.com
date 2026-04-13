@@ -13,6 +13,8 @@ export interface GapItem {
   severity: GapItemSeverity;
   description: string;
   suggestion: string;
+  triagerGuidance: string;
+  reporterGuidance: string;
   /** @nullable */
   audience?: GapItemAudience;
 }
