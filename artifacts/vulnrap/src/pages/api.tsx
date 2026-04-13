@@ -20,7 +20,7 @@ function CopyBlock({ code, language }: { code: string; language: string }) {
       </pre>
       <button
         onClick={handleCopy}
-        className="absolute top-3 right-3 p-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-primary transition-all opacity-0 group-hover:opacity-100"
+        className="absolute top-3 right-3 p-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-primary transition-all sm:opacity-0 sm:group-hover:opacity-100"
       >
         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
       </button>

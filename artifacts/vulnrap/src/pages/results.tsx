@@ -42,10 +42,19 @@ function getConfidenceColor(confidence: number): string {
 }
 
 function Hint({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
   return (
     <span className="group relative inline-flex ml-1 cursor-help">
-      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-primary transition-colors" />
-      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 rounded-md glass-card px-3 py-2 text-xs text-popover-foreground opacity-0 group-hover:opacity-100 transition-opacity z-50 glow-border text-left font-normal normal-case">
+      <button
+        type="button"
+        className="inline-flex"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        onBlur={() => setOpen(false)}
+        aria-label="More info"
+      >
+        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-primary transition-colors" />
+      </button>
+      <span className={`pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 rounded-md glass-card px-3 py-2 text-xs text-popover-foreground transition-opacity z-50 glow-border text-left font-normal normal-case ${open ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
         {text}
       </span>
     </span>
@@ -1773,7 +1782,7 @@ export default function Results() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-6 w-6 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                         onClick={() => copyHash(hash as string)}
                       >
                         <Copy className="w-3 h-3" />

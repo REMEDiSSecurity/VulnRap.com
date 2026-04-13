@@ -151,7 +151,7 @@ export default function History() {
                       <button
                         type="button"
                         onClick={() => handleRemove(entry.id, entry.type)}
-                        className="p-1.5 rounded-md text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                        className="p-1.5 rounded-md text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
                         title="Remove from history"
                       >
                         <XCircle className="w-4 h-4" />

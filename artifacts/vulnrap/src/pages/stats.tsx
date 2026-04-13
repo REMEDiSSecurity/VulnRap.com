@@ -223,7 +223,7 @@ export default function Stats() {
                       : 0;
 
                     return (
-                      <div key={i} className="flex-1 flex flex-col items-center group relative h-full">
+                      <button key={i} type="button" className="flex-1 flex flex-col items-center group relative h-full cursor-default focus:outline-none" aria-label={`${bucket.count} reports, ${pct}% of total, ${bucket.min}–${bucket.max} score range`}>
                         <div className="w-full flex-1 relative">
                           <div
                             className="absolute bottom-0 left-0 right-0 bar-gradient rounded-t-sm transition-all duration-500"
@@ -234,12 +234,12 @@ export default function Stats() {
                           />
                         </div>
 
-                        <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity glass-card text-popover-foreground text-xs px-3 py-2 rounded-lg pointer-events-none z-10 glow-border space-y-0.5">
+                        <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity glass-card text-popover-foreground text-xs px-3 py-2 rounded-lg pointer-events-none z-10 glow-border space-y-0.5">
                           <div className="font-mono font-bold text-primary">{bucket.count} reports</div>
                           <div className="text-muted-foreground">{pct}% of total</div>
                           <div className="text-muted-foreground/60 text-[10px]">{bucket.min}–{bucket.max} score range</div>
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

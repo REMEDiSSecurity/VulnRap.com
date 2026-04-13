@@ -561,10 +561,19 @@ function VideoSection() {
 }
 
 function Explainer({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
   return (
     <span className="group relative inline-flex ml-1 cursor-help">
-      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-primary transition-colors" />
-      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-popover border border-border px-3 py-2 text-xs text-popover-foreground opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg text-left font-normal normal-case">
+      <button
+        type="button"
+        className="inline-flex"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        onBlur={() => setOpen(false)}
+        aria-label="More info"
+      >
+        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-primary transition-colors" />
+      </button>
+      <span className={`pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-popover border border-border px-3 py-2 text-xs text-popover-foreground transition-opacity z-50 shadow-lg text-left font-normal normal-case ${open ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
         {text}
       </span>
     </span>
