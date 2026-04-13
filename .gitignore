@@ -55,3 +55,8 @@ Thumbs.db
 replit.md
 artifact.toml
 .replit
+.agents/
+
+# Internal development assets (not needed to run the platform)
+attached_assets/
+artifacts/mockup-sandbox/
