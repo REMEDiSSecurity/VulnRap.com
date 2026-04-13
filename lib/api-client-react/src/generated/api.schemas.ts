@@ -150,6 +150,7 @@ export const VerificationCheckResult = {
   warning: "warning",
   error: "error",
   skipped: "skipped",
+  info: "info",
 } as const;
 
 export interface VerificationCheck {
@@ -380,6 +381,68 @@ export interface LLMTriageGuidance {
   reporterFeedback: string;
 }
 
+/**
+ * Identified target project for reproduction
+ */
+export interface ReproRecipeTarget {
+  name: string;
+  version?: string | null;
+  /** Repository URL (GitHub/GitLab) */
+  source?: string | null;
+  language?: string | null;
+  packageManager?: string | null;
+}
+
+export type HardwareComponentType =
+  (typeof HardwareComponentType)[keyof typeof HardwareComponentType];
+
+export const HardwareComponentType = {
+  cpu: "cpu",
+  server: "server",
+  network: "network",
+  iot: "iot",
+  storage: "storage",
+  peripheral: "peripheral",
+  embedded: "embedded",
+  gpu: "gpu",
+} as const;
+
+/**
+ * Detected hardware component relevant to the vulnerability
+ */
+export interface HardwareComponent {
+  type: HardwareComponentType;
+  vendor: string;
+  model?: string | null;
+  /** URL to the product page for quick reference */
+  productUrl?: string | null;
+  /** Suggested emulation or virtual testing approaches */
+  emulationOptions: string[];
+  notes: string[];
+}
+
+/**
+ * Structured reproduction recipe — setup commands, PoC script, and Dockerfile for reproducing the reported vulnerability
+ */
+export interface ReproRecipe {
+  title: string;
+  target?: ReproRecipeTarget | null;
+  /** Shell commands to set up the target environment */
+  setupCommands: string[];
+  /** Extracted or generated PoC as a runnable script */
+  pocScript?: string | null;
+  /** Language of the PoC script (bash, python, etc.) */
+  pocLanguage?: string | null;
+  /** What the triager should observe if the vulnerability is real */
+  expectedOutput?: string | null;
+  /** Generated Dockerfile for containerized reproduction */
+  dockerfile?: string | null;
+  /** Warnings, prerequisites, and verification status */
+  notes: string[];
+  /** Detected hardware components with emulation guidance */
+  hardware: HardwareComponent[];
+}
+
 export interface TriageAssistant {
   reproGuidance?: ReproGuidance | null;
   gaps: GapItem[];
@@ -387,6 +450,8 @@ export interface TriageAssistant {
   reporterFeedback: ReporterFeedbackItem[];
   reporterFeedbackSummary: ReporterFeedbackSummary;
   llmTriageGuidance?: LLMTriageGuidance | null;
+  /** Structured reproduction recipe with setup commands, PoC script, and optional Dockerfile */
+  reproRecipe?: ReproRecipe | null;
 }
 
 export interface ReportAnalysis {

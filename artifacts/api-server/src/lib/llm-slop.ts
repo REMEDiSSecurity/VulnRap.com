@@ -12,12 +12,22 @@ export interface LLMTriageGuidance {
   reporterFeedback: string;
 }
 
+export interface LLMReproRecipe {
+  setupCommands: string[];
+  pocScript: string | null;
+  pocLanguage: string | null;
+  expectedOutput: string | null;
+  prerequisites: string[];
+  cleanupCommands: string[];
+}
+
 export interface LLMSlopResult {
   llmSlopScore: number;
   llmFeedback: string[];
   llmBreakdown: LLMBreakdown | null;
   llmRedFlags: string[];
   llmTriageGuidance: LLMTriageGuidance | null;
+  llmReproRecipe: LLMReproRecipe | null;
 }
 
 export interface LLMBreakdown {
@@ -63,13 +73,10 @@ export function isLLMAvailable(): boolean {
 }
 
 export function shouldCallLLM(
-  heuristicScore: number,
-  confidence: number,
+  _heuristicScore: number,
+  _confidence: number,
 ): boolean {
-  if (!isLLMAvailable()) return false;
-  if (confidence < COST_GUARD_CONFIDENCE) return true;
-  if (heuristicScore >= COST_GUARD_LOW && heuristicScore <= COST_GUARD_HIGH) return true;
-  return false;
+  return isLLMAvailable();
 }
 
 function getCacheKey(text: string): string {
@@ -137,6 +144,14 @@ Respond ONLY with valid JSON:
     "missing_info": ["<missing item 1>", ...],
     "dont_miss": ["<warning 1>", ...],
     "reporter_feedback": "<2-3 sentence assessment>"
+  },
+  "reproduction_recipe": {
+    "setup_commands": ["<shell command 1>", "<shell command 2>", ...],
+    "poc_script": "<the PoC as a single runnable script, with comments>",
+    "poc_language": "<bash|python|ruby|go|java|curl|http>",
+    "expected_output": "<1-2 sentences: what output confirms the vuln is real>",
+    "prerequisites": ["<prerequisite 1>", ...],
+    "cleanup_commands": ["<teardown command 1>", ...]
   }
 }
 
@@ -144,26 +159,13 @@ Rules:
 - red_flags: 0-4 items, each a concrete observation referencing actual content
 - reasoning: concise, references specific parts of the report
 - triage_guidance: always present, reference specifics from the report, not generic advice
+- reproduction_recipe: always present. setup_commands should be concrete shell commands to install and run the target at the claimed version. poc_script should be a complete, runnable script (not pseudocode) based on the report's claims. If the report lacks enough detail for a runnable PoC, produce your best approximation with TODO comments marking what the triager needs to fill in. poc_language should match the script language. prerequisites lists required tools/SDKs. cleanup_commands lists any teardown needed (kill processes, remove containers, etc.)
 - Do not mention that you are an AI`;
 
-export async function analyzeSlopWithLLM(
-  text: string
+async function analyzeSlopWithLLMOnce(
+  client: OpenAI,
+  truncatedText: string,
 ): Promise<LLMSlopResult | null> {
-  const client = buildClient();
-  if (!client) {
-    logger.info("LLM slop: no API key configured, skipping LLM analysis");
-    return null;
-  }
-
-  const truncatedText =
-    text.length > 6000 ? text.slice(0, 6000) + "\n\n[truncated for analysis]" : text;
-
-  const cached = getCachedResult(truncatedText);
-  if (cached) {
-    logger.info("LLM slop: returning cached result");
-    return cached;
-  }
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
@@ -176,7 +178,7 @@ export async function analyzeSlopWithLLM(
       {
         model,
         temperature: 0.1,
-        max_completion_tokens: 1500,
+        max_completion_tokens: 2500,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -216,6 +218,14 @@ export async function analyzeSlopWithLLM(
         missing_info?: string[];
         dont_miss?: string[];
         reporter_feedback?: string;
+      };
+      reproduction_recipe?: {
+        setup_commands?: string[];
+        poc_script?: string;
+        poc_language?: string;
+        expected_output?: string;
+        prerequisites?: string[];
+        cleanup_commands?: string[];
       };
     };
 
@@ -308,7 +318,28 @@ export async function analyzeSlopWithLLM(
       }
     }
 
-    logger.info({ weightedScore, breakdown, hasTriageGuidance: !!llmTriageGuidance, elapsedMs }, "LLM slop: analysis complete");
+    let llmReproRecipe: LLMReproRecipe | null = null;
+    if (parsed.reproduction_recipe) {
+      const rr = parsed.reproduction_recipe;
+      const setupCommands = Array.isArray(rr.setup_commands)
+        ? rr.setup_commands.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 15)
+        : [];
+      const pocScript = typeof rr.poc_script === "string" && rr.poc_script.trim().length > 0 ? rr.poc_script.trim() : null;
+      const pocLanguage = typeof rr.poc_language === "string" ? rr.poc_language.trim().toLowerCase() : null;
+      const expectedOutput = typeof rr.expected_output === "string" && rr.expected_output.trim().length > 0 ? rr.expected_output.trim() : null;
+      const prerequisites = Array.isArray(rr.prerequisites)
+        ? rr.prerequisites.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 8)
+        : [];
+      const cleanupCommands = Array.isArray(rr.cleanup_commands)
+        ? rr.cleanup_commands.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 5)
+        : [];
+
+      if (setupCommands.length > 0 || pocScript) {
+        llmReproRecipe = { setupCommands, pocScript, pocLanguage, expectedOutput, prerequisites, cleanupCommands };
+      }
+    }
+
+    logger.info({ weightedScore, breakdown, hasTriageGuidance: !!llmTriageGuidance, hasReproRecipe: !!llmReproRecipe, elapsedMs }, "LLM slop: analysis complete");
 
     const result: LLMSlopResult = {
       llmSlopScore: clamp(weightedScore),
@@ -316,6 +347,7 @@ export async function analyzeSlopWithLLM(
       llmBreakdown: breakdown,
       llmRedFlags: redFlags,
       llmTriageGuidance,
+      llmReproRecipe,
     };
 
     setCachedResult(truncatedText, result);
@@ -331,6 +363,40 @@ export async function analyzeSlopWithLLM(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function analyzeSlopWithLLM(
+  text: string
+): Promise<LLMSlopResult | null> {
+  const client = buildClient();
+  if (!client) {
+    logger.info("LLM slop: no API key configured, skipping LLM analysis");
+    return null;
+  }
+
+  const truncatedText =
+    text.length > 6000 ? text.slice(0, 6000) + "\n\n[truncated for analysis]" : text;
+
+  const cached = getCachedResult(truncatedText);
+  if (cached) {
+    logger.info("LLM slop: returning cached result");
+    return cached;
+  }
+
+  const MAX_RETRIES = 2;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const result = await analyzeSlopWithLLMOnce(client, truncatedText);
+    if (result) return result;
+
+    if (attempt < MAX_RETRIES) {
+      const delayMs = 1000 * Math.pow(2, attempt);
+      logger.info({ attempt: attempt + 1, delayMs }, "LLM slop: retrying after failure");
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+
+  logger.warn("LLM slop: all retry attempts exhausted");
+  return null;
 }
 
 function clamp(val: number): number {

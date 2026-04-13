@@ -281,6 +281,7 @@ export const GetReportResponse = zod.object({
               "warning",
               "error",
               "skipped",
+              "info",
             ]),
             detail: zod
               .string()
@@ -506,6 +507,106 @@ export const GetReportResponse = zod.object({
             zod.null(),
           ])
           .optional(),
+        reproRecipe: zod
+          .union([
+            zod
+              .object({
+                title: zod.string(),
+                target: zod
+                  .union([
+                    zod
+                      .object({
+                        name: zod.string(),
+                        version: zod
+                          .union([zod.string(), zod.null()])
+                          .optional(),
+                        source: zod
+                          .union([zod.string(), zod.null()])
+                          .optional()
+                          .describe("Repository URL (GitHub\/GitLab)"),
+                        language: zod
+                          .union([zod.string(), zod.null()])
+                          .optional(),
+                        packageManager: zod
+                          .union([zod.string(), zod.null()])
+                          .optional(),
+                      })
+                      .describe("Identified target project for reproduction"),
+                    zod.null(),
+                  ])
+                  .optional(),
+                setupCommands: zod
+                  .array(zod.string())
+                  .describe("Shell commands to set up the target environment"),
+                pocScript: zod
+                  .union([zod.string(), zod.null()])
+                  .optional()
+                  .describe("Extracted or generated PoC as a runnable script"),
+                pocLanguage: zod
+                  .union([zod.string(), zod.null()])
+                  .optional()
+                  .describe("Language of the PoC script (bash, python, etc.)"),
+                expectedOutput: zod
+                  .union([zod.string(), zod.null()])
+                  .optional()
+                  .describe(
+                    "What the triager should observe if the vulnerability is real",
+                  ),
+                dockerfile: zod
+                  .union([zod.string(), zod.null()])
+                  .optional()
+                  .describe(
+                    "Generated Dockerfile for containerized reproduction",
+                  ),
+                notes: zod
+                  .array(zod.string())
+                  .describe("Warnings, prerequisites, and verification status"),
+                hardware: zod
+                  .array(
+                    zod
+                      .object({
+                        type: zod.enum([
+                          "cpu",
+                          "server",
+                          "network",
+                          "iot",
+                          "storage",
+                          "peripheral",
+                          "embedded",
+                          "gpu",
+                        ]),
+                        vendor: zod.string(),
+                        model: zod.union([zod.string(), zod.null()]).optional(),
+                        productUrl: zod
+                          .union([zod.string(), zod.null()])
+                          .optional()
+                          .describe(
+                            "URL to the product page for quick reference",
+                          ),
+                        emulationOptions: zod
+                          .array(zod.string())
+                          .describe(
+                            "Suggested emulation or virtual testing approaches",
+                          ),
+                        notes: zod.array(zod.string()),
+                      })
+                      .describe(
+                        "Detected hardware component relevant to the vulnerability",
+                      ),
+                  )
+                  .describe(
+                    "Detected hardware components with emulation guidance",
+                  ),
+              })
+              .describe(
+                "Structured reproduction recipe — setup commands, PoC script, and Dockerfile for reproducing the reported vulnerability",
+              ),
+            zod.null(),
+          ])
+          .optional()
+          .describe(
+            "Structured reproduction recipe with setup commands, PoC script, and optional Dockerfile",
+          ),
       }),
       zod.null(),
     ])
@@ -822,6 +923,7 @@ export const CheckReportResponse = zod.object({
               "warning",
               "error",
               "skipped",
+              "info",
             ]),
             detail: zod
               .string()
@@ -1047,6 +1149,106 @@ export const CheckReportResponse = zod.object({
             zod.null(),
           ])
           .optional(),
+        reproRecipe: zod
+          .union([
+            zod
+              .object({
+                title: zod.string(),
+                target: zod
+                  .union([
+                    zod
+                      .object({
+                        name: zod.string(),
+                        version: zod
+                          .union([zod.string(), zod.null()])
+                          .optional(),
+                        source: zod
+                          .union([zod.string(), zod.null()])
+                          .optional()
+                          .describe("Repository URL (GitHub\/GitLab)"),
+                        language: zod
+                          .union([zod.string(), zod.null()])
+                          .optional(),
+                        packageManager: zod
+                          .union([zod.string(), zod.null()])
+                          .optional(),
+                      })
+                      .describe("Identified target project for reproduction"),
+                    zod.null(),
+                  ])
+                  .optional(),
+                setupCommands: zod
+                  .array(zod.string())
+                  .describe("Shell commands to set up the target environment"),
+                pocScript: zod
+                  .union([zod.string(), zod.null()])
+                  .optional()
+                  .describe("Extracted or generated PoC as a runnable script"),
+                pocLanguage: zod
+                  .union([zod.string(), zod.null()])
+                  .optional()
+                  .describe("Language of the PoC script (bash, python, etc.)"),
+                expectedOutput: zod
+                  .union([zod.string(), zod.null()])
+                  .optional()
+                  .describe(
+                    "What the triager should observe if the vulnerability is real",
+                  ),
+                dockerfile: zod
+                  .union([zod.string(), zod.null()])
+                  .optional()
+                  .describe(
+                    "Generated Dockerfile for containerized reproduction",
+                  ),
+                notes: zod
+                  .array(zod.string())
+                  .describe("Warnings, prerequisites, and verification status"),
+                hardware: zod
+                  .array(
+                    zod
+                      .object({
+                        type: zod.enum([
+                          "cpu",
+                          "server",
+                          "network",
+                          "iot",
+                          "storage",
+                          "peripheral",
+                          "embedded",
+                          "gpu",
+                        ]),
+                        vendor: zod.string(),
+                        model: zod.union([zod.string(), zod.null()]).optional(),
+                        productUrl: zod
+                          .union([zod.string(), zod.null()])
+                          .optional()
+                          .describe(
+                            "URL to the product page for quick reference",
+                          ),
+                        emulationOptions: zod
+                          .array(zod.string())
+                          .describe(
+                            "Suggested emulation or virtual testing approaches",
+                          ),
+                        notes: zod.array(zod.string()),
+                      })
+                      .describe(
+                        "Detected hardware component relevant to the vulnerability",
+                      ),
+                  )
+                  .describe(
+                    "Detected hardware components with emulation guidance",
+                  ),
+              })
+              .describe(
+                "Structured reproduction recipe — setup commands, PoC script, and Dockerfile for reproducing the reported vulnerability",
+              ),
+            zod.null(),
+          ])
+          .optional()
+          .describe(
+            "Structured reproduction recipe with setup commands, PoC script, and optional Dockerfile",
+          ),
       }),
       zod.null(),
     ])

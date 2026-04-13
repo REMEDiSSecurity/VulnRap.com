@@ -107,6 +107,7 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
       fusion.evidence,
       verification,
       llmResult?.llmTriageGuidance ?? null,
+      llmResult?.llmReproRecipe ?? null,
     );
   } catch (err) {
     logger.warn({ err }, "Triage assistant generation failed");
@@ -1409,6 +1410,56 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
         lines.push(`- ${icon} ${fb.message}`);
       }
       lines.push("");
+    }
+
+    if (mdTriageAssistant.reproRecipe) {
+      const rr = mdTriageAssistant.reproRecipe;
+      lines.push(`## Reproduction Recipe: ${rr.title}`);
+      lines.push("");
+      if (rr.target) {
+        lines.push(`**Target**: ${rr.target.name}${rr.target.version ? ` v${rr.target.version}` : ""}${rr.target.source ? ` (${rr.target.source})` : ""}`);
+        lines.push("");
+      }
+      if (rr.setupCommands.length > 0) {
+        lines.push("### Setup");
+        lines.push("```bash");
+        rr.setupCommands.forEach(cmd => lines.push(cmd));
+        lines.push("```");
+        lines.push("");
+      }
+      if (rr.pocScript) {
+        lines.push(`### PoC Script (${rr.pocLanguage || "bash"})`);
+        lines.push(`\`\`\`${rr.pocLanguage || "bash"}`);
+        lines.push(rr.pocScript);
+        lines.push("```");
+        lines.push("");
+      }
+      if (rr.expectedOutput) {
+        lines.push("### Expected Output");
+        lines.push(rr.expectedOutput);
+        lines.push("");
+      }
+      if (rr.dockerfile) {
+        lines.push("### Dockerfile");
+        lines.push("```dockerfile");
+        lines.push(rr.dockerfile);
+        lines.push("```");
+        lines.push("");
+      }
+      if (rr.hardware && rr.hardware.length > 0) {
+        lines.push("### Hardware Components");
+        for (const hw of rr.hardware) {
+          lines.push(`- **${hw.vendor}${hw.model ? ` ${hw.model}` : ""}** (${hw.type})`);
+          if (hw.productUrl) lines.push(`  Product: ${hw.productUrl}`);
+          if (hw.emulationOptions.length > 0) lines.push(`  Emulation: ${hw.emulationOptions[0]}`);
+        }
+        lines.push("");
+      }
+      if (rr.notes.length > 0) {
+        lines.push("### Notes");
+        rr.notes.forEach(n => lines.push(`- ⚠️ ${n}`));
+        lines.push("");
+      }
     }
 
     if (mdTriageAssistant.llmTriageGuidance) {

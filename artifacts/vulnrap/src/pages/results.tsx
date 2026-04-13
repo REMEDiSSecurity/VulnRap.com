@@ -1,11 +1,11 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type TriageAssistant, type ReproGuidance, type GapItem, type DontMissItem, type ReporterFeedbackItem, type LLMTriageGuidance } from "@workspace/api-client-react";
+import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type TriageAssistant, type ReproGuidance, type GapItem, type DontMissItem, type ReporterFeedbackItem, type LLMTriageGuidance, type ReproRecipe, type HardwareComponent } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu, GitCompare, ChevronDown, ChevronUp, Download, BarChart3, Target, Eye, Gauge, Leaf, Shield, MessageSquareWarning, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff } from "lucide-react";
+import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu, GitCompare, ChevronDown, ChevronUp, Download, BarChart3, Target, Eye, Gauge, Leaf, Shield, MessageSquareWarning, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, FlaskConical, Terminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -357,19 +357,151 @@ function TriageCard({ triage, challengeQuestions, temporalSignals, templateMatch
   );
 }
 
-type AssistantTab = "reproduce" | "gaps" | "dontmiss" | "feedback";
+function CopyableCodeBlock({ code, language, label, toast }: { code: string; language?: string; label: string; toast: ReturnType<typeof useToast>["toast"] }) {
+  const copyCode = () => {
+    navigator.clipboard.writeText(code);
+    toast({ title: "Copied", description: `${label} copied to clipboard.` });
+  };
+  return (
+    <div className="glass-card rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/20 border-b border-muted/20">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+          <Terminal className="w-3 h-3" />{label}{language ? ` (${language})` : ""}
+        </span>
+        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={copyCode}>
+          <Copy className="w-3 h-3" />
+        </Button>
+      </div>
+      <pre className="p-3 text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap break-words font-mono text-green-300/90 bg-black/30">
+        {code}
+      </pre>
+    </div>
+  );
+}
+
+function RecipeTabContent({ recipe, toast }: { recipe: ReproRecipe; toast: ReturnType<typeof useToast>["toast"] }) {
+  return (
+    <div className="space-y-4 animate-in fade-in duration-200">
+      <div className="flex items-center gap-2">
+        <FlaskConical className="w-4 h-4 text-emerald-400" />
+        <span className="text-sm font-medium">{recipe.title}</span>
+      </div>
+
+      {recipe.target && (
+        <div className="glass-card rounded-lg p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Target</div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 text-[10px]">{recipe.target.name}</Badge>
+            {recipe.target.version && <Badge variant="outline" className="border-muted/40 text-[10px]">v{recipe.target.version}</Badge>}
+            {recipe.target.language && <Badge variant="outline" className="border-muted/40 text-[10px]">{recipe.target.language}</Badge>}
+            {recipe.target.packageManager && <Badge variant="outline" className="border-muted/40 text-[10px]">{recipe.target.packageManager}</Badge>}
+          </div>
+          {recipe.target.source && (
+            <a href={recipe.target.source} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline mt-1.5 block truncate">{recipe.target.source}</a>
+          )}
+        </div>
+      )}
+
+      {recipe.setupCommands.length > 0 && (
+        <CopyableCodeBlock
+          code={recipe.setupCommands.join("\n")}
+          language="bash"
+          label="Setup Commands"
+          toast={toast}
+        />
+      )}
+
+      {recipe.pocScript && (
+        <CopyableCodeBlock
+          code={recipe.pocScript}
+          language={recipe.pocLanguage || "bash"}
+          label="PoC Script"
+          toast={toast}
+        />
+      )}
+
+      {recipe.expectedOutput && (
+        <div className="glass-card rounded-lg p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+            <Eye className="w-3 h-3" />Expected Output
+          </div>
+          <p className="text-xs leading-relaxed">{recipe.expectedOutput}</p>
+        </div>
+      )}
+
+      {recipe.dockerfile && (
+        <CopyableCodeBlock
+          code={recipe.dockerfile}
+          language="dockerfile"
+          label="Dockerfile"
+          toast={toast}
+        />
+      )}
+
+      {recipe.hardware && recipe.hardware.length > 0 && (
+        <div className="space-y-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <Cpu className="w-3 h-3" />Hardware Components
+          </div>
+          {recipe.hardware.map((hw: HardwareComponent, i: number) => (
+            <div key={i} className="glass-card rounded-lg p-3 border border-orange-500/15">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="outline" className="border-orange-500/40 text-orange-400 text-[10px]">{hw.vendor}</Badge>
+                {hw.model && <span className="text-xs font-medium">{hw.model}</span>}
+                <Badge variant="outline" className="border-muted/40 text-[9px]">{hw.type}</Badge>
+              </div>
+              {hw.productUrl && (
+                <a href={hw.productUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline block mb-2 truncate">{hw.productUrl}</a>
+              )}
+              {hw.emulationOptions.length > 0 && (
+                <div className="mt-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Emulation Options</div>
+                  <ul className="space-y-0.5">
+                    {hw.emulationOptions.map((opt, j) => (
+                      <li key={j} className="text-xs flex items-start gap-1.5">
+                        <span className="w-1 h-1 rounded-full bg-orange-400 mt-1.5 flex-shrink-0" />{opt}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {recipe.notes.length > 0 && (
+        <div className="glass-card rounded-lg p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Notes</div>
+          <ul className="space-y-1">
+            {recipe.notes.map((note, i) => (
+              <li key={i} className="text-xs flex items-start gap-1.5">
+                <AlertTriangle className="w-3 h-3 text-yellow-400 mt-0.5 flex-shrink-0" />
+                {note}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type AssistantTab = "reproduce" | "recipe" | "gaps" | "dontmiss" | "feedback";
 
 function TriageAssistantPanel({ assistant, toast }: { assistant: TriageAssistant; toast: ReturnType<typeof useToast>["toast"] }) {
   const [expanded, setExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<AssistantTab>("reproduce");
 
   const hasRepro = !!assistant.reproGuidance;
+  const hasRecipe = !!assistant.reproRecipe && (assistant.reproRecipe.setupCommands.length > 0 || !!assistant.reproRecipe.pocScript);
   const hasGaps = assistant.gaps.length > 0 || (assistant.llmTriageGuidance?.missingInfo?.length ?? 0) > 0;
   const hasDontMiss = assistant.dontMiss.length > 0 || (assistant.llmTriageGuidance?.dontMiss?.length ?? 0) > 0;
   const hasFeedback = assistant.reporterFeedback.length > 0 || !!assistant.llmTriageGuidance?.reporterFeedback;
 
   const tabs: { id: AssistantTab; label: string; icon: React.ReactNode; active: boolean; count?: number }[] = [
     { id: "reproduce", label: "Reproduce", icon: <Crosshair className="w-3.5 h-3.5" />, active: hasRepro },
+    { id: "recipe", label: "Recipe", icon: <FlaskConical className="w-3.5 h-3.5" />, active: hasRecipe },
     { id: "gaps", label: "Gaps", icon: <ListChecks className="w-3.5 h-3.5" />, active: hasGaps, count: assistant.gaps.length + (assistant.llmTriageGuidance?.missingInfo?.length ?? 0) },
     { id: "dontmiss", label: "Don't Miss", icon: <Microscope className="w-3.5 h-3.5" />, active: hasDontMiss, count: assistant.dontMiss.length + (assistant.llmTriageGuidance?.dontMiss?.length ?? 0) },
     { id: "feedback", label: "Reporter", icon: <UserCheck className="w-3.5 h-3.5" />, active: hasFeedback },
@@ -397,6 +529,46 @@ function TriageAssistantPanel({ assistant, toast }: { assistant: TriageAssistant
       lines.push("## Reporter Feedback", "");
       assistant.reporterFeedback.forEach(f => lines.push(`- ${f.message}`));
       lines.push("");
+    }
+    if (assistant.reproRecipe) {
+      const rr = assistant.reproRecipe;
+      lines.push(`## Reproduction Recipe: ${rr.title}`, "");
+      if (rr.target) {
+        lines.push(`Target: ${rr.target.name}${rr.target.version ? ` v${rr.target.version}` : ""}${rr.target.source ? ` (${rr.target.source})` : ""}`);
+        lines.push("");
+      }
+      if (rr.setupCommands.length > 0) {
+        lines.push("### Setup", "```bash");
+        rr.setupCommands.forEach(cmd => lines.push(cmd));
+        lines.push("```", "");
+      }
+      if (rr.pocScript) {
+        lines.push(`### PoC Script (${rr.pocLanguage || "bash"})`, `\`\`\`${rr.pocLanguage || "bash"}`);
+        lines.push(rr.pocScript);
+        lines.push("```", "");
+      }
+      if (rr.expectedOutput) {
+        lines.push("### Expected Output", rr.expectedOutput, "");
+      }
+      if (rr.dockerfile) {
+        lines.push("### Dockerfile", "```dockerfile");
+        lines.push(rr.dockerfile);
+        lines.push("```", "");
+      }
+      if (rr.hardware && rr.hardware.length > 0) {
+        lines.push("### Hardware Components");
+        for (const hw of rr.hardware) {
+          lines.push(`- **${hw.vendor}${hw.model ? ` ${hw.model}` : ""}** (${hw.type})`);
+          if (hw.productUrl) lines.push(`  Product: ${hw.productUrl}`);
+          if (hw.emulationOptions.length > 0) lines.push(`  Emulation: ${hw.emulationOptions[0]}`);
+        }
+        lines.push("");
+      }
+      if (rr.notes.length > 0) {
+        lines.push("### Notes");
+        rr.notes.forEach(n => lines.push(`- ${n}`));
+        lines.push("");
+      }
     }
     if (assistant.llmTriageGuidance) {
       const ltg = assistant.llmTriageGuidance;
@@ -538,6 +710,10 @@ function TriageAssistantPanel({ assistant, toast }: { assistant: TriageAssistant
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === "recipe" && assistant.reproRecipe && (
+            <RecipeTabContent recipe={assistant.reproRecipe} toast={toast} />
           )}
 
           {activeTab === "gaps" && (

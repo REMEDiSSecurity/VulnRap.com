@@ -1,6 +1,7 @@
 import type { EvidenceItem } from "./score-fusion";
 import type { VerificationResult } from "./active-verification";
 import type { LLMSlopResult } from "./llm-slop";
+import { generateReproRecipe, type ReproRecipe } from "./repro-recipe";
 
 export interface ReproStep {
   order: number;
@@ -52,6 +53,7 @@ export interface TriageAssistantResult {
   reporterFeedback: ReporterFeedbackItem[];
   reporterFeedbackSummary: ReporterFeedbackSummary;
   llmTriageGuidance: LLMTriageGuidance | null;
+  reproRecipe: ReproRecipe | null;
 }
 
 export interface LLMTriageGuidance {
@@ -877,6 +879,7 @@ export function generateTriageAssistant(
   evidence: EvidenceItem[],
   verification: VerificationResult | null,
   llmTriageGuidance: LLMTriageGuidance | null,
+  llmReproRecipe?: import("./llm-slop").LLMReproRecipe | null,
 ): TriageAssistantResult {
   const rawRepro = generateReproGuidance(text);
   const reproGuidance = mergeReproGuidance(rawRepro, llmTriageGuidance);
@@ -894,6 +897,44 @@ export function generateTriageAssistant(
     }
   }
 
+  let reproRecipe = generateReproRecipe(text, verification, llmTriageGuidance);
+  if (reproRecipe && llmReproRecipe) {
+    if (llmReproRecipe.pocScript && !reproRecipe.pocScript) {
+      reproRecipe.pocScript = llmReproRecipe.pocScript;
+      reproRecipe.pocLanguage = llmReproRecipe.pocLanguage;
+    }
+    if (llmReproRecipe.expectedOutput && !reproRecipe.expectedOutput) {
+      reproRecipe.expectedOutput = llmReproRecipe.expectedOutput;
+    }
+    for (const cmd of llmReproRecipe.setupCommands) {
+      if (!reproRecipe.setupCommands.some(c => c.toLowerCase().includes(cmd.toLowerCase().slice(0, 30)))) {
+        reproRecipe.setupCommands.push(cmd);
+      }
+    }
+    if (llmReproRecipe.prerequisites.length > 0) {
+      reproRecipe.notes.push(`Prerequisites: ${llmReproRecipe.prerequisites.join(", ")}`);
+    }
+    if (llmReproRecipe.cleanupCommands.length > 0) {
+      reproRecipe.notes.push(`Cleanup: ${llmReproRecipe.cleanupCommands.join(" && ")}`);
+    }
+  } else if (!reproRecipe && llmReproRecipe && (llmReproRecipe.setupCommands.length > 0 || llmReproRecipe.pocScript)) {
+    reproRecipe = {
+      title: "AI-generated reproduction recipe",
+      target: null,
+      setupCommands: llmReproRecipe.setupCommands,
+      pocScript: llmReproRecipe.pocScript,
+      pocLanguage: llmReproRecipe.pocLanguage,
+      expectedOutput: llmReproRecipe.expectedOutput,
+      dockerfile: null,
+      notes: [
+        ...(llmReproRecipe.prerequisites.length > 0 ? [`Prerequisites: ${llmReproRecipe.prerequisites.join(", ")}`] : []),
+        ...(llmReproRecipe.cleanupCommands.length > 0 ? [`Cleanup: ${llmReproRecipe.cleanupCommands.join(" && ")}`] : []),
+        "This recipe was generated entirely by AI analysis — verify all commands before running.",
+      ],
+      hardware: [],
+    };
+  }
+
   return {
     reproGuidance,
     gaps,
@@ -901,5 +942,6 @@ export function generateTriageAssistant(
     reporterFeedback,
     reporterFeedbackSummary,
     llmTriageGuidance,
+    reproRecipe,
   };
 }

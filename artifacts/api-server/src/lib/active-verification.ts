@@ -481,12 +481,33 @@ async function verifyCveReferences(text: string): Promise<VerificationCheck[]> {
         weight: 0,
       });
     } else if (!nvdResult.found) {
+      const currentYear = new Date().getFullYear();
+      const yearsOld = currentYear - year;
+
+      let freshWeight: number;
+      let freshType: string;
+      let freshReason: string;
+
+      if (yearsOld > 2) {
+        freshWeight = 20;
+        freshType = "fabricated_cve";
+        freshReason = `${cveId} not found in NVD and is ${yearsOld} years old — likely fabricated`;
+      } else if (yearsOld > 1) {
+        freshWeight = 12;
+        freshType = "stale_missing_cve";
+        freshReason = `${cveId} not found in NVD (${yearsOld}yr old) — unusual but could be delayed publication`;
+      } else {
+        freshWeight = 3;
+        freshType = "recent_cve_not_yet_published";
+        freshReason = `${cveId} not yet in NVD — likely recently assigned (coordinated disclosure lag is normal)`;
+      }
+
       checks.push({
-        type: "cve_not_in_nvd",
+        type: freshType,
         target: cveId,
-        result: "not_found",
-        detail: `${cveId} not found in NVD — may be recently assigned, reserved, or non-existent`,
-        weight: 20,
+        result: yearsOld <= 1 ? "info" : "not_found",
+        detail: freshReason,
+        weight: freshWeight,
       });
     } else {
       if (nvdResult.published) {
@@ -581,13 +602,27 @@ function checkPocPlausibility(text: string): VerificationCheck[] {
 
 function computeVerificationScore(checks: VerificationCheck[]): number {
   const NEUTRAL = 50;
-  let adjustment = 0;
+  let positiveSignals = 0;
+  let negativeSignals = 0;
+  let totalAdjustment = 0;
 
   for (const check of checks) {
-    adjustment += check.weight;
+    totalAdjustment += check.weight;
+    if (check.weight > 0) negativeSignals++;
+    else if (check.weight < 0) positiveSignals++;
   }
 
-  const score = Math.max(0, Math.min(100, NEUTRAL + adjustment));
+  const SINGLE_SIGNAL_CAP = 40;
+  if (negativeSignals < 2 && totalAdjustment > 0) {
+    const cappedScore = Math.min(NEUTRAL + totalAdjustment, SINGLE_SIGNAL_CAP);
+    totalAdjustment = cappedScore - NEUTRAL;
+  }
+
+  if (positiveSignals >= 3 && negativeSignals === 0) {
+    return Math.max(0, 10 - positiveSignals * 5);
+  }
+
+  const score = Math.max(0, Math.min(100, NEUTRAL + totalAdjustment));
   return score;
 }
 

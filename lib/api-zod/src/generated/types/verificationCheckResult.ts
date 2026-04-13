@@ -15,4 +15,5 @@ export const VerificationCheckResult = {
   warning: "warning",
   error: "error",
   skipped: "skipped",
+  info: "info",
 } as const;

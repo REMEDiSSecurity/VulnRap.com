@@ -11,6 +11,7 @@ import type { LLMTriageGuidance } from "./lLMTriageGuidance";
 import type { ReporterFeedbackItem } from "./reporterFeedbackItem";
 import type { ReporterFeedbackSummary } from "./reporterFeedbackSummary";
 import type { ReproGuidance } from "./reproGuidance";
+import type { ReproRecipe } from "./reproRecipe";
 
 export interface TriageAssistant {
   reproGuidance?: ReproGuidance | null;
@@ -19,4 +20,6 @@ export interface TriageAssistant {
   reporterFeedback: ReporterFeedbackItem[];
   reporterFeedbackSummary: ReporterFeedbackSummary;
   llmTriageGuidance?: LLMTriageGuidance | null;
+  /** Structured reproduction recipe with setup commands, PoC script, and optional Dockerfile */
+  reproRecipe?: ReproRecipe | null;
 }

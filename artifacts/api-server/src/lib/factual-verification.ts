@@ -310,11 +310,31 @@ function analyzeFabricatedCves(text: string): { score: number; evidence: Factual
       if (ids[i] - ids[i - 1] === 1) sequentialCount++;
     }
     if (sequentialCount >= 2) {
-      totalWeight += 15;
+      const currentYear = new Date().getFullYear();
+      const allRecent = cveIds.every(c => currentYear - c.year <= 1);
+      const hasNamedResearcher = /(?:reported|discovered|found|credited)\s+(?:by|to)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?/i.test(text)
+        || /(?:X41|Trail of Bits|Google Project Zero|Qualys|Rapid7|Tenable|Snyk|Synopsys|Checkmarx|HackerOne|Bugcrowd)/i.test(text);
+      const hasTemplateMarkers = /(?:dear\s+(?:security|sir|team)|i\s+(?:hope|would like)|best\s+regards|sincerely)/i.test(text);
+
+      let seqWeight: number;
+      let seqDesc: string;
+
+      if (hasNamedResearcher && allRecent) {
+        seqWeight = 0;
+        seqDesc = `${sequentialCount + 1} sequential CVE IDs detected (${cveIds.slice(0, 3).map(c => c.full).join(", ")}) — consistent with coordinated multi-vuln disclosure from named researcher`;
+      } else if (hasTemplateMarkers) {
+        seqWeight = 12;
+        seqDesc = `${sequentialCount + 1} CVE IDs with sequential numbering (${cveIds.slice(0, 3).map(c => c.full).join(", ")}) in templated report — suspicious`;
+      } else {
+        seqWeight = 5;
+        seqDesc = `${sequentialCount + 1} sequential CVE IDs detected (${cveIds.slice(0, 3).map(c => c.full).join(", ")}) — may indicate coordinated disclosure or fabrication`;
+      }
+
+      totalWeight += seqWeight;
       evidence.push({
         type: "fabricated_cve",
-        description: `${sequentialCount + 1} CVE IDs with sequential numbering (${cveIds.slice(0, 3).map(c => c.full).join(", ")}) — real CVE IDs are not sequentially assigned`,
-        weight: 15,
+        description: seqDesc,
+        weight: seqWeight,
       });
     }
 

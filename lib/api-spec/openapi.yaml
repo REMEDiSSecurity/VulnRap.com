@@ -1102,7 +1102,7 @@ components:
           description: The reference being verified (e.g. repo:filepath, CVE-ID)
         result:
           type: string
-          enum: [verified, not_found, warning, error, skipped]
+          enum: [verified, not_found, warning, error, skipped, info]
         detail:
           type: string
           description: Human-readable explanation of the check result
@@ -1513,6 +1513,116 @@ components:
         - clarityScore
         - actionability
 
+    ReproRecipeTarget:
+      type: object
+      description: Identified target project for reproduction
+      properties:
+        name:
+          type: string
+        version:
+          oneOf:
+            - type: string
+            - type: "null"
+        source:
+          oneOf:
+            - type: string
+            - type: "null"
+          description: Repository URL (GitHub/GitLab)
+        language:
+          oneOf:
+            - type: string
+            - type: "null"
+        packageManager:
+          oneOf:
+            - type: string
+            - type: "null"
+      required:
+        - name
+
+    HardwareComponent:
+      type: object
+      description: Detected hardware component relevant to the vulnerability
+      properties:
+        type:
+          type: string
+          enum: [cpu, server, network, iot, storage, peripheral, embedded, gpu]
+        vendor:
+          type: string
+        model:
+          oneOf:
+            - type: string
+            - type: "null"
+        productUrl:
+          oneOf:
+            - type: string
+            - type: "null"
+          description: URL to the product page for quick reference
+        emulationOptions:
+          type: array
+          items:
+            type: string
+          description: Suggested emulation or virtual testing approaches
+        notes:
+          type: array
+          items:
+            type: string
+      required:
+        - type
+        - vendor
+        - emulationOptions
+        - notes
+
+    ReproRecipe:
+      type: object
+      description: Structured reproduction recipe — setup commands, PoC script, and Dockerfile for reproducing the reported vulnerability
+      properties:
+        title:
+          type: string
+        target:
+          oneOf:
+            - $ref: "#/components/schemas/ReproRecipeTarget"
+            - type: "null"
+        setupCommands:
+          type: array
+          items:
+            type: string
+          description: Shell commands to set up the target environment
+        pocScript:
+          oneOf:
+            - type: string
+            - type: "null"
+          description: Extracted or generated PoC as a runnable script
+        pocLanguage:
+          oneOf:
+            - type: string
+            - type: "null"
+          description: Language of the PoC script (bash, python, etc.)
+        expectedOutput:
+          oneOf:
+            - type: string
+            - type: "null"
+          description: What the triager should observe if the vulnerability is real
+        dockerfile:
+          oneOf:
+            - type: string
+            - type: "null"
+          description: Generated Dockerfile for containerized reproduction
+        notes:
+          type: array
+          items:
+            type: string
+          description: Warnings, prerequisites, and verification status
+        hardware:
+          type: array
+          items:
+            $ref: "#/components/schemas/HardwareComponent"
+          description: Detected hardware components with emulation guidance
+      required:
+        - title
+        - setupCommands
+        - notes
+        - hardware
+
     TriageAssistant:
       type: object
       properties:
@@ -1538,6 +1648,11 @@ components:
           oneOf:
             - $ref: "#/components/schemas/LLMTriageGuidance"
             - type: "null"
+        reproRecipe:
+          oneOf:
+            - $ref: "#/components/schemas/ReproRecipe"
+            - type: "null"
+          description: Structured reproduction recipe with setup commands, PoC script, and optional Dockerfile
       required:
         - gaps
         - dontMiss

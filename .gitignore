@@ -60,3 +60,4 @@ artifact.toml
 # Internal development assets (not needed to run the platform)
 attached_assets/
 artifacts/mockup-sandbox/
+attached_assets/

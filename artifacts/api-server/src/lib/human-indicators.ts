@@ -122,7 +122,14 @@ export function detectHumanIndicators(text: string): HumanIndicatorResult {
     });
   }
 
-  const totalReduction = indicators.reduce((sum, ind) => sum + ind.weight, 0);
+  const baseReduction = indicators.reduce((sum, ind) => sum + ind.weight, 0);
+
+  const compoundMultipliers = [1.0, 1.0, 1.3, 1.7, 2.2, 2.5, 2.8];
+  const multiplier = indicators.length < compoundMultipliers.length
+    ? compoundMultipliers[indicators.length]
+    : 3.0;
+
+  const totalReduction = Math.round(baseReduction * multiplier);
 
   return {
     indicators,
