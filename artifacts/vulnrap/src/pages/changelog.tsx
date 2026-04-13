@@ -1,12 +1,58 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target } from "lucide-react";
+import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText } from "lucide-react";
 
-export const CURRENT_VERSION = "3.0.0";
-export const RELEASE_DATE = "2026-04-12";
+export const CURRENT_VERSION = "3.1.0";
+export const RELEASE_DATE = "2026-04-13";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.1.0",
+    date: "2026-04-13",
+    label: "Triage Visuals & Hardening",
+    labelColor: "border-cyan-500 text-cyan-400",
+    sections: [
+      {
+        icon: <BarChart3 className="w-4 h-4 text-cyan-400" />,
+        title: "Results Page Visualizations",
+        type: "feature",
+        items: [
+          "LLM radar chart: SVG spider chart rendering all 5 LLM dimensions (Specificity, Originality, Voice, Coherence, Hallucination) with labeled axes and filled polygon overlay",
+          "Confidence gauge: semicircular arc gauge color-coded from orange (low) through yellow (medium) to green (high), shown on both results and check pages",
+          "Evidence-highlighted report text: inline citation highlighting in the redacted report — AI phrases in red, human signals in green, with hover tooltips showing evidence type and weight",
+          "Analysis progress stepper: multi-step pipeline visualization (Upload → Redact → Linguistic → Factual → Template → LLM → Triage) replaces generic spinner during analysis on home and check pages",
+        ],
+      },
+      {
+        icon: <BookOpen className="w-4 h-4 text-emerald-400" />,
+        title: "Blog & Documentation",
+        type: "feature",
+        items: [
+          "Published deep-dive blog post: 'Building VulnRap: How We're Making AI Slop Detection Actually Work for PSIRT Teams' — full technical walkthrough of all four development sprints",
+          "NOTICE.md: comprehensive third-party attribution covering all runtime and dev dependencies, academic algorithm references (MinHash, SimHash, LSH, Noisy-OR), and community references (curl, Log4j, OpenSSF)",
+        ],
+      },
+      {
+        icon: <Shield className="w-4 h-4 text-yellow-400" />,
+        title: "Security & Limits",
+        type: "improvement",
+        items: [
+          "File upload size limit reduced from 20MB to 5MB across all endpoints and UI surfaces (home, check, batch, privacy policy) for tighter resource control",
+          "All file size error messages, tooltips, and descriptions updated consistently",
+        ],
+      },
+      {
+        icon: <Wrench className="w-4 h-4 text-orange-400" />,
+        title: "Fixes",
+        type: "fix",
+        items: [
+          "Fixed Swagger UI button on developers page — was using absolute origin URL that failed in proxied iframe environments; now uses relative path",
+          "Fixed sensitivity preset defaults (lenient humanMultiplier corrected)",
+        ],
+      },
+    ],
+  },
   {
     version: "3.0.0",
     date: "2026-04-12",
