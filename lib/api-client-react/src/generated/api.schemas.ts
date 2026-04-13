@@ -711,6 +711,36 @@ export interface SubmitFeedbackBody {
   comment?: string;
 }
 
+export interface SubmitFeedbackWithChallenge {
+  /** The challenge ID from GET /feedback/challenge */
+  challengeId: string;
+  /** The computed solution to the proof-of-work challenge */
+  challengeSolution: string;
+  /** The report ID this feedback is about (optional) */
+  reportId?: number;
+  /**
+   * Rating from 1 (not useful) to 5 (very useful)
+   * @minimum 1
+   * @maximum 5
+   */
+  rating: number;
+  /** Whether the tool was helpful overall */
+  helpful: boolean;
+  /**
+   * Optional free-text suggestions for improvement
+   * @maxLength 1000
+   */
+  comment?: string;
+}
+
+export interface FeedbackChallenge {
+  challengeId: string;
+  nonce: string;
+  difficulty: number;
+  prefix: string;
+  expiresAt: number;
+}
+
 export interface FeedbackResponse {
   id: number;
   message: string;
@@ -772,6 +802,104 @@ export interface FeedbackAnalytics {
   scoreCorrelation: FeedbackAnalyticsScoreCorrelationItem[];
   outliers: FeedbackAnalyticsOutliersItem[];
   recentFeedback: FeedbackAnalyticsRecentFeedbackItem[];
+}
+
+export type ScoringConfigItemAxisThresholds = { [key: string]: number };
+
+export type ScoringConfigItemTierThresholds = {
+  low: number;
+  high: number;
+};
+
+export interface ScoringConfigItem {
+  version: string;
+  createdAt: string;
+  prior: number;
+  floor: number;
+  ceiling: number;
+  axisThresholds: ScoringConfigItemAxisThresholds;
+  tierThresholds: ScoringConfigItemTierThresholds;
+  fabricationBoost: number;
+  description: string;
+}
+
+export interface ScoringConfigResponse {
+  current: ScoringConfigItem;
+  history: ScoringConfigItem[];
+}
+
+export type BucketAnalysisSignal =
+  (typeof BucketAnalysisSignal)[keyof typeof BucketAnalysisSignal];
+
+export const BucketAnalysisSignal = {
+  accurate: "accurate",
+  "over-scoring": "over-scoring",
+  "under-scoring": "under-scoring",
+  "insufficient-data": "insufficient-data",
+} as const;
+
+export interface BucketAnalysis {
+  bucket: string;
+  scoreRange: number[];
+  feedbackCount: number;
+  avgRating: number;
+  helpfulPct: number;
+  meetsThreshold: boolean;
+  signal: BucketAnalysisSignal;
+  ratingDeviation: number;
+}
+
+export type CalibrationSuggestionConfidence =
+  (typeof CalibrationSuggestionConfidence)[keyof typeof CalibrationSuggestionConfidence];
+
+export const CalibrationSuggestionConfidence = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export interface CalibrationSuggestion {
+  parameter: string;
+  currentValue: number;
+  suggestedValue: number;
+  reason: string;
+  confidence: CalibrationSuggestionConfidence;
+  basedOnCount: number;
+}
+
+export type CalibrationReportOverallHealth =
+  (typeof CalibrationReportOverallHealth)[keyof typeof CalibrationReportOverallHealth];
+
+export const CalibrationReportOverallHealth = {
+  good: "good",
+  "needs-attention": "needs-attention",
+  "needs-tuning": "needs-tuning",
+} as const;
+
+export interface CalibrationReport {
+  currentConfig: ScoringConfigItem;
+  totalFeedbackAnalyzed: number;
+  bucketAnalysis: BucketAnalysis[];
+  suggestions: CalibrationSuggestion[];
+  overallHealth: CalibrationReportOverallHealth;
+  minFeedbackThreshold: number;
+}
+
+/**
+ * Object with scoring config changes (prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost)
+ */
+export type ApplyCalibrationBodyChanges = { [key: string]: unknown };
+
+export interface ApplyCalibrationBody {
+  /** Object with scoring config changes (prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost) */
+  changes: ApplyCalibrationBodyChanges;
+  /** Description of why this change is being made */
+  description: string;
+}
+
+export interface ApplyCalibrationResponse {
+  message: string;
+  config: ScoringConfigItem;
 }
 
 /**

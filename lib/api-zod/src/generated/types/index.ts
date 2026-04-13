@@ -6,6 +6,15 @@
  * OpenAPI spec version: 3.0.0
  */
 
+export * from "./applyCalibrationBody";
+export * from "./applyCalibrationBodyChanges";
+export * from "./applyCalibrationResponse";
+export * from "./bucketAnalysis";
+export * from "./bucketAnalysisSignal";
+export * from "./calibrationReport";
+export * from "./calibrationReportOverallHealth";
+export * from "./calibrationSuggestion";
+export * from "./calibrationSuggestionConfidence";
 export * from "./challengeQuestion";
 export * from "./checkReportBody";
 export * from "./checkReportBodySkipLlm";
@@ -30,6 +39,7 @@ export * from "./feedbackAnalyticsRatingDistribution";
 export * from "./feedbackAnalyticsRecentFeedbackItem";
 export * from "./feedbackAnalyticsScoreCorrelationItem";
 export * from "./feedbackAnalyticsSummary";
+export * from "./feedbackChallenge";
 export * from "./feedbackResponse";
 export * from "./gapItem";
 export * from "./gapItemAudience";
@@ -64,6 +74,10 @@ export * from "./reproStepSource";
 export * from "./revisionResult";
 export * from "./revisionResultDirection";
 export * from "./scoreBreakdown";
+export * from "./scoringConfigItem";
+export * from "./scoringConfigItemAxisThresholds";
+export * from "./scoringConfigItemTierThresholds";
+export * from "./scoringConfigResponse";
 export * from "./sectionComparisonItem";
 export * from "./sectionComparisonItemStatus";
 export * from "./sectionMatchItem";
@@ -72,6 +86,7 @@ export * from "./similarityMatchMatchType";
 export * from "./slopDistribution";
 export * from "./slopDistributionBucketsItem";
 export * from "./submitFeedbackBody";
+export * from "./submitFeedbackWithChallenge";
 export * from "./submitReportBody";
 export * from "./submitReportBodyContentMode";
 export * from "./submitReportBodyShowInFeed";

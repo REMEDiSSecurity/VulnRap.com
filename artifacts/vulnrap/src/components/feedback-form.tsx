@@ -1,10 +1,34 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useSubmitFeedback } from "@workspace/api-client-react";
-import { MessageSquare, Star, ThumbsUp, ThumbsDown, CheckCircle } from "lucide-react";
+import { getFeedbackChallenge, submitFeedback } from "@workspace/api-client-react";
+import { MessageSquare, Star, ThumbsUp, ThumbsDown, CheckCircle, Shield } from "lucide-react";
+
+async function solveChallenge(prefix: string, nonce: string, difficulty: number): Promise<string> {
+  const target = "0".repeat(difficulty);
+  const encoder = new TextEncoder();
+  let counter = 0;
+
+  while (true) {
+    const candidate = counter.toString(36);
+    const input = prefix + nonce + candidate;
+    const data = encoder.encode(input);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+
+    if (hashHex.startsWith(target)) {
+      return candidate;
+    }
+    counter++;
+
+    if (counter % 5000 === 0) {
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+}
 
 export default function FeedbackForm({ reportId }: { reportId?: number }) {
   const { toast } = useToast();
@@ -13,31 +37,38 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [hoveredStar, setHoveredStar] = useState(0);
+  const [isPending, setIsPending] = useState(false);
+  const [solvingChallenge, setSolvingChallenge] = useState(false);
 
-  const { mutate, isPending } = useSubmitFeedback({
-    mutation: {
-      onSuccess: () => {
-        setSubmitted(true);
-        toast({ title: "Feedback received", description: "Thanks for helping us sharpen the analysis!" });
-      },
-      onError: () => {
-        toast({ title: "Error", description: "Failed to submit feedback. Please try again.", variant: "destructive" });
-      },
-    },
-  });
+  const handleSubmit = useCallback(async () => {
+    if (rating === 0 || helpful === null || isPending) return;
 
-  const handleSubmit = () => {
-    if (rating === 0 || helpful === null) return;
+    setIsPending(true);
+    setSolvingChallenge(true);
 
-    mutate({
-      data: {
+    try {
+      const challenge = await getFeedbackChallenge();
+      const solution = await solveChallenge(challenge.prefix, challenge.nonce, challenge.difficulty);
+      setSolvingChallenge(false);
+
+      await submitFeedback({
+        challengeId: challenge.challengeId,
+        challengeSolution: solution,
         reportId,
         rating,
         helpful,
         comment: comment.trim() || undefined,
-      },
-    });
-  };
+      });
+
+      setSubmitted(true);
+      toast({ title: "Feedback received", description: "Thanks for helping us sharpen the analysis!" });
+    } catch {
+      toast({ title: "Error", description: "Failed to submit feedback. Please try again.", variant: "destructive" });
+    } finally {
+      setIsPending(false);
+      setSolvingChallenge(false);
+    }
+  }, [rating, helpful, comment, reportId, isPending, toast]);
 
   if (submitted) {
     return (
@@ -147,8 +178,22 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
           disabled={rating === 0 || helpful === null || isPending}
           className="w-full gap-2"
         >
-          <MessageSquare className="w-4 h-4" />
-          {isPending ? "Sending..." : "Send Feedback"}
+          {solvingChallenge ? (
+            <>
+              <Shield className="w-4 h-4 animate-pulse" />
+              Verifying...
+            </>
+          ) : isPending ? (
+            <>
+              <MessageSquare className="w-4 h-4" />
+              Sending...
+            </>
+          ) : (
+            <>
+              <MessageSquare className="w-4 h-4" />
+              Send Feedback
+            </>
+          )}
         </Button>
       </CardContent>
     </Card>

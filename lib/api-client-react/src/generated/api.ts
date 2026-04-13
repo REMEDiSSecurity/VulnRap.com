@@ -17,12 +17,16 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  ApplyCalibrationBody,
+  ApplyCalibrationResponse,
+  CalibrationReport,
   CheckReportBody,
   CheckResult,
   DeleteReportBody,
   DeleteReportResponse,
   ErrorResponse,
   FeedbackAnalytics,
+  FeedbackChallenge,
   FeedbackResponse,
   GetReportFeedParams,
   HashLookupResult,
@@ -32,8 +36,9 @@ import type {
   ReportAnalysis,
   ReportComparison,
   ReportFeed,
+  ScoringConfigResponse,
   SlopDistribution,
-  SubmitFeedbackBody,
+  SubmitFeedbackWithChallenge,
   SubmitReportBody,
   VerificationBadge,
 } from "./api.schemas";
@@ -959,7 +964,83 @@ export function useGetReportFeed<
 }
 
 /**
- * Allows users to share whether the tool was helpful and suggest improvements
+ * Returns a SHA-256 proof-of-work challenge that must be solved before submitting feedback. This prevents automated spam.
+ * @summary Get a proof-of-work challenge for feedback submission
+ */
+export const getGetFeedbackChallengeUrl = () => {
+  return `/api/feedback/challenge`;
+};
+
+export const getFeedbackChallenge = async (
+  options?: RequestInit,
+): Promise<FeedbackChallenge> => {
+  return customFetch<FeedbackChallenge>(getGetFeedbackChallengeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFeedbackChallengeQueryKey = () => {
+  return [`/api/feedback/challenge`] as const;
+};
+
+export const getGetFeedbackChallengeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFeedbackChallenge>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getFeedbackChallenge>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetFeedbackChallengeQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getFeedbackChallenge>>
+  > = ({ signal }) => getFeedbackChallenge({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFeedbackChallenge>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFeedbackChallengeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getFeedbackChallenge>>
+>;
+export type GetFeedbackChallengeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get a proof-of-work challenge for feedback submission
+ */
+
+export function useGetFeedbackChallenge<
+  TData = Awaited<ReturnType<typeof getFeedbackChallenge>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getFeedbackChallenge>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFeedbackChallengeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Allows users to share whether the tool was helpful and suggest improvements. Requires a solved proof-of-work challenge.
  * @summary Submit user feedback about the tool
  */
 export const getSubmitFeedbackUrl = () => {
@@ -967,14 +1048,14 @@ export const getSubmitFeedbackUrl = () => {
 };
 
 export const submitFeedback = async (
-  submitFeedbackBody: SubmitFeedbackBody,
+  submitFeedbackWithChallenge: SubmitFeedbackWithChallenge,
   options?: RequestInit,
 ): Promise<FeedbackResponse> => {
   return customFetch<FeedbackResponse>(getSubmitFeedbackUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(submitFeedbackBody),
+    body: JSON.stringify(submitFeedbackWithChallenge),
   });
 };
 
@@ -985,14 +1066,14 @@ export const getSubmitFeedbackMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof submitFeedback>>,
     TError,
-    { data: BodyType<SubmitFeedbackBody> },
+    { data: BodyType<SubmitFeedbackWithChallenge> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof submitFeedback>>,
   TError,
-  { data: BodyType<SubmitFeedbackBody> },
+  { data: BodyType<SubmitFeedbackWithChallenge> },
   TContext
 > => {
   const mutationKey = ["submitFeedback"];
@@ -1006,7 +1087,7 @@ export const getSubmitFeedbackMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof submitFeedback>>,
-    { data: BodyType<SubmitFeedbackBody> }
+    { data: BodyType<SubmitFeedbackWithChallenge> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -1019,7 +1100,7 @@ export const getSubmitFeedbackMutationOptions = <
 export type SubmitFeedbackMutationResult = NonNullable<
   Awaited<ReturnType<typeof submitFeedback>>
 >;
-export type SubmitFeedbackMutationBody = BodyType<SubmitFeedbackBody>;
+export type SubmitFeedbackMutationBody = BodyType<SubmitFeedbackWithChallenge>;
 export type SubmitFeedbackMutationError = ErrorType<ErrorResponse>;
 
 /**
@@ -1032,14 +1113,14 @@ export const useSubmitFeedback = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof submitFeedback>>,
     TError,
-    { data: BodyType<SubmitFeedbackBody> },
+    { data: BodyType<SubmitFeedbackWithChallenge> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof submitFeedback>>,
   TError,
-  { data: BodyType<SubmitFeedbackBody> },
+  { data: BodyType<SubmitFeedbackWithChallenge> },
   TContext
 > => {
   return useMutation(getSubmitFeedbackMutationOptions(options));
@@ -1120,6 +1201,245 @@ export function useGetFeedbackAnalytics<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Analyzes feedback data against scoring results to suggest weight and threshold adjustments. Uses volume gating to ensure suggestions are based on sufficient data.
+ * @summary Get calibration report with tuning suggestions
+ */
+export const getGetCalibrationReportUrl = () => {
+  return `/api/feedback/calibration`;
+};
+
+export const getCalibrationReport = async (
+  options?: RequestInit,
+): Promise<CalibrationReport> => {
+  return customFetch<CalibrationReport>(getGetCalibrationReportUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCalibrationReportQueryKey = () => {
+  return [`/api/feedback/calibration`] as const;
+};
+
+export const getGetCalibrationReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCalibrationReport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCalibrationReport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCalibrationReportQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCalibrationReport>>
+  > = ({ signal }) => getCalibrationReport({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCalibrationReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCalibrationReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCalibrationReport>>
+>;
+export type GetCalibrationReportQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get calibration report with tuning suggestions
+ */
+
+export function useGetCalibrationReport<
+  TData = Awaited<ReturnType<typeof getCalibrationReport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCalibrationReport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCalibrationReportQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns the active scoring config version and full version history.
+ * @summary Get current and historical scoring configurations
+ */
+export const getGetScoringConfigUrl = () => {
+  return `/api/feedback/calibration/config`;
+};
+
+export const getScoringConfig = async (
+  options?: RequestInit,
+): Promise<ScoringConfigResponse> => {
+  return customFetch<ScoringConfigResponse>(getGetScoringConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetScoringConfigQueryKey = () => {
+  return [`/api/feedback/calibration/config`] as const;
+};
+
+export const getGetScoringConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScoringConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScoringConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetScoringConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getScoringConfig>>
+  > = ({ signal }) => getScoringConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScoringConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScoringConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScoringConfig>>
+>;
+export type GetScoringConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get current and historical scoring configurations
+ */
+
+export function useGetScoringConfig<
+  TData = Awaited<ReturnType<typeof getScoringConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScoringConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScoringConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Creates a new scoring configuration version with the specified changes. All subsequent reports will be scored with the new config.
+ * @summary Apply calibration changes to scoring config
+ */
+export const getApplyCalibrationUrl = () => {
+  return `/api/feedback/calibration/apply`;
+};
+
+export const applyCalibration = async (
+  applyCalibrationBody: ApplyCalibrationBody,
+  options?: RequestInit,
+): Promise<ApplyCalibrationResponse> => {
+  return customFetch<ApplyCalibrationResponse>(getApplyCalibrationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(applyCalibrationBody),
+  });
+};
+
+export const getApplyCalibrationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyCalibration>>,
+    TError,
+    { data: BodyType<ApplyCalibrationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof applyCalibration>>,
+  TError,
+  { data: BodyType<ApplyCalibrationBody> },
+  TContext
+> => {
+  const mutationKey = ["applyCalibration"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof applyCalibration>>,
+    { data: BodyType<ApplyCalibrationBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return applyCalibration(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApplyCalibrationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof applyCalibration>>
+>;
+export type ApplyCalibrationMutationBody = BodyType<ApplyCalibrationBody>;
+export type ApplyCalibrationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Apply calibration changes to scoring config
+ */
+export const useApplyCalibration = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyCalibration>>,
+    TError,
+    { data: BodyType<ApplyCalibrationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof applyCalibration>>,
+  TError,
+  { data: BodyType<ApplyCalibrationBody> },
+  TContext
+> => {
+  return useMutation(getApplyCalibrationMutationOptions(options));
+};
 
 /**
  * Returns aggregate statistics for the platform

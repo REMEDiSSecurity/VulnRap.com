@@ -1,11 +1,27 @@
-import { useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey, type FeedbackAnalytics as FeedbackAnalyticsType, type FeedbackAnalyticsDailyTrendItem, type FeedbackAnalyticsScoreCorrelationItem, type FeedbackAnalyticsOutliersItem, type FeedbackAnalyticsRecentFeedbackItem } from "@workspace/api-client-react";
+import { useState } from "react";
+import {
+  useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey,
+  useGetCalibrationReport, getGetCalibrationReportQueryKey,
+  useGetScoringConfig, getGetScoringConfigQueryKey,
+  applyCalibration,
+  type FeedbackAnalyticsDailyTrendItem,
+  type FeedbackAnalyticsScoreCorrelationItem,
+  type FeedbackAnalyticsOutliersItem,
+  type FeedbackAnalyticsRecentFeedbackItem,
+  type CalibrationSuggestion,
+  type BucketAnalysis,
+} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquare, Star, ThumbsUp, ThumbsDown, TrendingUp, AlertTriangle,
-  BarChart3, Users, ArrowRight, Clock, Hash,
+  BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
+  CheckCircle2, XCircle, Info, Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -169,6 +185,225 @@ function RecentRow({ item }: {
       <span className="text-[10px] text-muted-foreground/50 shrink-0 w-16 text-right">
         {new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
       </span>
+    </div>
+  );
+}
+
+function BucketRow({ bucket }: { bucket: BucketAnalysis }) {
+  const signalConfig = {
+    "accurate": { color: "text-green-400", bg: "bg-green-400/10", icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
+    "over-scoring": { color: "text-red-400", bg: "bg-red-400/10", icon: <XCircle className="w-3.5 h-3.5" /> },
+    "under-scoring": { color: "text-orange-400", bg: "bg-orange-400/10", icon: <AlertTriangle className="w-3.5 h-3.5" /> },
+    "insufficient-data": { color: "text-muted-foreground/50", bg: "bg-muted/10", icon: <Info className="w-3.5 h-3.5" /> },
+  };
+  const cfg = signalConfig[bucket.signal];
+  const signalLabel = bucket.signal.replace("-", " ").replace(/\b\w/g, c => c.toUpperCase());
+
+  return (
+    <div className="flex items-center gap-3 py-3 border-b border-border/20 last:border-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-foreground">{bucket.bucket}</div>
+        <div className="text-[10px] text-muted-foreground">
+          {bucket.feedbackCount} feedback · {bucket.meetsThreshold ? "threshold met" : `needs ${10 - bucket.feedbackCount} more`}
+        </div>
+      </div>
+      <div className="text-right w-16">
+        <div className="text-sm font-bold tabular-nums">{bucket.avgRating > 0 ? bucket.avgRating.toFixed(1) : "—"}</div>
+        <div className="text-[10px] text-muted-foreground">rating</div>
+      </div>
+      <div className="text-right w-16">
+        <div className="text-sm font-bold tabular-nums">{bucket.feedbackCount > 0 ? `${bucket.helpfulPct}%` : "—"}</div>
+        <div className="text-[10px] text-muted-foreground">helpful</div>
+      </div>
+      <Badge variant="outline" className={cn("text-[10px] gap-1", cfg.color, cfg.bg)}>
+        {cfg.icon} {signalLabel}
+      </Badge>
+    </div>
+  );
+}
+
+function SuggestionCard({ suggestion, onApply, applying }: {
+  suggestion: CalibrationSuggestion;
+  onApply: (s: CalibrationSuggestion) => void;
+  applying: boolean;
+}) {
+  const confColor = suggestion.confidence === "high" ? "text-green-400" : suggestion.confidence === "medium" ? "text-yellow-400" : "text-muted-foreground";
+
+  return (
+    <div className="p-4 rounded-lg glass-card border border-border/50 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-primary shrink-0" />
+          <code className="text-xs font-mono text-primary">{suggestion.parameter}</code>
+        </div>
+        <Badge variant="outline" className={cn("text-[10px]", confColor)}>
+          {suggestion.confidence} confidence
+        </Badge>
+      </div>
+      <div className="flex items-center gap-3 text-sm">
+        <span className="tabular-nums text-muted-foreground">{suggestion.currentValue}</span>
+        <ArrowRight className="w-3 h-3 text-muted-foreground" />
+        <span className="tabular-nums font-bold text-foreground">{suggestion.suggestedValue}</span>
+        <span className="text-[10px] text-muted-foreground ml-auto">
+          based on {suggestion.basedOnCount} entries
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed">{suggestion.reason}</p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="gap-2 text-xs"
+        onClick={() => onApply(suggestion)}
+        disabled={applying}
+      >
+        <Play className="w-3 h-3" />
+        {applying ? "Applying..." : "Apply This Change"}
+      </Button>
+    </div>
+  );
+}
+
+function CalibrationSection() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [applying, setApplying] = useState(false);
+
+  const { data: calibration, isLoading: calLoading } = useGetCalibrationReport({
+    query: {
+      queryKey: getGetCalibrationReportQueryKey(),
+      refetchInterval: 120_000,
+    },
+  });
+
+  const { data: configData } = useGetScoringConfig({
+    query: {
+      queryKey: getGetScoringConfigQueryKey(),
+    },
+  });
+
+  const handleApply = async (suggestion: CalibrationSuggestion) => {
+    setApplying(true);
+    try {
+      const parts = suggestion.parameter.split(".");
+      let changes: Record<string, unknown>;
+      if (parts.length === 2) {
+        changes = { [parts[0]]: { [parts[1]]: suggestion.suggestedValue } };
+      } else {
+        changes = { [suggestion.parameter]: suggestion.suggestedValue };
+      }
+
+      await applyCalibration({
+        changes,
+        description: `Auto-calibration: ${suggestion.parameter} ${suggestion.currentValue} → ${suggestion.suggestedValue}. ${suggestion.reason}`,
+      });
+
+      toast({ title: "Config updated", description: `${suggestion.parameter} changed to ${suggestion.suggestedValue}. New version applied.` });
+      queryClient.invalidateQueries({ queryKey: getGetCalibrationReportQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetScoringConfigQueryKey() });
+    } catch {
+      toast({ title: "Error", description: "Failed to apply calibration change.", variant: "destructive" });
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  if (calLoading) {
+    return <Skeleton className="h-64 rounded-xl" />;
+  }
+
+  if (!calibration) return null;
+
+  const healthColor = calibration.overallHealth === "good"
+    ? "text-green-400 bg-green-400/10"
+    : calibration.overallHealth === "needs-attention"
+      ? "text-yellow-400 bg-yellow-400/10"
+      : "text-red-400 bg-red-400/10";
+  const healthLabel = calibration.overallHealth.replace("-", " ").replace(/\b\w/g, c => c.toUpperCase());
+
+  return (
+    <div className="space-y-6">
+      <Card className="glass-card rounded-xl border-primary/10">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Settings className="w-4 h-4 text-primary" />
+              Scoring Calibration
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className={cn("text-[10px] gap-1", healthColor)}>
+                <Shield className="w-3 h-3" /> {healthLabel}
+              </Badge>
+              {configData?.current && (
+                <Badge variant="secondary" className="text-[10px]">
+                  v{configData.current.version}
+                </Badge>
+              )}
+            </div>
+          </div>
+          <CardDescription>
+            Feedback-driven analysis of scoring accuracy per score range.
+            {calibration.totalFeedbackAnalyzed > 0
+              ? ` Analyzing ${calibration.totalFeedbackAnalyzed} feedback entries.`
+              : " No linked feedback to analyze yet."}
+            {" "}Minimum {calibration.minFeedbackThreshold} entries per bucket before suggesting changes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {calibration.bucketAnalysis.map((bucket: BucketAnalysis) => (
+            <BucketRow key={bucket.bucket} bucket={bucket} />
+          ))}
+        </CardContent>
+      </Card>
+
+      {calibration.suggestions.length > 0 && (
+        <Card className="glass-card rounded-xl border-primary/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Zap className="w-4 h-4 text-primary" />
+              Suggested Adjustments
+              <Badge variant="secondary" className="ml-auto text-[10px]">{calibration.suggestions.length}</Badge>
+            </CardTitle>
+            <CardDescription>
+              Data-driven tuning suggestions based on feedback patterns. Each change creates a new scoring config version.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {calibration.suggestions.map((s: CalibrationSuggestion, i: number) => (
+              <SuggestionCard key={i} suggestion={s} onApply={handleApply} applying={applying} />
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {configData && configData.history.length > 1 && (
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
+              Config Version History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {[...configData.history].reverse().map((cfg, i) => (
+                <div key={cfg.version} className={cn(
+                  "flex items-center gap-3 py-2 border-b border-border/20 last:border-0",
+                  i === 0 && "text-foreground",
+                  i > 0 && "text-muted-foreground"
+                )}>
+                  <Badge variant={i === 0 ? "default" : "outline"} className="text-[10px]">
+                    v{cfg.version}
+                  </Badge>
+                  <span className="text-xs flex-1">{cfg.description}</span>
+                  <span className="text-[10px] text-muted-foreground/50 shrink-0">
+                    {new Date(cfg.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -339,6 +574,8 @@ export default function FeedbackAnalytics() {
           </CardContent>
         </Card>
       </div>
+
+      <CalibrationSection />
 
       {dailyTrend.length > 0 && (
         <Card className="glass-card rounded-xl">

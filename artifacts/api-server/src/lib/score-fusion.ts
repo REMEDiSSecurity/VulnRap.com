@@ -3,6 +3,7 @@ import type { FactualResult } from "./factual-verification";
 import type { LLMSlopResult } from "./llm-slop";
 import { detectHumanIndicators, type HumanIndicator } from "./human-indicators";
 import type { VerificationResult } from "./active-verification";
+import { getCurrentConfig, getConfigVersion } from "./scoring-config";
 
 export interface ScoreBreakdown {
   linguistic: number;
@@ -13,6 +14,7 @@ export interface ScoreBreakdown {
   quality: number;
   llmUsed?: boolean;
   redactionApplied?: boolean;
+  scoringConfigVersion?: string;
 }
 
 export interface EvidenceItem {
@@ -42,30 +44,30 @@ const DEFAULT_THRESHOLDS: TierThresholds = {
   high: 75,
 };
 
-const PRIOR = 15;
-const FLOOR = 5;
-const CEILING = 95;
-
-const AXIS_THRESHOLDS: Record<string, number> = {
-  linguistic: 10,
-  factual: 10,
-  template: 5,
-  llm: 20,
-  verification: 55,
-};
+export function loadScoringParams() {
+  const config = getCurrentConfig();
+  return {
+    PRIOR: config.prior,
+    FLOOR: config.floor,
+    CEILING: config.ceiling,
+    AXIS_THRESHOLDS: config.axisThresholds,
+    FABRICATION_BOOST: config.fabricationBoost,
+  };
+}
 
 export function loadThresholds(): TierThresholds {
-  const low = parseInt(process.env.SLOP_THRESHOLD_LOW || "", 10);
-  const high = parseInt(process.env.SLOP_THRESHOLD_HIGH || "", 10);
+  const config = getCurrentConfig();
+  const envLow = parseInt(process.env.SLOP_THRESHOLD_LOW || "", 10);
+  const envHigh = parseInt(process.env.SLOP_THRESHOLD_HIGH || "", 10);
 
-  const validLow = !isNaN(low) && low >= 0 && low <= 100 ? low : DEFAULT_THRESHOLDS.low;
-  const validHigh = !isNaN(high) && high >= 0 && high <= 100 ? high : DEFAULT_THRESHOLDS.high;
+  const low = !isNaN(envLow) && envLow >= 0 && envLow <= 100 ? envLow : config.tierThresholds.low;
+  const high = !isNaN(envHigh) && envHigh >= 0 && envHigh <= 100 ? envHigh : config.tierThresholds.high;
 
-  if (validLow >= validHigh) {
-    return DEFAULT_THRESHOLDS;
+  if (low >= high) {
+    return { low: config.tierThresholds.low, high: config.tierThresholds.high };
   }
 
-  return { low: validLow, high: validHigh };
+  return { low, high };
 }
 
 export function fuseScores(
@@ -78,6 +80,7 @@ export function fuseScores(
   verification?: VerificationResult | null,
 ): FusionResult {
   const thr = thresholds ?? loadThresholds();
+  const params = loadScoringParams();
 
   const allEvidence: EvidenceItem[] = [
     ...linguistic.evidence,
@@ -142,25 +145,25 @@ export function fuseScores(
   }
 
   const activeAxes = axisScores.filter(
-    a => a.score > (AXIS_THRESHOLDS[a.name] ?? 10)
+    a => a.score > (params.AXIS_THRESHOLDS[a.name] ?? 10)
   );
 
   let slopScore: number;
 
   if (activeAxes.length === 0) {
-    slopScore = PRIOR;
+    slopScore = params.PRIOR;
   } else {
     const probabilities = activeAxes.map(a => {
       let p = a.score / 100;
       if (hasFabricationBoost && a.name === "factual") {
-        p = Math.min(1, p * 1.3);
+        p = Math.min(1, p * params.FABRICATION_BOOST);
       }
       return Math.max(0, Math.min(0.95, p));
     });
 
     const combinedP = 1 - probabilities.reduce((prod, p) => prod * (1 - p), 1);
 
-    slopScore = Math.round(PRIOR + combinedP * (CEILING - PRIOR));
+    slopScore = Math.round(params.PRIOR + combinedP * (params.CEILING - params.PRIOR));
   }
 
   const humanResult = detectHumanIndicators(originalText);
@@ -169,11 +172,11 @@ export function fuseScores(
     const verifiedCount = verification.checks.filter(c => c.result === "verified").length;
     if (verifiedCount > 0) {
       const verifiedReduction = Math.min(verifiedCount * -3, -1);
-      slopScore = Math.max(FLOOR, slopScore + verifiedReduction);
+      slopScore = Math.max(params.FLOOR, slopScore + verifiedReduction);
     }
   }
 
-  slopScore = Math.max(FLOOR, slopScore + humanResult.totalReduction);
+  slopScore = Math.max(params.FLOOR, slopScore + humanResult.totalReduction);
 
   slopScore = Math.min(100, Math.max(0, slopScore));
 
@@ -199,6 +202,7 @@ export function fuseScores(
     llm: llm ? Math.round(llm.llmSlopScore) : null,
     verification: verification && verification.checks.length > 0 ? verification.score : null,
     quality: Math.round(qualityScore),
+    scoringConfigVersion: getConfigVersion(),
   };
 
   return {
@@ -218,6 +222,7 @@ export function recomputeSlopScoreWithoutLlm(
   originalText: string,
 ): { slopScore: number; confidence: number; slopTier: string } {
   const thr = loadThresholds();
+  const params = loadScoringParams();
 
   const hasFabricationBoost = evidenceItems.some(
     e => e.type === "hallucinated_function" || e.type === "fabricated_cve" || e.type === "future_cve" || e.type === "fake_asan"
@@ -233,26 +238,26 @@ export function recomputeSlopScoreWithoutLlm(
   }
 
   const activeAxes = axisScores.filter(
-    a => a.score > (AXIS_THRESHOLDS[a.name] ?? 10)
+    a => a.score > (params.AXIS_THRESHOLDS[a.name] ?? 10)
   );
 
   let slopScore: number;
   if (activeAxes.length === 0) {
-    slopScore = PRIOR;
+    slopScore = params.PRIOR;
   } else {
     const probabilities = activeAxes.map(a => {
       let p = a.score / 100;
       if (hasFabricationBoost && a.name === "factual") {
-        p = Math.min(1, p * 1.3);
+        p = Math.min(1, p * params.FABRICATION_BOOST);
       }
       return Math.max(0, Math.min(0.95, p));
     });
     const combinedP = 1 - probabilities.reduce((prod, p) => prod * (1 - p), 1);
-    slopScore = Math.round(PRIOR + combinedP * (CEILING - PRIOR));
+    slopScore = Math.round(params.PRIOR + combinedP * (params.CEILING - params.PRIOR));
   }
 
   const humanResult = detectHumanIndicators(originalText);
-  slopScore = Math.max(FLOOR, slopScore + humanResult.totalReduction);
+  slopScore = Math.max(params.FLOOR, slopScore + humanResult.totalReduction);
   slopScore = Math.min(100, Math.max(0, slopScore));
 
   const nonLlmEvidence = evidenceItems.filter(e => e.type !== "llm_red_flag" && e.type !== "llm_observation");

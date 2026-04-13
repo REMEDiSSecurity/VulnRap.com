@@ -38,7 +38,7 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
     - Home/Submit page with drag-and-drop upload, privacy mode selection, and Analysis Options toggles (Skip AI analysis, Disable PII redaction with auto-skip-AI guardrail).
     - Analysis Results page displaying dual scores (AI Likelihood + Report Quality), confidence gauge (semicircular SVG), per-axis breakdown (Linguistic/Factual/Template/LLM), LLM radar chart (5-dimension spider chart), evidence signals with weight badges, evidence-highlighted report text with inline citations, redaction summary, similarity matches, and section-level analysis.
     - Analysis progress stepper component showing pipeline stages (Upload → Redact → Linguistic → Factual → Template/Similarity → LLM/Scoring → Triage) during submission/check.
-    - Feedback Analytics dashboard (`/feedback-analytics`) with summary stats, rating distribution, score-vs-feedback correlation, outlier detection, daily trends, and recent feedback feed.
+    - Feedback Analytics dashboard (`/feedback-analytics`) with summary stats, rating distribution, score-vs-feedback correlation, outlier detection, daily trends, recent feedback feed, and scoring calibration section with per-bucket analysis, volume-gated tuning suggestions, and config version history.
     - Batch Upload and Compare Two Reports functionalities.
     - Session History and Export/Download options.
     - Public verification page (`/verify/:id`) for sharing analysis results.
@@ -52,6 +52,9 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
 - **Auto-Redaction Engine**: Deterministic regex-based redaction of PII/secrets, applied before analysis or storage. Can be toggled via `skipRedaction` parameter (forces `skipLlm=true` to prevent unredacted data from reaching external APIs).
 - **Analysis Options**: `skipLlm` and `skipRedaction` query params on POST `/reports` and `/reports/check`. Flags (`llmUsed`, `redactionApplied`) are persisted in the `breakdown` JSONB column and returned by GET `/reports/:id`.
 - **Feedback Analytics**: GET `/feedback/analytics` returns aggregated stats (avg rating, helpfulness rate, rating distribution, daily trends, score-vs-feedback correlation by slop bucket, outlier reports where user feedback disagrees with engine scoring, and recent feedback entries).
+- **Proof-of-Work Bot Protection**: Feedback submissions require solving a SHA-256 proof-of-work challenge (difficulty 4, ~200ms client-side). GET `/feedback/challenge` issues challenges; POST `/feedback` validates solutions before accepting. Challenges are single-use with 5-minute TTL.
+- **Scoring Config Versioning**: All scoring parameters (prior, floor, ceiling, axis thresholds, tier thresholds, fabrication boost) are centralized in `scoring-config.ts`. Each scored report is stamped with `scoringConfigVersion` in its breakdown JSONB. Config history tracks all versions.
+- **Feedback-Driven Calibration Engine**: GET `/feedback/calibration` analyzes feedback against scores per bucket, with volume gating (minimum 10 entries per bucket). Generates tuning suggestions (threshold/weight adjustments) with confidence levels. POST `/feedback/calibration/apply` creates new config versions. GET `/feedback/calibration/config` returns current config and version history.
 - **Section Parser**: Parses reports into logical sections, hashes them with SHA-256, and classifies their value.
 - **Similarity Engine**: Uses MinHash + Locality Sensitive Hashing (LSH), Simhash, and SHA-256 for near-duplicate and exact-match detection.
 - **Multi-Axis Scoring Engine (v3.0)**:

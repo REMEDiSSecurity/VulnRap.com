@@ -3,26 +3,51 @@ import { db } from "@workspace/db";
 import { userFeedbackTable, reportsTable } from "@workspace/db";
 import { SubmitFeedbackBody } from "@workspace/api-zod";
 import { sql, eq, desc, gte, and, isNotNull } from "drizzle-orm";
+import { generateChallenge, verifyChallenge } from "../lib/challenge";
 
 const router: IRouter = Router();
 
+router.get("/feedback/challenge", (_req, res) => {
+  try {
+    const challenge = generateChallenge();
+    res.json(challenge);
+  } catch (err) {
+    _req.log?.error(err, "Failed to generate challenge");
+    res.status(500).json({ error: "Failed to generate challenge." });
+  }
+});
+
 router.post("/feedback", async (req, res) => {
   try {
-    const parsed = SubmitFeedbackBody.safeParse(req.body);
+    const { challengeId, challengeSolution, reportId, rating, helpful, comment } = req.body;
 
-    if (!parsed.success) {
-      res.status(400).json({ error: "Invalid feedback data. Rating (1-5) and helpful (true/false) are required." });
+    if (!challengeId || typeof challengeId !== "string" || !challengeSolution || typeof challengeSolution !== "string") {
+      res.status(400).json({ error: "Proof-of-work challenge is required. Fetch a challenge from GET /feedback/challenge first." });
       return;
     }
 
-    const { reportId, rating, helpful, comment } = parsed.data;
+    const challengeResult = verifyChallenge(challengeId, challengeSolution);
+    if (!challengeResult.valid) {
+      res.status(403).json({ error: challengeResult.error });
+      return;
+    }
 
-    const trimmedComment = comment?.trim().slice(0, 1000) || null;
+    if (typeof rating !== "number" || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+      res.status(400).json({ error: "Rating must be an integer from 1 to 5." });
+      return;
+    }
+    if (typeof helpful !== "boolean") {
+      res.status(400).json({ error: "helpful must be a boolean." });
+      return;
+    }
+
+    const trimmedComment = typeof comment === "string" ? comment.trim().slice(0, 1000) || null : null;
+    const validReportId = typeof reportId === "number" && Number.isInteger(reportId) ? reportId : null;
 
     const [inserted] = await db
       .insert(userFeedbackTable)
       .values({
-        reportId: reportId ?? null,
+        reportId: validReportId,
         rating,
         helpful,
         comment: trimmedComment,

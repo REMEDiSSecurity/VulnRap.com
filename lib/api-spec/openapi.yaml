@@ -341,18 +341,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReportFeed"
 
+  /feedback/challenge:
+    get:
+      operationId: getFeedbackChallenge
+      tags: [feedback]
+      summary: Get a proof-of-work challenge for feedback submission
+      description: Returns a SHA-256 proof-of-work challenge that must be solved before submitting feedback. This prevents automated spam.
+      responses:
+        "200":
+          description: Challenge issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackChallenge"
+
   /feedback:
     post:
       operationId: submitFeedback
       tags: [feedback]
       summary: Submit user feedback about the tool
-      description: Allows users to share whether the tool was helpful and suggest improvements
+      description: Allows users to share whether the tool was helpful and suggest improvements. Requires a solved proof-of-work challenge.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SubmitFeedbackBody"
+              $ref: "#/components/schemas/SubmitFeedbackWithChallenge"
       responses:
         "201":
           description: Feedback submitted successfully
@@ -362,6 +376,12 @@ paths:
                 $ref: "#/components/schemas/FeedbackResponse"
         "400":
           description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Challenge verification failed
           content:
             application/json:
               schema:
@@ -380,6 +400,60 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeedbackAnalytics"
+
+  /feedback/calibration:
+    get:
+      operationId: getCalibrationReport
+      tags: [feedback]
+      summary: Get calibration report with tuning suggestions
+      description: Analyzes feedback data against scoring results to suggest weight and threshold adjustments. Uses volume gating to ensure suggestions are based on sufficient data.
+      responses:
+        "200":
+          description: Calibration report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalibrationReport"
+
+  /feedback/calibration/config:
+    get:
+      operationId: getScoringConfig
+      tags: [feedback]
+      summary: Get current and historical scoring configurations
+      description: Returns the active scoring config version and full version history.
+      responses:
+        "200":
+          description: Scoring config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoringConfigResponse"
+
+  /feedback/calibration/apply:
+    post:
+      operationId: applyCalibration
+      tags: [feedback]
+      summary: Apply calibration changes to scoring config
+      description: Creates a new scoring configuration version with the specified changes. All subsequent reports will be scored with the new config.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyCalibrationBody"
+      responses:
+        "201":
+          description: Config updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyCalibrationResponse"
+        "400":
+          description: Invalid changes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /stats:
     get:
@@ -1492,6 +1566,51 @@ components:
         - rating
         - helpful
 
+    SubmitFeedbackWithChallenge:
+      type: object
+      properties:
+        challengeId:
+          type: string
+          description: The challenge ID from GET /feedback/challenge
+        challengeSolution:
+          type: string
+          description: The computed solution to the proof-of-work challenge
+        reportId:
+          type: integer
+          description: The report ID this feedback is about (optional)
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Rating from 1 (not useful) to 5 (very useful)
+        helpful:
+          type: boolean
+          description: Whether the tool was helpful overall
+        comment:
+          type: string
+          maxLength: 1000
+          description: Optional free-text suggestions for improvement
+      required:
+        - challengeId
+        - challengeSolution
+        - rating
+        - helpful
+
+    FeedbackChallenge:
+      type: object
+      properties:
+        challengeId:
+          type: string
+        nonce:
+          type: string
+        difficulty:
+          type: integer
+        prefix:
+          type: string
+        expiresAt:
+          type: number
+      required: [challengeId, nonce, difficulty, prefix, expiresAt]
+
     FeedbackResponse:
       type: object
       properties:
@@ -1611,3 +1730,129 @@ components:
                 nullable: true
             required: [feedbackId, rating, helpful, createdAt]
       required: [summary, ratingDistribution, dailyTrend, scoreCorrelation, outliers, recentFeedback]
+
+    ScoringConfigItem:
+      type: object
+      properties:
+        version:
+          type: string
+        createdAt:
+          type: string
+        prior:
+          type: number
+        floor:
+          type: number
+        ceiling:
+          type: number
+        axisThresholds:
+          type: object
+          additionalProperties:
+            type: number
+        tierThresholds:
+          type: object
+          properties:
+            low:
+              type: number
+            high:
+              type: number
+          required: [low, high]
+        fabricationBoost:
+          type: number
+        description:
+          type: string
+      required: [version, createdAt, prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost, description]
+
+    ScoringConfigResponse:
+      type: object
+      properties:
+        current:
+          $ref: "#/components/schemas/ScoringConfigItem"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoringConfigItem"
+      required: [current, history]
+
+    BucketAnalysis:
+      type: object
+      properties:
+        bucket:
+          type: string
+        scoreRange:
+          type: array
+          items:
+            type: number
+        feedbackCount:
+          type: integer
+        avgRating:
+          type: number
+        helpfulPct:
+          type: number
+        meetsThreshold:
+          type: boolean
+        signal:
+          type: string
+          enum: [accurate, over-scoring, under-scoring, insufficient-data]
+        ratingDeviation:
+          type: number
+      required: [bucket, scoreRange, feedbackCount, avgRating, helpfulPct, meetsThreshold, signal, ratingDeviation]
+
+    CalibrationSuggestion:
+      type: object
+      properties:
+        parameter:
+          type: string
+        currentValue:
+          type: number
+        suggestedValue:
+          type: number
+        reason:
+          type: string
+        confidence:
+          type: string
+          enum: [low, medium, high]
+        basedOnCount:
+          type: integer
+      required: [parameter, currentValue, suggestedValue, reason, confidence, basedOnCount]
+
+    CalibrationReport:
+      type: object
+      properties:
+        currentConfig:
+          $ref: "#/components/schemas/ScoringConfigItem"
+        totalFeedbackAnalyzed:
+          type: integer
+        bucketAnalysis:
+          type: array
+          items:
+            $ref: "#/components/schemas/BucketAnalysis"
+        suggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalibrationSuggestion"
+        overallHealth:
+          type: string
+          enum: [good, needs-attention, needs-tuning]
+        minFeedbackThreshold:
+          type: integer
+      required: [currentConfig, totalFeedbackAnalyzed, bucketAnalysis, suggestions, overallHealth, minFeedbackThreshold]
+
+    ApplyCalibrationBody:
+      type: object
+      properties:
+        changes:
+          type: object
+          description: Object with scoring config changes (prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost)
+        description:
+          type: string
+          description: Description of why this change is being made
+      required: [changes, description]
+
+    ApplyCalibrationResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        config:
+          $ref: "#/components/schemas/ScoringConfigItem"
+      required: [message, config]

@@ -1119,7 +1119,19 @@ export const GetReportFeedResponse = zod.object({
 });
 
 /**
- * Allows users to share whether the tool was helpful and suggest improvements
+ * Returns a SHA-256 proof-of-work challenge that must be solved before submitting feedback. This prevents automated spam.
+ * @summary Get a proof-of-work challenge for feedback submission
+ */
+export const GetFeedbackChallengeResponse = zod.object({
+  challengeId: zod.string(),
+  nonce: zod.string(),
+  difficulty: zod.number(),
+  prefix: zod.string(),
+  expiresAt: zod.number(),
+});
+
+/**
+ * Allows users to share whether the tool was helpful and suggest improvements. Requires a solved proof-of-work challenge.
  * @summary Submit user feedback about the tool
  */
 export const submitFeedbackBodyRatingMax = 5;
@@ -1127,6 +1139,12 @@ export const submitFeedbackBodyRatingMax = 5;
 export const submitFeedbackBodyCommentMax = 1000;
 
 export const SubmitFeedbackBody = zod.object({
+  challengeId: zod
+    .string()
+    .describe("The challenge ID from GET \/feedback\/challenge"),
+  challengeSolution: zod
+    .string()
+    .describe("The computed solution to the proof-of-work challenge"),
   reportId: zod
     .number()
     .optional()
@@ -1200,6 +1218,110 @@ export const GetFeedbackAnalyticsResponse = zod.object({
       slopTier: zod.string().nullish(),
     }),
   ),
+});
+
+/**
+ * Analyzes feedback data against scoring results to suggest weight and threshold adjustments. Uses volume gating to ensure suggestions are based on sufficient data.
+ * @summary Get calibration report with tuning suggestions
+ */
+export const GetCalibrationReportResponse = zod.object({
+  currentConfig: zod.object({
+    version: zod.string(),
+    createdAt: zod.string(),
+    prior: zod.number(),
+    floor: zod.number(),
+    ceiling: zod.number(),
+    axisThresholds: zod.record(zod.string(), zod.number()),
+    tierThresholds: zod.object({
+      low: zod.number(),
+      high: zod.number(),
+    }),
+    fabricationBoost: zod.number(),
+    description: zod.string(),
+  }),
+  totalFeedbackAnalyzed: zod.number(),
+  bucketAnalysis: zod.array(
+    zod.object({
+      bucket: zod.string(),
+      scoreRange: zod.array(zod.number()),
+      feedbackCount: zod.number(),
+      avgRating: zod.number(),
+      helpfulPct: zod.number(),
+      meetsThreshold: zod.boolean(),
+      signal: zod.enum([
+        "accurate",
+        "over-scoring",
+        "under-scoring",
+        "insufficient-data",
+      ]),
+      ratingDeviation: zod.number(),
+    }),
+  ),
+  suggestions: zod.array(
+    zod.object({
+      parameter: zod.string(),
+      currentValue: zod.number(),
+      suggestedValue: zod.number(),
+      reason: zod.string(),
+      confidence: zod.enum(["low", "medium", "high"]),
+      basedOnCount: zod.number(),
+    }),
+  ),
+  overallHealth: zod.enum(["good", "needs-attention", "needs-tuning"]),
+  minFeedbackThreshold: zod.number(),
+});
+
+/**
+ * Returns the active scoring config version and full version history.
+ * @summary Get current and historical scoring configurations
+ */
+export const GetScoringConfigResponse = zod.object({
+  current: zod.object({
+    version: zod.string(),
+    createdAt: zod.string(),
+    prior: zod.number(),
+    floor: zod.number(),
+    ceiling: zod.number(),
+    axisThresholds: zod.record(zod.string(), zod.number()),
+    tierThresholds: zod.object({
+      low: zod.number(),
+      high: zod.number(),
+    }),
+    fabricationBoost: zod.number(),
+    description: zod.string(),
+  }),
+  history: zod.array(
+    zod.object({
+      version: zod.string(),
+      createdAt: zod.string(),
+      prior: zod.number(),
+      floor: zod.number(),
+      ceiling: zod.number(),
+      axisThresholds: zod.record(zod.string(), zod.number()),
+      tierThresholds: zod.object({
+        low: zod.number(),
+        high: zod.number(),
+      }),
+      fabricationBoost: zod.number(),
+      description: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * Creates a new scoring configuration version with the specified changes. All subsequent reports will be scored with the new config.
+ * @summary Apply calibration changes to scoring config
+ */
+export const ApplyCalibrationBody = zod.object({
+  changes: zod
+    .object({})
+    .passthrough()
+    .describe(
+      "Object with scoring config changes (prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost)",
+    ),
+  description: zod
+    .string()
+    .describe("Description of why this change is being made"),
 });
 
 /**
