@@ -575,13 +575,13 @@
   100% { transform: translateY(100vh); }
 }
 
-/* Logo beam SVG overlay */
+/* Logo beam SVG overlay — matches logo laser angles exactly */
 .logo-beams {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 800px;
-  height: 300px;
+  width: 600px;
+  height: 600px;
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 1;
@@ -592,29 +592,87 @@
   height: 100%;
 }
 
-.beam-line {
+/* Scan beams — idle at low opacity, charge-fire cycle every ~10s */
+.scan-beam {
+  opacity: 0.25;
+  stroke-dasharray: 450;
+  stroke-dashoffset: 0;
+  animation: scan-fire 10s ease-in-out infinite;
+}
+
+/* Cyan pair: top-left ↔ bottom-right (matches logo \ diagonal) */
+.scan-beam-cyan-1 { animation-delay: 0s; }
+.scan-beam-cyan-2 { animation-delay: 0.15s; }
+
+/* Magenta pair: top-right ↔ bottom-left (matches logo / diagonal) */
+.scan-beam-mag-1 { animation-delay: 5s; }
+.scan-beam-mag-2 { animation-delay: 5.15s; }
+
+@keyframes scan-fire {
+  0%, 70% {
+    opacity: 0.2;
+    stroke-dashoffset: 0;
+    filter: url(#beam-glow);
+  }
+  75% {
+    opacity: 0.15;
+    stroke-dashoffset: 450;
+  }
+  80% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+    filter: url(#beam-glow) brightness(1.8);
+  }
+  85% {
+    opacity: 0.9;
+  }
+  92% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0.2;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Core intersection point — pulses with scan rhythm */
+.scan-core-dot {
+  animation: core-pulse 10s ease-in-out infinite;
+}
+
+@keyframes core-pulse {
+  0%, 70% { opacity: 0.3; r: 2; }
+  78% { opacity: 0.1; r: 1; }
+  80% { opacity: 1; r: 5; }
+  85% { opacity: 0.8; r: 4; }
+  100% { opacity: 0.3; r: 2; }
+}
+
+.scan-core-ring {
+  animation: core-ring 10s ease-in-out infinite;
+}
+
+@keyframes core-ring {
+  0%, 70% { opacity: 0.08; r: 6; }
+  80% { opacity: 0.4; r: 12; }
+  90% { opacity: 0.1; r: 8; }
+  100% { opacity: 0.08; r: 6; }
+}
+
+/* Ripple rings — expand outward on fire */
+.scan-ripple {
   opacity: 0;
-  animation: beam-appear 1.5s ease-out forwards;
+  animation: scan-ripple-expand 10s ease-out infinite;
 }
 
-.beam-line-1 { animation-delay: 0.2s; }
-.beam-line-2 { animation-delay: 0.4s; }
-.beam-line-3 { animation-delay: 0.6s; }
-.beam-line-4 { animation-delay: 0.8s; }
+.scan-ripple-1 { animation-delay: 0s; }
+.scan-ripple-2 { animation-delay: 5.2s; }
 
-@keyframes beam-appear {
-  0% { opacity: 0; stroke-dasharray: 1000; stroke-dashoffset: 1000; }
-  50% { opacity: 1; }
-  100% { opacity: 0.7; stroke-dashoffset: 0; }
-}
-
-.beam-origin-pulse {
-  animation: origin-pulse 3s ease-in-out infinite;
-}
-
-@keyframes origin-pulse {
-  0%, 100% { r: 3; opacity: 0.4; }
-  50% { r: 6; opacity: 0.8; }
+@keyframes scan-ripple-expand {
+  0%, 78% { r: 10; opacity: 0; stroke-width: 1; }
+  80% { r: 10; opacity: 0.25; stroke-width: 1; }
+  92% { r: 80; opacity: 0; stroke-width: 0.3; }
+  100% { r: 80; opacity: 0; stroke-width: 0.3; }
 }
 
 /* Ensure main content is above laser effects */

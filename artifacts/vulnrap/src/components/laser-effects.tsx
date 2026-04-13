@@ -91,33 +91,46 @@ export function LogoBeams() {
   return (
     <div className="logo-beams" aria-hidden="true">
       <svg
-        viewBox="0 0 800 300"
+        viewBox="0 0 600 600"
         className="logo-beams-svg"
-        preserveAspectRatio="xMidYMid slice"
+        preserveAspectRatio="xMidYMid meet"
       >
         <defs>
-          <linearGradient id="cyan-beam-l" x1="50%" y1="50%" x2="0%" y2="0%">
-            <stop offset="0%" stopColor="rgba(0,255,255,0.5)" />
-            <stop offset="40%" stopColor="rgba(0,255,255,0.15)" />
-            <stop offset="100%" stopColor="rgba(0,255,255,0)" />
+          <linearGradient id="cyan-beam-ul" x1="300" y1="300" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#00FFFF" stopOpacity="0.7" />
+            <stop offset="30%" stopColor="#00FFFF" stopOpacity="0.3" />
+            <stop offset="70%" stopColor="#00FFFF" stopOpacity="0.06" />
+            <stop offset="100%" stopColor="#00FFFF" stopOpacity="0" />
           </linearGradient>
-          <linearGradient id="cyan-beam-r" x1="50%" y1="50%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="rgba(0,255,255,0.5)" />
-            <stop offset="40%" stopColor="rgba(0,255,255,0.15)" />
-            <stop offset="100%" stopColor="rgba(0,255,255,0)" />
+          <linearGradient id="cyan-beam-lr" x1="300" y1="300" x2="600" y2="600" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#00FFFF" stopOpacity="0.7" />
+            <stop offset="30%" stopColor="#00FFFF" stopOpacity="0.3" />
+            <stop offset="70%" stopColor="#00FFFF" stopOpacity="0.06" />
+            <stop offset="100%" stopColor="#00FFFF" stopOpacity="0" />
           </linearGradient>
-          <linearGradient id="mag-beam-l" x1="50%" y1="50%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="rgba(200,50,255,0.5)" />
-            <stop offset="40%" stopColor="rgba(200,50,255,0.15)" />
-            <stop offset="100%" stopColor="rgba(200,50,255,0)" />
+
+          <linearGradient id="mag-beam-ur" x1="300" y1="300" x2="600" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#C832FF" stopOpacity="0.65" />
+            <stop offset="30%" stopColor="#C832FF" stopOpacity="0.25" />
+            <stop offset="70%" stopColor="#C832FF" stopOpacity="0.05" />
+            <stop offset="100%" stopColor="#C832FF" stopOpacity="0" />
           </linearGradient>
-          <linearGradient id="mag-beam-r" x1="50%" y1="50%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="rgba(200,50,255,0.5)" />
-            <stop offset="40%" stopColor="rgba(200,50,255,0.15)" />
-            <stop offset="100%" stopColor="rgba(200,50,255,0)" />
+          <linearGradient id="mag-beam-ll" x1="300" y1="300" x2="0" y2="600" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#C832FF" stopOpacity="0.65" />
+            <stop offset="30%" stopColor="#C832FF" stopOpacity="0.25" />
+            <stop offset="70%" stopColor="#C832FF" stopOpacity="0.05" />
+            <stop offset="100%" stopColor="#C832FF" stopOpacity="0" />
           </linearGradient>
+
           <filter id="beam-glow">
-            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="core-glow">
+            <feGaussianBlur stdDeviation="6" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -125,13 +138,25 @@ export function LogoBeams() {
           </filter>
         </defs>
 
-        <line x1="400" y1="150" x2="0" y2="30" stroke="url(#cyan-beam-l)" strokeWidth="1.5" filter="url(#beam-glow)" className="beam-line beam-line-1" />
-        <line x1="400" y1="150" x2="800" y2="270" stroke="url(#cyan-beam-r)" strokeWidth="1.5" filter="url(#beam-glow)" className="beam-line beam-line-2" />
+        <line x1="300" y1="300" x2="20" y2="20"
+          stroke="url(#cyan-beam-ul)" strokeWidth="2" strokeLinecap="round"
+          filter="url(#beam-glow)" className="scan-beam scan-beam-cyan-1" />
+        <line x1="300" y1="300" x2="580" y2="580"
+          stroke="url(#cyan-beam-lr)" strokeWidth="2" strokeLinecap="round"
+          filter="url(#beam-glow)" className="scan-beam scan-beam-cyan-2" />
 
-        <line x1="400" y1="150" x2="50" y2="280" stroke="url(#mag-beam-l)" strokeWidth="1" filter="url(#beam-glow)" className="beam-line beam-line-3" />
-        <line x1="400" y1="150" x2="750" y2="20" stroke="url(#mag-beam-r)" strokeWidth="1" filter="url(#beam-glow)" className="beam-line beam-line-4" />
+        <line x1="300" y1="300" x2="580" y2="20"
+          stroke="url(#mag-beam-ur)" strokeWidth="1.5" strokeLinecap="round"
+          filter="url(#beam-glow)" className="scan-beam scan-beam-mag-1" />
+        <line x1="300" y1="300" x2="20" y2="580"
+          stroke="url(#mag-beam-ll)" strokeWidth="1.5" strokeLinecap="round"
+          filter="url(#beam-glow)" className="scan-beam scan-beam-mag-2" />
 
-        <circle cx="400" cy="150" r="4" fill="rgba(0,255,255,0.6)" className="beam-origin-pulse" />
+        <circle cx="300" cy="300" r="8" fill="rgba(255,255,255,0.15)" className="scan-core-ring" filter="url(#core-glow)" />
+        <circle cx="300" cy="300" r="3" fill="rgba(0,255,255,0.5)" className="scan-core-dot" />
+
+        <circle cx="300" cy="300" r="20" fill="none" stroke="rgba(0,255,255,0.1)" strokeWidth="0.5" className="scan-ripple scan-ripple-1" />
+        <circle cx="300" cy="300" r="20" fill="none" stroke="rgba(200,50,255,0.08)" strokeWidth="0.5" className="scan-ripple scan-ripple-2" />
       </svg>
     </div>
   );

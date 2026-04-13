@@ -65,19 +65,17 @@
 </g>
 
 <g transform="translate(90,60)">
+<line x1="-22" y1="-22" x2="-65" y2="-65" stroke="#00FFFF" stroke-width="2.5" stroke-linecap="round" opacity="0.6" filter="url(#glow-filter)"/>
+<line x1="22" y1="22" x2="65" y2="65" stroke="#00FFFF" stroke-width="2.5" stroke-linecap="round" opacity="0.5" filter="url(#glow-filter)"/>
+<line x1="22" y1="-22" x2="65" y2="-65" stroke="#C832FF" stroke-width="2" stroke-linecap="round" opacity="0.55" filter="url(#glow-filter)"/>
+<line x1="-22" y1="22" x2="-65" y2="65" stroke="#C832FF" stroke-width="2" stroke-linecap="round" opacity="0.45" filter="url(#glow-filter)"/>
+<circle cx="0" cy="0" r="5" fill="rgba(255,255,255,0.2)" filter="url(#glow-filter)"/>
 <ellipse cx="0" cy="0" rx="28" ry="36" fill="none" stroke="#00FFD1" stroke-width="2.5" opacity="0.9"/>
 <ellipse cx="0" cy="-6" rx="18" ry="15" fill="#00FFD1" opacity="0.12"/>
 <circle cx="-7" cy="-10" r="4.5" fill="#00FFD1"/>
 <circle cx="7" cy="-10" r="4.5" fill="#00FFD1"/>
 <circle cx="-7" cy="-10" r="1.8" fill="#0D1117"/>
 <circle cx="7" cy="-10" r="1.8" fill="#0D1117"/>
-<line x1="-22" y1="-22" x2="-50" y2="-50" stroke="#00FFFF" stroke-width="2" stroke-linecap="round" opacity="0.5" filter="url(#glow-filter)"/>
-<line x1="22" y1="-22" x2="50" y2="-50" stroke="#00FFFF" stroke-width="2" stroke-linecap="round" opacity="0.5" filter="url(#glow-filter)"/>
-<line x1="-27" y1="0" x2="-56" y2="-6" stroke="#C832FF" stroke-width="1.5" stroke-linecap="round" opacity="0.5" filter="url(#glow-filter)"/>
-<line x1="27" y1="0" x2="56" y2="-6" stroke="#C832FF" stroke-width="1.5" stroke-linecap="round" opacity="0.5" filter="url(#glow-filter)"/>
-<line x1="-22" y1="20" x2="-45" y2="42" stroke="#00FFFF" stroke-width="1.5" stroke-linecap="round" opacity="0.35"/>
-<line x1="22" y1="20" x2="45" y2="42" stroke="#00FFFF" stroke-width="1.5" stroke-linecap="round" opacity="0.35"/>
-<line x1="0" y1="-44" x2="0" y2="44" stroke="#C832FF" stroke-width="1" opacity="0.3" stroke-dasharray="3 2"/>
 </g>
 
 <text x="155" y="72" font-family="'Space Grotesk', 'Inter', system-ui, sans-serif" font-size="28" font-weight="700" letter-spacing="4" fill="url(#title-grad)" filter="url(#text-glow)">VULNRAP</text>
