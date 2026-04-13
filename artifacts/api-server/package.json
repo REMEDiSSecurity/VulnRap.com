@@ -8,7 +8,9 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "seed": "node --enable-source-maps ./dist/seed.mjs"
+    "seed": "node --enable-source-maps ./dist/seed.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
@@ -41,6 +43,7 @@
     "esbuild": "^0.27.3",
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13",
-    "thread-stream": "3.1.0"
+    "thread-stream": "3.1.0",
+    "vitest": "^4.1.4"
   }
 }

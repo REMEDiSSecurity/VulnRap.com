@@ -72,3 +72,10 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
 - **GitHub API**: Used by Active Content Verification for file path and code reference verification.
 - **NVD API 2.0**: Used by Active Content Verification for CVE cross-referencing and description plagiarism detection.
 - **PostgreSQL**: The primary database for storing report data, hashes, and similarity results.
+
+## Testing
+
+- **Unit Tests**: 114 tests across 10 test files in `artifacts/api-server/src/lib/`, using Vitest.
+  - Run: `pnpm --filter @workspace/api-server test`
+  - Watch: `pnpm --filter @workspace/api-server test:watch`
+  - Coverage: sanitize, redactor, human-indicators, sloppiness, section-parser, similarity, linguistic-analysis, factual-verification, score-fusion, triage-assistant
