@@ -808,7 +808,7 @@ export default function Home() {
         <SlopDetectionCard />
       </div>
 
-      <Card className="glass-card-accent rounded-xl overflow-hidden">
+      <Card className="glass-card-accent rounded-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-primary" />
