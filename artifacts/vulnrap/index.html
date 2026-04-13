@@ -4,9 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
 
-    <title>VulnRap - Free Vulnerability Report Validation</title>
-    <meta name="description" content="Validate incoming vulnerability reports. VulnRap verifies claims against live sources, detects duplicates, and scores report validity. Free, anonymous, no account required." />
+    <title>VulnRap — VirusTotal for Bug Reports | Free Vulnerability Report Validation</title>
+    <meta name="description" content="Validate incoming vulnerability reports instantly. VulnRap verifies factual claims against live sources, detects AI-generated slop, catches duplicates, and scores report integrity. Free, anonymous, no account required. Built for PSIRT teams." />
     <meta name="theme-color" content="#0D1117" />
+    <meta name="keywords" content="vulnerability report validation, PSIRT, bug bounty, AI slop detection, CVE verification, duplicate detection, report scoring, security triage" />
+    <meta name="author" content="REMEDiS Security" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://vulnrap.com/" />
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -14,24 +18,60 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
 
-    <!-- Open Graph / Facebook / LinkedIn / Discord -->
+    <!-- Open Graph / Facebook / LinkedIn / Discord / Slack -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="VulnRap - VirusTotal for Bug Reports" />
-    <meta property="og:description" content="Free vulnerability report validation. Verify factual claims, detect duplicates, and score report validity with auto-redacted PII. Anonymous, no account needed." />
-    <meta property="og:image" content="/opengraph.jpg" />
-    <meta property="og:image:width" content="1280" />
-    <meta property="og:image:height" content="720" />
+    <meta property="og:url" content="https://vulnrap.com/" />
+    <meta property="og:title" content="VulnRap — VirusTotal for Bug Reports" />
+    <meta property="og:description" content="Validate vulnerability reports instantly. Verify factual claims, detect AI slop, catch duplicates, and score report integrity. Free, anonymous, no account needed." />
+    <meta property="og:image" content="https://vulnrap.com/opengraph.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:alt" content="VulnRap — VirusTotal for Bug Reports. Validate claims, detect duplicates, score report integrity. Free and anonymous." />
     <meta property="og:site_name" content="VulnRap" />
     <meta property="og:locale" content="en_US" />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="VulnRap - VirusTotal for Bug Reports" />
-    <meta name="twitter:description" content="Free vulnerability report validation. Verify factual claims, detect duplicates, and score report validity with auto-redacted PII." />
-    <meta name="twitter:image" content="/opengraph.jpg" />
-    <meta name="twitter:image:alt" content="VulnRap - Free Vulnerability Report Validation Platform" />
+    <meta name="twitter:title" content="VulnRap — VirusTotal for Bug Reports" />
+    <meta name="twitter:description" content="Validate vulnerability reports instantly. Verify factual claims, detect AI slop, catch duplicates, and score report integrity. Free and anonymous." />
+    <meta name="twitter:image" content="https://vulnrap.com/opengraph.jpg" />
+    <meta name="twitter:image:alt" content="VulnRap — VirusTotal for Bug Reports. Validate claims, detect duplicates, score report integrity." />
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "VulnRap",
+      "url": "https://vulnrap.com",
+      "description": "Vulnerability report validation platform for PSIRT teams. Verifies factual claims, detects AI-generated content, catches duplicates, and scores report integrity.",
+      "applicationCategory": "SecurityApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "creator": {
+        "@type": "Organization",
+        "name": "REMEDiS Security",
+        "url": "https://github.com/REMEDiSSecurity"
+      },
+      "featureList": [
+        "Factual claim verification against live CVE/NVD databases",
+        "AI-generated report detection (slop scoring)",
+        "Near-duplicate and exact-match detection",
+        "Automatic PII and credential redaction",
+        "Multi-axis scoring engine",
+        "PSIRT triage recommendations",
+        "Hardware-aware reproduction recipes",
+        "Anonymous — no account required"
+      ]
+    }
+    </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -1,0 +1,26 @@
+{
+  "name": "VulnRap — Vulnerability Report Validation",
+  "short_name": "VulnRap",
+  "description": "Validate vulnerability reports. Verify claims, detect AI slop, catch duplicates.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D1117",
+  "theme_color": "#0D1117",
+  "icons": [
+    {
+      "src": "/favicon-16.png",
+      "sizes": "16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

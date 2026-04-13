@@ -1,0 +1,116 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1200" height="630" fill="#0D1117"/>
+
+<rect x="0" y="0" width="1200" height="630" fill="url(#bg-gradient)" opacity="0.6"/>
+<defs>
+<radialGradient id="bg-gradient" cx="0.3" cy="0.4" r="0.8">
+<stop offset="0%" stop-color="#0a2a2a"/>
+<stop offset="60%" stop-color="#0D1117"/>
+<stop offset="100%" stop-color="#0D1117"/>
+</radialGradient>
+<radialGradient id="glow-accent" cx="0.7" cy="0.6" r="0.5">
+<stop offset="0%" stop-color="#C832FF" stop-opacity="0.08"/>
+<stop offset="100%" stop-color="#C832FF" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="title-grad" x1="0" y1="0" x2="600" y2="0" gradientUnits="userSpaceOnUse">
+<stop offset="0%" stop-color="#00FFD1"/>
+<stop offset="100%" stop-color="#00FFFF"/>
+</linearGradient>
+<linearGradient id="line-grad" x1="80" y1="0" x2="500" y2="0" gradientUnits="userSpaceOnUse">
+<stop offset="0%" stop-color="#00FFD1" stop-opacity="0.8"/>
+<stop offset="100%" stop-color="#00FFD1" stop-opacity="0"/>
+</linearGradient>
+<linearGradient id="line-grad-r" x1="700" y1="0" x2="1120" y2="0" gradientUnits="userSpaceOnUse">
+<stop offset="0%" stop-color="#C832FF" stop-opacity="0"/>
+<stop offset="100%" stop-color="#C832FF" stop-opacity="0.6"/>
+</linearGradient>
+<linearGradient id="badge-grad" x1="0" y1="0" x2="0" y2="36" gradientUnits="userSpaceOnUse">
+<stop offset="0%" stop-color="#00FFD1" stop-opacity="0.15"/>
+<stop offset="100%" stop-color="#00FFD1" stop-opacity="0.05"/>
+</linearGradient>
+<filter id="glow-filter">
+<feGaussianBlur stdDeviation="8" result="blur"/>
+<feMerge>
+<feMergeNode in="blur"/>
+<feMergeNode in="SourceGraphic"/>
+</feMerge>
+</filter>
+<filter id="text-glow">
+<feGaussianBlur stdDeviation="3" result="blur"/>
+<feMerge>
+<feMergeNode in="blur"/>
+<feMergeNode in="SourceGraphic"/>
+</feMerge>
+</filter>
+</defs>
+
+<rect x="0" y="0" width="1200" height="630" fill="url(#glow-accent)"/>
+
+<line x1="0" y1="1" x2="1200" y2="1" stroke="#00FFD1" stroke-width="2" opacity="0.5"/>
+<line x1="0" y1="629" x2="1200" y2="629" stroke="#C832FF" stroke-width="2" opacity="0.4"/>
+
+<line x1="80" y1="290" x2="500" y2="290" stroke="url(#line-grad)" stroke-width="1"/>
+<line x1="700" y1="290" x2="1120" y2="290" stroke="url(#line-grad-r)" stroke-width="1"/>
+
+<g opacity="0.06">
+<line x1="200" y1="0" x2="200" y2="630" stroke="#00FFD1" stroke-width="1"/>
+<line x1="400" y1="0" x2="400" y2="630" stroke="#00FFD1" stroke-width="1"/>
+<line x1="600" y1="0" x2="600" y2="630" stroke="#00FFD1" stroke-width="1"/>
+<line x1="800" y1="0" x2="800" y2="630" stroke="#00FFD1" stroke-width="1"/>
+<line x1="1000" y1="0" x2="1000" y2="630" stroke="#00FFD1" stroke-width="1"/>
+<line x1="0" y1="126" x2="1200" y2="126" stroke="#00FFD1" stroke-width="1"/>
+<line x1="0" y1="252" x2="1200" y2="252" stroke="#00FFD1" stroke-width="1"/>
+<line x1="0" y1="378" x2="1200" y2="378" stroke="#00FFD1" stroke-width="1"/>
+<line x1="0" y1="504" x2="1200" y2="504" stroke="#00FFD1" stroke-width="1"/>
+</g>
+
+<g transform="translate(90,60)">
+<ellipse cx="0" cy="0" rx="28" ry="36" fill="none" stroke="#00FFD1" stroke-width="2.5" opacity="0.9"/>
+<ellipse cx="0" cy="-6" rx="18" ry="15" fill="#00FFD1" opacity="0.12"/>
+<circle cx="-7" cy="-10" r="4.5" fill="#00FFD1"/>
+<circle cx="7" cy="-10" r="4.5" fill="#00FFD1"/>
+<circle cx="-7" cy="-10" r="1.8" fill="#0D1117"/>
+<circle cx="7" cy="-10" r="1.8" fill="#0D1117"/>
+<line x1="-22" y1="-22" x2="-50" y2="-50" stroke="#00FFFF" stroke-width="2" stroke-linecap="round" opacity="0.5" filter="url(#glow-filter)"/>
+<line x1="22" y1="-22" x2="50" y2="-50" stroke="#00FFFF" stroke-width="2" stroke-linecap="round" opacity="0.5" filter="url(#glow-filter)"/>
+<line x1="-27" y1="0" x2="-56" y2="-6" stroke="#C832FF" stroke-width="1.5" stroke-linecap="round" opacity="0.5" filter="url(#glow-filter)"/>
+<line x1="27" y1="0" x2="56" y2="-6" stroke="#C832FF" stroke-width="1.5" stroke-linecap="round" opacity="0.5" filter="url(#glow-filter)"/>
+<line x1="-22" y1="20" x2="-45" y2="42" stroke="#00FFFF" stroke-width="1.5" stroke-linecap="round" opacity="0.35"/>
+<line x1="22" y1="20" x2="45" y2="42" stroke="#00FFFF" stroke-width="1.5" stroke-linecap="round" opacity="0.35"/>
+<line x1="0" y1="-44" x2="0" y2="44" stroke="#C832FF" stroke-width="1" opacity="0.3" stroke-dasharray="3 2"/>
+</g>
+
+<text x="155" y="72" font-family="'Space Grotesk', 'Inter', system-ui, sans-serif" font-size="28" font-weight="700" letter-spacing="4" fill="url(#title-grad)" filter="url(#text-glow)">VULNRAP</text>
+
+<text x="600" y="210" font-family="'Space Grotesk', 'Inter', system-ui, sans-serif" font-size="72" font-weight="700" fill="white" text-anchor="middle" letter-spacing="-1">VirusTotal for</text>
+<text x="600" y="280" font-family="'Space Grotesk', 'Inter', system-ui, sans-serif" font-size="72" font-weight="700" fill="url(#title-grad)" text-anchor="middle" letter-spacing="-1" filter="url(#text-glow)">Bug Reports</text>
+
+<text x="600" y="340" font-family="'Inter', system-ui, sans-serif" font-size="24" font-weight="400" fill="#8B949E" text-anchor="middle">Validate claims. Detect duplicates. Score report integrity.</text>
+
+<g transform="translate(172, 400)">
+<rect x="0" y="0" width="200" height="36" rx="18" fill="url(#badge-grad)" stroke="#00FFD1" stroke-width="1" stroke-opacity="0.3"/>
+<circle cx="22" cy="18" r="5" fill="#00FFD1" opacity="0.8"/>
+<text x="38" y="23" font-family="'Inter', system-ui, sans-serif" font-size="13" font-weight="600" fill="#00FFD1" letter-spacing="0.5">Factual Verification</text>
+</g>
+<g transform="translate(402, 400)">
+<rect x="0" y="0" width="180" height="36" rx="18" fill="url(#badge-grad)" stroke="#00FFD1" stroke-width="1" stroke-opacity="0.3"/>
+<circle cx="22" cy="18" r="5" fill="#C832FF" opacity="0.8"/>
+<text x="38" y="23" font-family="'Inter', system-ui, sans-serif" font-size="13" font-weight="600" fill="#B0B8C4" letter-spacing="0.5">AI Slop Detection</text>
+</g>
+<g transform="translate(612, 400)">
+<rect x="0" y="0" width="200" height="36" rx="18" fill="url(#badge-grad)" stroke="#00FFD1" stroke-width="1" stroke-opacity="0.3"/>
+<circle cx="22" cy="18" r="5" fill="#FFAA00" opacity="0.8"/>
+<text x="38" y="23" font-family="'Inter', system-ui, sans-serif" font-size="13" font-weight="600" fill="#B0B8C4" letter-spacing="0.5">Duplicate Detection</text>
+</g>
+<g transform="translate(842, 400)">
+<rect x="0" y="0" width="180" height="36" rx="18" fill="url(#badge-grad)" stroke="#00FFD1" stroke-width="1" stroke-opacity="0.3"/>
+<circle cx="22" cy="18" r="5" fill="#00AAFF" opacity="0.8"/>
+<text x="38" y="23" font-family="'Inter', system-ui, sans-serif" font-size="13" font-weight="600" fill="#B0B8C4" letter-spacing="0.5">Auto PII Redaction</text>
+</g>
+
+<text x="600" y="490" font-family="'Inter', system-ui, sans-serif" font-size="18" font-weight="500" fill="#58A6FF" text-anchor="middle">Free &amp; Anonymous   |   No Account Required   |   Open Source</text>
+
+<text x="600" y="580" font-family="'JetBrains Mono', monospace" font-size="14" fill="#484F58" text-anchor="middle" letter-spacing="1">vulnrap.com  //  made by and for frustrated PSIRTlings</text>
+
+<rect x="80" y="530" width="1040" height="1" fill="#21262D"/>
+</svg>
