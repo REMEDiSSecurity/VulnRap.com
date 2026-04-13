@@ -110,15 +110,15 @@ export function BlogBuildingVulnrap() {
         </P>
 
         <P>
-          The weekend project became a week-long project. The week became a month. Every time I solved one detection problem, I'd find two more. "OK, I can catch AI phrases &mdash; but what about the slop that doesn't use AI phrases?" That led to statistical text analysis. "OK, I can detect abnormal sentence uniformity &mdash; but what about the slop that references real code?" That led to factual verification via GitHub API. "OK, I can check if functions exist &mdash; but what about the slop that references real functions but describes fake vulnerabilities?" That led to the LLM semantic analysis layer.
+          It started with minutes of thinking &mdash; scribbling out "what if I just pattern-match the obvious AI phrases?" Then hours of trying things, testing against real slop from our queue, watching the detection rate climb from useless to interesting. Every time I solved one detection problem, I'd find two more. "OK, I can catch AI phrases &mdash; but what about the slop that doesn't use AI phrases?" That led to statistical text analysis. "OK, I can detect abnormal sentence uniformity &mdash; but what about the slop that references real code?" That led to factual verification via GitHub API. "OK, I can check if functions exist &mdash; but what about the slop that references real functions but describes fake vulnerabilities?" That led to the LLM semantic analysis layer.
         </P>
 
         <P>
-          Each layer was a weekend. Each weekend peeled back another layer of the problem. And each layer revealed that slop detection is fundamentally a game theory problem &mdash; you're not building a classifier, you're building a system where every bypass requires doing progressively more real work, until the effort to bypass the detector exceeds the effort to just find a real vulnerability.
+          Minutes became hours. Hours became days. Days became a whole weekend spent refining the idea, tearing apart what didn't work, rebuilding it better. Each new layer peeled back another layer of the problem. And each layer revealed that slop detection is fundamentally a game theory problem &mdash; you're not building a classifier, you're building a system where every bypass requires doing progressively more real work, until the effort to bypass the detector exceeds the effort to just find a real vulnerability.
         </P>
 
         <P>
-          The stack reflects the weekend-project origin: Express, React, PostgreSQL, TailwindCSS. Nothing exotic. The entire thing runs on a single Replit instance. We open-sourced it because the problem isn't ours alone &mdash; every PSIRT team, every bug bounty program, every open-source maintainer is dealing with this. The more eyes on the detection logic, the better it gets.
+          The stack reflects the rapid-prototype origin: Express, React, PostgreSQL, TailwindCSS. Nothing exotic. The entire thing runs on a single Replit instance. We open-sourced it because the problem isn't ours alone &mdash; every PSIRT team, every bug bounty program, every open-source maintainer is dealing with this. The more eyes on the detection logic, the better it gets.
         </P>
 
         <Separator className="bg-border/50 my-6" />
