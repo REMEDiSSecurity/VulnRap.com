@@ -20,6 +20,10 @@ PSIRT teams waste hours triaging reports that turn out to describe non-existent 
 
 Built and funded by [REMEDiS Security](https://remedissecurity.com) and [COMPLiTT](https://complitt.com).
 
+### Why Replit
+
+We chose to build VulnRap on [Replit](https://replit.com) because we already had several other projects running there. Having an existing workspace made it easy to get things tested and off the ground quickly — database provisioning, environment configuration, and deployment were already familiar, so we could focus on the analysis engine instead of infrastructure setup. VulnRap can be self-hosted anywhere (see [Local vs Hosted](#local-vs-hosted)), but Replit gave us the fastest path from idea to live instance.
+
 ## Live Instance
 
 **[vulnrap.com](https://vulnrap.com)** — free to use, no signup required.
