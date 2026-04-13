@@ -130,7 +130,7 @@ curl -X POST https://vulnrap.com/api/reports/check \\
 ];
 
 export default function ApiDocs() {
-  const apiDocsUrl = `${window.location.origin}/api/docs`;
+  const apiDocsUrl = "/api/docs/";
 
   return (
     <div className="max-w-4xl mx-auto space-y-10">
