@@ -1,4 +1,4 @@
-import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check } from "lucide-react";
+import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -131,6 +131,7 @@ curl -X POST https://vulnrap.com/api/reports/check \\
 
 export default function ApiDocs() {
   const apiDocsUrl = "/api/docs/";
+  const [swaggerOpen, setSwaggerOpen] = useState(false);
 
   return (
     <div className="max-w-4xl mx-auto space-y-10">
@@ -156,11 +157,9 @@ export default function ApiDocs() {
                 Full Swagger UI with try-it-out functionality. Test every endpoint directly in your browser.
               </p>
             </div>
-            <a href={apiDocsUrl} target="_blank" rel="noopener noreferrer">
-              <Button className="glow-button gap-2">
-                Open Swagger UI <ExternalLink className="w-3.5 h-3.5" />
-              </Button>
-            </a>
+            <Button className="glow-button gap-2" onClick={() => setSwaggerOpen((v) => !v)}>
+              {swaggerOpen ? "Hide" : "Open"} Swagger UI {swaggerOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </Button>
           </CardContent>
         </Card>
 
@@ -181,6 +180,19 @@ export default function ApiDocs() {
           </CardContent>
         </Card>
       </div>
+
+      {swaggerOpen && (
+        <Card className="glass-card rounded-xl overflow-hidden">
+          <CardContent className="p-0">
+            <iframe
+              src={apiDocsUrl}
+              title="Swagger UI"
+              className="w-full border-0 rounded-xl bg-white"
+              style={{ height: "80vh", minHeight: "500px" }}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="space-y-4">
         <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
@@ -359,9 +371,9 @@ async function analyzeAndPost(filePath, slackWebhook) {
       </div>
 
       <div className="text-center text-xs text-muted-foreground/50 pb-4">
-        <a href={apiDocsUrl} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
+        <button type="button" onClick={() => { setSwaggerOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="hover:text-primary transition-colors">
           Full OpenAPI spec available at /api/docs
-        </a>
+        </button>
       </div>
     </div>
   );

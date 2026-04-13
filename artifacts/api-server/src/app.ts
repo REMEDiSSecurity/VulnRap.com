@@ -37,8 +37,10 @@ const swaggerHelmet = helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "https://validator.swagger.io"],
       connectSrc: ["'self'"],
+      frameAncestors: ["'self'"],
     },
   },
+  xFrameOptions: false,
 });
 
 app.use((req, res, next) => {
