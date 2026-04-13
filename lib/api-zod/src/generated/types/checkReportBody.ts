@@ -15,8 +15,8 @@ export type CheckReportBody = {
   rawText?: string;
   /** HTTPS URL to a plain-text report (GitHub raw, Gist, GitLab, Pastebin, etc.). Auto-converts GitHub blob URLs to raw. Max 5MB. */
   reportUrl?: string;
-  /** Skip LLM analysis — use only local heuristic/statistical scoring */
+  /** Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true". */
   skipLlm?: CheckReportBodySkipLlm;
-  /** Skip PII auto-redaction. Only use for known slop or local deployments. */
+  /** Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data. */
   skipRedaction?: CheckReportBodySkipRedaction;
 };

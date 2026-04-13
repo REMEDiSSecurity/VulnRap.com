@@ -367,6 +367,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /feedback/analytics:
+    get:
+      operationId: getFeedbackAnalytics
+      tags: [feedback]
+      summary: Get aggregated feedback analytics
+      description: Returns summary stats, rating distribution, daily trends, score-vs-feedback correlation, outlier reports, and recent feedback entries
+      responses:
+        "200":
+          description: Feedback analytics data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackAnalytics"
+
   /stats:
     get:
       operationId: getStats
@@ -1488,3 +1502,112 @@ components:
       required:
         - id
         - message
+
+    FeedbackAnalytics:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            totalFeedback:
+              type: integer
+            avgRating:
+              type: number
+            helpfulCount:
+              type: integer
+            notHelpfulCount:
+              type: integer
+            helpfulnessRate:
+              type: number
+            withComments:
+              type: integer
+            linkedToReport:
+              type: integer
+          required: [totalFeedback, avgRating, helpfulCount, notHelpfulCount, helpfulnessRate, withComments, linkedToReport]
+        ratingDistribution:
+          type: object
+          additionalProperties:
+            type: integer
+        dailyTrend:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              count:
+                type: integer
+              avgRating:
+                type: number
+              helpfulPct:
+                type: number
+            required: [date, count, avgRating, helpfulPct]
+        scoreCorrelation:
+          type: array
+          items:
+            type: object
+            properties:
+              scoreBucket:
+                type: string
+              avgRating:
+                type: number
+              helpfulPct:
+                type: number
+              count:
+                type: integer
+            required: [scoreBucket, avgRating, helpfulPct, count]
+        outliers:
+          type: array
+          items:
+            type: object
+            properties:
+              feedbackId:
+                type: integer
+              reportId:
+                type: integer
+                nullable: true
+              rating:
+                type: integer
+              helpful:
+                type: boolean
+              comment:
+                type: string
+                nullable: true
+              feedbackDate:
+                type: string
+                format: date-time
+              slopScore:
+                type: integer
+              slopTier:
+                type: string
+              qualityScore:
+                type: integer
+            required: [feedbackId, rating, helpful, slopScore, slopTier, qualityScore]
+        recentFeedback:
+          type: array
+          items:
+            type: object
+            properties:
+              feedbackId:
+                type: integer
+              reportId:
+                type: integer
+                nullable: true
+              rating:
+                type: integer
+              helpful:
+                type: boolean
+              comment:
+                type: string
+                nullable: true
+              createdAt:
+                type: string
+                format: date-time
+              slopScore:
+                type: integer
+                nullable: true
+              slopTier:
+                type: string
+                nullable: true
+            required: [feedbackId, rating, helpful, createdAt]
+      required: [summary, ratingDistribution, dailyTrend, scoreCorrelation, outliers, recentFeedback]

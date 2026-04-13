@@ -21,8 +21,8 @@ export type SubmitReportBody = {
   contentMode: SubmitReportBodyContentMode;
   /** Whether to show this report in the public recent reports feed */
   showInFeed?: SubmitReportBodyShowInFeed;
-  /** Skip LLM analysis — use only local heuristic/statistical scoring */
+  /** Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true". */
   skipLlm?: SubmitReportBodySkipLlm;
-  /** Skip PII auto-redaction. Only use for known slop or local deployments. */
+  /** Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data. */
   skipRedaction?: SubmitReportBodySkipRedaction;
 };

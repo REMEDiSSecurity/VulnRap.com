@@ -716,6 +716,64 @@ export interface FeedbackResponse {
   message: string;
 }
 
+export type FeedbackAnalyticsSummary = {
+  totalFeedback: number;
+  avgRating: number;
+  helpfulCount: number;
+  notHelpfulCount: number;
+  helpfulnessRate: number;
+  withComments: number;
+  linkedToReport: number;
+};
+
+export type FeedbackAnalyticsRatingDistribution = { [key: string]: number };
+
+export type FeedbackAnalyticsDailyTrendItem = {
+  date: string;
+  count: number;
+  avgRating: number;
+  helpfulPct: number;
+};
+
+export type FeedbackAnalyticsScoreCorrelationItem = {
+  scoreBucket: string;
+  avgRating: number;
+  helpfulPct: number;
+  count: number;
+};
+
+export type FeedbackAnalyticsOutliersItem = {
+  feedbackId: number;
+  reportId?: number | null;
+  rating: number;
+  helpful: boolean;
+  comment?: string | null;
+  feedbackDate?: string;
+  slopScore: number;
+  slopTier: string;
+  qualityScore: number;
+};
+
+export type FeedbackAnalyticsRecentFeedbackItem = {
+  feedbackId: number;
+  reportId?: number | null;
+  rating: number;
+  helpful: boolean;
+  comment?: string | null;
+  createdAt: string;
+  slopScore?: number | null;
+  slopTier?: string | null;
+};
+
+export interface FeedbackAnalytics {
+  summary: FeedbackAnalyticsSummary;
+  ratingDistribution: FeedbackAnalyticsRatingDistribution;
+  dailyTrend: FeedbackAnalyticsDailyTrendItem[];
+  scoreCorrelation: FeedbackAnalyticsScoreCorrelationItem[];
+  outliers: FeedbackAnalyticsOutliersItem[];
+  recentFeedback: FeedbackAnalyticsRecentFeedbackItem[];
+}
+
 /**
  * Privacy mode — full shares content, similarity_only stores only hashes
  */
@@ -739,7 +797,7 @@ export const SubmitReportBodyShowInFeed = {
 } as const;
 
 /**
- * Skip LLM analysis — use only local heuristic/statistical scoring
+ * Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true".
  */
 export type SubmitReportBodySkipLlm =
   (typeof SubmitReportBodySkipLlm)[keyof typeof SubmitReportBodySkipLlm];
@@ -750,7 +808,7 @@ export const SubmitReportBodySkipLlm = {
 } as const;
 
 /**
- * Skip PII auto-redaction. Only use for known slop or local deployments.
+ * Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data.
  */
 export type SubmitReportBodySkipRedaction =
   (typeof SubmitReportBodySkipRedaction)[keyof typeof SubmitReportBodySkipRedaction];
@@ -771,14 +829,14 @@ export type SubmitReportBody = {
   contentMode: SubmitReportBodyContentMode;
   /** Whether to show this report in the public recent reports feed */
   showInFeed?: SubmitReportBodyShowInFeed;
-  /** Skip LLM analysis — use only local heuristic/statistical scoring */
+  /** Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true". */
   skipLlm?: SubmitReportBodySkipLlm;
-  /** Skip PII auto-redaction. Only use for known slop or local deployments. */
+  /** Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data. */
   skipRedaction?: SubmitReportBodySkipRedaction;
 };
 
 /**
- * Skip LLM analysis — use only local heuristic/statistical scoring
+ * Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true".
  */
 export type CheckReportBodySkipLlm =
   (typeof CheckReportBodySkipLlm)[keyof typeof CheckReportBodySkipLlm];
@@ -789,7 +847,7 @@ export const CheckReportBodySkipLlm = {
 } as const;
 
 /**
- * Skip PII auto-redaction. Only use for known slop or local deployments.
+ * Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data.
  */
 export type CheckReportBodySkipRedaction =
   (typeof CheckReportBodySkipRedaction)[keyof typeof CheckReportBodySkipRedaction];
@@ -806,9 +864,9 @@ export type CheckReportBody = {
   rawText?: string;
   /** HTTPS URL to a plain-text report (GitHub raw, Gist, GitLab, Pastebin, etc.). Auto-converts GitHub blob URLs to raw. Max 5MB. */
   reportUrl?: string;
-  /** Skip LLM analysis — use only local heuristic/statistical scoring */
+  /** Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true". */
   skipLlm?: CheckReportBodySkipLlm;
-  /** Skip PII auto-redaction. Only use for known slop or local deployments. */
+  /** Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data. */
   skipRedaction?: CheckReportBodySkipRedaction;
 };
 

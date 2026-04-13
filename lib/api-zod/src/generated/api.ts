@@ -57,13 +57,13 @@ export const SubmitReportBody = zod.object({
     .enum(["true", "false"])
     .default(submitReportBodySkipLlmDefault)
     .describe(
-      "Skip LLM analysis — use only local heuristic\/statistical scoring",
+      'Skip LLM analysis — use only local heuristic\/statistical scoring. Sent as string in multipart form data. Forced to \"true\" server-side when skipRedaction is \"true\".',
     ),
   skipRedaction: zod
     .enum(["true", "false"])
     .default(submitReportBodySkipRedactionDefault)
     .describe(
-      "Skip PII auto-redaction. Only use for known slop or local deployments.",
+      "Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data.",
     ),
 });
 
@@ -660,13 +660,13 @@ export const CheckReportBody = zod.object({
     .enum(["true", "false"])
     .default(checkReportBodySkipLlmDefault)
     .describe(
-      "Skip LLM analysis — use only local heuristic\/statistical scoring",
+      'Skip LLM analysis — use only local heuristic\/statistical scoring. Sent as string in multipart form data. Forced to \"true\" server-side when skipRedaction is \"true\".',
     ),
   skipRedaction: zod
     .enum(["true", "false"])
     .default(checkReportBodySkipRedactionDefault)
     .describe(
-      "Skip PII auto-redaction. Only use for known slop or local deployments.",
+      "Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data.",
     ),
 });
 
@@ -1142,6 +1142,64 @@ export const SubmitFeedbackBody = zod.object({
     .max(submitFeedbackBodyCommentMax)
     .optional()
     .describe("Optional free-text suggestions for improvement"),
+});
+
+/**
+ * Returns summary stats, rating distribution, daily trends, score-vs-feedback correlation, outlier reports, and recent feedback entries
+ * @summary Get aggregated feedback analytics
+ */
+export const GetFeedbackAnalyticsResponse = zod.object({
+  summary: zod.object({
+    totalFeedback: zod.number(),
+    avgRating: zod.number(),
+    helpfulCount: zod.number(),
+    notHelpfulCount: zod.number(),
+    helpfulnessRate: zod.number(),
+    withComments: zod.number(),
+    linkedToReport: zod.number(),
+  }),
+  ratingDistribution: zod.record(zod.string(), zod.number()),
+  dailyTrend: zod.array(
+    zod.object({
+      date: zod.string(),
+      count: zod.number(),
+      avgRating: zod.number(),
+      helpfulPct: zod.number(),
+    }),
+  ),
+  scoreCorrelation: zod.array(
+    zod.object({
+      scoreBucket: zod.string(),
+      avgRating: zod.number(),
+      helpfulPct: zod.number(),
+      count: zod.number(),
+    }),
+  ),
+  outliers: zod.array(
+    zod.object({
+      feedbackId: zod.number(),
+      reportId: zod.number().nullish(),
+      rating: zod.number(),
+      helpful: zod.boolean(),
+      comment: zod.string().nullish(),
+      feedbackDate: zod.coerce.date().optional(),
+      slopScore: zod.number(),
+      slopTier: zod.string(),
+      qualityScore: zod.number(),
+    }),
+  ),
+  recentFeedback: zod.array(
+    zod.object({
+      feedbackId: zod.number(),
+      reportId: zod.number().nullish(),
+      rating: zod.number(),
+      helpful: zod.boolean(),
+      comment: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      slopScore: zod.number().nullish(),
+      slopTier: zod.string().nullish(),
+    }),
+  ),
 });
 
 /**

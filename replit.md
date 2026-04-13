@@ -38,6 +38,7 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
     - Home/Submit page with drag-and-drop upload, privacy mode selection, and Analysis Options toggles (Skip AI analysis, Disable PII redaction with auto-skip-AI guardrail).
     - Analysis Results page displaying dual scores (AI Likelihood + Report Quality), confidence gauge (semicircular SVG), per-axis breakdown (Linguistic/Factual/Template/LLM), LLM radar chart (5-dimension spider chart), evidence signals with weight badges, evidence-highlighted report text with inline citations, redaction summary, similarity matches, and section-level analysis.
     - Analysis progress stepper component showing pipeline stages (Upload → Redact → Linguistic → Factual → Template/Similarity → LLM/Scoring → Triage) during submission/check.
+    - Feedback Analytics dashboard (`/feedback-analytics`) with summary stats, rating distribution, score-vs-feedback correlation, outlier detection, daily trends, and recent feedback feed.
     - Batch Upload and Compare Two Reports functionalities.
     - Session History and Export/Download options.
     - Public verification page (`/verify/:id`) for sharing analysis results.
@@ -50,6 +51,7 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
 - **Database**: PostgreSQL with Drizzle ORM.
 - **Auto-Redaction Engine**: Deterministic regex-based redaction of PII/secrets, applied before analysis or storage. Can be toggled via `skipRedaction` parameter (forces `skipLlm=true` to prevent unredacted data from reaching external APIs).
 - **Analysis Options**: `skipLlm` and `skipRedaction` query params on POST `/reports` and `/reports/check`. Flags (`llmUsed`, `redactionApplied`) are persisted in the `breakdown` JSONB column and returned by GET `/reports/:id`.
+- **Feedback Analytics**: GET `/feedback/analytics` returns aggregated stats (avg rating, helpfulness rate, rating distribution, daily trends, score-vs-feedback correlation by slop bucket, outlier reports where user feedback disagrees with engine scoring, and recent feedback entries).
 - **Section Parser**: Parses reports into logical sections, hashes them with SHA-256, and classifies their value.
 - **Similarity Engine**: Uses MinHash + Locality Sensitive Hashing (LSH), Simhash, and SHA-256 for near-duplicate and exact-match detection.
 - **Multi-Axis Scoring Engine (v3.0)**:

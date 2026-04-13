@@ -7,7 +7,7 @@
  */
 
 /**
- * Skip PII auto-redaction. Only use for known slop or local deployments.
+ * Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data.
  */
 export type CheckReportBodySkipRedaction =
   (typeof CheckReportBodySkipRedaction)[keyof typeof CheckReportBodySkipRedaction];

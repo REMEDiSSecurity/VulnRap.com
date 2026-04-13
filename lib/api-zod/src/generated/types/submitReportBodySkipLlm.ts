@@ -7,7 +7,7 @@
  */
 
 /**
- * Skip LLM analysis — use only local heuristic/statistical scoring
+ * Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true".
  */
 export type SubmitReportBodySkipLlm =
   (typeof SubmitReportBodySkipLlm)[keyof typeof SubmitReportBodySkipLlm];

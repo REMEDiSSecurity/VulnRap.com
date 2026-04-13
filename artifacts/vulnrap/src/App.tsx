@@ -36,6 +36,7 @@ const Changelog = lazyRetry(() => import("@/pages/changelog"));
 const History = lazyRetry(() => import("@/pages/history"));
 const Compare = lazyRetry(() => import("@/pages/compare"));
 const Batch = lazyRetry(() => import("@/pages/batch"));
+const FeedbackAnalytics = lazyRetry(() => import("@/pages/feedback-analytics"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -69,6 +70,7 @@ function AppRoutes() {
             <Route path="/history" element={<History />} />
             <Route path="/compare" element={<Compare />} />
             <Route path="/batch" element={<Batch />} />
+            <Route path="/feedback-analytics" element={<FeedbackAnalytics />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

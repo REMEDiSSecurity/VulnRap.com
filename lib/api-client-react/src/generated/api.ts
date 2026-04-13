@@ -22,6 +22,7 @@ import type {
   DeleteReportBody,
   DeleteReportResponse,
   ErrorResponse,
+  FeedbackAnalytics,
   FeedbackResponse,
   GetReportFeedParams,
   HashLookupResult,
@@ -1043,6 +1044,82 @@ export const useSubmitFeedback = <
 > => {
   return useMutation(getSubmitFeedbackMutationOptions(options));
 };
+
+/**
+ * Returns summary stats, rating distribution, daily trends, score-vs-feedback correlation, outlier reports, and recent feedback entries
+ * @summary Get aggregated feedback analytics
+ */
+export const getGetFeedbackAnalyticsUrl = () => {
+  return `/api/feedback/analytics`;
+};
+
+export const getFeedbackAnalytics = async (
+  options?: RequestInit,
+): Promise<FeedbackAnalytics> => {
+  return customFetch<FeedbackAnalytics>(getGetFeedbackAnalyticsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFeedbackAnalyticsQueryKey = () => {
+  return [`/api/feedback/analytics`] as const;
+};
+
+export const getGetFeedbackAnalyticsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFeedbackAnalytics>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getFeedbackAnalytics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetFeedbackAnalyticsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getFeedbackAnalytics>>
+  > = ({ signal }) => getFeedbackAnalytics({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFeedbackAnalytics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFeedbackAnalyticsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getFeedbackAnalytics>>
+>;
+export type GetFeedbackAnalyticsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get aggregated feedback analytics
+ */
+
+export function useGetFeedbackAnalytics<
+  TData = Awaited<ReturnType<typeof getFeedbackAnalytics>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getFeedbackAnalytics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFeedbackAnalyticsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * Returns aggregate statistics for the platform
