@@ -96,26 +96,26 @@ export function LogoBeams() {
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
-          <linearGradient id="cyan-beam-ul" x1="300" y1="300" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+          <linearGradient id="cyan-beam-ul" x1="299" y1="300" x2="73" y2="20" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#00FFFF" stopOpacity="0.7" />
             <stop offset="30%" stopColor="#00FFFF" stopOpacity="0.3" />
             <stop offset="70%" stopColor="#00FFFF" stopOpacity="0.06" />
             <stop offset="100%" stopColor="#00FFFF" stopOpacity="0" />
           </linearGradient>
-          <linearGradient id="cyan-beam-lr" x1="300" y1="300" x2="600" y2="600" gradientUnits="userSpaceOnUse">
+          <linearGradient id="cyan-beam-lr" x1="299" y1="300" x2="524" y2="580" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#00FFFF" stopOpacity="0.7" />
             <stop offset="30%" stopColor="#00FFFF" stopOpacity="0.3" />
             <stop offset="70%" stopColor="#00FFFF" stopOpacity="0.06" />
             <stop offset="100%" stopColor="#00FFFF" stopOpacity="0" />
           </linearGradient>
 
-          <linearGradient id="mag-beam-ur" x1="300" y1="300" x2="600" y2="0" gradientUnits="userSpaceOnUse">
+          <linearGradient id="mag-beam-ur" x1="299" y1="300" x2="532" y2="20" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#C832FF" stopOpacity="0.65" />
             <stop offset="30%" stopColor="#C832FF" stopOpacity="0.25" />
             <stop offset="70%" stopColor="#C832FF" stopOpacity="0.05" />
             <stop offset="100%" stopColor="#C832FF" stopOpacity="0" />
           </linearGradient>
-          <linearGradient id="mag-beam-ll" x1="300" y1="300" x2="0" y2="600" gradientUnits="userSpaceOnUse">
+          <linearGradient id="mag-beam-ll" x1="299" y1="300" x2="64" y2="580" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#C832FF" stopOpacity="0.65" />
             <stop offset="30%" stopColor="#C832FF" stopOpacity="0.25" />
             <stop offset="70%" stopColor="#C832FF" stopOpacity="0.05" />
@@ -138,17 +138,17 @@ export function LogoBeams() {
           </filter>
         </defs>
 
-        <line x1="300" y1="300" x2="20" y2="20"
+        <line x1="299" y1="300" x2="73" y2="20"
           stroke="url(#cyan-beam-ul)" strokeWidth="2" strokeLinecap="round"
           filter="url(#beam-glow)" className="scan-beam scan-beam-cyan-1" />
-        <line x1="300" y1="300" x2="580" y2="580"
+        <line x1="299" y1="300" x2="524" y2="580"
           stroke="url(#cyan-beam-lr)" strokeWidth="2" strokeLinecap="round"
           filter="url(#beam-glow)" className="scan-beam scan-beam-cyan-2" />
 
-        <line x1="300" y1="300" x2="580" y2="20"
+        <line x1="299" y1="300" x2="532" y2="20"
           stroke="url(#mag-beam-ur)" strokeWidth="1.5" strokeLinecap="round"
           filter="url(#beam-glow)" className="scan-beam scan-beam-mag-1" />
-        <line x1="300" y1="300" x2="20" y2="580"
+        <line x1="299" y1="300" x2="64" y2="580"
           stroke="url(#mag-beam-ll)" strokeWidth="1.5" strokeLinecap="round"
           filter="url(#beam-glow)" className="scan-beam scan-beam-mag-2" />
 
