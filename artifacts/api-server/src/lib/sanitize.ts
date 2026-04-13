@@ -39,21 +39,3 @@ export function detectBinaryContent(buffer: Buffer): boolean {
   return nullCount / sampleSize > 0.1;
 }
 
-export function safeJsonParse<T = unknown>(input: string): T | null {
-  try {
-    const parsed = JSON.parse(input);
-    if (parsed === null || typeof parsed !== "object") return parsed as T;
-    if (Object.prototype.hasOwnProperty.call(parsed, "__proto__")) {
-      delete parsed.__proto__;
-    }
-    if (Object.prototype.hasOwnProperty.call(parsed, "constructor")) {
-      delete parsed.constructor;
-    }
-    if (Object.prototype.hasOwnProperty.call(parsed, "prototype")) {
-      delete parsed.prototype;
-    }
-    return parsed as T;
-  } catch {
-    return null;
-  }
-}
