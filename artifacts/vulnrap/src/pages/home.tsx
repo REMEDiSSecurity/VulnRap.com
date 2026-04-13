@@ -407,10 +407,10 @@ function SlopDetectionCard() {
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
-            Slop Detection
+            Validity Scoring
             <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
           </h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">Scores AI-generation likelihood so your team can prioritize real findings over generated noise. Tap to see what we check.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">Scores how likely a report describes a real, verifiable issue — factual claims, PoC plausibility, and content originality. Tap to see what we check.</p>
         </div>
       </button>
 
@@ -796,7 +796,7 @@ export default function Home() {
         </div>
         <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight text-primary uppercase glow-text" data-testid="text-heading">Report Validation</h1>
         <p className="text-sm sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed px-2">
-          Analyze incoming vulnerability reports for AI-generated "slop" and cross-check against known submissions. Built for PSIRT teams, triage analysts, and anyone buried in an inbox full of incoming reports.
+          Assess the likelihood that an incoming vulnerability report describes a real, reproducible issue. Cross-check claims against live sources, detect duplicate submissions, and surface what deserves analyst time. Built for PSIRT teams, triage analysts, and anyone buried in an inbox full of incoming reports.
         </p>
       </div>
 
@@ -813,7 +813,7 @@ export default function Home() {
           <CardTitle className="flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-primary" />
             Submit Report
-            <Explainer text="Submit a vulnerability report for analysis. Upload a file or paste your report text directly. We'll analyze it for AI-generated content and check it against previously submitted reports for similarity." />
+            <Explainer text="Submit a vulnerability report for analysis. Upload a file or paste your report text directly. We'll verify factual claims, check it against previously submitted reports, and score the likelihood the issue is real and reproducible." />
           </CardTitle>
           <CardDescription>Upload a file, paste text, or link to a report (Max 5MB)</CardDescription>
         </CardHeader>
@@ -1115,14 +1115,14 @@ export default function Home() {
             <div className="text-2xl sm:text-3xl font-bold step-number">03</div>
             <h3 className="font-medium text-xs sm:text-sm">Analyze</h3>
             <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-              Each section is hashed, compared against existing reports, and scored for AI likelihood.
+              Claims are verified against live sources, sections are compared for duplicates, and the report is scored for validity.
             </p>
           </div>
           <div className="space-y-1.5 sm:space-y-2 p-3 sm:p-4 rounded-xl glass-card feature-card">
             <div className="text-2xl sm:text-3xl font-bold step-number">04</div>
             <h3 className="font-medium text-xs sm:text-sm">Results</h3>
             <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-              Get your slop score, similarity matches, redaction summary, and feedback.
+              Get a validity score, similarity matches, verification results, triage recommendation, and redaction summary.
             </p>
           </div>
         </div>
@@ -1260,7 +1260,7 @@ function TransparencySection() {
           </div>
 
           <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border/50 pt-3">
-            We use no third-party analytics, tracking pixels, or CDNs. The entire application is self-contained. If you want to verify any of this, the redaction, hashing, and scoring logic is documented in the expandable cards above with exact algorithm details and thresholds. The full source code is <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">available on GitHub</a>.
+            We use no third-party analytics, tracking pixels, or CDNs. The entire application is self-contained. If you want to verify any of this, the redaction, hashing, and scoring logic is documented in the expandable cards above with exact algorithm details and thresholds. The full source code is <a href="https://github.com/REMEDiSSecurity/VulnRap.Com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">available on GitHub</a>.
           </p>
         </div>
       )}

@@ -25,7 +25,7 @@ export default function Security() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
           <p>
-            If you discover a security vulnerability in VulnRap, please report it responsibly. Do not open a public <a href="https://github.com/REMEDiSSecurity/VulnRapcom/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">GitHub issue</a> for security vulnerabilities.
+            If you discover a security vulnerability in VulnRap, please report it responsibly. Do not open a public <a href="https://github.com/REMEDiSSecurity/VulnRap.Com/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">GitHub issue</a> for security vulnerabilities.
           </p>
           <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2 text-foreground font-medium">
@@ -126,10 +126,10 @@ export default function Security() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
           <p>
-            VulnRap is <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">open source</a>. If you find an issue and have a fix, we welcome pull requests. For security issues, please email us first so we can coordinate the fix and disclosure responsibly.
+            VulnRap is <a href="https://github.com/REMEDiSSecurity/VulnRap.Com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">open source</a>. If you find an issue and have a fix, we welcome pull requests. For security issues, please email us first so we can coordinate the fix and disclosure responsibly.
           </p>
           <p>
-            For non-security bugs and feature requests, feel free to <a href="https://github.com/REMEDiSSecurity/VulnRapcom/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">open a GitHub issue</a> directly.
+            For non-security bugs and feature requests, feel free to <a href="https://github.com/REMEDiSSecurity/VulnRap.Com/issues" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">open a GitHub issue</a> directly.
           </p>
         </CardContent>
       </Card>

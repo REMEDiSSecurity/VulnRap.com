@@ -51,7 +51,7 @@ function FirstPost() {
             VulnRap does two things well:
           </p>
           <p>
-            <strong className="text-foreground">1. AI Slop Detection.</strong> We run a multi-axis scoring system on every report. Four independent axes — linguistic AI fingerprinting, factual verification, LLM semantic analysis, and template detection — are fused via Bayesian combination into a single slopScore. The linguistic axis checks for AI filler phrases, statistical text patterns, and stylometric signals. Factual verification flags placeholder URLs, fabricated CVEs, hallucinated function names, and severity inflation. When available, the LLM evaluates five semantic dimensions: specificity, originality, voice, coherence, and hallucination. A separate qualityScore measures report completeness independently. The result is a 0-100 slop score with a confidence indicator. Below 15, the report is probably human-written. Above 70, it is almost certainly generated.
+            <strong className="text-foreground">1. Report Validity Scoring.</strong> We run a multi-axis scoring system on every report to assess whether it describes a real, reproducible issue. Four independent axes — factual verification, linguistic analysis, LLM semantic analysis, and template detection — are fused via Bayesian combination into a single score. Factual verification checks whether the function names, file paths, CVE IDs, and code references in the report actually exist in the claimed project. The linguistic axis catches patterns common in fabricated reports. When available, the LLM evaluates specificity, originality, voice, coherence, and hallucination. A separate qualityScore measures report completeness independently. The result is a 0-100 score with a confidence indicator. Reports scoring low show strong evidence of verifiable claims. Reports scoring high have multiple indicators of fabricated or templated content.
           </p>
           <p>
             <strong className="text-foreground">2. Similarity Detection.</strong> We fingerprint every report using MinHash (Jaccard similarity estimation), SimHash (structural fingerprinting), and SHA-256 hashing at both the document and section level. When you submit a report, we compare it against everything in the database. If your "Steps to Reproduce" section is identical to someone else's, we flag it — even if the rest of the report is different.
@@ -73,8 +73,8 @@ function FirstPost() {
             <li><strong className="text-foreground">No accounts.</strong> We do not know who you are. There are no user accounts, no email collection, no tracking cookies, no analytics. We literally could not identify you if we wanted to.</li>
             <li><strong className="text-foreground">Auto-redaction first.</strong> Before anything is stored, we strip emails, IPs, API keys, credentials, phone numbers, company names, and other identifying information. The redaction engine uses deterministic regex patterns — same input always produces the same output.</li>
             <li><strong className="text-foreground">Privacy modes.</strong> If you do not want even the redacted text stored, use "Keep it private" mode. We will only store mathematical fingerprints — enough for similarity comparison, but no text at all.</li>
-            <li><strong className="text-foreground">Open source.</strong> The entire codebase is <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">public on GitHub</a>. You can read the redaction patterns, the hashing algorithms, the slop detection heuristics, and the database schema. There is nothing hidden.</li>
-            <li><strong className="text-foreground">No business model.</strong> VulnRap is funded directly by REMEDiS Security and COMPLiTT because we use it ourselves. There are no investors, no ad revenue, no data monetization. If we can not keep funding it, the code is <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">open source</a> and someone else can run it.</li>
+            <li><strong className="text-foreground">Open source.</strong> The entire codebase is <a href="https://github.com/REMEDiSSecurity/VulnRap.Com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">public on GitHub</a>. You can read the redaction patterns, the hashing algorithms, the slop detection heuristics, and the database schema. There is nothing hidden.</li>
+            <li><strong className="text-foreground">No business model.</strong> VulnRap is funded directly by REMEDiS Security and COMPLiTT because we use it ourselves. There are no investors, no ad revenue, no data monetization. If we can not keep funding it, the code is <a href="https://github.com/REMEDiSSecurity/VulnRap.Com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">open source</a> and someone else can run it.</li>
           </ul>
         </div>
 
@@ -103,7 +103,7 @@ function FirstPost() {
             VulnRap only works if teams use it. The similarity detection gets better with every report in the database. If you run a PSIRT or triage team, use the Check page on incoming reports or integrate the API into your intake pipeline. Every report analyzed makes the system more useful for the entire community.
           </p>
           <p>
-            If you are a developer, the <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">project is open source</a> and we welcome contributions. The slop detection heuristics can always be improved, the redaction patterns can always catch more edge cases, and the section parser can always handle more report formats.
+            If you are a developer, the <a href="https://github.com/REMEDiSSecurity/VulnRap.Com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">project is open source</a> and we welcome contributions. The validation heuristics can always be improved, the redaction patterns can always catch more edge cases, and the section parser can always handle more report formats.
           </p>
           <p>
             If you find a security vulnerability in VulnRap itself, please <Link to="/security" className="text-primary hover:underline">report it responsibly</Link>. We are security people — we will take it seriously and fix it quickly.
@@ -133,7 +133,7 @@ export default function Blog() {
           Blog
         </h1>
         <p className="text-muted-foreground mt-2 max-w-3xl leading-relaxed">
-          Updates, technical deep-dives, and the occasional rant about AI-generated vulnerability reports.
+          Updates, technical deep-dives, and the occasional rant about vulnerability report quality.
         </p>
       </div>
 
@@ -150,7 +150,7 @@ export default function Blog() {
       </Card>
 
       <div className="text-center text-xs text-muted-foreground/50 pb-4">
-        <p><a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Follow the project on GitHub</a> to stay updated.</p>
+        <p><a href="https://github.com/REMEDiSSecurity/VulnRap.Com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Follow the project on GitHub</a> to stay updated.</p>
       </div>
     </div>
   );

@@ -9,8 +9,8 @@ const useCases = [
     title: "PSIRT / Triage Teams",
     subtitle: "Before you start reading",
     scenarios: [
-      "Paste incoming reports into the Check page. Get a slop score, duplicate detection, and redaction analysis without storing anything in VulnRap's database.",
-      "Flag reports scoring above 50 as potentially AI-generated. These are the ones most likely to describe a theoretical attack rather than an actual finding — deprioritize them accordingly.",
+      "Paste incoming reports into the Check page. Get a validity score, duplicate detection, verification results, and redaction analysis without storing anything in VulnRap's database.",
+      "Flag reports scoring above 50 for closer scrutiny. These are the ones most likely to describe a theoretical attack rather than an actual finding — deprioritize them accordingly.",
       "Use the API to build a pre-screening step into your triage pipeline. POST to /api/reports/check and auto-tag reports before they hit your queue.",
     ],
   },
@@ -18,9 +18,9 @@ const useCases = [
     icon: <Bug className="w-6 h-6 text-cyan-400" />,
     iconBg: "icon-glow-cyan",
     title: "Incoming Report Screening",
-    subtitle: "Catch slop before it wastes triage hours",
+    subtitle: "Catch low-validity reports before they waste triage hours",
     scenarios: [
-      "Run every inbound report through VulnRap as a first-pass quality check. Reports with high slop scores can be batched for bulk review instead of getting individual analyst time.",
+      "Run every inbound report through VulnRap as a first-pass validity check. Reports with high scores (likely fabricated) can be batched for bulk review instead of getting individual analyst time.",
       "Detect cross-submission duplicates automatically. If a report matches an existing one at 80%+, your team can close it as a duplicate immediately instead of re-triaging the same issue.",
       "Use the section-level hash comparison to spot reports that copy-paste the same PoC or impact statement across different submissions — a common pattern in spray-and-pray campaigns.",
     ],
@@ -33,7 +33,7 @@ const useCases = [
     scenarios: [
       "Integrate VulnRap's check endpoint as an intake pre-filter. Automatically score and tag incoming reports before they reach your triage queue.",
       "Use content hash lookups to detect cross-platform duplicates. If the same report has already been analyzed on VulnRap, the hash match tells your team instantly — no manual comparison needed.",
-      "Surface slop scores and similarity data alongside incoming submissions so triagers can prioritize high-quality, original reports first.",
+      "Surface validity scores and similarity data alongside incoming submissions so triagers can prioritize high-quality, original reports first.",
     ],
   },
   {
@@ -43,7 +43,7 @@ const useCases = [
     subtitle: "Automated quality gates for your intake workflow",
     scenarios: [
       "Add a VulnRap check step to your intake pipeline. When vulnerability reports arrive through automated channels (Jira, email parsers, Slack bots), run them through the API before they create tickets.",
-      "Set thresholds: auto-deprioritize reports with slop scores above 70, flag 30\u201370 for manual review, fast-track anything below 30 to an analyst.",
+      "Set thresholds: auto-deprioritize reports scoring above 70 (likely fabricated), flag 30\u201370 for manual review, fast-track anything below 30 to an analyst.",
       "Use the lookup endpoint to deduplicate incoming reports against your historical submissions before they generate new work items.",
     ],
   },
@@ -53,7 +53,7 @@ const useCases = [
     title: "Report Quality Benchmarking",
     subtitle: "Measure and track submission quality over time",
     scenarios: [
-      "Use VulnRap's stats page to monitor the overall quality of reports your team is receiving. Track average slop scores, duplicate rates, and submission volume trends.",
+      "Use VulnRap's stats page to monitor the overall quality of reports your team is receiving. Track average validity scores, duplicate rates, and submission volume trends.",
       "Identify repeat-offender patterns: if the same report structure keeps showing up with different target names swapped in, VulnRap's similarity detection catches it.",
       "Use the section-level analysis to understand which parts of incoming reports are original research vs. recycled boilerplate. This helps your team decide where to focus review effort.",
     ],

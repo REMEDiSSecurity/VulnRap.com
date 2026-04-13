@@ -163,7 +163,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="text-muted-foreground/25 group-hover:text-primary/40 transition-colors">— view changelog</span>
           </Link>
           <a
-            href="https://github.com/REMEDiSSecurity/VulnRapcom"
+            href="https://github.com/REMEDiSSecurity/VulnRap.Com"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-muted-foreground/50 hover:text-primary transition-colors group"

@@ -4,7 +4,7 @@
 
 VulnRap is a free, anonymous vulnerability report validation platform built for PSIRT and triage teams receiving vulnerability reports. Upload an incoming report and instantly get:
 
-- **AI Slop Detection** — Multi-axis scoring (0-100) fusing linguistic fingerprinting, factual verification, LLM semantic analysis, template detection, and active content verification via Noisy-OR fusion
+- **Report Validity Scoring** — Multi-axis scoring (0-100) fusing factual verification, linguistic analysis, LLM semantic analysis, template detection, and active content verification via Noisy-OR fusion to assess whether a report describes a real, reproducible issue
 - **Similarity Matching** — MinHash + LSH + SimHash fingerprinting catches near-duplicate and structurally similar submissions across the entire database
 - **Section-Level Hashing** — Individual sections are hashed independently, so copied "Steps to Reproduce" blocks get flagged even when the rest differs
 - **Auto-Redaction** — PII, secrets, API keys, credentials, and identifying information are stripped before anything is stored or compared
@@ -16,7 +16,7 @@ Reports are auto-redacted, then compared. Nothing identifies you. No accounts re
 
 ## Why This Exists
 
-PSIRT teams waste hours triaging AI-generated garbage and duplicate submissions. VulnRap gives triage teams a quick sanity check on incoming reports before they consume analyst time.
+PSIRT teams waste hours triaging reports that turn out to describe non-existent vulnerabilities — fabricated function names, placeholder PoCs, templated content, duplicate submissions. VulnRap gives triage teams a quick validity check on incoming reports before they consume analyst time. The question isn't "was this written by AI?" — it's "does this report describe a real issue?"
 
 Built and funded by [REMEDiS Security](https://remedissecurity.com) and [COMPLiTT](https://complitt.com).
 
@@ -80,8 +80,8 @@ Upload/Paste → Sanitize → Auto-Redact PII/Secrets
 ### Automated Setup
 
 ```bash
-git clone https://github.com/REMEDiSSecurity/VulnRapcom.git
-cd VulnRapcom
+git clone https://github.com/REMEDiSSecurity/VulnRap.Com.git
+cd VulnRap.Com
 ./setup.sh
 ```
 
@@ -99,8 +99,8 @@ The setup script checks prerequisites, installs dependencies, configures the dat
 
 ```bash
 # Clone and install
-git clone https://github.com/REMEDiSSecurity/VulnRapcom.git
-cd VulnRapcom
+git clone https://github.com/REMEDiSSecurity/VulnRap.Com.git
+cd VulnRap.Com
 pnpm install
 
 # Start PostgreSQL (if you don't have one running)
@@ -141,9 +141,9 @@ OPENAI_API_KEY=sk-...
 To download VulnRap as a ZIP archive without git history:
 
 ```bash
-curl -L https://github.com/REMEDiSSecurity/VulnRapcom/archive/refs/heads/main.zip -o vulnrap.zip
+curl -L https://github.com/REMEDiSSecurity/VulnRap.Com/archive/refs/heads/main.zip -o vulnrap.zip
 unzip vulnrap.zip
-cd VulnRapcom-main
+cd VulnRap.Com-main
 ./setup.sh
 ```
 
@@ -306,7 +306,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
 
 ## Security
 
-If you find a security vulnerability in VulnRap itself, please report it responsibly via the contact in [/.well-known/security.txt](https://vulnrap.com/.well-known/security.txt) rather than opening a public issue. See [SECURITY.md](https://github.com/REMEDiSSecurity/VulnRapcom/security/policy) for details.
+If you find a security vulnerability in VulnRap itself, please report it responsibly via the contact in [/.well-known/security.txt](https://vulnrap.com/.well-known/security.txt) rather than opening a public issue. See [SECURITY.md](https://github.com/REMEDiSSecurity/VulnRap.Com/security/policy) for details.
 
 ## License
 

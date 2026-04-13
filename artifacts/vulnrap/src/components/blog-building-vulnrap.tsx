@@ -61,7 +61,7 @@ export function BlogBuildingVulnrap() {
           <span>by the REMEDiS Security team</span>
         </div>
         <h2 className="text-2xl font-bold tracking-tight">
-          Building VulnRap: How We're Making AI Slop Detection Actually Work for PSIRT Teams
+          Building VulnRap: How We're Making Vulnerability Report Validation Actually Work for PSIRT Teams
         </h2>
         <p className="text-muted-foreground leading-relaxed">
           A detailed walkthrough of four development sprints, what we built, what we learned, what works, and what's coming next.
@@ -521,7 +521,7 @@ Final score: 15 + combined_probability * 80`}</CodeBlock>
       <div className="text-center text-xs text-muted-foreground/70 italic">
         <p>
           VulnRap is free and open. The API is at <Code>POST /api/reports/check</Code>. The source is on{" "}
-          <a href="https://github.com/REMEDiSSecurity/VulnRapcom" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+          <a href="https://github.com/REMEDiSSecurity/VulnRap.Com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
             GitHub
             <ExternalLink className="w-3 h-3 inline ml-0.5" />
           </a>.
