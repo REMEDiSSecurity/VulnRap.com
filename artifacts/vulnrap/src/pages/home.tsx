@@ -13,10 +13,11 @@ import { Progress } from "@/components/ui/progress";
 import { cn, anonymizeId } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
+import { AnalysisStepper } from "@/components/analysis-stepper";
 import logoSrc from "@/assets/logo.png";
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const MAX_TEXT_LENGTH = 20 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_TEXT_LENGTH = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md", ".pdf"];
 
 function getSlopColor(score: number) {
@@ -53,7 +54,7 @@ function validateFile(file: File): string | null {
     return `Unsupported file type. Accepted formats: .txt, .md, .pdf`;
   }
   if (file.size > MAX_FILE_SIZE) {
-    return `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 20MB.`;
+    return `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 5MB.`;
   }
   if (file.size === 0) {
     return "File is empty. Please select a file with content.";
@@ -707,7 +708,7 @@ export default function Home() {
         return;
       }
       if (new Blob([trimmed]).size > MAX_TEXT_LENGTH) {
-        toast({ title: "Text too large", description: "Pasted text exceeds the 20MB limit.", variant: "destructive" });
+        toast({ title: "Text too large", description: "Pasted text exceeds the 5MB limit.", variant: "destructive" });
         return;
       }
       submitMutation.mutate({ data: { rawText: trimmed, contentMode: mode, showInFeed: feedVal } });
@@ -796,7 +797,7 @@ export default function Home() {
             Submit Report
             <Explainer text="Submit a vulnerability report for analysis. Upload a file or paste your report text directly. We'll analyze it for AI-generated content and check it against previously submitted reports for similarity." />
           </CardTitle>
-          <CardDescription>Upload a file, paste text, or link to a report (Max 20MB)</CardDescription>
+          <CardDescription>Upload a file, paste text, or link to a report (Max 5MB)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 sm:space-y-8">
           <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 px-3 sm:px-4 py-2.5 sm:py-3 text-xs text-muted-foreground leading-relaxed">
@@ -1013,6 +1014,8 @@ export default function Home() {
         </CardFooter>
       </Card>
 
+      <AnalysisStepper isActive={isProcessing && stage !== "done"} mode="submit" className="my-4" />
+
       <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5">
         <h2 className="text-lg font-bold flex items-center gap-2">
           <Zap className="w-5 h-5 text-primary" />
@@ -1084,7 +1087,7 @@ function TransparencySection() {
               </h3>
               <ul className="space-y-2 text-xs text-muted-foreground leading-relaxed">
                 <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">1.</span>You select a file, paste text, or enter a URL — your raw content stays in your browser until you hit Submit.</li>
-                <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">2.</span>File type validation (.txt, .md, .pdf) and size checks (20MB max) run entirely in the browser.</li>
+                <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">2.</span>File type validation (.txt, .md, .pdf) and size checks (5MB max) run entirely in the browser.</li>
                 <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">3.</span>No content is sent to our server until you explicitly submit. There is no background upload, no preview processing, no analytics on your text.</li>
                 <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">4.</span>After submission, a one-time delete token is stored in your browser's session storage. This token lets you delete your report — it is never sent to any third party and is lost when you close the tab.</li>
               </ul>

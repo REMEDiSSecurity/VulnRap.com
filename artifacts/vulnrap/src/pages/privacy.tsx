@@ -255,7 +255,7 @@ export default function Privacy() {
                   File Handling
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Uploaded files are validated server-side (extension, size, content type). Files are processed in memory and never temporarily written to disk. Maximum file size is 20MB.
+                  Uploaded files are validated server-side (extension, size, content type). Files are processed in memory and never temporarily written to disk. Maximum file size is 5MB.
                 </p>
               </div>
               <div className="space-y-3">

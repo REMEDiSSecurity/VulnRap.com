@@ -11,8 +11,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { addHistoryEntry } from "@/lib/history";
 import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCustom, adjustScore, adjustTier, SENSITIVITY_PRESETS, type SensitivityPreset } from "@/lib/settings";
+import { AnalysisStepper } from "@/components/analysis-stepper";
+import { ConfidenceGauge } from "@/components/confidence-gauge";
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
 
 type InputMode = "file" | "text" | "link";
@@ -21,7 +23,7 @@ function validateFile(file: File): string | null {
   const ext = file.name.toLowerCase();
   const hasValidExt = ALLOWED_EXTENSIONS.some(e => ext.endsWith(e));
   if (!hasValidExt) return `Unsupported file type. Accepted formats: ${ALLOWED_EXTENSIONS.join(", ")}`;
-  if (file.size > MAX_FILE_SIZE) return `File too large. Maximum size is 20MB.`;
+  if (file.size > MAX_FILE_SIZE) return `File too large. Maximum size is 5MB.`;
   if (file.size === 0) return "File is empty.";
   return null;
 }
@@ -165,17 +167,8 @@ function CheckScoreContent({ result, sensitivity, onSensitivityChange }: {
         )}
       </div>
       {result.confidence != null && (
-        <div className="w-full max-w-xs mt-3 flex items-center gap-2">
-          <Gauge className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-          <div className="flex-1 space-y-0.5">
-            <div className="flex justify-between text-[10px]">
-              <span className="text-muted-foreground">Confidence</span>
-              <span className={`font-mono font-bold ${getConfidenceColor(result.confidence)}`}>
-                {(result.confidence * 100).toFixed(0)}% — {getConfidenceLabel(result.confidence)}
-              </span>
-            </div>
-            <Progress value={result.confidence * 100} className="h-1" indicatorClassName={result.confidence >= 0.8 ? "bg-green-500" : result.confidence >= 0.5 ? "bg-yellow-500" : "bg-orange-500"} />
-          </div>
+        <div className="mt-3">
+          <ConfidenceGauge value={result.confidence} size={110} label="Confidence" />
         </div>
       )}
       <div className="w-full max-w-xs mt-3">
@@ -477,7 +470,7 @@ export default function Check() {
                 <>
                   <UploadCloud className="w-8 h-8 text-muted-foreground" />
                   <span className="font-medium">Drop a file here or click to browse</span>
-                  <span className="text-xs text-muted-foreground">.txt, .md (max 20MB)</span>
+                  <span className="text-xs text-muted-foreground">.txt, .md (max 5MB)</span>
                 </>
               )}
               {fileError && <span className="text-xs text-destructive">{fileError}</span>}
@@ -498,6 +491,8 @@ export default function Check() {
           </Button>
         </CardFooter>
       </Card>
+
+      <AnalysisStepper isActive={checkMutation.isPending} mode="check" className="my-4" />
 
       {result && (
         <div className="space-y-6">

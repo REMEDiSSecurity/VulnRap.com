@@ -36,12 +36,13 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
 - Features route-level code splitting for performance.
 - Provides various user interfaces including:
     - Home/Submit page with drag-and-drop upload and privacy mode selection.
-    - Analysis Results page displaying dual scores (AI Likelihood + Report Quality), confidence indicator, per-axis breakdown (Linguistic/Factual/Template/LLM), evidence signals with weight badges, LLM dimension scores, redaction summary, similarity matches, and section-level analysis.
+    - Analysis Results page displaying dual scores (AI Likelihood + Report Quality), confidence gauge (semicircular SVG), per-axis breakdown (Linguistic/Factual/Template/LLM), LLM radar chart (5-dimension spider chart), evidence signals with weight badges, evidence-highlighted report text with inline citations, redaction summary, similarity matches, and section-level analysis.
+    - Analysis progress stepper component showing pipeline stages (Upload → Redact → Linguistic → Factual → Template/Similarity → LLM/Scoring → Triage) during submission/check.
     - Batch Upload and Compare Two Reports functionalities.
     - Session History and Export/Download options.
     - Public verification page (`/verify/:id`) for sharing analysis results.
     - API documentation for developers and use case explanations.
-- Supports triple input methods: file upload (.txt, .md), direct text paste, or URL link (GitHub, Gist, etc.).
+- Supports triple input methods: file upload (.txt, .md, 5MB max), direct text paste, or URL link (GitHub, Gist, etc.).
 - Utilizes generated API hooks from `@workspace/api-client-react`.
 
 ### Backend (`artifacts/api-server/`)

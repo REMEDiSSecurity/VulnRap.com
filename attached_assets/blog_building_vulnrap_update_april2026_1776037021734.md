@@ -12,6 +12,24 @@ VulnRap was built to solve this. Not by replacing human judgment, but by giving 
 
 ---
 
+## How This Started: A Weekend Project That Wouldn't Let Go
+
+VulnRap started as a weekend project. That's it — no funding round, no roadmap, no team. Just a frustrated PSIRT engineer who'd spent one too many Friday afternoons triaging a beautifully formatted report about a buffer overflow in a function that didn't exist.
+
+The initial idea was deliberately narrow: "What if I just grep for 'Dear Security Team' and 'I hope this message finds you well' and auto-flag those?" That prototype took about two hours. It caught maybe 30% of the slop in our queue. Good enough to be interesting. Not good enough to be useful.
+
+And that's where the nerd sniping happened.
+
+If you're unfamiliar with the term, "nerd sniping" is [the xkcd concept](https://xkcd.com/356/) where you present someone with a problem so interesting that they can't stop thinking about it. AI slop detection is a textbook nerd snipe: it sits at the intersection of computational linguistics, information retrieval, adversarial machine learning, and the deeply human question of "what does it mean to actually understand a vulnerability?"
+
+The weekend project became a week-long project. The week became a month. Every time I solved one detection problem, I'd find two more. "OK, I can catch AI phrases — but what about the slop that doesn't use AI phrases?" That led to statistical text analysis. "OK, I can detect abnormal sentence uniformity — but what about the slop that references real code?" That led to factual verification via GitHub API. "OK, I can check if functions exist — but what about the slop that references real functions but describes fake vulnerabilities?" That led to the LLM semantic analysis layer.
+
+Each layer was a weekend. Each weekend peeled back another layer of the problem. And each layer revealed that slop detection is fundamentally a game theory problem — you're not building a classifier, you're building a system where every bypass requires doing progressively more real work, until the effort to bypass the detector exceeds the effort to just find a real vulnerability.
+
+The stack reflects the weekend-project origin: Express, React, PostgreSQL, TailwindCSS. Nothing exotic. The entire thing runs on a single Replit instance. We open-sourced it because the problem isn't ours alone — every PSIRT team, every bug bounty program, every open-source maintainer is dealing with this. The more eyes on the detection logic, the better it gets.
+
+---
+
 ## Where We Started: The Brutal Baseline
 
 Before we could improve anything, we needed to know how well (or poorly) the original system worked. We ran a blind test: 29 vulnerability reports submitted through the VulnRap API. 14 were known AI slop at varying sophistication levels. 15 were confirmed legitimate — sourced from HackerOne disclosed reports (with real bounty payouts), oss-security mailing list advisories written by researchers like Daniel Stenberg and Qualys, and Full Disclosure advisories from firms like SEC Consult.
@@ -312,6 +330,13 @@ The feedback is designed to be professional and constructive — not accusatory.
 ### UI Integration
 
 The triage report renders as a tabbed panel (Reproduce, Gaps, Don't Miss, Reporter Feedback) with a "Copy for Ticket" button that generates formatted markdown suitable for pasting into Jira, ServiceNow, or GitHub Issues. One click gives the triager a complete triage summary they can attach to the ticket.
+
+The results page also includes several visualization features designed for at-a-glance triage:
+
+- **Confidence Gauge**: A semicircular gauge showing how certain the analysis is, color-coded from orange (low) through yellow (medium) to green (high). This tells triagers whether to trust the score or treat it as a rough estimate.
+- **LLM Radar Chart**: When LLM analysis is available, the five semantic dimensions (Specificity, Originality, Voice, Coherence, Hallucination) render as a radar/spider chart alongside the traditional bar breakdown. The shape of the polygon tells an immediate visual story — a legitimate report produces a small, even polygon; slop produces a large, spiky one.
+- **Evidence-Highlighted Report Text**: The redacted report text is displayed with inline citations — matched AI phrases are highlighted in red, human signals in green. Hovering over any highlight shows the evidence type and weight. This lets a triager scan the original text and see exactly what triggered each signal, instead of cross-referencing between a list of evidence items and the report.
+- **Analysis Progress Stepper**: During submission, a multi-step stepper shows the analysis pipeline progressing through Upload → Redact → Linguistic → Factual → Template → LLM → Triage, replacing the generic spinner. This builds confidence that something meaningful is happening and gives a sense of how much longer to wait.
 
 ---
 

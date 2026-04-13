@@ -13,6 +13,9 @@ import FeedbackForm from "@/components/feedback-form";
 import { anonymizeId } from "@/lib/utils";
 import { SettingsButton } from "@/components/settings-panel";
 import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCustom, adjustScore, adjustTier, SENSITIVITY_PRESETS, type VulnRapSettings, type SensitivityPreset } from "@/lib/settings";
+import { RadarChart } from "@/components/radar-chart";
+import { ConfidenceGauge } from "@/components/confidence-gauge";
+import { HighlightedReport } from "@/components/evidence-highlighter";
 
 function getQualityColor(score: number) {
   if (score >= 70) return "text-green-500";
@@ -756,7 +759,6 @@ export default function Results() {
   const id = parseInt(params.id || "0", 10);
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [showFullReport, setShowFullReport] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [expandedCompare, setExpandedCompare] = useState<number | null>(null);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
@@ -1133,17 +1135,8 @@ export default function Results() {
             </div>
 
             {confidence != null && (
-              <div className="w-full max-w-md mt-5 flex items-center gap-3">
-                <Gauge className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <div className="flex-1 space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Confidence</span>
-                    <span className={`font-mono font-bold ${getConfidenceColor(confidence)}`}>
-                      {(confidence * 100).toFixed(0)}% — {getConfidenceLabel(confidence)}
-                    </span>
-                  </div>
-                  <Progress value={confidence * 100} className="h-1.5" indicatorClassName={confidence >= 0.8 ? "bg-green-500" : confidence >= 0.5 ? "bg-yellow-500" : "bg-orange-500"} />
-                </div>
+              <div className="mt-4">
+                <ConfidenceGauge value={confidence} size={130} label="Analysis Confidence" />
               </div>
             )}
 
@@ -1283,12 +1276,26 @@ export default function Results() {
             <CardDescription>Per-dimension LLM semantic analysis</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
-              {llmBreakdown.specificity != null && <LlmDimensionBar label="Specificity" score={llmBreakdown.specificity} />}
-              {llmBreakdown.originality != null && <LlmDimensionBar label="Originality" score={llmBreakdown.originality} />}
-              {llmBreakdown.voice != null && <LlmDimensionBar label="Voice" score={llmBreakdown.voice} />}
-              {llmBreakdown.coherence != null && <LlmDimensionBar label="Coherence" score={llmBreakdown.coherence} />}
-              {llmBreakdown.hallucination != null && <LlmDimensionBar label="Hallucination" score={llmBreakdown.hallucination} />}
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="flex-shrink-0">
+                <RadarChart
+                  data={[
+                    { label: "Specificity", value: llmBreakdown.specificity ?? 0, max: 100 },
+                    { label: "Originality", value: llmBreakdown.originality ?? 0, max: 100 },
+                    { label: "Voice", value: llmBreakdown.voice ?? 0, max: 100 },
+                    { label: "Coherence", value: llmBreakdown.coherence ?? 0, max: 100 },
+                    { label: "Hallucination", value: llmBreakdown.hallucination ?? 0, max: 100 },
+                  ]}
+                  size={220}
+                />
+              </div>
+              <div className="flex-1 w-full space-y-3">
+                {llmBreakdown.specificity != null && <LlmDimensionBar label="Specificity" score={llmBreakdown.specificity} />}
+                {llmBreakdown.originality != null && <LlmDimensionBar label="Originality" score={llmBreakdown.originality} />}
+                {llmBreakdown.voice != null && <LlmDimensionBar label="Voice" score={llmBreakdown.voice} />}
+                {llmBreakdown.coherence != null && <LlmDimensionBar label="Coherence" score={llmBreakdown.coherence} />}
+                {llmBreakdown.hallucination != null && <LlmDimensionBar label="Hallucination" score={llmBreakdown.hallucination} />}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1673,31 +1680,12 @@ export default function Results() {
       )}
 
       {report.redactedText && (
-        <Card className="glass-card rounded-xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              Redacted Report Content
-              <Hint text="This is the auto-redacted version of your report that was stored and compared. PII, secrets, and identifying information have been replaced with redaction tags." />
-            </CardTitle>
-            <CardDescription>Auto-redacted version stored in the platform</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFullReport(!showFullReport)}
-              className="mb-4 glass-card hover:border-primary/30"
-            >
-              {showFullReport ? "Hide Report" : "Show Redacted Report"}
-            </Button>
-            {showFullReport && (
-              <pre className="glass-card rounded-xl p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto max-h-96 overflow-y-auto leading-relaxed">
-                {report.redactedText}
-              </pre>
-            )}
-          </CardContent>
-        </Card>
+        <HighlightedReport
+          text={report.redactedText}
+          evidence={evidence ?? []}
+          humanIndicators={humanIndicators}
+          typeLabels={EVIDENCE_TYPE_LABELS}
+        />
       )}
 
       <FeedbackForm reportId={id} />

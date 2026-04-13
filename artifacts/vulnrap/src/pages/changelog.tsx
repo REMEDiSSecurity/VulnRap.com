@@ -233,7 +233,7 @@ const CHANGELOG: ChangelogEntry[] = [
         type: "feature",
         items: [
           "Full vulnerability report analysis pipeline: auto-redaction → similarity matching → slop scoring → section hashing",
-          "Triple input modes: file upload (.txt, .md, 20MB), text paste, and URL fetch (GitHub, Gist, GitLab, Pastebin, and more)",
+          "Triple input modes: file upload (.txt, .md, 5MB), text paste, and URL fetch (GitHub, Gist, GitLab, Pastebin, and more)",
           "Privacy modes: Full (stores redacted text + hashes) and Similarity-Only (hashes only, no text stored)",
           "Shareable results page at /results/:id with slop score, similarity matches, section hashes, and redaction summary",
           "Public verification badge page at /verify/:id — lightweight, linkable, no auth required",

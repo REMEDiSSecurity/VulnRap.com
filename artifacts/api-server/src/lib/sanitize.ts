@@ -1,4 +1,4 @@
-const MAX_INPUT_LENGTH = 20 * 1024 * 1024;
+const MAX_INPUT_LENGTH = 5 * 1024 * 1024;
 
 export function sanitizeText(input: string): string {
   let text = input;

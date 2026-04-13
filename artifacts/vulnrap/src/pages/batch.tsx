@@ -11,7 +11,7 @@ import { addHistoryEntry } from "@/lib/history";
 import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
 import { anonymizeId } from "@/lib/utils";
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md", ".pdf"];
 const MAX_FILES = 50;
 
@@ -33,7 +33,7 @@ function validateFile(file: File): string | null {
   const ext = file.name.toLowerCase();
   const hasValidExt = ALLOWED_EXTENSIONS.some((e) => ext.endsWith(e));
   if (!hasValidExt) return `Unsupported file type`;
-  if (file.size > MAX_FILE_SIZE) return `File too large (max 20MB)`;
+  if (file.size > MAX_FILE_SIZE) return `File too large (max 5MB)`;
   if (file.size === 0) return "File is empty";
   return null;
 }
@@ -226,7 +226,7 @@ export default function Batch() {
               Drop report files here or click to browse
             </span>
             <span className="text-xs text-muted-foreground">
-              .txt, .md, .pdf — up to {MAX_FILES} files, 20MB each
+              .txt, .md, .pdf — up to {MAX_FILES} files, 5MB each
             </span>
           </div>
         </CardContent>

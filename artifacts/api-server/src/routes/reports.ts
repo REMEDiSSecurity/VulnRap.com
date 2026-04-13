@@ -121,7 +121,7 @@ async function performAnalysis(originalText: string, redactedText: string): Prom
   };
 }
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_URL_SIZE = 5 * 1024 * 1024;
 const URL_TIMEOUT_MS = 15_000;
 
@@ -271,7 +271,7 @@ router.post("/reports", (req, res, next): void => {
   upload.single("file")(req, res, (err) => {
     if (err) {
       if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-        res.status(413).json({ error: "File exceeds 20MB limit." });
+        res.status(413).json({ error: "File exceeds 5MB limit." });
         return;
       }
       res.status(400).json({ error: err.message || "Upload failed." });
@@ -326,7 +326,7 @@ router.post("/reports", async (req, res): Promise<void> => {
     safeFileName = "pasted-text.txt";
     rawFileSize = Buffer.byteLength(rawText, "utf-8");
     if (rawFileSize > MAX_FILE_SIZE) {
-      res.status(413).json({ error: "Text exceeds 20MB limit." });
+      res.status(413).json({ error: "Text exceeds 5MB limit." });
       return;
     }
   } else {
@@ -572,7 +572,7 @@ router.post("/reports/check", (req, res, next): void => {
   upload.single("file")(req, res, (err) => {
     if (err) {
       if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-        res.status(413).json({ error: "File exceeds 20MB limit." });
+        res.status(413).json({ error: "File exceeds 5MB limit." });
         return;
       }
       res.status(400).json({ error: err.message || "Upload failed." });
@@ -613,7 +613,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
   } else if (rawText.length > 0) {
     text = sanitizeText(rawText);
     if (Buffer.byteLength(rawText, "utf-8") > MAX_FILE_SIZE) {
-      res.status(413).json({ error: "Text exceeds 20MB limit." });
+      res.status(413).json({ error: "Text exceeds 5MB limit." });
       return;
     }
   } else {
