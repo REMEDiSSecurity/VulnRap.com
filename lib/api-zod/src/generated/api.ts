@@ -347,10 +347,17 @@ export const GetReportResponse = zod.object({
         )
         .optional(),
       totalDurationMs: zod.number().optional(),
+      crashInfo: zod
+        .object({
+          message: zod.string().optional(),
+          stage: zod.string().optional(),
+          inputLength: zod.number().optional(),
+        })
+        .nullish(),
     })
     .nullish()
     .describe(
-      "Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.",
+      "Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings. crashInfo is non-null when the pipeline ran in degraded mode.",
     ),
   adjustedScore: zod
     .number()
@@ -1087,10 +1094,17 @@ export const CheckReportResponse = zod.object({
         )
         .optional(),
       totalDurationMs: zod.number().optional(),
+      crashInfo: zod
+        .object({
+          message: zod.string().optional(),
+          stage: zod.string().optional(),
+          inputLength: zod.number().optional(),
+        })
+        .nullish(),
     })
     .nullish()
     .describe(
-      "Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.",
+      "Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings. crashInfo is non-null when the pipeline ran in degraded mode.",
     ),
   adjustedScore: zod
     .number()

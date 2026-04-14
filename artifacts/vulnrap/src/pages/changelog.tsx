@@ -3,10 +3,81 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout } from "lucide-react";
 
-export const CURRENT_VERSION = "3.2.0";
+export const CURRENT_VERSION = "3.2.1";
 export const RELEASE_DATE = "2026-04-14";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.2.1",
+    date: "2026-04-14",
+    label: "Pipeline Hardening & Real-World Validation",
+    labelColor: "border-amber-500 text-amber-400",
+    sections: [
+      {
+        icon: <Shield className="w-4 h-4 text-red-400" />,
+        title: "Pipeline Crash Fix",
+        type: "fix",
+        items: [
+          "Fixed upstream crash that silently zeroed all heuristic signals and LLM results for certain inputs — root cause was unprotected similarity/section-hashing code crashing on special characters before the analysis pipeline ever ran",
+          "Nuclear try/catch now wraps the entire analysis orchestration function — crashes produce a degraded result with crashInfo diagnostics instead of null diagnostics and zeroed scores",
+          "Similarity and section-hashing code wrapped in independent try/catch blocks in both POST /reports and POST /reports/check — pipeline continues with empty similarity data on crash",
+          "New sanitizeForAnalysis() preprocessor: strips control characters, normalizes Unicode (NFC), caps input at 50K characters before any regex-based detector runs",
+          "diagnostics.crashInfo field added to API responses — non-null when pipeline ran in degraded mode, containing the crash stage, error message, and input length for debugging",
+        ],
+      },
+      {
+        icon: <Brain className="w-4 h-4 text-cyan-400" />,
+        title: "LLM Compatibility Fix (gpt-5-nano)",
+        type: "fix",
+        items: [
+          "Fixed LLM results never being incorporated — gpt-5-nano is a reasoning model that rejects the temperature parameter and consumes completion tokens for internal chain-of-thought, leaving nothing for output",
+          "Compact system prompt for nano/mini models: scoring JSON only (no triage/recipe sections), fitting within the smaller effective token budget after reasoning overhead",
+          "Token budget raised to 4,000 for nano and 8,000 for full models; timeout increased to 30s; retries reduced to 1 for nano to fail fast",
+        ],
+      },
+      {
+        icon: <Search className="w-4 h-4 text-green-400" />,
+        title: "Template False-Positive Fix",
+        type: "fix",
+        items: [
+          "Bounty template minimum match count raised from 3 to 5 — legitimate structured reports (e.g., DoD VDP) with standard section headers (Impact, Steps to Reproduce, Remediation) no longer trigger the template detector",
+        ],
+      },
+      {
+        icon: <FlaskConical className="w-4 h-4 text-emerald-400" />,
+        title: "Real-World Test Corpus",
+        type: "improvement",
+        items: [
+          "Added real-world slop corpus: 5 actual AI-generated reports rejected by the curl project on HackerOne (fabricated function names, invented ASan output, test certs flagged as credentials, protocol-required crypto flagged as vulnerable)",
+          "Added real-world legitimate report: a triaged, bounty-awarded HackerOne access control finding — verifies no false positives on genuine human reports with casual greetings",
+          "Pipeline robustness tests: SQL injection payloads, GraphQL JSON, pipe/backtick characters, 40K single-line input, and Unicode/emoji all process without crashes",
+          "126 tests across 11 test files (up from 114 across 10)",
+        ],
+      },
+      {
+        icon: <Wrench className="w-4 h-4 text-orange-400" />,
+        title: "Lessons Learned",
+        type: "improvement",
+        items: [
+          "Per-detector try/catch is not enough — if the crash is upstream (in preprocessing, section parsing, or similarity hashing), individually wrapped detectors never execute. Defense-in-depth means wrapping at EVERY level: orchestration, stage, and detector",
+          "Reasoning models (gpt-5-nano) behave fundamentally differently from instruction models — they silently consume output tokens for chain-of-thought, reject temperature!=1, and need compact prompts to leave room for actual output",
+          "Synthetic test data overfits to its own patterns — our AI-generated test corpus missed real-world slop characteristics (argued-back responses, fabricated ASan output, openly admitting AI use). Real reports from public disclosures are the ground truth",
+          "Null diagnostics vs empty diagnostics is a critical API contract distinction — downstream consumers need to differentiate 'analysis crashed' from 'analysis ran but found nothing'. crashInfo solves this",
+          "Template detection thresholds must account for legitimate report structure — structured vulnerability reports naturally contain headers like Impact and Steps to Reproduce. Five matching headers is a better threshold than three",
+        ],
+      },
+      {
+        icon: <Code2 className="w-4 h-4 text-orange-400" />,
+        title: "API Changes",
+        type: "improvement",
+        items: [
+          "llmFailed boolean added to all API responses — true only when LLM was attempted but failed (not when skipped or unavailable)",
+          "diagnostics.crashInfo added to OpenAPI spec for both GetReportResponse and CheckReportResponse",
+          "llmUsed now gates on runtime LLM availability (not just user skip flag) for accurate reporting",
+        ],
+      },
+    ],
+  },
   {
     version: "3.2.0",
     date: "2026-04-14",
@@ -49,7 +120,7 @@ const CHANGELOG: ChangelogEntry[] = [
         type: "improvement",
         items: [
           "Model switched from gpt-4o-mini to gpt-5-nano for faster, cheaper analysis",
-          "Timeout reduced from 30s to 15s; max_tokens from 2500 to 1000; input truncation from 6000 to 4000 characters",
+          "Timeout reduced from 30s to 15s; max_tokens from 2500 to 1000; input truncation from 6000 to 4000 characters (later adjusted in v3.2.1 for reasoning model compatibility)",
           "LLM now runs in parallel with heuristics instead of waiting for preliminary scores — shaves seconds off every analysis",
           "LLM prompt refocused on report validity and substance assessment rather than pure AI detection",
         ],

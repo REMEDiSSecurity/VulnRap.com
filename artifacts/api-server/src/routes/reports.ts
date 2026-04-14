@@ -27,7 +27,7 @@ import { fuseScores, recomputeSlopScoreWithoutLlm, type FusionResult, type Evide
 import { generateConfigImpactNotices, type ConfigImpactNotice } from "../lib/config-notices";
 import { redactReport } from "../lib/redactor";
 import { parseSections, findSectionMatches } from "../lib/section-parser";
-import { sanitizeText, sanitizeFileName, detectBinaryContent } from "../lib/sanitize";
+import { sanitizeText, sanitizeForAnalysis, sanitizeFileName, detectBinaryContent } from "../lib/sanitize";
 import { extractTextFromPdf } from "../lib/pdf";
 import { logger } from "../lib/logger";
 import { performActiveVerification, type VerificationResult } from "../lib/active-verification";
@@ -76,6 +76,12 @@ interface StageStatus {
   error?: string;
 }
 
+interface CrashInfo {
+  message: string;
+  stage: string;
+  inputLength: number;
+}
+
 interface AnalysisDiagnostics {
   inputStats: {
     charCount: number;
@@ -87,6 +93,7 @@ interface AnalysisDiagnostics {
   stages: Record<string, StageStatus>;
   parseWarnings: Array<{ type: string; detail: string }>;
   totalDurationMs: number;
+  crashInfo: CrashInfo | null;
 }
 
 interface AnalysisResult extends FusionResult {
@@ -120,22 +127,27 @@ async function runStage<T>(
 async function performAnalysis(originalText: string, redactedText: string, opts?: { skipLlm?: boolean }): Promise<AnalysisResult> {
   const pipelineStart = Date.now();
 
-  const lines = originalText.split("\n");
+  const safeOriginal = sanitizeForAnalysis(originalText);
+  const safeRedacted = sanitizeForAnalysis(redactedText);
+
+  const lines = safeOriginal.split("\n");
   let maxLineLength = 0;
   for (const line of lines) {
     if (line.length > maxLineLength) maxLineLength = line.length;
   }
+
   const diagnostics: AnalysisDiagnostics = {
     inputStats: {
-      charCount: originalText.length,
+      charCount: safeOriginal.length,
       lineCount: lines.length,
-      wordCount: (originalText.match(/\b\w+\b/g) || []).length,
+      wordCount: (safeOriginal.match(/\b\w+\b/g) || []).length,
       maxLineLength,
-      containsPlaceholders: /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]/i.test(originalText),
+      containsPlaceholders: /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]/i.test(safeOriginal),
     },
     stages: {},
     parseWarnings: [],
     totalDurationMs: 0,
+    crashInfo: null,
   };
 
   if (diagnostics.inputStats.maxLineLength > 10000) {
@@ -145,78 +157,117 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
     });
   }
 
-  const userSkippedLlm = opts?.skipLlm === true;
-  const llmAvailable = isLLMAvailable();
-  const callLlm = !userSkippedLlm && llmAvailable;
+  try {
+    const userSkippedLlm = opts?.skipLlm === true;
+    const llmAvailable = isLLMAvailable();
+    const callLlm = !userSkippedLlm && llmAvailable;
 
-  const llmPromise = callLlm
-    ? runStage("llm_analysis", () => analyzeSlopWithLLM(redactedText), diagnostics)
-    : Promise.resolve(null);
+    const llmPromise = callLlm
+      ? runStage("llm_analysis", () => analyzeSlopWithLLM(safeRedacted), diagnostics)
+      : Promise.resolve(null);
 
-  const [heuristic, linguistic, factual, verification] = await Promise.all([
-    runStage("heuristic_analysis", () => analyzeSloppiness(originalText), diagnostics),
-    runStage("linguistic_analysis", () => analyzeLinguistic(originalText), diagnostics),
-    runStage("factual_verification", () => analyzeFactual(originalText), diagnostics),
-    runStage("active_verification", () => performActiveVerification(redactedText), diagnostics),
-  ]);
+    const [heuristic, linguistic, factual, verification] = await Promise.all([
+      runStage("heuristic_analysis", () => analyzeSloppiness(safeOriginal), diagnostics),
+      runStage("linguistic_analysis", () => analyzeLinguistic(safeOriginal), diagnostics),
+      runStage("factual_verification", () => analyzeFactual(safeOriginal), diagnostics),
+      runStage("active_verification", () => performActiveVerification(safeRedacted), diagnostics),
+    ]);
 
-  const llmResult: LLMSlopResult | null = (await llmPromise) ?? null;
+    const llmResult: LLMSlopResult | null = (await llmPromise) ?? null;
 
-  if (!callLlm) {
-    diagnostics.stages["llm_analysis"] = { status: "ok", durationMs: 0, error: userSkippedLlm ? "skipped_by_user" : "not_needed" };
-  }
+    if (!callLlm) {
+      diagnostics.stages["llm_analysis"] = { status: "ok", durationMs: 0, error: userSkippedLlm ? "skipped_by_user" : "not_needed" };
+    }
 
-  const safeLinguistic = linguistic ?? { score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0, evidence: [] };
-  const safeFactual = factual ?? { score: 0, severityInflationScore: 0, placeholderScore: 0, fabricatedOutputScore: 0, evidence: [] };
-  const safeQuality = heuristic?.qualityScore ?? 50;
+    const safeLinguistic = linguistic ?? { score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0, evidence: [] };
+    const safeFactual = factual ?? { score: 0, severityInflationScore: 0, placeholderScore: 0, fabricatedOutputScore: 0, evidence: [] };
+    const safeQuality = heuristic?.qualityScore ?? 50;
 
-  logger.info(
-    { llmAvailable, callLlm, userSkippedLlm, llmSucceeded: !!llmResult },
-    "LLM decision"
-  );
-
-  const fusion = await runStage("score_fusion", () =>
-    fuseScores(safeLinguistic, safeFactual, llmResult, safeQuality, originalText, undefined, verification),
-    diagnostics,
-  );
-
-  const safeFusion = fusion ?? {
-    slopScore: 50, qualityScore: safeQuality, confidence: 0.3,
-    breakdown: { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: safeQuality },
-    evidence: [], humanIndicators: [], slopTier: "Questionable",
-    authenticityScore: 50, validityScore: 50, quadrant: "WEAK_HUMAN" as const,
-    archetype: "REQUEST_DETAILS" as const, analysisMode: "heuristic_only" as const, confidenceNote: null,
-  };
-
-  let triageRecommendation: TriageRecommendation | null = null;
-  const triageRecResult = await runStage("triage_recommendation", () => {
-    const base = generateTriageRecommendation(
-      safeFusion.slopScore, safeFusion.confidence, verification, safeFusion.evidence,
+    logger.info(
+      { llmAvailable, callLlm, userSkippedLlm, llmSucceeded: !!llmResult },
+      "LLM decision"
     );
-    const temporalSignals = computeTemporalSignals(verification);
-    return { ...base, temporalSignals, templateMatch: null, revision: null };
-  }, diagnostics);
-  triageRecommendation = triageRecResult;
 
-  let triageAssistant: TriageAssistantResult | null = null;
-  const triageAstResult = await runStage("triage_assistant", () =>
-    generateTriageAssistant(
-      originalText, safeFusion.slopScore, safeFusion.confidence, safeFusion.evidence,
-      verification, llmResult?.llmTriageGuidance ?? null, llmResult?.llmReproRecipe ?? null,
-    ), diagnostics);
-  triageAssistant = triageAstResult;
+    const fusion = await runStage("score_fusion", () =>
+      fuseScores(safeLinguistic, safeFactual, llmResult, safeQuality, safeOriginal, undefined, verification),
+      diagnostics,
+    );
 
-  diagnostics.totalDurationMs = Date.now() - pipelineStart;
+    const safeFusion = fusion ?? {
+      slopScore: 50, qualityScore: safeQuality, confidence: 0.3,
+      breakdown: { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: safeQuality },
+      evidence: [], humanIndicators: [], slopTier: "Questionable",
+      authenticityScore: 50, validityScore: 50, quadrant: "WEAK_HUMAN" as const,
+      archetype: "REQUEST_DETAILS" as const, analysisMode: "heuristic_only" as const, confidenceNote: null,
+    };
 
-  return {
-    ...safeFusion,
-    feedback: heuristic?.feedback ?? [],
-    llmResult,
-    verification,
-    triageRecommendation,
-    triageAssistant,
-    diagnostics,
-  };
+    let triageRecommendation: TriageRecommendation | null = null;
+    const triageRecResult = await runStage("triage_recommendation", () => {
+      const base = generateTriageRecommendation(
+        safeFusion.slopScore, safeFusion.confidence, verification, safeFusion.evidence,
+      );
+      const temporalSignals = computeTemporalSignals(verification);
+      return { ...base, temporalSignals, templateMatch: null, revision: null };
+    }, diagnostics);
+    triageRecommendation = triageRecResult;
+
+    let triageAssistant: TriageAssistantResult | null = null;
+    const triageAstResult = await runStage("triage_assistant", () =>
+      generateTriageAssistant(
+        safeOriginal, safeFusion.slopScore, safeFusion.confidence, safeFusion.evidence,
+        verification, llmResult?.llmTriageGuidance ?? null, llmResult?.llmReproRecipe ?? null,
+      ), diagnostics);
+    triageAssistant = triageAstResult;
+
+    diagnostics.totalDurationMs = Date.now() - pipelineStart;
+
+    return {
+      ...safeFusion,
+      feedback: heuristic?.feedback ?? [],
+      llmResult,
+      verification,
+      triageRecommendation,
+      triageAssistant,
+      diagnostics,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+
+    logger.error(
+      { err, inputLength: safeOriginal.length, inputPreview: safeOriginal.substring(0, 200), stages: diagnostics.stages },
+      "=== ANALYSIS PIPELINE CRASH ==="
+    );
+
+    diagnostics.totalDurationMs = Date.now() - pipelineStart;
+    diagnostics.crashInfo = {
+      message: msg,
+      stage: Object.entries(diagnostics.stages).find(([, v]) => v.status !== "ok" && v.status !== "error")?.[0] || "unknown",
+      inputLength: safeOriginal.length,
+    };
+
+    return {
+      slopScore: 30,
+      qualityScore: 50,
+      confidence: 0.3,
+      breakdown: { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: 50 },
+      evidence: [],
+      humanIndicators: [],
+      slopTier: "Likely Human" as const,
+      authenticityScore: 0,
+      validityScore: 0,
+      quadrant: "WEAK_HUMAN" as const,
+      archetype: "REQUEST_DETAILS" as const,
+      analysisMode: "heuristic_only" as const,
+      confidenceNote: "Analysis ran in degraded mode due to an internal error. Scores may be unreliable.",
+      feedback: [],
+      llmResult: null,
+      verification: null,
+      triageRecommendation: null,
+      triageAssistant: null,
+      diagnostics,
+    };
+  }
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -447,41 +498,54 @@ router.post("/reports", async (req, res): Promise<void> => {
   const analysisText = redactedText;
 
   const contentHash = computeContentHash(analysisText);
-  const simhash = computeSimhash(analysisText);
-  const minhashSignature = computeMinHash(analysisText);
-  const lshBuckets = computeLSHBuckets(minhashSignature);
+  let simhash = "";
+  let minhashSignature: number[] = [];
+  let lshBuckets: string[] = [];
+  let sections: ReturnType<typeof parseSections>["sections"] = [];
+  let sectionHashes: Record<string, string> = {};
+  let similarityMatches: ReturnType<typeof findSimilarReports> = [];
+  let sectionMatches: ReturnType<typeof findSectionMatches> = [];
 
-  const { sections, sectionHashes } = parseSections(analysisText);
+  try {
+    simhash = computeSimhash(analysisText);
+    minhashSignature = computeMinHash(analysisText);
+    lshBuckets = computeLSHBuckets(minhashSignature);
+    const parsed = parseSections(analysisText);
+    sections = parsed.sections;
+    sectionHashes = parsed.sectionHashes;
 
-  const lshConditions = lshBuckets.map(bucket =>
-    sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
-  );
+    const lshConditions = lshBuckets.map(bucket =>
+      sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
+    );
 
-  const candidateReports = lshConditions.length > 0
-    ? await db
-        .select({
-          id: reportsTable.id,
-          minhashSignature: reportsTable.minhashSignature,
-          simhash: reportsTable.simhash,
-          lshBuckets: reportsTable.lshBuckets,
-          sectionHashes: reportsTable.sectionHashes,
-        })
-        .from(reportsTable)
-        .where(or(...lshConditions))
-        .limit(500)
-    : [];
+    const candidateReports = lshConditions.length > 0
+      ? await db
+          .select({
+            id: reportsTable.id,
+            minhashSignature: reportsTable.minhashSignature,
+            simhash: reportsTable.simhash,
+            lshBuckets: reportsTable.lshBuckets,
+            sectionHashes: reportsTable.sectionHashes,
+          })
+          .from(reportsTable)
+          .where(or(...lshConditions))
+          .limit(500)
+      : [];
 
-  const similarityMatches = findSimilarReports(
-    minhashSignature,
-    simhash,
-    lshBuckets,
-    candidateReports as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
-  );
+    similarityMatches = findSimilarReports(
+      minhashSignature,
+      simhash,
+      lshBuckets,
+      candidateReports as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
+    );
 
-  const sectionMatches = findSectionMatches(
-    sectionHashes,
-    candidateReports as Array<{ id: number; sectionHashes: Record<string, string> }>,
-  );
+    sectionMatches = findSectionMatches(
+      sectionHashes,
+      candidateReports as Array<{ id: number; sectionHashes: Record<string, string> }>,
+    );
+  } catch (simErr) {
+    logger.error({ err: simErr, inputLength: analysisText.length }, "[SIMILARITY CRASH] Similarity/section analysis failed");
+  }
 
   const llmUsed = !skipLlm && isLLMAvailable();
   const analysisResult = await performAnalysis(text, redactedText, { skipLlm });
@@ -886,38 +950,47 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     return;
   }
 
-  const simhash = computeSimhash(analysisText);
-  const minhashSignature = computeMinHash(analysisText);
-  const lshBuckets = computeLSHBuckets(minhashSignature);
-  const { sectionHashes } = parseSections(analysisText);
+  let similarityMatches: ReturnType<typeof findSimilarReports> = [];
+  let sectionHashes: Record<string, string> = {};
+  let sectionMatches: ReturnType<typeof findSectionMatches> = [];
 
-  const checkLshConditions = lshBuckets.map(bucket =>
-    sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
-  );
+  try {
+    const simhash = computeSimhash(analysisText);
+    const minhashSignature = computeMinHash(analysisText);
+    const lshBuckets = computeLSHBuckets(minhashSignature);
+    const parsed = parseSections(analysisText);
+    sectionHashes = parsed.sectionHashes;
 
-  const checkCandidates = checkLshConditions.length > 0
-    ? await db
-        .select({
-          id: reportsTable.id,
-          minhashSignature: reportsTable.minhashSignature,
-          simhash: reportsTable.simhash,
-          lshBuckets: reportsTable.lshBuckets,
-          sectionHashes: reportsTable.sectionHashes,
-        })
-        .from(reportsTable)
-        .where(or(...checkLshConditions))
-        .limit(500)
-    : [];
+    const checkLshConditions = lshBuckets.map(bucket =>
+      sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
+    );
 
-  const similarityMatches = findSimilarReports(
-    minhashSignature, simhash, lshBuckets,
-    checkCandidates as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
-  );
+    const checkCandidates = checkLshConditions.length > 0
+      ? await db
+          .select({
+            id: reportsTable.id,
+            minhashSignature: reportsTable.minhashSignature,
+            simhash: reportsTable.simhash,
+            lshBuckets: reportsTable.lshBuckets,
+            sectionHashes: reportsTable.sectionHashes,
+          })
+          .from(reportsTable)
+          .where(or(...checkLshConditions))
+          .limit(500)
+      : [];
 
-  const sectionMatches = findSectionMatches(
-    sectionHashes,
-    checkCandidates as Array<{ id: number; sectionHashes: Record<string, string> }>,
-  );
+    similarityMatches = findSimilarReports(
+      minhashSignature, simhash, lshBuckets,
+      checkCandidates as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
+    );
+
+    sectionMatches = findSectionMatches(
+      sectionHashes,
+      checkCandidates as Array<{ id: number; sectionHashes: Record<string, string> }>,
+    );
+  } catch (simErr) {
+    logger.error({ err: simErr, inputLength: analysisText.length }, "[SIMILARITY CRASH] Check: Similarity/section analysis failed");
+  }
 
   const analysisResult = await performAnalysis(text, analysisText, { skipLlm });
 

@@ -155,7 +155,7 @@ export type ReportAnalysisConfigNoticesItem = {
 };
 
 /**
- * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+ * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings. crashInfo is non-null when the pipeline ran in degraded mode.
  * @nullable
  */
 export type ReportAnalysisDiagnostics = {
@@ -178,6 +178,12 @@ export type ReportAnalysisDiagnostics = {
     detail?: string;
   }[];
   totalDurationMs?: number;
+  /** @nullable */
+  crashInfo?: {
+    message?: string;
+    stage?: string;
+    inputLength?: number;
+  } | null;
 } | null;
 
 /**
@@ -621,7 +627,7 @@ export interface ReportAnalysis {
   /** Configuration impact notices explaining how current settings affect analysis accuracy, latency, and privacy. */
   configNotices?: ReportAnalysisConfigNoticesItem[];
   /**
-   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings. crashInfo is non-null when the pipeline ran in degraded mode.
    * @nullable
    */
   diagnostics?: ReportAnalysisDiagnostics;
@@ -748,7 +754,7 @@ export type CheckResultConfigNoticesItem = {
 };
 
 /**
- * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+ * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings. crashInfo is non-null when the pipeline ran in degraded mode.
  * @nullable
  */
 export type CheckResultDiagnostics = {
@@ -771,6 +777,12 @@ export type CheckResultDiagnostics = {
     detail?: string;
   }[];
   totalDurationMs?: number;
+  /** @nullable */
+  crashInfo?: {
+    message?: string;
+    stage?: string;
+    inputLength?: number;
+  } | null;
 } | null;
 
 /**
@@ -828,7 +840,7 @@ export interface CheckResult {
   /** Configuration impact notices explaining how current settings affect analysis. */
   configNotices?: CheckResultConfigNoticesItem[];
   /**
-   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings. crashInfo is non-null when the pipeline ran in degraded mode.
    * @nullable
    */
   diagnostics?: CheckResultDiagnostics;

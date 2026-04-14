@@ -793,7 +793,16 @@ components:
                     type: string
             totalDurationMs:
               type: integer
-          description: Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+            crashInfo:
+              type: ["object", "null"]
+              properties:
+                message:
+                  type: string
+                stage:
+                  type: string
+                inputLength:
+                  type: integer
+          description: Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings. crashInfo is non-null when the pipeline ran in degraded mode.
         adjustedScore:
           type: ["integer", "null"]
           description: Client-adjusted slop score based on sensitivity profile. Null when no adjustment applied (balanced preset).
@@ -1052,7 +1061,16 @@ components:
                     type: string
             totalDurationMs:
               type: integer
-          description: Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+            crashInfo:
+              type: ["object", "null"]
+              properties:
+                message:
+                  type: string
+                stage:
+                  type: string
+                inputLength:
+                  type: integer
+          description: Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings. crashInfo is non-null when the pipeline ran in degraded mode.
         adjustedScore:
           type: ["integer", "null"]
           description: Client-adjusted slop score based on sensitivity profile. Null when no adjustment applied.

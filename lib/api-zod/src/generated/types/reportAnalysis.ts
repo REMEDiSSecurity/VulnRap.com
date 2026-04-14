@@ -89,7 +89,7 @@ export interface ReportAnalysis {
   /** Configuration impact notices explaining how current settings affect analysis accuracy, latency, and privacy. */
   configNotices?: ReportAnalysisConfigNoticesItem[];
   /**
-   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings. crashInfo is non-null when the pipeline ran in degraded mode.
    * @nullable
    */
   diagnostics?: ReportAnalysisDiagnostics;
