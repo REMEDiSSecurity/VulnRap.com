@@ -1357,15 +1357,13 @@ function RecentReportsFeed() {
           </Link>
         ))}
       </div>
-      {total > 10 && (
-        <Link
-          to="/reports"
-          className="flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors group"
-        >
-          <span>View all {total} reports</span>
-          <ExternalLink className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-        </Link>
-      )}
+      <Link
+        to="/reports"
+        className="flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors group"
+      >
+        <span>View all{total > reports.length ? ` ${total}` : ""} reports</span>
+        <ExternalLink className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+      </Link>
     </div>
   );
 }

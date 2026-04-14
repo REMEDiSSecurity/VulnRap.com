@@ -42,8 +42,7 @@ const SORT_OPTIONS = [
   { value: "score_asc", label: "Lowest score" },
 ] as const;
 
-const TIER_OPTIONS = [
-  "All",
+const TIER_ORDER = [
   "Clean",
   "Probably Legit",
   "Likely Human",
@@ -124,6 +123,7 @@ export default function Reports() {
 
   const tierCounts = summary?.tierCounts ?? {};
   const tierEntries = Object.entries(tierCounts).sort((a, b) => b[1] - a[1]);
+  const availableTiers = ["All", ...TIER_ORDER.filter((t) => t in tierCounts)];
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -205,7 +205,7 @@ export default function Reports() {
             </button>
             {showTierMenu && (
               <div className="absolute top-full mt-1 left-0 z-50 glass-card rounded-lg border border-border/50 shadow-xl py-1 min-w-[160px]">
-                {TIER_OPTIONS.map((tier) => (
+                {availableTiers.map((tier) => (
                   <button
                     key={tier}
                     type="button"
@@ -215,7 +215,7 @@ export default function Reports() {
                       tierFilter === tier && "text-primary font-medium"
                     )}
                   >
-                    {tier === "All" ? "All tiers" : tier}
+                    {tier === "All" ? "All tiers" : `${tier} (${tierCounts[tier] ?? 0})`}
                   </button>
                 ))}
               </div>
