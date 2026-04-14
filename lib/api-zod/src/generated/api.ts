@@ -226,6 +226,92 @@ export const GetReportResponse = zod.object({
     )
     .optional()
     .describe("Detected human-writing signals that reduced the slop score"),
+  authenticityScore: zod
+    .number()
+    .optional()
+    .describe(
+      "AI-authorship likelihood score 0-100 (higher = more likely AI-generated). Measures writing style, spectral patterns, template usage.",
+    ),
+  validityScore: zod
+    .number()
+    .optional()
+    .describe(
+      "Technical substance\/validity score 0-100 (higher = stronger evidence of a real vulnerability). Measures evidence quality, claim specificity, internal consistency.",
+    ),
+  quadrant: zod
+    .enum(["AI_SLOP", "AI_ASSISTED", "WEAK_HUMAN", "STRONG_HUMAN"])
+    .optional()
+    .describe(
+      "Two-axis classification quadrant. AI_SLOP=high auth\/low valid, AI_ASSISTED=high auth\/high valid, WEAK_HUMAN=low auth\/low valid, STRONG_HUMAN=low auth\/high valid.",
+    ),
+  archetype: zod
+    .enum(["AUTO_CLOSE", "PRIORITIZE_REVIEW", "REQUEST_DETAILS", "ACCEPT"])
+    .optional()
+    .describe(
+      "Recommended triage action derived from quadrant classification.",
+    ),
+  analysisMode: zod
+    .enum(["heuristic_only", "llm_enhanced"])
+    .optional()
+    .describe(
+      "Whether the analysis ran in heuristic-only mode or with LLM enhancement.",
+    ),
+  confidenceNote: zod
+    .string()
+    .nullish()
+    .describe(
+      "Human-readable note explaining confidence adjustments (e.g. LLM-free mode reduces confidence by 15%).",
+    ),
+  configNotices: zod
+    .array(
+      zod.object({
+        setting: zod.string().optional(),
+        severity: zod.enum(["info", "warning", "critical"]).optional(),
+        title: zod.string().optional(),
+        summary: zod.string().optional(),
+        impact: zod.record(zod.string(), zod.string()).optional(),
+        recommendation: zod.string().optional(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Configuration impact notices explaining how current settings affect analysis accuracy, latency, and privacy.",
+    ),
+  diagnostics: zod
+    .object({
+      inputStats: zod
+        .object({
+          charCount: zod.number().optional(),
+          lineCount: zod.number().optional(),
+          wordCount: zod.number().optional(),
+          maxLineLength: zod.number().optional(),
+          containsPlaceholders: zod.boolean().optional(),
+        })
+        .optional(),
+      stages: zod
+        .record(
+          zod.string(),
+          zod.object({
+            status: zod.string().optional(),
+            durationMs: zod.number().optional(),
+            error: zod.string().optional(),
+          }),
+        )
+        .optional(),
+      parseWarnings: zod
+        .array(
+          zod.object({
+            type: zod.string().optional(),
+            detail: zod.string().optional(),
+          }),
+        )
+        .optional(),
+      totalDurationMs: zod.number().optional(),
+    })
+    .nullish()
+    .describe(
+      "Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.",
+    ),
   adjustedScore: zod
     .number()
     .nullish()
@@ -876,6 +962,82 @@ export const CheckReportResponse = zod.object({
     )
     .optional()
     .describe("Detected human-writing signals that reduced the slop score"),
+  authenticityScore: zod
+    .number()
+    .optional()
+    .describe("AI-authorship likelihood score 0-100."),
+  validityScore: zod
+    .number()
+    .optional()
+    .describe("Technical substance\/validity score 0-100."),
+  quadrant: zod
+    .enum(["AI_SLOP", "AI_ASSISTED", "WEAK_HUMAN", "STRONG_HUMAN"])
+    .optional()
+    .describe("Two-axis classification quadrant."),
+  archetype: zod
+    .enum(["AUTO_CLOSE", "PRIORITIZE_REVIEW", "REQUEST_DETAILS", "ACCEPT"])
+    .optional()
+    .describe("Recommended triage action derived from quadrant."),
+  analysisMode: zod
+    .enum(["heuristic_only", "llm_enhanced"])
+    .optional()
+    .describe(
+      "Whether the analysis ran in heuristic-only mode or with LLM enhancement.",
+    ),
+  confidenceNote: zod
+    .string()
+    .nullish()
+    .describe("Human-readable note explaining confidence adjustments."),
+  configNotices: zod
+    .array(
+      zod.object({
+        setting: zod.string().optional(),
+        severity: zod.enum(["info", "warning", "critical"]).optional(),
+        title: zod.string().optional(),
+        summary: zod.string().optional(),
+        impact: zod.record(zod.string(), zod.string()).optional(),
+        recommendation: zod.string().optional(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Configuration impact notices explaining how current settings affect analysis.",
+    ),
+  diagnostics: zod
+    .object({
+      inputStats: zod
+        .object({
+          charCount: zod.number().optional(),
+          lineCount: zod.number().optional(),
+          wordCount: zod.number().optional(),
+          maxLineLength: zod.number().optional(),
+          containsPlaceholders: zod.boolean().optional(),
+        })
+        .optional(),
+      stages: zod
+        .record(
+          zod.string(),
+          zod.object({
+            status: zod.string().optional(),
+            durationMs: zod.number().optional(),
+            error: zod.string().optional(),
+          }),
+        )
+        .optional(),
+      parseWarnings: zod
+        .array(
+          zod.object({
+            type: zod.string().optional(),
+            detail: zod.string().optional(),
+          }),
+        )
+        .optional(),
+      totalDurationMs: zod.number().optional(),
+    })
+    .nullish()
+    .describe(
+      "Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.",
+    ),
   adjustedScore: zod
     .number()
     .nullish()

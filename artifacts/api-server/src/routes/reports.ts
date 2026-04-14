@@ -23,7 +23,8 @@ import { analyzeSloppiness } from "../lib/sloppiness";
 import { analyzeSlopWithLLM, shouldCallLLM, isLLMAvailable, type LLMSlopResult } from "../lib/llm-slop";
 import { analyzeLinguistic } from "../lib/linguistic-analysis";
 import { analyzeFactual } from "../lib/factual-verification";
-import { fuseScores, recomputeSlopScoreWithoutLlm, type FusionResult, type EvidenceItem } from "../lib/score-fusion";
+import { fuseScores, recomputeSlopScoreWithoutLlm, type FusionResult, type EvidenceItem, type Quadrant, type Archetype, type AnalysisMode } from "../lib/score-fusion";
+import { generateConfigImpactNotices, type ConfigImpactNotice } from "../lib/config-notices";
 import { redactReport } from "../lib/redactor";
 import { parseSections, findSectionMatches } from "../lib/section-parser";
 import { sanitizeText, sanitizeFileName, detectBinaryContent } from "../lib/sanitize";
@@ -42,84 +43,154 @@ import {
   type TriageAssistantResult,
 } from "../lib/triage-assistant";
 
+interface StageStatus {
+  status: "ok" | "error";
+  durationMs: number;
+  error?: string;
+}
+
+interface AnalysisDiagnostics {
+  inputStats: {
+    charCount: number;
+    lineCount: number;
+    wordCount: number;
+    maxLineLength: number;
+    containsPlaceholders: boolean;
+  };
+  stages: Record<string, StageStatus>;
+  parseWarnings: Array<{ type: string; detail: string }>;
+  totalDurationMs: number;
+}
+
 interface AnalysisResult extends FusionResult {
   feedback: string[];
   llmResult: Awaited<ReturnType<typeof analyzeSlopWithLLM>>;
   verification: VerificationResult | null;
   triageRecommendation: TriageRecommendation | null;
   triageAssistant: TriageAssistantResult | null;
+  diagnostics: AnalysisDiagnostics;
+}
+
+async function runStage<T>(
+  name: string,
+  fn: () => T | Promise<T>,
+  diagnostics: AnalysisDiagnostics,
+): Promise<T | null> {
+  const start = Date.now();
+  try {
+    const result = await fn();
+    diagnostics.stages[name] = { status: "ok", durationMs: Date.now() - start };
+    return result;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    diagnostics.stages[name] = { status: "error", durationMs: Date.now() - start, error: msg };
+    diagnostics.parseWarnings.push({ type: `stage_failed_${name}`, detail: `${name} stage threw: ${msg}` });
+    logger.warn({ err, stage: name }, `Analysis stage ${name} failed`);
+    return null;
+  }
 }
 
 async function performAnalysis(originalText: string, redactedText: string, opts?: { skipLlm?: boolean }): Promise<AnalysisResult> {
+  const pipelineStart = Date.now();
+
+  const lines = originalText.split("\n");
+  let maxLineLength = 0;
+  for (const line of lines) {
+    if (line.length > maxLineLength) maxLineLength = line.length;
+  }
+  const diagnostics: AnalysisDiagnostics = {
+    inputStats: {
+      charCount: originalText.length,
+      lineCount: lines.length,
+      wordCount: (originalText.match(/\b\w+\b/g) || []).length,
+      maxLineLength,
+      containsPlaceholders: /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]/i.test(originalText),
+    },
+    stages: {},
+    parseWarnings: [],
+    totalDurationMs: 0,
+  };
+
+  if (diagnostics.inputStats.maxLineLength > 10000) {
+    diagnostics.parseWarnings.push({
+      type: "extremely_long_lines",
+      detail: `Longest line is ${diagnostics.inputStats.maxLineLength} chars — may cause regex backtracking.`,
+    });
+  }
+
   const [heuristic, linguistic, factual, verification] = await Promise.all([
-    Promise.resolve(analyzeSloppiness(originalText)),
-    Promise.resolve(analyzeLinguistic(originalText)),
-    Promise.resolve(analyzeFactual(originalText)),
-    performActiveVerification(redactedText).catch((err) => {
-      logger.warn({ err }, "Active verification failed, skipping");
-      return null;
-    }),
+    runStage("heuristic_analysis", () => analyzeSloppiness(originalText), diagnostics),
+    runStage("linguistic_analysis", () => analyzeLinguistic(originalText), diagnostics),
+    runStage("factual_verification", () => analyzeFactual(originalText), diagnostics),
+    runStage("active_verification", () => performActiveVerification(redactedText), diagnostics),
   ]);
 
-  const preliminary = fuseScores(linguistic, factual, null, heuristic.qualityScore, originalText, undefined, verification);
+  const safeLinguistic = linguistic ?? { score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0, evidence: [] };
+  const safeFactual = factual ?? { score: 0, evidence: [] };
+  const safeQuality = heuristic?.qualityScore ?? 50;
+
+  const preliminary = await runStage("score_fusion_preliminary", () =>
+    fuseScores(safeLinguistic, safeFactual, null, safeQuality, originalText, undefined, verification),
+    diagnostics,
+  );
+
+  const safePreliminary = preliminary ?? {
+    slopScore: 50, qualityScore: safeQuality, confidence: 0.3,
+    breakdown: { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: safeQuality },
+    evidence: [], humanIndicators: [], slopTier: "Questionable",
+    authenticityScore: 50, validityScore: 50, quadrant: "WEAK_HUMAN" as const,
+    archetype: "REQUEST_DETAILS" as const, analysisMode: "heuristic_only" as const, confidenceNote: null,
+  };
 
   let llmResult: LLMSlopResult | null = null;
   const llmAvailable = isLLMAvailable();
   const userSkippedLlm = opts?.skipLlm === true;
-  const callLlm = !userSkippedLlm && shouldCallLLM(preliminary.slopScore, preliminary.confidence);
+  const callLlm = !userSkippedLlm && shouldCallLLM(safePreliminary.slopScore, safePreliminary.confidence);
   logger.info(
-    { preliminaryScore: preliminary.slopScore, confidence: preliminary.confidence, llmAvailable, callLlm, userSkippedLlm },
+    { preliminaryScore: safePreliminary.slopScore, confidence: safePreliminary.confidence, llmAvailable, callLlm, userSkippedLlm },
     "LLM decision"
   );
   if (callLlm) {
-    llmResult = await analyzeSlopWithLLM(redactedText);
+    llmResult = await runStage("llm_analysis", () => analyzeSlopWithLLM(redactedText), diagnostics) ?? null;
+  } else {
+    diagnostics.stages["llm_analysis"] = { status: "ok", durationMs: 0, error: userSkippedLlm ? "skipped_by_user" : "not_needed" };
   }
 
   const fusion = llmResult
-    ? fuseScores(linguistic, factual, llmResult, heuristic.qualityScore, originalText, undefined, verification)
-    : preliminary;
+    ? (await runStage("score_fusion_final", () =>
+        fuseScores(safeLinguistic, safeFactual, llmResult!, safeQuality, originalText, undefined, verification),
+        diagnostics,
+      ) ?? safePreliminary)
+    : safePreliminary;
 
   let triageRecommendation: TriageRecommendation | null = null;
-  try {
+  const triageRecResult = await runStage("triage_recommendation", () => {
     const base = generateTriageRecommendation(
-      fusion.slopScore,
-      fusion.confidence,
-      verification,
-      fusion.evidence,
+      fusion.slopScore, fusion.confidence, verification, fusion.evidence,
     );
     const temporalSignals = computeTemporalSignals(verification);
-    triageRecommendation = {
-      ...base,
-      temporalSignals,
-      templateMatch: null,
-      revision: null,
-    };
-  } catch (err) {
-    logger.warn({ err }, "Triage recommendation generation failed");
-  }
+    return { ...base, temporalSignals, templateMatch: null, revision: null };
+  }, diagnostics);
+  triageRecommendation = triageRecResult;
 
   let triageAssistant: TriageAssistantResult | null = null;
-  try {
-    triageAssistant = generateTriageAssistant(
-      originalText,
-      fusion.slopScore,
-      fusion.confidence,
-      fusion.evidence,
-      verification,
-      llmResult?.llmTriageGuidance ?? null,
-      llmResult?.llmReproRecipe ?? null,
-    );
-  } catch (err) {
-    logger.warn({ err }, "Triage assistant generation failed");
-  }
+  const triageAstResult = await runStage("triage_assistant", () =>
+    generateTriageAssistant(
+      originalText, fusion.slopScore, fusion.confidence, fusion.evidence,
+      verification, llmResult?.llmTriageGuidance ?? null, llmResult?.llmReproRecipe ?? null,
+    ), diagnostics);
+  triageAssistant = triageAstResult;
+
+  diagnostics.totalDurationMs = Date.now() - pipelineStart;
 
   return {
     ...fusion,
-    feedback: heuristic.feedback,
+    feedback: heuristic?.feedback ?? [],
     llmResult,
     verification,
     triageRecommendation,
     triageAssistant,
+    diagnostics,
   };
 }
 
@@ -485,6 +556,10 @@ router.post("/reports", async (req, res): Promise<void> => {
         breakdown: { ...analysisResult.breakdown, llmUsed, redactionApplied },
         evidence: analysisResult.evidence,
         humanIndicators: analysisResult.humanIndicators,
+        authenticityScore: analysisResult.authenticityScore,
+        validityScore: analysisResult.validityScore,
+        quadrant: analysisResult.quadrant,
+        archetype: analysisResult.archetype,
         similarityMatches,
         sectionHashes,
         sectionMatches,
@@ -551,6 +626,10 @@ router.post("/reports", async (req, res): Promise<void> => {
     breakdown: report.breakdown ?? { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: 50 },
     evidence: report.evidence ?? [],
     humanIndicators: report.humanIndicators ?? [],
+    authenticityScore: report.authenticityScore,
+    validityScore: report.validityScore,
+    quadrant: report.quadrant,
+    archetype: report.archetype,
     similarityMatches: report.similarityMatches,
     sectionHashes: report.sectionHashes ?? {},
     sectionMatches: report.sectionMatches ?? [],
@@ -657,6 +736,10 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       breakdown: reportsTable.breakdown,
       evidence: reportsTable.evidence,
       humanIndicators: reportsTable.humanIndicators,
+      authenticityScore: reportsTable.authenticityScore,
+      validityScore: reportsTable.validityScore,
+      quadrant: reportsTable.quadrant,
+      archetype: reportsTable.archetype,
       similarityMatches: reportsTable.similarityMatches,
       sectionHashes: reportsTable.sectionHashes,
       sectionMatches: reportsTable.sectionMatches,
@@ -713,6 +796,11 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     let responseBreakdown = cached.breakdown;
     let responseEvidence = cached.evidence;
 
+    let responseAuthenticityScore = cached.authenticityScore ?? 0;
+    let responseValidityScore = cached.validityScore ?? 0;
+    let responseQuadrant = cached.quadrant ?? "WEAK_HUMAN";
+    let responseArchetype = cached.archetype ?? "REQUEST_DETAILS";
+
     if (stripLlm && cached.breakdown) {
       const bd = cached.breakdown as import("@workspace/db").ScoreBreakdown;
       const allEvidence = (cached.evidence || []) as EvidenceItem[];
@@ -720,9 +808,19 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       responseSlopScore = recomputed.slopScore;
       responseSlopTier = recomputed.slopTier;
       responseConfidence = recomputed.confidence;
+      responseAuthenticityScore = recomputed.authenticityScore;
+      responseValidityScore = recomputed.validityScore;
+      responseQuadrant = recomputed.quadrant;
+      responseArchetype = recomputed.archetype;
       responseBreakdown = { ...bd, llm: null, llmUsed: false, redactionApplied };
       responseEvidence = allEvidence.filter(e => e.type !== "llm_red_flag" && e.type !== "llm_observation");
     }
+
+    const cachedAnalysisMode = (skipLlm || !cachedHadLlm) ? "heuristic_only" : "llm_enhanced";
+    const cachedConfidenceNote = cachedAnalysisMode === "heuristic_only"
+      ? "Running in heuristic-only mode — confidence reduced by 15%. Enable LLM analysis for higher precision on borderline reports."
+      : null;
+    const cachedConfigNotices = generateConfigImpactNotices({ skipLlm, skipRedaction });
 
     const response = CheckReportResponse.parse({
       slopScore: responseSlopScore,
@@ -732,6 +830,14 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       breakdown: responseBreakdown,
       evidence: responseEvidence,
       humanIndicators: cached.humanIndicators,
+      authenticityScore: responseAuthenticityScore,
+      validityScore: responseValidityScore,
+      quadrant: responseQuadrant,
+      archetype: responseArchetype,
+      analysisMode: cachedAnalysisMode,
+      confidenceNote: cachedConfidenceNote,
+      configNotices: cachedConfigNotices,
+      diagnostics: null,
       similarityMatches: cached.similarityMatches,
       sectionHashes: cached.sectionHashes,
       sectionMatches: cached.sectionMatches,
@@ -789,6 +895,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
   const analysisResult = await performAnalysis(text, analysisText, { skipLlm });
 
   const { llmResult: checkLlmResult } = analysisResult;
+  const configNotices = generateConfigImpactNotices({ skipLlm, skipRedaction });
 
   const response = CheckReportResponse.parse({
     slopScore: analysisResult.slopScore,
@@ -798,6 +905,14 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     breakdown: analysisResult.breakdown,
     evidence: analysisResult.evidence,
     humanIndicators: analysisResult.humanIndicators,
+    authenticityScore: analysisResult.authenticityScore,
+    validityScore: analysisResult.validityScore,
+    quadrant: analysisResult.quadrant,
+    archetype: analysisResult.archetype,
+    analysisMode: analysisResult.analysisMode,
+    confidenceNote: analysisResult.confidenceNote,
+    configNotices,
+    diagnostics: analysisResult.diagnostics,
     similarityMatches,
     sectionHashes,
     sectionMatches,
@@ -1149,6 +1264,10 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     breakdown: report.breakdown ?? { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: 50 },
     evidence: report.evidence ?? [],
     humanIndicators: report.humanIndicators ?? [],
+    authenticityScore: report.authenticityScore ?? 0,
+    validityScore: report.validityScore ?? 0,
+    quadrant: report.quadrant ?? "WEAK_HUMAN",
+    archetype: report.archetype ?? "REQUEST_DETAILS",
     similarityMatches: report.similarityMatches,
     sectionHashes: report.sectionHashes ?? {},
     sectionMatches: report.sectionMatches ?? [],

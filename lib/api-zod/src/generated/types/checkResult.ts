@@ -5,7 +5,12 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { CheckResultAnalysisMode } from "./checkResultAnalysisMode";
+import type { CheckResultArchetype } from "./checkResultArchetype";
+import type { CheckResultConfigNoticesItem } from "./checkResultConfigNoticesItem";
+import type { CheckResultDiagnostics } from "./checkResultDiagnostics";
 import type { CheckResultLlmBreakdown } from "./checkResultLlmBreakdown";
+import type { CheckResultQuadrant } from "./checkResultQuadrant";
 import type { CheckResultSectionHashes } from "./checkResultSectionHashes";
 import type { CheckResultSensitivityProfile } from "./checkResultSensitivityProfile";
 import type { EvidenceItem } from "./evidenceItem";
@@ -41,6 +46,28 @@ export interface CheckResult {
   llmBreakdown?: CheckResultLlmBreakdown;
   /** Detected human-writing signals that reduced the slop score */
   humanIndicators?: HumanIndicator[];
+  /** AI-authorship likelihood score 0-100. */
+  authenticityScore?: number;
+  /** Technical substance/validity score 0-100. */
+  validityScore?: number;
+  /** Two-axis classification quadrant. */
+  quadrant?: CheckResultQuadrant;
+  /** Recommended triage action derived from quadrant. */
+  archetype?: CheckResultArchetype;
+  /** Whether the analysis ran in heuristic-only mode or with LLM enhancement. */
+  analysisMode?: CheckResultAnalysisMode;
+  /**
+   * Human-readable note explaining confidence adjustments.
+   * @nullable
+   */
+  confidenceNote?: string | null;
+  /** Configuration impact notices explaining how current settings affect analysis. */
+  configNotices?: CheckResultConfigNoticesItem[];
+  /**
+   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+   * @nullable
+   */
+  diagnostics?: CheckResultDiagnostics;
   /**
    * Client-adjusted slop score based on sensitivity profile. Null when no adjustment applied.
    * @nullable

@@ -114,9 +114,46 @@ const USERNAME_ATTRIBUTION_PATTERNS = [
   /\b((?:reported\s+by|author|researcher|discoverer|finder)\s*[:=]?\s*)['"]?([A-Za-z][A-Za-z0-9._ -]{2,})['"]?/gi,
 ];
 
+const PLACEHOLDER_PATTERNS = [
+  /\[REDACTED\]/gi,
+  /\[REMOVED\]/gi,
+  /\[CENSORED\]/gi,
+  /\[MASKED\]/gi,
+  /\[HIDDEN\]/gi,
+  /XXXX{4,}/g,
+  /\*{4,}/g,
+  /█+/g,
+];
+
+export interface PlaceholderResult {
+  text: string;
+  placeholders: Array<{ match: string; offset: number; type: string }>;
+}
+
+export function preprocessPlaceholders(text: string): PlaceholderResult {
+  let processed = text;
+  const placeholders: Array<{ match: string; offset: number; type: string }> = [];
+
+  for (const pattern of PLACEHOLDER_PATTERNS) {
+    const regex = new RegExp(pattern.source, pattern.flags);
+    processed = processed.replace(regex, (match, offset: number) => {
+      placeholders.push({ match, offset, type: "pre_redacted" });
+      return "__PLACEHOLDER__";
+    });
+  }
+
+  return { text: processed, placeholders };
+}
+
 export function redactReport(text: string): RedactionResult {
   const categories: Record<string, number> = {};
-  let redactedText = text;
+
+  const { text: preprocessedText, placeholders } = preprocessPlaceholders(text);
+  if (placeholders.length > 0) {
+    categories["pre_redacted_placeholders"] = placeholders.length;
+  }
+
+  let redactedText = preprocessedText;
 
   for (const { name, pattern, replacement } of PATTERNS) {
     const regex = new RegExp(pattern.source, pattern.flags);

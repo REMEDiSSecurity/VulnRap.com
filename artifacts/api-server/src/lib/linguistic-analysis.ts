@@ -73,6 +73,31 @@ const AI_PHRASES: WeightedPhrase[] = [
   { phrase: "embark on", weight: 5 },
 ];
 
+interface SycophraticPattern {
+  pattern: RegExp;
+  weight: number;
+  type: string;
+}
+
+const SYCOPHANTIC_PHRASES: SycophraticPattern[] = [
+  { pattern: /I\s+(?:sincerely\s+)?apologize\s+for/i, weight: 10, type: "ai_apology" },
+  { pattern: /I\s+hope\s+this\s+(?:helps|message\s+finds)/i, weight: 12, type: "ai_pleasantry" },
+  { pattern: /(?:Certainly|Absolutely)!\s+(?:Let\s+me|I'll)/i, weight: 15, type: "ai_eager_response" },
+  { pattern: /Thank\s+you\s+for\s+your\s+(?:dedication|time|attention)/i, weight: 8, type: "ai_gratitude" },
+  { pattern: /(?:best|kind)\s+regards,?\s*\n\s*Security\s+Researcher/i, weight: 10, type: "ai_sign_off" },
+  { pattern: /I\s+(?:would\s+be|am)\s+happy\s+to\s+provide/i, weight: 8, type: "ai_offer" },
+  { pattern: /upon\s+further\s+(?:analysis|investigation|review)/i, weight: 8, type: "ai_hedge" },
+  { pattern: /my\s+(?:advanced|sophisticated)\s+(?:security\s+)?tools/i, weight: 12, type: "ai_self_aggrandize" },
+  { pattern: /maintain\s+a\s+(?:better|good)\s+relationship/i, weight: 10, type: "ai_relationship" },
+  { pattern: /(?:Dear|Hello)\s+Security\s+Team/i, weight: 6, type: "ai_formal_greeting" },
+  { pattern: /as\s+(?:a\s+)?(?:senior|experienced)\s+(?:security|penetration)/i, weight: 8, type: "ai_credential_claim" },
+  { pattern: /during\s+my\s+(?:routine|comprehensive|thorough)\s+(?:security\s+)?(?:research|audit|assessment)/i, weight: 10, type: "ai_routine_claim" },
+  { pattern: /(?:As\s+per|According\s+to)\s+CWE-\d+/i, weight: 5, type: "ai_cwe_textbook" },
+  { pattern: /represents?\s+a\s+significant\s+security\s+(?:debt|risk|concern)/i, weight: 5, type: "ai_boilerplate" },
+  { pattern: /widely\s+known\s+in\s+the\s+security\s+community/i, weight: 6, type: "ai_appeal_authority" },
+  { pattern: /please\s+(?:don't\s+hesitate|feel\s+free)\s+to\s+(?:reach\s+out|contact)/i, weight: 6, type: "ai_closing" },
+];
+
 const SLOP_TEMPLATES = [
   {
     name: "dear_security_team",
@@ -143,6 +168,29 @@ function analyzeLexicalMarkers(text: string): { score: number; evidence: Linguis
       });
     }
   }
+
+  let sycophraticWeight = 0;
+  let sycophraticCount = 0;
+  for (const sp of SYCOPHANTIC_PHRASES) {
+    const matches = text.match(sp.pattern);
+    if (matches) {
+      sycophraticCount++;
+      sycophraticWeight += sp.weight;
+      evidence.push({
+        type: sp.type,
+        description: `AI-characteristic phrase detected: "${matches[0]}"`,
+        weight: sp.weight,
+        matched: matches[0],
+      });
+    }
+  }
+
+  const COMPOUND_MULTIPLIERS = [1.0, 1.0, 1.3, 1.7, 2.2, 2.5, 2.8, 3.0];
+  const multiplier = sycophraticCount < COMPOUND_MULTIPLIERS.length
+    ? COMPOUND_MULTIPLIERS[sycophraticCount] : 3.0;
+  const compoundedSycophratic = Math.round(sycophraticWeight * multiplier);
+
+  totalWeight += compoundedSycophratic;
 
   const score = Math.min(100, Math.round(30 * Math.log1p(totalWeight)));
   return { score, evidence };

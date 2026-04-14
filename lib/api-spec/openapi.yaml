@@ -662,6 +662,87 @@ components:
           items:
             $ref: "#/components/schemas/HumanIndicator"
           description: Detected human-writing signals that reduced the slop score
+        authenticityScore:
+          type: integer
+          description: AI-authorship likelihood score 0-100 (higher = more likely AI-generated). Measures writing style, spectral patterns, template usage.
+        validityScore:
+          type: integer
+          description: Technical substance/validity score 0-100 (higher = stronger evidence of a real vulnerability). Measures evidence quality, claim specificity, internal consistency.
+        quadrant:
+          type: string
+          enum: ["AI_SLOP", "AI_ASSISTED", "WEAK_HUMAN", "STRONG_HUMAN"]
+          description: Two-axis classification quadrant. AI_SLOP=high auth/low valid, AI_ASSISTED=high auth/high valid, WEAK_HUMAN=low auth/low valid, STRONG_HUMAN=low auth/high valid.
+        archetype:
+          type: string
+          enum: ["AUTO_CLOSE", "PRIORITIZE_REVIEW", "REQUEST_DETAILS", "ACCEPT"]
+          description: Recommended triage action derived from quadrant classification.
+        analysisMode:
+          type: string
+          enum: ["heuristic_only", "llm_enhanced"]
+          description: Whether the analysis ran in heuristic-only mode or with LLM enhancement.
+        confidenceNote:
+          type: ["string", "null"]
+          description: Human-readable note explaining confidence adjustments (e.g. LLM-free mode reduces confidence by 15%).
+        configNotices:
+          type: array
+          items:
+            type: object
+            properties:
+              setting:
+                type: string
+              severity:
+                type: string
+                enum: ["info", "warning", "critical"]
+              title:
+                type: string
+              summary:
+                type: string
+              impact:
+                type: object
+                additionalProperties:
+                  type: string
+              recommendation:
+                type: string
+          description: Configuration impact notices explaining how current settings affect analysis accuracy, latency, and privacy.
+        diagnostics:
+          type: ["object", "null"]
+          properties:
+            inputStats:
+              type: object
+              properties:
+                charCount:
+                  type: integer
+                lineCount:
+                  type: integer
+                wordCount:
+                  type: integer
+                maxLineLength:
+                  type: integer
+                containsPlaceholders:
+                  type: boolean
+            stages:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  durationMs:
+                    type: integer
+                  error:
+                    type: string
+            parseWarnings:
+              type: array
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  detail:
+                    type: string
+            totalDurationMs:
+              type: integer
+          description: Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
         adjustedScore:
           type: ["integer", "null"]
           description: Client-adjusted slop score based on sensitivity profile. Null when no adjustment applied (balanced preset).
@@ -817,6 +898,87 @@ components:
           items:
             $ref: "#/components/schemas/HumanIndicator"
           description: Detected human-writing signals that reduced the slop score
+        authenticityScore:
+          type: integer
+          description: AI-authorship likelihood score 0-100.
+        validityScore:
+          type: integer
+          description: Technical substance/validity score 0-100.
+        quadrant:
+          type: string
+          enum: ["AI_SLOP", "AI_ASSISTED", "WEAK_HUMAN", "STRONG_HUMAN"]
+          description: Two-axis classification quadrant.
+        archetype:
+          type: string
+          enum: ["AUTO_CLOSE", "PRIORITIZE_REVIEW", "REQUEST_DETAILS", "ACCEPT"]
+          description: Recommended triage action derived from quadrant.
+        analysisMode:
+          type: string
+          enum: ["heuristic_only", "llm_enhanced"]
+          description: Whether the analysis ran in heuristic-only mode or with LLM enhancement.
+        confidenceNote:
+          type: ["string", "null"]
+          description: Human-readable note explaining confidence adjustments.
+        configNotices:
+          type: array
+          items:
+            type: object
+            properties:
+              setting:
+                type: string
+              severity:
+                type: string
+                enum: ["info", "warning", "critical"]
+              title:
+                type: string
+              summary:
+                type: string
+              impact:
+                type: object
+                additionalProperties:
+                  type: string
+              recommendation:
+                type: string
+          description: Configuration impact notices explaining how current settings affect analysis.
+        diagnostics:
+          type: ["object", "null"]
+          properties:
+            inputStats:
+              type: object
+              properties:
+                charCount:
+                  type: integer
+                lineCount:
+                  type: integer
+                wordCount:
+                  type: integer
+                maxLineLength:
+                  type: integer
+                containsPlaceholders:
+                  type: boolean
+            stages:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  durationMs:
+                    type: integer
+                  error:
+                    type: string
+            parseWarnings:
+              type: array
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  detail:
+                    type: string
+            totalDurationMs:
+              type: integer
+          description: Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
         adjustedScore:
           type: ["integer", "null"]
           description: Client-adjusted slop score based on sensitivity profile. Null when no adjustment applied.

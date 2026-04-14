@@ -107,6 +107,16 @@ export function detectHumanIndicators(text: string): HumanIndicatorResult {
     });
   }
 
+  const preRedactedCount = (text.match(/\[REDACTED\]|\[REMOVED\]|\[CENSORED\]|\[MASKED\]|\[HIDDEN\]/gi) || []).length;
+  if (preRedactedCount > 0) {
+    indicators.push({
+      type: "human_pre_redaction",
+      description: `Reporter pre-redacted ${preRedactedCount} sensitive value(s) before submission — indicates awareness of operational security`,
+      weight: -5 * Math.min(preRedactedCount, 3),
+      matched: `${preRedactedCount} placeholder(s)`,
+    });
+  }
+
   let hasPleasantries = false;
   for (const pattern of AI_PLEASANTRIES) {
     if (pattern.test(text)) {

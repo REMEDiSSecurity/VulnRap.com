@@ -79,6 +79,89 @@ export type ReportAnalysisLlmBreakdown = {
 } | null;
 
 /**
+ * Two-axis classification quadrant. AI_SLOP=high auth/low valid, AI_ASSISTED=high auth/high valid, WEAK_HUMAN=low auth/low valid, STRONG_HUMAN=low auth/high valid.
+ */
+export type ReportAnalysisQuadrant =
+  (typeof ReportAnalysisQuadrant)[keyof typeof ReportAnalysisQuadrant];
+
+export const ReportAnalysisQuadrant = {
+  AI_SLOP: "AI_SLOP",
+  AI_ASSISTED: "AI_ASSISTED",
+  WEAK_HUMAN: "WEAK_HUMAN",
+  STRONG_HUMAN: "STRONG_HUMAN",
+} as const;
+
+/**
+ * Recommended triage action derived from quadrant classification.
+ */
+export type ReportAnalysisArchetype =
+  (typeof ReportAnalysisArchetype)[keyof typeof ReportAnalysisArchetype];
+
+export const ReportAnalysisArchetype = {
+  AUTO_CLOSE: "AUTO_CLOSE",
+  PRIORITIZE_REVIEW: "PRIORITIZE_REVIEW",
+  REQUEST_DETAILS: "REQUEST_DETAILS",
+  ACCEPT: "ACCEPT",
+} as const;
+
+/**
+ * Whether the analysis ran in heuristic-only mode or with LLM enhancement.
+ */
+export type ReportAnalysisAnalysisMode =
+  (typeof ReportAnalysisAnalysisMode)[keyof typeof ReportAnalysisAnalysisMode];
+
+export const ReportAnalysisAnalysisMode = {
+  heuristic_only: "heuristic_only",
+  llm_enhanced: "llm_enhanced",
+} as const;
+
+export type ReportAnalysisConfigNoticesItemSeverity =
+  (typeof ReportAnalysisConfigNoticesItemSeverity)[keyof typeof ReportAnalysisConfigNoticesItemSeverity];
+
+export const ReportAnalysisConfigNoticesItemSeverity = {
+  info: "info",
+  warning: "warning",
+  critical: "critical",
+} as const;
+
+export type ReportAnalysisConfigNoticesItemImpact = { [key: string]: string };
+
+export type ReportAnalysisConfigNoticesItem = {
+  setting?: string;
+  severity?: ReportAnalysisConfigNoticesItemSeverity;
+  title?: string;
+  summary?: string;
+  impact?: ReportAnalysisConfigNoticesItemImpact;
+  recommendation?: string;
+};
+
+/**
+ * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+ * @nullable
+ */
+export type ReportAnalysisDiagnostics = {
+  inputStats?: {
+    charCount?: number;
+    lineCount?: number;
+    wordCount?: number;
+    maxLineLength?: number;
+    containsPlaceholders?: boolean;
+  };
+  stages?: {
+    [key: string]: {
+      status?: string;
+      durationMs?: number;
+      error?: string;
+    };
+  };
+  parseWarnings?: {
+    type?: string;
+    detail?: string;
+  }[];
+  totalDurationMs?: number;
+} | null;
+
+/**
  * Active sensitivity preset used for score adjustment. Null when default (balanced).
  * @nullable
  */
@@ -501,6 +584,28 @@ export interface ReportAnalysis {
   llmBreakdown?: ReportAnalysisLlmBreakdown;
   /** Detected human-writing signals that reduced the slop score */
   humanIndicators?: HumanIndicator[];
+  /** AI-authorship likelihood score 0-100 (higher = more likely AI-generated). Measures writing style, spectral patterns, template usage. */
+  authenticityScore?: number;
+  /** Technical substance/validity score 0-100 (higher = stronger evidence of a real vulnerability). Measures evidence quality, claim specificity, internal consistency. */
+  validityScore?: number;
+  /** Two-axis classification quadrant. AI_SLOP=high auth/low valid, AI_ASSISTED=high auth/high valid, WEAK_HUMAN=low auth/low valid, STRONG_HUMAN=low auth/high valid. */
+  quadrant?: ReportAnalysisQuadrant;
+  /** Recommended triage action derived from quadrant classification. */
+  archetype?: ReportAnalysisArchetype;
+  /** Whether the analysis ran in heuristic-only mode or with LLM enhancement. */
+  analysisMode?: ReportAnalysisAnalysisMode;
+  /**
+   * Human-readable note explaining confidence adjustments (e.g. LLM-free mode reduces confidence by 15%).
+   * @nullable
+   */
+  confidenceNote?: string | null;
+  /** Configuration impact notices explaining how current settings affect analysis accuracy, latency, and privacy. */
+  configNotices?: ReportAnalysisConfigNoticesItem[];
+  /**
+   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+   * @nullable
+   */
+  diagnostics?: ReportAnalysisDiagnostics;
   /**
    * Client-adjusted slop score based on sensitivity profile. Null when no adjustment applied (balanced preset).
    * @nullable
@@ -557,6 +662,89 @@ export type CheckResultLlmBreakdown = {
 } | null;
 
 /**
+ * Two-axis classification quadrant.
+ */
+export type CheckResultQuadrant =
+  (typeof CheckResultQuadrant)[keyof typeof CheckResultQuadrant];
+
+export const CheckResultQuadrant = {
+  AI_SLOP: "AI_SLOP",
+  AI_ASSISTED: "AI_ASSISTED",
+  WEAK_HUMAN: "WEAK_HUMAN",
+  STRONG_HUMAN: "STRONG_HUMAN",
+} as const;
+
+/**
+ * Recommended triage action derived from quadrant.
+ */
+export type CheckResultArchetype =
+  (typeof CheckResultArchetype)[keyof typeof CheckResultArchetype];
+
+export const CheckResultArchetype = {
+  AUTO_CLOSE: "AUTO_CLOSE",
+  PRIORITIZE_REVIEW: "PRIORITIZE_REVIEW",
+  REQUEST_DETAILS: "REQUEST_DETAILS",
+  ACCEPT: "ACCEPT",
+} as const;
+
+/**
+ * Whether the analysis ran in heuristic-only mode or with LLM enhancement.
+ */
+export type CheckResultAnalysisMode =
+  (typeof CheckResultAnalysisMode)[keyof typeof CheckResultAnalysisMode];
+
+export const CheckResultAnalysisMode = {
+  heuristic_only: "heuristic_only",
+  llm_enhanced: "llm_enhanced",
+} as const;
+
+export type CheckResultConfigNoticesItemSeverity =
+  (typeof CheckResultConfigNoticesItemSeverity)[keyof typeof CheckResultConfigNoticesItemSeverity];
+
+export const CheckResultConfigNoticesItemSeverity = {
+  info: "info",
+  warning: "warning",
+  critical: "critical",
+} as const;
+
+export type CheckResultConfigNoticesItemImpact = { [key: string]: string };
+
+export type CheckResultConfigNoticesItem = {
+  setting?: string;
+  severity?: CheckResultConfigNoticesItemSeverity;
+  title?: string;
+  summary?: string;
+  impact?: CheckResultConfigNoticesItemImpact;
+  recommendation?: string;
+};
+
+/**
+ * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+ * @nullable
+ */
+export type CheckResultDiagnostics = {
+  inputStats?: {
+    charCount?: number;
+    lineCount?: number;
+    wordCount?: number;
+    maxLineLength?: number;
+    containsPlaceholders?: boolean;
+  };
+  stages?: {
+    [key: string]: {
+      status?: string;
+      durationMs?: number;
+      error?: string;
+    };
+  };
+  parseWarnings?: {
+    type?: string;
+    detail?: string;
+  }[];
+  totalDurationMs?: number;
+} | null;
+
+/**
  * Active sensitivity preset used for score adjustment. Null when default.
  * @nullable
  */
@@ -593,6 +781,28 @@ export interface CheckResult {
   llmBreakdown?: CheckResultLlmBreakdown;
   /** Detected human-writing signals that reduced the slop score */
   humanIndicators?: HumanIndicator[];
+  /** AI-authorship likelihood score 0-100. */
+  authenticityScore?: number;
+  /** Technical substance/validity score 0-100. */
+  validityScore?: number;
+  /** Two-axis classification quadrant. */
+  quadrant?: CheckResultQuadrant;
+  /** Recommended triage action derived from quadrant. */
+  archetype?: CheckResultArchetype;
+  /** Whether the analysis ran in heuristic-only mode or with LLM enhancement. */
+  analysisMode?: CheckResultAnalysisMode;
+  /**
+   * Human-readable note explaining confidence adjustments.
+   * @nullable
+   */
+  confidenceNote?: string | null;
+  /** Configuration impact notices explaining how current settings affect analysis. */
+  configNotices?: CheckResultConfigNoticesItem[];
+  /**
+   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+   * @nullable
+   */
+  diagnostics?: CheckResultDiagnostics;
   /**
    * Client-adjusted slop score based on sensitivity profile. Null when no adjustment applied.
    * @nullable

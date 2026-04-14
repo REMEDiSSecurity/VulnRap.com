@@ -8,8 +8,13 @@
 import type { EvidenceItem } from "./evidenceItem";
 import type { HumanIndicator } from "./humanIndicator";
 import type { RedactionSummary } from "./redactionSummary";
+import type { ReportAnalysisAnalysisMode } from "./reportAnalysisAnalysisMode";
+import type { ReportAnalysisArchetype } from "./reportAnalysisArchetype";
+import type { ReportAnalysisConfigNoticesItem } from "./reportAnalysisConfigNoticesItem";
 import type { ReportAnalysisContentMode } from "./reportAnalysisContentMode";
+import type { ReportAnalysisDiagnostics } from "./reportAnalysisDiagnostics";
 import type { ReportAnalysisLlmBreakdown } from "./reportAnalysisLlmBreakdown";
+import type { ReportAnalysisQuadrant } from "./reportAnalysisQuadrant";
 import type { ReportAnalysisSectionHashes } from "./reportAnalysisSectionHashes";
 import type { ReportAnalysisSensitivityProfile } from "./reportAnalysisSensitivityProfile";
 import type { ScoreBreakdown } from "./scoreBreakdown";
@@ -66,6 +71,28 @@ export interface ReportAnalysis {
   llmBreakdown?: ReportAnalysisLlmBreakdown;
   /** Detected human-writing signals that reduced the slop score */
   humanIndicators?: HumanIndicator[];
+  /** AI-authorship likelihood score 0-100 (higher = more likely AI-generated). Measures writing style, spectral patterns, template usage. */
+  authenticityScore?: number;
+  /** Technical substance/validity score 0-100 (higher = stronger evidence of a real vulnerability). Measures evidence quality, claim specificity, internal consistency. */
+  validityScore?: number;
+  /** Two-axis classification quadrant. AI_SLOP=high auth/low valid, AI_ASSISTED=high auth/high valid, WEAK_HUMAN=low auth/low valid, STRONG_HUMAN=low auth/high valid. */
+  quadrant?: ReportAnalysisQuadrant;
+  /** Recommended triage action derived from quadrant classification. */
+  archetype?: ReportAnalysisArchetype;
+  /** Whether the analysis ran in heuristic-only mode or with LLM enhancement. */
+  analysisMode?: ReportAnalysisAnalysisMode;
+  /**
+   * Human-readable note explaining confidence adjustments (e.g. LLM-free mode reduces confidence by 15%).
+   * @nullable
+   */
+  confidenceNote?: string | null;
+  /** Configuration impact notices explaining how current settings affect analysis accuracy, latency, and privacy. */
+  configNotices?: ReportAnalysisConfigNoticesItem[];
+  /**
+   * Pipeline diagnostics showing which analysis stages ran, their durations, and any warnings.
+   * @nullable
+   */
+  diagnostics?: ReportAnalysisDiagnostics;
   /**
    * Client-adjusted slop score based on sensitivity profile. Null when no adjustment applied (balanced preset).
    * @nullable
