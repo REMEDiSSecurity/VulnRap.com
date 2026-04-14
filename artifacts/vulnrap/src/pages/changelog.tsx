@@ -425,7 +425,7 @@ const CHANGELOG: ChangelogEntry[] = [
         title: "Sloppiness (AI Detection) Scoring",
         type: "feature",
         items: [
-          "Heuristic scoring engine on a 0–100 scale across five tiers: Probably Legit, Mildly Suspicious, Questionable, Highly Suspicious, Pure Slop",
+          "Heuristic scoring engine on a 0–100 scale across five tiers: Clean, Likely Human, Questionable, Likely Slop, Slop",
           "Checks: AI-generated filler phrases, missing version/build info, missing reproduction steps, missing code blocks or commands, missing attack vector / CVE / CWE, sentence length clustering, vocabulary diversity (type-token ratio)",
           "Returns actionable feedback strings for each triggered heuristic",
           "Slop analysis intentionally runs on original (pre-redaction) text for accurate AI-pattern detection",

@@ -44,11 +44,8 @@ const SORT_OPTIONS = [
 
 const TIER_ORDER = [
   "Clean",
-  "Probably Legit",
   "Likely Human",
-  "Mildly Suspicious",
   "Questionable",
-  "Highly Suspicious",
   "Likely Slop",
   "Slop",
 ];
@@ -56,13 +53,9 @@ const TIER_ORDER = [
 function getTierBadgeColor(tier: string) {
   switch (tier) {
     case "Clean":
-    case "Probably Legit":
     case "Likely Human":
       return "border-green-500/50 text-green-400 bg-green-500/10";
-    case "Mildly Suspicious":
-      return "border-yellow-500/50 text-yellow-400 bg-yellow-500/10";
     case "Questionable":
-    case "Highly Suspicious":
       return "border-amber-500/50 text-amber-400 bg-amber-500/10";
     case "Likely Slop":
       return "border-orange-500/50 text-orange-400 bg-orange-500/10";
@@ -76,13 +69,9 @@ function getTierBadgeColor(tier: string) {
 function getTierBarColor(tier: string) {
   switch (tier) {
     case "Clean":
-    case "Probably Legit":
     case "Likely Human":
       return "bg-green-500";
-    case "Mildly Suspicious":
-      return "bg-yellow-500";
     case "Questionable":
-    case "Highly Suspicious":
       return "bg-amber-500";
     case "Likely Slop":
       return "bg-orange-500";

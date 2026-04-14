@@ -79,6 +79,8 @@ export interface CheckResult {
    */
   sensitivityProfile?: CheckResultSensitivityProfile;
   llmEnhanced: boolean;
+  /** True when LLM analysis was attempted but failed. */
+  llmFailed?: boolean;
   /** Whether LLM analysis was attempted (not skipped by user). */
   llmUsed?: boolean;
   /** Whether PII auto-redaction was applied. */

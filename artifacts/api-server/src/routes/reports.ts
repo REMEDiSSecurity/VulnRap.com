@@ -167,7 +167,7 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
   }
 
   const safeLinguistic = linguistic ?? { score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0, evidence: [] };
-  const safeFactual = factual ?? { score: 0, evidence: [] };
+  const safeFactual = factual ?? { score: 0, severityInflationScore: 0, placeholderScore: 0, fabricatedOutputScore: 0, evidence: [] };
   const safeQuality = heuristic?.qualityScore ?? 50;
 
   logger.info(
@@ -483,7 +483,7 @@ router.post("/reports", async (req, res): Promise<void> => {
     candidateReports as Array<{ id: number; sectionHashes: Record<string, string> }>,
   );
 
-  const llmUsed = !skipLlm;
+  const llmUsed = !skipLlm && isLLMAvailable();
   const analysisResult = await performAnalysis(text, redactedText, { skipLlm });
   const { llmResult } = analysisResult;
 
@@ -665,6 +665,7 @@ router.post("/reports", async (req, res): Promise<void> => {
     llmFeedback: report.llmFeedback ?? null,
     llmBreakdown: report.llmBreakdown ?? null,
     llmEnhanced: report.llmSlopScore != null,
+    llmFailed: llmUsed && report.llmSlopScore == null,
     llmUsed,
     redactionApplied,
     verification: analysisResult.verification ?? null,
@@ -872,6 +873,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       llmFeedback: skipLlm ? null : (cached.llmFeedback ?? null),
       llmBreakdown: skipLlm ? null : (cached.llmBreakdown ?? null),
       llmEnhanced: skipLlm ? false : cachedHadLlm,
+      llmFailed: !skipLlm && !cachedHadLlm,
       llmUsed: !skipLlm,
       redactionApplied,
       verification: null,
@@ -947,6 +949,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     llmFeedback: checkLlmResult ? checkLlmResult.llmFeedback : null,
     llmBreakdown: checkLlmResult?.llmBreakdown ?? null,
     llmEnhanced: checkLlmResult != null,
+    llmFailed: !skipLlm && checkLlmResult == null && isLLMAvailable(),
     llmUsed: !skipLlm,
     redactionApplied,
     verification: analysisResult.verification ?? null,
@@ -1366,7 +1369,8 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     llmFeedback: report.llmFeedback ?? null,
     llmBreakdown: report.llmBreakdown ?? null,
     llmEnhanced: report.llmSlopScore != null,
-    llmUsed: (report.breakdown as import("@workspace/db").ScoreBreakdown | null)?.llmUsed !== false,
+    llmFailed: (report.breakdown as import("@workspace/db").ScoreBreakdown | null)?.llmUsed === true && report.llmSlopScore == null,
+    llmUsed: (report.breakdown as import("@workspace/db").ScoreBreakdown | null)?.llmUsed === true,
     redactionApplied: (report.breakdown as import("@workspace/db").ScoreBreakdown | null)?.redactionApplied !== false,
     verification,
     triageRecommendation,

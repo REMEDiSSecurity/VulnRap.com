@@ -160,7 +160,7 @@ const SLOP_TEMPLATES = [
       /attack\s+vector\s*:/i,
       /privileges\s+required\s*:/i,
     ],
-    minMatches: 3,
+    minMatches: 5,
     weight: 8,
   },
   {
@@ -424,10 +424,19 @@ function analyzeTemplates(text: string): { score: number; evidence: LinguisticEv
   return { score, evidence };
 }
 
+function safeDetector<T>(name: string, fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch {
+    return fallback;
+  }
+}
+
 export function analyzeLinguistic(text: string): LinguisticResult {
-  const lexical = analyzeLexicalMarkers(text);
-  const statistical = analyzeStatisticalFeatures(text);
-  const templates = analyzeTemplates(text);
+  const emptyResult = { score: 0, evidence: [] as LinguisticEvidence[] };
+  const lexical = safeDetector("lexical", () => analyzeLexicalMarkers(text), emptyResult);
+  const statistical = safeDetector("statistical", () => analyzeStatisticalFeatures(text), emptyResult);
+  const templates = safeDetector("templates", () => analyzeTemplates(text), emptyResult);
 
   const combinedScore = Math.min(100, Math.round(
     lexical.score * 0.40 +

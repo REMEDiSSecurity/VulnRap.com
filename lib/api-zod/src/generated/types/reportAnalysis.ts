@@ -105,6 +105,8 @@ export interface ReportAnalysis {
   sensitivityProfile?: ReportAnalysisSensitivityProfile;
   /** True when LLM analysis contributed to the final slopScore. False means the score is purely heuristic. */
   llmEnhanced: boolean;
+  /** True when LLM analysis was attempted but failed (timeout, parse error, API error). False when LLM succeeded or was not attempted. */
+  llmFailed?: boolean;
   /** Whether LLM analysis was attempted (not skipped by user). When false, the user explicitly opted out of AI analysis. */
   llmUsed?: boolean;
   /** Whether PII auto-redaction was applied. When false, the user explicitly disabled redaction. */

@@ -374,6 +374,12 @@ export const GetReportResponse = zod.object({
     .describe(
       "True when LLM analysis contributed to the final slopScore. False means the score is purely heuristic.",
     ),
+  llmFailed: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when LLM analysis was attempted but failed (timeout, parse error, API error). False when LLM succeeded or was not attempted.",
+    ),
   llmUsed: zod
     .boolean()
     .optional()
@@ -1104,6 +1110,10 @@ export const CheckReportResponse = zod.object({
       "Active sensitivity preset used for score adjustment. Null when default.",
     ),
   llmEnhanced: zod.boolean(),
+  llmFailed: zod
+    .boolean()
+    .optional()
+    .describe("True when LLM analysis was attempted but failed."),
   llmUsed: zod
     .boolean()
     .optional()

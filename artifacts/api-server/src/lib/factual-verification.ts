@@ -445,16 +445,24 @@ function analyzeHallucinatedFunctions(text: string): { score: number; evidence: 
   return { score, evidence };
 }
 
-export function analyzeFactual(text: string): FactualResult {
-  const severity = analyzeSeverityInflation(text);
-  const placeholders = analyzePlaceholderUrls(text);
-  const fabricated = analyzeFabricatedOutput(text);
-  const cveCheck = analyzeCveReferences(text);
-  const fabricatedCves = analyzeFabricatedCves(text);
-  const hallucinatedFuncs = analyzeHallucinatedFunctions(text);
+function safeDetector<T>(name: string, fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch {
+    return fallback;
+  }
+}
 
-  const fakeFilePaths = analyzeFakeFilePaths(text);
-  const testCertAbuse = analyzeTestCertAbuse(text);
+export function analyzeFactual(text: string): FactualResult {
+  const empty = { score: 0, evidence: [] as FactualEvidence[] };
+  const severity = safeDetector("severity", () => analyzeSeverityInflation(text), empty);
+  const placeholders = safeDetector("placeholders", () => analyzePlaceholderUrls(text), empty);
+  const fabricated = safeDetector("fabricated", () => analyzeFabricatedOutput(text), empty);
+  const cveCheck = safeDetector("cveCheck", () => analyzeCveReferences(text), empty);
+  const fabricatedCves = safeDetector("fabricatedCves", () => analyzeFabricatedCves(text), empty);
+  const hallucinatedFuncs = safeDetector("hallucinatedFuncs", () => analyzeHallucinatedFunctions(text), empty);
+  const fakeFilePaths = safeDetector("fakeFilePaths", () => analyzeFakeFilePaths(text), empty);
+  const testCertAbuse = safeDetector("testCertAbuse", () => analyzeTestCertAbuse(text), empty);
 
   const combinedScore = Math.min(100, Math.round(
     severity.score * 0.20 +

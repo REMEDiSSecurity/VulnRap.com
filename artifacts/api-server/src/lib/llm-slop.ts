@@ -41,7 +41,7 @@ export interface LLMBreakdown {
   verdict: string;
 }
 
-const LLM_TIMEOUT_MS = 15_000;
+const LLM_TIMEOUT_MS = 30_000;
 
 const COST_GUARD_LOW = 25;
 const COST_GUARD_HIGH = 60;
@@ -105,7 +105,7 @@ function setCachedResult(text: string, result: LLMSlopResult): void {
   resultCache.set(getCacheKey(text), { result, ts: Date.now() });
 }
 
-const SYSTEM_PROMPT = `You are a senior vulnerability triage analyst at a major software security program. Your job is NOT to detect if this was written by AI. Your job is to assess whether this report describes a REAL, REPRODUCIBLE vulnerability that could be acted upon.
+const SYSTEM_PROMPT_FULL = `You are a senior vulnerability triage analyst at a major software security program. Your job is NOT to detect if this was written by AI. Your job is to assess whether this report describes a REAL, REPRODUCIBLE vulnerability that could be acted upon.
 
 You will evaluate the report on these four specific criteria:
 
@@ -234,6 +234,32 @@ Rules:
 - reproduction_recipe: always present. setup_commands should be concrete shell commands to install and run the target at the claimed version. poc_script should be a complete, runnable script (not pseudocode) based on the report's claims. If the report lacks enough detail for a runnable PoC, produce your best approximation with TODO comments marking what the triager needs to fill in. poc_language should match the script language. prerequisites lists required tools/SDKs. cleanup_commands lists any teardown needed (kill processes, remove containers, etc.)
 - Do not mention that you are an AI`;
 
+const SYSTEM_PROMPT_COMPACT = `You are a vulnerability triage analyst. Assess whether this report describes a REAL, REPRODUCIBLE vulnerability.
+
+Score these four criteria (0-25 each):
+1. CLAIM SPECIFICITY: specific project/version/file/function vs generic claims
+2. EVIDENCE QUALITY: code snippets, HTTP requests, stack traces vs text-only descriptions
+3. INTERNAL CONSISTENCY: vuln type, component, impact align logically
+4. HALLUCINATION SIGNALS: functions/files that exist, plausible stack traces, consistent details
+
+Rules:
+- Well-structured format is NOT evidence of hallucination
+- Named CVE IDs, commit SHAs, advisory URLs are POSITIVE signals
+- DO penalize vague, generic, or unverifiable claims
+- DO penalize obvious hallucinations (nonexistent functions, impossible stack traces)
+
+Return ONLY a JSON object:
+{"claimSpecificity":<0-25>,"evidenceQuality":<0-25>,"internalConsistency":<0-25>,"hallucinationSignals":<0-25>,"validityScore":<0-100>,"red_flags":["..."],"green_flags":["..."],"verdict":"LIKELY_VALID"|"UNCERTAIN"|"LIKELY_FABRICATED","reasoning":"<2-3 sentences>"}`;
+
+function getSystemPrompt(model: string): string {
+  if (model.includes("nano") || model.includes("mini")) {
+    return SYSTEM_PROMPT_COMPACT;
+  }
+  return SYSTEM_PROMPT_FULL;
+}
+
+const SYSTEM_PROMPT = SYSTEM_PROMPT_FULL;
+
 async function analyzeSlopWithLLMOnce(
   client: OpenAI,
   truncatedText: string,
@@ -246,13 +272,16 @@ async function analyzeSlopWithLLMOnce(
     const startMs = Date.now();
     logger.info({ model, textLength: truncatedText.length }, "LLM slop: sending request");
 
+    const isNano = model.includes("nano");
+    const activePrompt = getSystemPrompt(model);
+    const tokenBudget = isNano ? 4000 : 8000;
     const response = await client.chat.completions.create(
       {
         model,
-        temperature: 0.1,
-        max_completion_tokens: 1000,
+        ...(!isNano ? { temperature: 0.1 } : {}),
+        max_completion_tokens: tokenBudget,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: activePrompt },
           {
             role: "user",
             content: `Score this vulnerability report for AI-generated slop:\n\n---\n${truncatedText}\n---`,
@@ -263,8 +292,14 @@ async function analyzeSlopWithLLMOnce(
     );
 
     const elapsedMs = Date.now() - startMs;
-    const raw = response.choices[0]?.message?.content?.trim() ?? "";
-    logger.info({ rawLength: raw.length, elapsedMs }, "LLM slop: received response");
+    const choice = response.choices[0];
+    const raw = choice?.message?.content?.trim() ?? "";
+    const finishReason = choice?.finish_reason ?? "unknown";
+    const usage = response.usage;
+    if (raw.length === 0 && choice) {
+      logger.warn({ messageKeys: Object.keys(choice.message || {}), choiceKeys: Object.keys(choice), refusal: (choice.message as Record<string, unknown>)?.refusal }, "LLM slop: empty content debug");
+    }
+    logger.info({ rawLength: raw.length, elapsedMs, finishReason, completionTokens: usage?.completion_tokens, promptTokens: usage?.prompt_tokens }, "LLM slop: received response");
 
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -505,7 +540,8 @@ export async function analyzeSlopWithLLM(
     return cached;
   }
 
-  const MAX_RETRIES = 2;
+  const model = process.env.OPENAI_MODEL || "gpt-5-nano";
+  const MAX_RETRIES = model.includes("nano") ? 1 : 2;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const result = await analyzeSlopWithLLMOnce(client, truncatedText);
     if (result) return result;
