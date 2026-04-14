@@ -47,6 +47,29 @@ function parseBoolParam(value: unknown): boolean {
   return value === "true" || value === true;
 }
 
+function safeBreakdown(bd: unknown): {
+  linguistic: number; factual: number; template: number;
+  llm: number | null; verification: number | null; quality: number;
+  scoringConfigVersion?: string; spectral?: number; evidenceQuality?: number;
+  hallucinationDetector?: number; claimSpecificity?: number; internalConsistency?: number;
+} {
+  const raw = (bd && typeof bd === "object" ? bd : {}) as Record<string, unknown>;
+  return {
+    linguistic: typeof raw.linguistic === "number" ? raw.linguistic : 0,
+    factual: typeof raw.factual === "number" ? raw.factual : 0,
+    template: typeof raw.template === "number" ? raw.template : 0,
+    llm: typeof raw.llm === "number" ? raw.llm : null,
+    verification: typeof raw.verification === "number" ? raw.verification : null,
+    quality: typeof raw.quality === "number" ? raw.quality : 50,
+    ...(typeof raw.scoringConfigVersion === "string" ? { scoringConfigVersion: raw.scoringConfigVersion } : {}),
+    ...(typeof raw.spectral === "number" ? { spectral: raw.spectral } : {}),
+    ...(typeof raw.evidenceQuality === "number" ? { evidenceQuality: raw.evidenceQuality } : {}),
+    ...(typeof raw.hallucinationDetector === "number" ? { hallucinationDetector: raw.hallucinationDetector } : {}),
+    ...(typeof raw.claimSpecificity === "number" ? { claimSpecificity: raw.claimSpecificity } : {}),
+    ...(typeof raw.internalConsistency === "number" ? { internalConsistency: raw.internalConsistency } : {}),
+  };
+}
+
 interface StageStatus {
   status: "ok" | "error";
   durationMs: number;
@@ -627,7 +650,7 @@ router.post("/reports", async (req, res): Promise<void> => {
     slopTier: report.slopTier,
     qualityScore: report.qualityScore,
     confidence: report.confidence,
-    breakdown: report.breakdown ?? { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: 50 },
+    breakdown: safeBreakdown(report.breakdown),
     evidence: report.evidence ?? [],
     humanIndicators: report.humanIndicators ?? [],
     authenticityScore: report.authenticityScore,
@@ -831,7 +854,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       slopTier: responseSlopTier,
       qualityScore: cached.qualityScore,
       confidence: responseConfidence,
-      breakdown: responseBreakdown,
+      breakdown: safeBreakdown(responseBreakdown),
       evidence: responseEvidence,
       humanIndicators: cached.humanIndicators,
       authenticityScore: responseAuthenticityScore,
@@ -906,7 +929,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     slopTier: analysisResult.slopTier,
     qualityScore: analysisResult.qualityScore,
     confidence: analysisResult.confidence,
-    breakdown: analysisResult.breakdown,
+    breakdown: safeBreakdown(analysisResult.breakdown),
     evidence: analysisResult.evidence,
     humanIndicators: analysisResult.humanIndicators,
     authenticityScore: analysisResult.authenticityScore,
@@ -1328,7 +1351,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     slopTier: report.slopTier,
     qualityScore: report.qualityScore ?? 50,
     confidence: report.confidence ?? 0.5,
-    breakdown: report.breakdown ?? { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: 50 },
+    breakdown: safeBreakdown(report.breakdown),
     evidence: report.evidence ?? [],
     humanIndicators: report.humanIndicators ?? [],
     authenticityScore: report.authenticityScore ?? 0,
