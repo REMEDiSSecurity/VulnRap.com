@@ -64,6 +64,14 @@ const CHANGELOG: ChangelogEntry[] = [
           "Applied breakdown safety at all 4 response-building sites (feed, cached check, new submission, GET by ID)",
         ],
       },
+    ],
+  },
+  {
+    version: "3.1.1",
+    date: "2026-04-14",
+    label: "Platform Hardening & Explorer",
+    labelColor: "border-emerald-500 text-emerald-400",
+    sections: [
       {
         icon: <Layout className="w-4 h-4 text-purple-400" />,
         title: "Reports Explorer",
@@ -79,10 +87,10 @@ const CHANGELOG: ChangelogEntry[] = [
         title: "Testing & Reliability",
         type: "improvement",
         items: [
-          "Comprehensive unit test suite: 114 tests across 10 test files covering all scoring modules",
+          "Comprehensive unit test suite: 114 tests across 10 test files covering all scoring modules (linguistic, factual, template, score-fusion, llm-slop, human-indicators, redaction, similarity, triage)",
           "Global error boundary added — unhandled frontend crashes show recovery UI instead of blank screen",
-          "LLM-free fallback mode: full analysis pipeline works without any LLM configuration",
-          "Config impact notices: UI warns when settings changes affect scoring behavior",
+          "LLM-free fallback mode: full analysis pipeline works without any LLM configuration, weights redistribute automatically",
+          "Config impact notices: UI warns when sensitivity or settings changes will affect scoring behavior",
         ],
       },
       {
@@ -90,10 +98,18 @@ const CHANGELOG: ChangelogEntry[] = [
         title: "API & Developer Experience",
         type: "improvement",
         items: [
-          "parseBoolParam() fix: skipLlm and skipRedaction now accept both string 'true' and boolean true",
+          "Embedded API documentation: Swagger UI and Scalar API reference toggled directly in the developers page (no external redirect)",
+          "parseBoolParam() fix: skipLlm and skipRedaction query params now accept both string 'true' and boolean true values",
           "Report submission rate limit increased for higher-throughput triage workflows",
-          "Embedded API documentation with Swagger/Scalar toggle directly in the developers page",
-          "Mobile UX improvements: all controls visible and tappable on small screens",
+        ],
+      },
+      {
+        icon: <Eye className="w-4 h-4 text-primary" />,
+        title: "UI & Visual Polish",
+        type: "improvement",
+        items: [
+          "Mobile UX overhaul: all controls visible and tappable on small screens, touch targets meet accessibility minimums",
+          "Laser beam angles adjusted to accurately match the VulnRap logo image",
         ],
       },
     ],
