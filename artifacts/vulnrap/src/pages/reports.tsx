@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useGetReportFeed, useGetStats, getGetReportFeedQueryKey, getGetStatsQueryKey } from "@workspace/api-client-react";
+import { useGetReportFeed, getGetReportFeedQueryKey } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -74,6 +74,26 @@ function getTierBadgeColor(tier: string) {
   }
 }
 
+function getTierBarColor(tier: string) {
+  switch (tier) {
+    case "Clean":
+    case "Probably Legit":
+    case "Likely Human":
+      return "bg-green-500";
+    case "Mildly Suspicious":
+      return "bg-yellow-500";
+    case "Questionable":
+    case "Highly Suspicious":
+      return "bg-amber-500";
+    case "Likely Slop":
+      return "bg-orange-500";
+    case "Slop":
+      return "bg-red-500";
+    default:
+      return "bg-muted-foreground";
+  }
+}
+
 export default function Reports() {
   const [offset, setOffset] = useState(0);
   const [sort, setSort] = useState<string>("newest");
@@ -95,38 +115,15 @@ export default function Reports() {
     },
   });
 
-  const { data: stats, isLoading: statsLoading } = useGetStats({
-    query: {
-      queryKey: getGetStatsQueryKey(),
-      staleTime: 60_000,
-    },
-  });
-
   const reports = feedData?.reports ?? [];
   const total = feedData?.total ?? 0;
   const hasMore = feedData?.hasMore ?? false;
+  const summary = feedData?.summary;
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  const avgScore = stats?.avgSlopScore ?? 0;
-
-  const scoreBuckets = [
-    { label: "0-20", range: [0, 20], color: "bg-green-500" },
-    { label: "21-40", range: [21, 40], color: "bg-yellow-500" },
-    { label: "41-60", range: [41, 60], color: "bg-amber-500" },
-    { label: "61-80", range: [61, 80], color: "bg-orange-500" },
-    { label: "81-100", range: [81, 100], color: "bg-red-500" },
-  ];
-
-  const distribution = reports.reduce((acc, r) => {
-    for (const b of scoreBuckets) {
-      if (r.slopScore >= b.range[0] && r.slopScore <= b.range[1]) {
-        acc[b.label] = (acc[b.label] || 0) + 1;
-        break;
-      }
-    }
-    return acc;
-  }, {} as Record<string, number>);
+  const tierCounts = summary?.tierCounts ?? {};
+  const tierEntries = Object.entries(tierCounts).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -147,10 +144,10 @@ export default function Reports() {
             <Database className="w-4 h-4 text-cyan-400" />
             <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Public Reports</span>
           </div>
-          {statsLoading ? (
+          {feedLoading ? (
             <Skeleton className="h-8 w-20" />
           ) : (
-            <div className="text-2xl font-mono font-bold glow-text-sm">{total}</div>
+            <div className="text-2xl font-mono font-bold glow-text-sm">{summary?.totalPublic ?? 0}</div>
           )}
         </div>
 
@@ -159,33 +156,38 @@ export default function Reports() {
             <TrendingUp className="w-4 h-4 text-amber-400" />
             <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Avg Slop Score</span>
           </div>
-          {statsLoading ? (
+          {feedLoading ? (
             <Skeleton className="h-8 w-20" />
           ) : (
-            <div className="text-2xl font-mono font-bold text-amber-400">{Math.round(avgScore)}</div>
+            <div className="text-2xl font-mono font-bold text-amber-400">{Math.round(summary?.avgScore ?? 0)}</div>
           )}
         </div>
 
         <div className="glass-card rounded-xl p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-2">
             <Activity className="w-4 h-4 text-violet-400" />
-            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Distribution</span>
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Tier Breakdown</span>
           </div>
-          <div className="flex items-end gap-1 h-8">
-            {scoreBuckets.map((b) => {
-              const count = distribution[b.label] || 0;
-              const maxCount = Math.max(...Object.values(distribution), 1);
-              const pct = (count / maxCount) * 100;
-              return (
-                <div
-                  key={b.label}
-                  className={cn("flex-1 rounded-t-sm transition-all", b.color, "opacity-70")}
-                  style={{ height: `${Math.max(pct, 8)}%` }}
-                  title={`${b.label}: ${count}`}
-                />
-              );
-            })}
-          </div>
+          {feedLoading ? (
+            <Skeleton className="h-8 w-full" />
+          ) : tierEntries.length > 0 ? (
+            <div className="flex items-end gap-1 h-8">
+              {tierEntries.map(([tier, count]) => {
+                const maxCount = Math.max(...tierEntries.map(([, c]) => c), 1);
+                const pct = (count / maxCount) * 100;
+                return (
+                  <div
+                    key={tier}
+                    className={cn("flex-1 rounded-t-sm transition-all opacity-70", getTierBarColor(tier))}
+                    style={{ height: `${Math.max(pct, 8)}%` }}
+                    title={`${tier}: ${count}`}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No data</div>
+          )}
         </div>
       </div>
 

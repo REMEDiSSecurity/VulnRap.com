@@ -85,6 +85,8 @@ export * from "./reporterFeedbackSummaryActionability";
 export * from "./reportFeed";
 export * from "./reportFeedReportsItem";
 export * from "./reportFeedReportsItemContentMode";
+export * from "./reportFeedSummary";
+export * from "./reportFeedSummaryTierCounts";
 export * from "./reproGuidance";
 export * from "./reproRecipe";
 export * from "./reproRecipeTarget";

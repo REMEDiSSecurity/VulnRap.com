@@ -1166,10 +1166,26 @@ components:
           type: integer
         hasMore:
           type: boolean
+        summary:
+          type: object
+          properties:
+            totalPublic:
+              type: integer
+            avgScore:
+              type: number
+            tierCounts:
+              type: object
+              additionalProperties:
+                type: integer
+          required:
+            - totalPublic
+            - avgScore
+            - tierCounts
       required:
         - reports
         - total
         - hasMore
+        - summary
 
     SlopDistribution:
       type: object

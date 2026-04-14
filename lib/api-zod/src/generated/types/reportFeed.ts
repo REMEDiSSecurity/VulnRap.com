@@ -6,9 +6,11 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { ReportFeedReportsItem } from "./reportFeedReportsItem";
+import type { ReportFeedSummary } from "./reportFeedSummary";
 
 export interface ReportFeed {
   reports: ReportFeedReportsItem[];
   total: number;
   hasMore: boolean;
+  summary: ReportFeedSummary;
 }

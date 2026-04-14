@@ -1498,6 +1498,11 @@ export const GetReportFeedResponse = zod.object({
   ),
   total: zod.number(),
   hasMore: zod.boolean(),
+  summary: zod.object({
+    totalPublic: zod.number(),
+    avgScore: zod.number(),
+    tierCounts: zod.record(zod.string(), zod.number()),
+  }),
 });
 
 /**

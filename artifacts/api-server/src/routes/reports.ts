@@ -973,6 +973,28 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
     .where(whereClause);
   const total = countResult?.count ?? 0;
 
+  const [summaryResult] = await db
+    .select({
+      totalPublic: sql<number>`count(*)::int`,
+      avgScore: sql<number>`coalesce(avg("slop_score"), 0)`,
+    })
+    .from(reportsTable)
+    .where(eq(reportsTable.showInFeed, true));
+
+  const tierRows = await db
+    .select({
+      tier: reportsTable.slopTier,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(reportsTable)
+    .where(eq(reportsTable.showInFeed, true))
+    .groupBy(reportsTable.slopTier);
+
+  const tierCounts: Record<string, number> = {};
+  for (const row of tierRows) {
+    tierCounts[row.tier] = row.count;
+  }
+
   const feedReports = await db
     .select({
       id: reportsTable.id,
@@ -1005,6 +1027,11 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
     reports: mapped,
     total,
     hasMore: offset + limit < total,
+    summary: {
+      totalPublic: summaryResult?.totalPublic ?? 0,
+      avgScore: Math.round((summaryResult?.avgScore ?? 0) * 10) / 10,
+      tierCounts,
+    },
   });
   res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
   res.json(response);

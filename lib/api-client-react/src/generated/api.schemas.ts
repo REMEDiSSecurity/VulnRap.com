@@ -891,10 +891,19 @@ export type ReportFeedReportsItem = {
   createdAt: string;
 };
 
+export type ReportFeedSummaryTierCounts = { [key: string]: number };
+
+export type ReportFeedSummary = {
+  totalPublic: number;
+  avgScore: number;
+  tierCounts: ReportFeedSummaryTierCounts;
+};
+
 export interface ReportFeed {
   reports: ReportFeedReportsItem[];
   total: number;
   hasMore: boolean;
+  summary: ReportFeedSummary;
 }
 
 export type SlopDistributionBucketsItem = {
