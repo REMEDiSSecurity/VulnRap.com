@@ -28,8 +28,8 @@ const CHANGELOG: ChangelogEntry[] = [
         title: "Linguistic Analysis Expansion",
         type: "improvement",
         items: [
-          "6 new sycophantic patterns: 'years of experience', 'discovered a critical', 'industry-leading tools', 'look forward to hearing', 'certified professional', 'engagement/assessment' claims",
-          "Total sycophantic pattern library now at 32 patterns for AI-generated filler detection",
+          "6 new formulaic phrase patterns: 'years of experience', 'discovered a critical', 'industry-leading tools', 'look forward to hearing', 'certified professional', 'engagement/assessment' claims",
+          "Total formulaic phrase library now at 32 patterns for AI-generated boilerplate detection",
         ],
       },
       {

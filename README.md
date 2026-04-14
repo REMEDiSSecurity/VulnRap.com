@@ -219,7 +219,7 @@ Deterministic analysis that checks for:
 - **AI filler phrases** — ~50 weighted phrases ("It is important to note," "As an AI language model," etc.)
 - **Statistical text analysis** — Sentence length variance, passive voice ratio, contraction absence, bigram entropy
 - **Template detection** — Bounty template headers (Vulnerability Type, Severity, CVSS Score, etc.), formal letter patterns (Dear Team / Best regards), dependency dumps, OWASP padding
-- **Sycophantic phrase detection** — 32 AI-generated filler patterns (years of experience, industry tools, discovered a critical, etc.)
+- **Formulaic phrase detection** — 32 AI-generated boilerplate patterns (years of experience, industry tools, discovered a critical, etc.)
 
 ### Axis 2: Quality vs Slop Separation
 - **qualityScore** (0-100) — Report completeness: version info, code blocks, repro steps
