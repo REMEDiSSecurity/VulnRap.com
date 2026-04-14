@@ -43,6 +43,10 @@ import {
   type TriageAssistantResult,
 } from "../lib/triage-assistant";
 
+function parseBoolParam(value: unknown): boolean {
+  return value === "true" || value === true;
+}
+
 interface StageStatus {
   status: "ok" | "error";
   durationMs: number;
@@ -359,8 +363,8 @@ router.post("/reports", async (req, res): Promise<void> => {
     ? req.body.contentMode
     : "full";
   const showInFeed = req.body.showInFeed === "true";
-  const skipRedaction = req.body.skipRedaction === "true";
-  const skipLlm = req.body.skipLlm === "true" || skipRedaction;
+  const skipRedaction = parseBoolParam(req.body.skipRedaction);
+  const skipLlm = parseBoolParam(req.body.skipLlm) || skipRedaction;
 
   let text: string;
   let safeFileName: string | null = null;
@@ -672,8 +676,8 @@ router.post("/reports/check", (req, res, next): void => {
 });
 
 router.post("/reports/check", async (req, res): Promise<void> => {
-  const skipRedaction = req.body.skipRedaction === "true";
-  const skipLlm = req.body.skipLlm === "true" || skipRedaction;
+  const skipRedaction = parseBoolParam(req.body.skipRedaction);
+  const skipLlm = parseBoolParam(req.body.skipLlm) || skipRedaction;
 
   let text: string;
   const rawText = typeof req.body.rawText === "string" ? req.body.rawText : "";
