@@ -666,17 +666,48 @@ components:
         llmBreakdown:
           type: ["object", "null"]
           properties:
+            claimSpecificity:
+              type: integer
+              description: Claim specificity score (0-25)
+            evidenceQuality:
+              type: integer
+              description: Evidence quality score (0-25)
+            internalConsistency:
+              type: integer
+              description: Internal consistency score (0-25)
+            hallucinationSignals:
+              type: integer
+              description: Hallucination signals score (0-25, higher = fewer hallucinations)
+            validityScore:
+              type: integer
+              description: Overall validity score (0-100)
+            redFlags:
+              type: array
+              items:
+                type: string
+            greenFlags:
+              type: array
+              items:
+                type: string
+            verdict:
+              type: string
+              description: "LIKELY_VALID | UNCERTAIN | LIKELY_FABRICATED"
             specificity:
               type: integer
+              description: Legacy V1 field (deprecated)
             originality:
               type: integer
+              description: Legacy V1 field (deprecated)
             voice:
               type: integer
+              description: Legacy V1 field (deprecated)
             coherence:
               type: integer
+              description: Legacy V1 field (deprecated)
             hallucination:
               type: integer
-          description: Per-dimension LLM scores (0-100 each). Null when LLM analysis is unavailable.
+              description: Legacy V1 field (deprecated)
+          description: Per-criterion LLM validity scores. Null when LLM analysis is unavailable. May contain legacy V1 fields for older records.
         humanIndicators:
           type: array
           items:
@@ -903,6 +934,26 @@ components:
         llmBreakdown:
           type: ["object", "null"]
           properties:
+            claimSpecificity:
+              type: integer
+            evidenceQuality:
+              type: integer
+            internalConsistency:
+              type: integer
+            hallucinationSignals:
+              type: integer
+            validityScore:
+              type: integer
+            redFlags:
+              type: array
+              items:
+                type: string
+            greenFlags:
+              type: array
+              items:
+                type: string
+            verdict:
+              type: string
             specificity:
               type: integer
             originality:

@@ -196,15 +196,55 @@ export const GetReportResponse = zod.object({
     ),
   llmBreakdown: zod
     .object({
-      specificity: zod.number().optional(),
-      originality: zod.number().optional(),
-      voice: zod.number().optional(),
-      coherence: zod.number().optional(),
-      hallucination: zod.number().optional(),
+      claimSpecificity: zod
+        .number()
+        .optional()
+        .describe("Claim specificity score (0-25)"),
+      evidenceQuality: zod
+        .number()
+        .optional()
+        .describe("Evidence quality score (0-25)"),
+      internalConsistency: zod
+        .number()
+        .optional()
+        .describe("Internal consistency score (0-25)"),
+      hallucinationSignals: zod
+        .number()
+        .optional()
+        .describe(
+          "Hallucination signals score (0-25, higher = fewer hallucinations)",
+        ),
+      validityScore: zod
+        .number()
+        .optional()
+        .describe("Overall validity score (0-100)"),
+      redFlags: zod.array(zod.string()).optional(),
+      greenFlags: zod.array(zod.string()).optional(),
+      verdict: zod
+        .string()
+        .optional()
+        .describe("LIKELY_VALID | UNCERTAIN | LIKELY_FABRICATED"),
+      specificity: zod
+        .number()
+        .optional()
+        .describe("Legacy V1 field (deprecated)"),
+      originality: zod
+        .number()
+        .optional()
+        .describe("Legacy V1 field (deprecated)"),
+      voice: zod.number().optional().describe("Legacy V1 field (deprecated)"),
+      coherence: zod
+        .number()
+        .optional()
+        .describe("Legacy V1 field (deprecated)"),
+      hallucination: zod
+        .number()
+        .optional()
+        .describe("Legacy V1 field (deprecated)"),
     })
     .nullish()
     .describe(
-      "Per-dimension LLM scores (0-100 each). Null when LLM analysis is unavailable.",
+      "Per-criterion LLM validity scores. Null when LLM analysis is unavailable. May contain legacy V1 fields for older records.",
     ),
   humanIndicators: zod
     .array(
@@ -935,6 +975,14 @@ export const CheckReportResponse = zod.object({
   llmFeedback: zod.array(zod.string()).nullish(),
   llmBreakdown: zod
     .object({
+      claimSpecificity: zod.number().optional(),
+      evidenceQuality: zod.number().optional(),
+      internalConsistency: zod.number().optional(),
+      hallucinationSignals: zod.number().optional(),
+      validityScore: zod.number().optional(),
+      redFlags: zod.array(zod.string()).optional(),
+      greenFlags: zod.array(zod.string()).optional(),
+      verdict: zod.string().optional(),
       specificity: zod.number().optional(),
       originality: zod.number().optional(),
       voice: zod.number().optional(),

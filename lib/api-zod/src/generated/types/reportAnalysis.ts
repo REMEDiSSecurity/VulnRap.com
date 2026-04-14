@@ -65,7 +65,7 @@ export interface ReportAnalysis {
    */
   llmFeedback?: string[] | null;
   /**
-   * Per-dimension LLM scores (0-100 each). Null when LLM analysis is unavailable.
+   * Per-criterion LLM validity scores. Null when LLM analysis is unavailable. May contain legacy V1 fields for older records.
    * @nullable
    */
   llmBreakdown?: ReportAnalysisLlmBreakdown;

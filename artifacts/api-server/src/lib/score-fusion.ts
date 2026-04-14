@@ -119,7 +119,7 @@ export function loadThresholds(): TierThresholds {
 
 function computeAuthenticityScore(
   linguistic: LinguisticResult,
-  llm: LLMSlopResult | null,
+  _llm: LLMSlopResult | null,
   spectral: SpectralResult,
   humanResult: { totalReduction: number },
 ): number {
@@ -128,15 +128,12 @@ function computeAuthenticityScore(
   );
 
   let auth = linguisticAxis * 0.40
-    + linguistic.templateScore * 0.15
+    + linguistic.templateScore * 0.35
     + spectral.score * 0.25;
 
-  if (llm) {
-    const llmVoice = llm.llmBreakdown?.voice ?? 50;
-    const llmOriginality = llm.llmBreakdown?.originality ?? 50;
-    auth += ((llmVoice * 0.5 + llmOriginality * 0.5) * 0.20);
-  } else {
-    auth += (linguisticAxis * 0.10 + spectral.score * 0.10);
+  if (linguisticAxis > 40 && linguistic.templateScore > 50) {
+    const compoundBoost = Math.min(15, (linguisticAxis - 40) * 0.3 + (linguistic.templateScore - 50) * 0.1);
+    auth += compoundBoost;
   }
 
   auth = Math.max(0, auth + humanResult.totalReduction);
@@ -144,42 +141,29 @@ function computeAuthenticityScore(
   return Math.min(100, Math.max(0, Math.round(auth)));
 }
 
-function computeValidityScore(
+function computeHeuristicValidity(
   factual: FactualResult,
-  llm: LLMSlopResult | null,
   evidenceQuality: EvidenceQualityResult,
   hallucination: HallucinationResult,
   claimSpec: ClaimSpecificityResult,
   consistency: InternalConsistencyResult,
   verification: VerificationResult | null,
 ): number {
-  let evidenceWeight: number;
-  let hallucinationWeight: number;
-  let claimWeight: number;
-  let consistencyWeight: number;
-  let factualWeight: number;
-  let verificationWeight: number;
+  const evidenceWeight = 0.25;
+  const hallucinationWeight = 0.20;
+  const claimWeight = 0.20;
+  const consistencyWeight = 0.15;
+  const factualWeight = 0.10;
+  const verificationWeight = 0.10;
 
-  if (llm) {
-    evidenceWeight = 0.25;
-    hallucinationWeight = 0.20;
-    claimWeight = 0.15;
-    consistencyWeight = 0.15;
-    factualWeight = 0.15;
-    verificationWeight = 0.10;
-  } else {
-    evidenceWeight = 0.25;
-    hallucinationWeight = 0.20;
-    claimWeight = 0.20;
-    consistencyWeight = 0.15;
-    factualWeight = 0.10;
-    verificationWeight = 0.10;
-  }
+  const substanceLow = claimSpec.score < 10 && evidenceQuality.score < 10;
+  const effectiveHallucination = substanceLow ? Math.min(hallucination.score, 40) : hallucination.score;
+  const effectiveConsistency = substanceLow ? Math.min(consistency.score, 40) : consistency.score;
 
   let validity = evidenceQuality.score * evidenceWeight
-    + hallucination.score * hallucinationWeight
+    + effectiveHallucination * hallucinationWeight
     + claimSpec.score * claimWeight
-    + consistency.score * consistencyWeight
+    + effectiveConsistency * consistencyWeight
     + (100 - factual.score) * factualWeight;
 
   if (verification && verification.checks.length > 0) {
@@ -190,15 +174,27 @@ function computeValidityScore(
     validity += 50 * verificationWeight;
   }
 
-  if (llm) {
-    const llmSpecificity = llm.llmBreakdown?.specificity ?? 50;
-    const llmCoherence = llm.llmBreakdown?.coherence ?? 50;
-    const llmHallucination = llm.llmBreakdown?.hallucination ?? 50;
-    const llmValidityBoost = ((100 - llmSpecificity) * 0.4 + (100 - llmCoherence) * 0.3 + (100 - llmHallucination) * 0.3);
-    validity = validity * 0.75 + llmValidityBoost * 0.25;
+  return Math.min(100, Math.max(0, Math.round(validity)));
+}
+
+function computeValidityScore(
+  factual: FactualResult,
+  llm: LLMSlopResult | null,
+  evidenceQuality: EvidenceQualityResult,
+  hallucination: HallucinationResult,
+  claimSpec: ClaimSpecificityResult,
+  consistency: InternalConsistencyResult,
+  verification: VerificationResult | null,
+): { final: number; heuristic: number; llmRaw: number | null } {
+  const heuristic = computeHeuristicValidity(factual, evidenceQuality, hallucination, claimSpec, consistency, verification);
+
+  if (llm && llm.llmBreakdown) {
+    const llmRaw = llm.llmBreakdown.validityScore ?? 50;
+    const final = Math.min(100, Math.max(0, Math.round(heuristic * 0.50 + llmRaw * 0.50)));
+    return { final, heuristic, llmRaw };
   }
 
-  return Math.min(100, Math.max(0, Math.round(validity)));
+  return { final: heuristic, heuristic, llmRaw: null };
 }
 
 export function fuseScores(
@@ -275,13 +271,23 @@ export function fuseScores(
   const humanResult = detectHumanIndicators(originalText);
 
   const authenticityScore = computeAuthenticityScore(linguistic, llm, spectral, humanResult);
-  const validityScore = computeValidityScore(
+  const validityResult = computeValidityScore(
     factual, llm, evidenceQuality, hallucination, claimSpec, consistency, verification ?? null,
   );
 
-  const { quadrant, archetype } = classifyQuadrant(authenticityScore, validityScore);
+  let scoreConflict: { conflict: boolean; heuristic: number; llm: number; difference: number } | null = null;
+  let finalValidityScore = validityResult.final;
+  if (validityResult.llmRaw !== null) {
+    const diff = Math.abs(validityResult.heuristic - validityResult.llmRaw);
+    if (diff > 30) {
+      scoreConflict = { conflict: true, heuristic: validityResult.heuristic, llm: validityResult.llmRaw, difference: diff };
+      finalValidityScore = Math.min(validityResult.heuristic, validityResult.llmRaw);
+    }
+  }
 
-  let slopScore = Math.round(authenticityScore * (1 - validityScore * 0.8 / 100));
+  const { quadrant, archetype } = classifyQuadrant(authenticityScore, finalValidityScore);
+
+  let slopScore = Math.round(authenticityScore * 0.65 + (100 - finalValidityScore) * 0.35);
 
   const hasHallucinatedFunction = factual.evidence.some(
     e => e.type === "hallucinated_function" || e.type === "fabricated_cve"
@@ -359,7 +365,7 @@ export function fuseScores(
     humanIndicators: humanResult.indicators,
     slopTier: getSlopTier(slopScore, thr),
     authenticityScore,
-    validityScore,
+    validityScore: finalValidityScore,
     quadrant,
     archetype,
     analysisMode,
@@ -383,25 +389,35 @@ export function recomputeSlopScoreWithoutLlm(
   const humanResult = detectHumanIndicators(originalText);
 
   const linguisticAxis = breakdown.linguistic;
-  let auth = linguisticAxis * 0.50 + breakdown.template * 0.20 + spectral.score * 0.30;
+  let auth = linguisticAxis * 0.40 + breakdown.template * 0.35 + spectral.score * 0.25;
+  if (linguisticAxis > 40 && breakdown.template > 50) {
+    const compoundBoost = Math.min(15, (linguisticAxis - 40) * 0.3 + (breakdown.template - 50) * 0.1);
+    auth += compoundBoost;
+  }
   auth = Math.max(0, auth + humanResult.totalReduction);
   const authenticityScore = Math.min(100, Math.max(0, Math.round(auth)));
 
+  const substanceLow = claimSpec.score < 10 && evidenceQuality.score < 10;
+  const effectiveHallucination = substanceLow ? Math.min(hallucination.score, 40) : hallucination.score;
+  const effectiveConsistency = substanceLow ? Math.min(consistency.score, 40) : consistency.score;
+
   const factualInverse = 100 - breakdown.factual;
-  let validity = evidenceQuality.score * 0.30
-    + hallucination.score * 0.25
+  let validity = evidenceQuality.score * 0.25
+    + effectiveHallucination * 0.20
     + claimSpec.score * 0.20
-    + consistency.score * 0.15
+    + effectiveConsistency * 0.15
     + factualInverse * 0.10;
 
   if (breakdown.verification != null) {
-    validity = validity * 0.9 + (100 - breakdown.verification) * 0.1;
+    validity += (100 - breakdown.verification) * 0.10;
+  } else {
+    validity += 50 * 0.10;
   }
 
   const validityScore = Math.min(100, Math.max(0, Math.round(validity)));
   const { quadrant, archetype } = classifyQuadrant(authenticityScore, validityScore);
 
-  let slopScore = Math.round(authenticityScore * (1 - validityScore * 0.8 / 100));
+  let slopScore = Math.round(authenticityScore * 0.65 + (100 - validityScore) * 0.35);
 
   const hasFabricationBoost = evidenceItems.some(
     e => e.type === "hallucinated_function" || e.type === "fabricated_cve" || e.type === "future_cve" || e.type === "fake_asan"

@@ -247,7 +247,7 @@ interface CheckResultData {
   breakdown?: { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number };
   evidence?: Array<{ type: string; description: string; weight: number; matched?: string | null }>;
   humanIndicators?: Array<{ type: string; description: string; weight: number; matched?: string | null }>;
-  llmBreakdown?: { specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number };
+  llmBreakdown?: { claimSpecificity?: number; evidenceQuality?: number; internalConsistency?: number; hallucinationSignals?: number; validityScore?: number; verdict?: string; redFlags?: string[]; greenFlags?: string[]; specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number };
   llmEnhanced?: boolean;
   llmUsed?: boolean;
   redactionApplied?: boolean;
@@ -1000,7 +1000,7 @@ export default function Check() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Brain className="w-4 h-4 text-cyan-400" />
-                  LLM Dimension Scores
+                  LLM Validity Assessment
                   <Badge variant="outline" className="border-cyan-500/50 text-cyan-400 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 normal-case">
                     <Brain className="w-2.5 h-2.5" />
                     LLM Enhanced
@@ -1008,13 +1008,39 @@ export default function Check() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
-                  {result.llmBreakdown.specificity != null && <LlmDimensionBar label="Specificity" score={result.llmBreakdown.specificity} />}
-                  {result.llmBreakdown.originality != null && <LlmDimensionBar label="Originality" score={result.llmBreakdown.originality} />}
-                  {result.llmBreakdown.voice != null && <LlmDimensionBar label="Voice" score={result.llmBreakdown.voice} />}
-                  {result.llmBreakdown.coherence != null && <LlmDimensionBar label="Coherence" score={result.llmBreakdown.coherence} />}
-                  {result.llmBreakdown.hallucination != null && <LlmDimensionBar label="Hallucination" score={result.llmBreakdown.hallucination} />}
-                </div>
+                {result.llmBreakdown.claimSpecificity != null ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+                      <LlmDimensionBar label="Claim Specificity" score={result.llmBreakdown.claimSpecificity * 4} />
+                      <LlmDimensionBar label="Evidence Quality" score={(result.llmBreakdown.evidenceQuality ?? 0) * 4} />
+                      <LlmDimensionBar label="Internal Consistency" score={(result.llmBreakdown.internalConsistency ?? 0) * 4} />
+                      <LlmDimensionBar label="Hallucination Signals" score={(result.llmBreakdown.hallucinationSignals ?? 0) * 4} />
+                    </div>
+                    {result.llmBreakdown.validityScore != null && (
+                      <div className="pt-2 border-t border-white/5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Overall Validity</span>
+                          <span className={`font-mono font-bold ${result.llmBreakdown.validityScore >= 70 ? "text-green-400" : result.llmBreakdown.validityScore >= 40 ? "text-yellow-400" : "text-red-400"}`}>
+                            {result.llmBreakdown.validityScore}/100
+                          </span>
+                        </div>
+                        {result.llmBreakdown.verdict && (
+                          <span className={`text-[10px] font-mono ${result.llmBreakdown.verdict === "LIKELY_VALID" ? "text-green-400" : result.llmBreakdown.verdict === "UNCERTAIN" ? "text-yellow-400" : "text-red-400"}`}>
+                            {result.llmBreakdown.verdict.replace(/_/g, " ")}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+                    {result.llmBreakdown.specificity != null && <LlmDimensionBar label="Specificity" score={result.llmBreakdown.specificity} />}
+                    {result.llmBreakdown.originality != null && <LlmDimensionBar label="Originality" score={result.llmBreakdown.originality} />}
+                    {result.llmBreakdown.voice != null && <LlmDimensionBar label="Voice" score={result.llmBreakdown.voice} />}
+                    {result.llmBreakdown.coherence != null && <LlmDimensionBar label="Coherence" score={result.llmBreakdown.coherence} />}
+                    {result.llmBreakdown.hallucination != null && <LlmDimensionBar label="Hallucination" score={result.llmBreakdown.hallucination} />}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

@@ -67,14 +67,33 @@ export const ReportAnalysisContentMode = {
 export type ReportAnalysisSectionHashes = { [key: string]: string };
 
 /**
- * Per-dimension LLM scores (0-100 each). Null when LLM analysis is unavailable.
+ * Per-criterion LLM validity scores. Null when LLM analysis is unavailable. May contain legacy V1 fields for older records.
  * @nullable
  */
 export type ReportAnalysisLlmBreakdown = {
+  /** Claim specificity score (0-25) */
+  claimSpecificity?: number;
+  /** Evidence quality score (0-25) */
+  evidenceQuality?: number;
+  /** Internal consistency score (0-25) */
+  internalConsistency?: number;
+  /** Hallucination signals score (0-25, higher = fewer hallucinations) */
+  hallucinationSignals?: number;
+  /** Overall validity score (0-100) */
+  validityScore?: number;
+  redFlags?: string[];
+  greenFlags?: string[];
+  /** LIKELY_VALID | UNCERTAIN | LIKELY_FABRICATED */
+  verdict?: string;
+  /** Legacy V1 field (deprecated) */
   specificity?: number;
+  /** Legacy V1 field (deprecated) */
   originality?: number;
+  /** Legacy V1 field (deprecated) */
   voice?: number;
+  /** Legacy V1 field (deprecated) */
   coherence?: number;
+  /** Legacy V1 field (deprecated) */
   hallucination?: number;
 } | null;
 
@@ -578,7 +597,7 @@ export interface ReportAnalysis {
    */
   llmFeedback?: string[] | null;
   /**
-   * Per-dimension LLM scores (0-100 each). Null when LLM analysis is unavailable.
+   * Per-criterion LLM validity scores. Null when LLM analysis is unavailable. May contain legacy V1 fields for older records.
    * @nullable
    */
   llmBreakdown?: ReportAnalysisLlmBreakdown;
@@ -654,6 +673,14 @@ export type CheckResultSectionHashes = { [key: string]: string };
  * @nullable
  */
 export type CheckResultLlmBreakdown = {
+  claimSpecificity?: number;
+  evidenceQuality?: number;
+  internalConsistency?: number;
+  hallucinationSignals?: number;
+  validityScore?: number;
+  redFlags?: string[];
+  greenFlags?: string[];
+  verdict?: string;
   specificity?: number;
   originality?: number;
   voice?: number;

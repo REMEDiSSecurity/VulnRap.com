@@ -31,11 +31,14 @@ export interface LLMSlopResult {
 }
 
 export interface LLMBreakdown {
-  specificity: number;
-  originality: number;
-  voice: number;
-  coherence: number;
-  hallucination: number;
+  claimSpecificity: number;
+  evidenceQuality: number;
+  internalConsistency: number;
+  hallucinationSignals: number;
+  validityScore: number;
+  redFlags: string[];
+  greenFlags: string[];
+  verdict: string;
 }
 
 const LLM_TIMEOUT_MS = 30_000;
@@ -102,19 +105,85 @@ function setCachedResult(text: string, result: LLMSlopResult): void {
   resultCache.set(getCacheKey(text), { result, ts: Date.now() });
 }
 
-const SYSTEM_PROMPT = `You are a PSIRT triage analyst scoring vulnerability reports for AI-generated "slop" AND providing triage guidance. Evaluate five dimensions and produce triage assistance in a single JSON response.
+const SYSTEM_PROMPT = `You are a senior vulnerability triage analyst at a major software security program. Your job is NOT to detect if this was written by AI. Your job is to assess whether this report describes a REAL, REPRODUCIBLE vulnerability that could be acted upon.
 
-## Scoring Dimensions (each 0-100, where 100 = most suspicious/AI-like)
+You will evaluate the report on these four specific criteria:
 
-1. **specificity** (weight 0.15): Are technical details concrete and verifiable? Score HIGH if vague placeholders ("the endpoint", "a recent version"), generic descriptions. Score LOW if exact versions, paths, parameters, error messages.
+1. CLAIM SPECIFICITY (0-25 points):
+   - Does it name a specific project, version, file path, function, or endpoint?
+   - Are the claims detailed enough to actually test or verify?
+   - Are generic project names like "your application" used instead of real product names?
+   - Score 0 if all claims are generic/vague.
+   - Score 15 if some claims are specific (e.g., a function name or file path).
+   - Score 25 if every claim is specific and verifiable (e.g., project name + version + file path).
 
-2. **originality** (weight 0.25): Does this read like original research or template-stuffed AI output? Score HIGH if it follows rigid vulnerability template patterns, uses boilerplate remediation, could be copy-pasted to any target. Score LOW if observations are specific to this target, contain unique findings.
+2. EVIDENCE QUALITY (0-25 points):
+   - Does it include actual code snippets, HTTP requests, stack traces, or tool output?
+   - Could this evidence be VERIFIED by checking the actual codebase or running the test yourself?
+   - Is the evidence specific and reproducible, or generic boilerplate?
+   - Score 0 if no evidence or only text descriptions.
+   - Score 12 if generic evidence (e.g., "' OR '1'='1' --" without target context).
+   - Score 25 if evidence is specific and directly verifiable (e.g., actual HTTP request with real endpoints, real file paths).
 
-3. **voice** (weight 0.20): Does the writing voice sound human? Score HIGH if overly formal, no contractions, uniform sentence length, AI buzzwords ("delve", "paramount", "multifaceted", "comprehensive analysis"). Score LOW if natural/informal, variable sentence structure, domain-specific jargon used correctly.
+3. INTERNAL CONSISTENCY (0-25 points):
+   - Do the vulnerability type, affected component, and impact align logically?
+   - Does the PoC actually match the vulnerability description?
+   - Are version numbers, function names, and file paths consistent throughout?
+   - Do claims about exploitability match the described vulnerability?
+   - Score 0 for major contradictions (e.g., "memory leak in HTTP/3" then PoC shows SQL injection).
+   - Score 12 for minor inconsistencies.
+   - Score 25 for perfect logical consistency.
 
-4. **coherence** (weight 0.15): Is the vulnerability description internally consistent? Score HIGH if the claimed vuln class doesn't match the evidence, PoC doesn't demonstrate the claim, or attack flow is idealized without real-world testing artifacts. Score LOW if claims match evidence, PoC is relevant.
+4. HALLUCINATION SIGNALS (0-25 points):
+   - Does it reference functions/files that might not exist in the named project?
+   - Are memory addresses suspiciously patterned (e.g., 0x00007ffff7a43210 repeating in stack trace)?
+   - Do stack traces show identical frames repeated (real crashes vary)?
+   - Are PID/TID values suspiciously simple (e.g., ==12345==)?
+   - Does it claim vulnerability in a version that has since been patched?
+   - Score 0 if clear hallucinations (fabricated function names, impossible stack traces, etc.).
+   - Score 12 if minor red flags (e.g., suspiciously round memory address, but plausible).
+   - Score 25 if no red flags.
 
-5. **hallucination** (weight 0.25): Are there signs of fabricated technical details? Score HIGH if function names seem invented, CVE IDs look wrong, severity claims lack evidence, generic code snippets that wouldn't actually work. Score LOW if technical details appear real and verifiable.
+CRITICAL RULES FOR YOUR SCORING:
+- A well-structured report format is NOT evidence of hallucination.
+- Named researchers, CVE IDs, commit SHAs, HTTP requests, and advisory URLs are POSITIVE signals.
+- Terse, direct writing style is characteristic of experienced security researchers — do NOT penalize for brevity.
+- DO NOT penalize reports for being well-organized or following a template.
+- DO penalize reports that are vague, generic, or make unverifiable claims.
+- DO penalize reports with obvious hallucinations (functions that don't exist, impossible stack traces, contradictions).
+
+CALIBRATION EXAMPLES:
+
+CALIBRATION EXAMPLE 1 (Score ~15 — Clear Slop):
+Title: Critical Buffer Overflow in the_function_that_does_not_exist()
+Description: I found a critical buffer overflow in the_function_that_does_not_exist() at lib/fake.c:999. This function has a strcpy() call that can be exploited. A simple curl request causes it to crash.
+Analysis:
+- Claim Specificity: 10 (names a function and file, but both appear fabricated)
+- Evidence Quality: 2 (no actual PoC, just claims)
+- Internal Consistency: 5 (the vulnerability type doesn't match the description)
+- Hallucination Signals: 0 (obvious red flags: nonexistent function and file)
+→ validityScore = 17 (clearly unreliable)
+
+CALIBRATION EXAMPLE 2 (Score ~50 — Genuinely Uncertain):
+Title: Possible Integer Overflow in Image Processing
+Description: While fuzzing image processing code, I found that large width/height values might cause integer overflow. The exact impact is unclear but could potentially lead to buffer issues.
+Analysis:
+- Claim Specificity: 10 (names "image processing code" but no specific file)
+- Evidence Quality: 12 (describes fuzzing but no actual PoC code)
+- Internal Consistency: 12 (logically sound but vague)
+- Hallucination Signals: 18 (no obvious red flags, but unverified)
+→ validityScore = 52 (could be real, but hard to verify)
+
+CALIBRATION EXAMPLE 3 (Score ~85 — Clearly Legitimate):
+Title: Broken Access Control in OpenWebUI Tool Valves (CVE-2026-34222)
+Description: The Tool Valves endpoint does not restrict read access. A low-privileged "Member" user can access valve data by using their auth token + guessing Tool IDs from concatenated names. Root cause: Missing admin permission check on the Tool Valves route. Fixed in v0.8.11 at commit f949d17.
+Evidence: https://github.com/open-webui/open-webui/commit/f949d17
+Analysis:
+- Claim Specificity: 25 (specific endpoint, version, commit, CVE ID)
+- Evidence Quality: 25 (actual code change with fix, verifiable)
+- Internal Consistency: 25 (perfectly consistent)
+- Hallucination Signals: 25 (no red flags; all claims are verifiable)
+→ validityScore = 100 (clearly legitimate)
 
 ## Triage Guidance
 Also produce actionable triage guidance for the PSIRT team receiving this report:
@@ -127,15 +196,17 @@ Also produce actionable triage guidance for the PSIRT team receiving this report
 - **reporter_feedback**: 2-3 sentences assessing the reporter's likely expertise/intent, clarity of writing, and actionability of the report
 
 ## Response Format
-Respond ONLY with valid JSON:
+Return a JSON object in this exact format:
 {
-  "specificity": <0-100>,
-  "originality": <0-100>,
-  "voice": <0-100>,
-  "coherence": <0-100>,
-  "hallucination": <0-100>,
-  "red_flags": ["<specific red flag from THIS report>", ...],
-  "reasoning": "<2-3 sentence summary of your assessment>",
+  "claimSpecificity": <0-25>,
+  "evidenceQuality": <0-25>,
+  "internalConsistency": <0-25>,
+  "hallucinationSignals": <0-25>,
+  "validityScore": <0-100>,
+  "red_flags": ["list of specific concerns if any"],
+  "green_flags": ["list of positive indicators"],
+  "verdict": "LIKELY_VALID" | "UNCERTAIN" | "LIKELY_FABRICATED",
+  "reasoning": "<2-3 sentence summary>",
   "triage_guidance": {
     "repro_steps": ["<step 1>", "<step 2>", ...],
     "environment": ["<env requirement 1>", ...],
@@ -157,6 +228,7 @@ Respond ONLY with valid JSON:
 
 Rules:
 - red_flags: 0-4 items, each a concrete observation referencing actual content
+- green_flags: 0-4 items, each a concrete positive observation
 - reasoning: concise, references specific parts of the report
 - triage_guidance: always present, reference specifics from the report, not generic advice
 - reproduction_recipe: always present. setup_commands should be concrete shell commands to install and run the target at the claimed version. poc_script should be a complete, runnable script (not pseudocode) based on the report's claims. If the report lacks enough detail for a runnable PoC, produce your best approximation with TODO comments marking what the triager needs to fill in. poc_language should match the script language. prerequisites lists required tools/SDKs. cleanup_commands lists any teardown needed (kill processes, remove containers, etc.)
@@ -201,15 +273,22 @@ async function analyzeSlopWithLLMOnce(
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as {
+      claimSpecificity?: number;
+      evidenceQuality?: number;
+      internalConsistency?: number;
+      hallucinationSignals?: number;
+      validityScore?: number;
+      red_flags?: string[];
+      green_flags?: string[];
+      verdict?: string;
+      reasoning?: string;
+      score?: number;
+      observations?: string[];
       specificity?: number;
       originality?: number;
       voice?: number;
       coherence?: number;
       hallucination?: number;
-      red_flags?: string[];
-      reasoning?: string;
-      score?: number;
-      observations?: string[];
       triage_guidance?: {
         repro_steps?: string[];
         environment?: string[];
@@ -229,48 +308,91 @@ async function analyzeSlopWithLLMOnce(
       };
     };
 
-    const hasNewFormat = parsed.specificity !== undefined ||
+    const hasV2Format = parsed.claimSpecificity !== undefined ||
+      parsed.evidenceQuality !== undefined ||
+      parsed.internalConsistency !== undefined ||
+      parsed.hallucinationSignals !== undefined;
+
+    const hasV1Format = parsed.specificity !== undefined ||
       parsed.originality !== undefined ||
       parsed.voice !== undefined;
 
     let breakdown: LLMBreakdown;
     let weightedScore: number;
 
-    if (hasNewFormat) {
+    if (hasV2Format) {
+      const cs = clamp25(parsed.claimSpecificity ?? 12);
+      const eq = clamp25(parsed.evidenceQuality ?? 12);
+      const ic = clamp25(parsed.internalConsistency ?? 12);
+      const hs = clamp25(parsed.hallucinationSignals ?? 12);
+      const vs = typeof parsed.validityScore === "number"
+        ? clamp(parsed.validityScore)
+        : clamp(Math.round((cs + eq + ic + hs) * 100 / 100));
+
       breakdown = {
-        specificity: clamp(parsed.specificity ?? 50),
-        originality: clamp(parsed.originality ?? 50),
-        voice: clamp(parsed.voice ?? 50),
-        coherence: clamp(parsed.coherence ?? 50),
-        hallucination: clamp(parsed.hallucination ?? 50),
+        claimSpecificity: cs,
+        evidenceQuality: eq,
+        internalConsistency: ic,
+        hallucinationSignals: hs,
+        validityScore: vs,
+        redFlags: Array.isArray(parsed.red_flags)
+          ? parsed.red_flags.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 4)
+          : [],
+        greenFlags: Array.isArray(parsed.green_flags)
+          ? parsed.green_flags.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 4)
+          : [],
+        verdict: typeof parsed.verdict === "string" ? parsed.verdict : "UNCERTAIN",
       };
 
-      weightedScore = Math.round(
-        breakdown.specificity * 0.15 +
-        breakdown.originality * 0.25 +
-        breakdown.voice * 0.20 +
-        breakdown.coherence * 0.15 +
-        breakdown.hallucination * 0.25
+      weightedScore = 100 - vs;
+    } else if (hasV1Format) {
+      const spec = clamp(parsed.specificity ?? 50);
+      const orig = clamp(parsed.originality ?? 50);
+      const voice = clamp(parsed.voice ?? 50);
+      const coh = clamp(parsed.coherence ?? 50);
+      const hall = clamp(parsed.hallucination ?? 50);
+
+      const v1SlopScore = Math.round(
+        spec * 0.15 + orig * 0.25 + voice * 0.20 + coh * 0.15 + hall * 0.25
       );
+      const mappedValidity = 100 - v1SlopScore;
+
+      breakdown = {
+        claimSpecificity: Math.round((100 - spec) * 25 / 100),
+        evidenceQuality: Math.round((100 - orig) * 25 / 100),
+        internalConsistency: Math.round((100 - coh) * 25 / 100),
+        hallucinationSignals: Math.round((100 - hall) * 25 / 100),
+        validityScore: mappedValidity,
+        redFlags: Array.isArray(parsed.red_flags)
+          ? parsed.red_flags.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 4)
+          : [],
+        greenFlags: [],
+        verdict: mappedValidity >= 70 ? "LIKELY_VALID" : mappedValidity >= 40 ? "UNCERTAIN" : "LIKELY_FABRICATED",
+      };
+
+      weightedScore = v1SlopScore;
+      logger.info({ v1SlopScore, mappedValidity }, "LLM slop: mapped V1 format to V2");
     } else if (typeof parsed.score === "number") {
       const legacyScore = clamp(parsed.score);
+      const mappedValidity = 100 - legacyScore;
       breakdown = {
-        specificity: legacyScore,
-        originality: legacyScore,
-        voice: legacyScore,
-        coherence: legacyScore,
-        hallucination: legacyScore,
+        claimSpecificity: Math.round(mappedValidity * 25 / 100),
+        evidenceQuality: Math.round(mappedValidity * 25 / 100),
+        internalConsistency: Math.round(mappedValidity * 25 / 100),
+        hallucinationSignals: Math.round(mappedValidity * 25 / 100),
+        validityScore: mappedValidity,
+        redFlags: [],
+        greenFlags: [],
+        verdict: "UNCERTAIN",
       };
       weightedScore = legacyScore;
       logger.info({ legacyScore }, "LLM slop: used legacy score format");
     } else {
-      logger.warn("LLM slop: response missing both new and legacy fields");
+      logger.warn("LLM slop: response missing all known fields");
       return null;
     }
 
-    const redFlags = Array.isArray(parsed.red_flags)
-      ? parsed.red_flags.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 4)
-      : [];
+    const redFlags = breakdown.redFlags;
 
     const feedback: string[] = [];
     if (typeof parsed.reasoning === "string" && parsed.reasoning.trim().length > 0) {
@@ -288,7 +410,7 @@ async function analyzeSlopWithLLMOnce(
     }
 
     if (feedback.length === 0) {
-      feedback.push(`LLM analysis complete: weighted score ${weightedScore}/100`);
+      feedback.push(`LLM analysis complete: validity ${breakdown.validityScore}/100 (${breakdown.verdict})`);
     }
 
     let llmTriageGuidance: LLMTriageGuidance | null = null;
@@ -339,7 +461,7 @@ async function analyzeSlopWithLLMOnce(
       }
     }
 
-    logger.info({ weightedScore, breakdown, hasTriageGuidance: !!llmTriageGuidance, hasReproRecipe: !!llmReproRecipe, elapsedMs }, "LLM slop: analysis complete");
+    logger.info({ weightedScore, validity: breakdown.validityScore, verdict: breakdown.verdict, hasTriageGuidance: !!llmTriageGuidance, hasReproRecipe: !!llmReproRecipe, elapsedMs }, "LLM slop: analysis complete");
 
     const result: LLMSlopResult = {
       llmSlopScore: clamp(weightedScore),
@@ -401,4 +523,8 @@ export async function analyzeSlopWithLLM(
 
 function clamp(val: number): number {
   return Math.min(100, Math.max(0, Math.round(Number(val) || 0)));
+}
+
+function clamp25(val: number): number {
+  return Math.min(25, Math.max(0, Math.round(Number(val) || 0)));
 }

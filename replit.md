@@ -47,14 +47,16 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
     - **Authenticity Axis (0-100)**: Measures AI-authorship likelihood from linguistic fingerprinting, spectral text analysis, template patterns, and sycophantic phrase detection. Human indicators reduce this score.
     - **Validity Axis (0-100)**: Measures technical substance from evidence quality, hallucination detection, claim specificity, internal consistency, and factual verification.
     - **Quadrant Classification**: `AI_SLOP` (high auth, low valid → AUTO_CLOSE), `AI_ASSISTED` (high auth, high valid → PRIORITIZE_REVIEW), `WEAK_HUMAN` (low auth, low valid → REQUEST_DETAILS), `STRONG_HUMAN` (low auth, high valid → ACCEPT).
-    - **Derived slopScore**: `authenticityScore × (1 - validityScore × 0.8 / 100)` — AI-ness only penalized when substance is low.
+    - **Derived slopScore**: `authenticityScore × 0.65 + (100 - validityScore) × 0.35` — additive formula combining AI-ness and lack of substance.
     - **New Analysis Modules**: `spectral-analysis.ts` (sentence/paragraph uniformity, hedge density), `evidence-quality.ts` (HTTP requests, code, patches, stack traces), `hallucination-detector.ts` (fabricated addresses, phantom scripts, impact escalation), `claim-specificity.ts` (named projects, CVEs, endpoints), `internal-consistency.ts` (vuln-language mismatch, CVSS inflation).
     - **Sycophantic Phrase Detection**: Compound multiplier for stacked AI pleasantries (apologies, eager responses, formal greetings).
     - **Pre-Redaction Human Indicator**: Reports with `[REDACTED]`/`[REMOVED]` placeholders are recognized as pre-redacted by the reporter, reducing slop score.
     - **Linguistic AI Fingerprinting**: Detects lexical markers, statistical text patterns, and template usage.
     - **Quality vs Slop Separation**: Assesses report completeness (`qualityScore`) distinct from AI provenance.
     - **Factual Verification**: Identifies fabricated details like severity inflation, placeholder URLs, fabricated debug output, and hallucinated function names.
-    - **LLM Semantic Analysis**: Evaluates reports across 5 dimensions (Specificity, Originality, Voice, Coherence, Hallucination) and produces `reproduction_recipe` and `triage_guidance`.
+    - **LLM Semantic Analysis V2**: Evaluates reports across 4 substance-focused criteria (claimSpecificity, evidenceQuality, internalConsistency, hallucinationSignals) each 0-25, producing validityScore, red_flags, green_flags, verdict, reproduction_recipe, and triage_guidance. Score conflict detection flags LLM vs heuristic divergence >30 pts and uses conservative score.
+    - **Substance Gate**: When both claimSpecificity and evidenceQuality are below 10, hallucination and consistency scores are capped at 40 to prevent "no issues found" from inflating validity of empty reports.
+    - **Known-Nonexistent Function Detection**: Catches fabricated API functions (e.g., curl_parse_header_secure) that don't exist in real projects.
     - **Human Indicator Detection**: Identifies human writing traits (contractions, informal style, commit refs, pre-redaction) to reduce slop scores.
     - **Active Content Verification**: Verifies referenced projects, file paths, function names via GitHub API, and CVEs via NVD 2.0 API, including plagiarism detection and PoC plausibility.
     - **Score Fusion v4.0**: Two-axis model computing authenticityScore and validityScore, with quadrant classification and derived slopScore for backward compatibility.

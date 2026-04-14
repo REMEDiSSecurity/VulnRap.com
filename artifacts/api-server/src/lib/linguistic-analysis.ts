@@ -96,6 +96,13 @@ const SYCOPHANTIC_PHRASES: SycophraticPattern[] = [
   { pattern: /represents?\s+a\s+significant\s+security\s+(?:debt|risk|concern)/i, weight: 5, type: "ai_boilerplate" },
   { pattern: /widely\s+known\s+in\s+the\s+security\s+community/i, weight: 6, type: "ai_appeal_authority" },
   { pattern: /please\s+(?:don't\s+hesitate|feel\s+free)\s+to\s+(?:reach\s+out|contact)/i, weight: 6, type: "ai_closing" },
+  { pattern: /this\s+(?:could|can)\s+(?:potentially\s+)?(?:lead\s+to|result\s+in|allow|enable)\s+(?:unauthorized|complete|full)/i, weight: 8, type: "ai_impact_inflation" },
+  { pattern: /an?\s+(?:malicious\s+)?attacker\s+(?:could|can|may)\s+(?:potentially\s+)?(?:exploit|leverage|abuse|take\s+advantage)/i, weight: 7, type: "ai_attacker_could" },
+  { pattern: /(?:I|we)\s+(?:strongly\s+)?recommend\s+(?:implementing|adopting|using)/i, weight: 6, type: "ai_recommend" },
+  { pattern: /it\s+is\s+(?:highly\s+)?(?:recommended|advised|suggested)\s+(?:to|that)/i, weight: 7, type: "ai_passive_recommend" },
+  { pattern: /(?:ensure|make\s+sure)\s+that\s+(?:all|proper|adequate|appropriate)/i, weight: 6, type: "ai_ensure_proper" },
+  { pattern: /(?:critical|significant|severe)\s+(?:security\s+)?(?:vulnerability|flaw|weakness|issue)/i, weight: 4, type: "ai_severity_inflation" },
+  { pattern: /(?:compromise|impact)\s+the\s+(?:entire|whole|complete)\s+(?:system|application|infrastructure)/i, weight: 7, type: "ai_total_compromise" },
 ];
 
 const SLOP_TEMPLATES = [
@@ -142,12 +149,44 @@ const SLOP_TEMPLATES = [
     weight: 6,
   },
   {
+    name: "full_template_headers",
+    patterns: [
+      /vulnerability\s+type\s*:/i,
+      /severity\s*:/i,
+      /cvss\s+score\s*:/i,
+      /description\s*:/i,
+      /impact\s*:/i,
+      /remediation\s*:/i,
+    ],
+    minMatches: 5,
+    weight: 15,
+  },
+  {
+    name: "generic_sqli_template",
+    patterns: [
+      /(?:sql\s+injection|sqli)/i,
+      /['"]?\s*OR\s+['"]?1['"]?\s*=\s*['"]?1/i,
+      /(?:expected\s+behavior|actual\s+behavior)\s*:/i,
+    ],
+    minMatches: 3,
+    weight: 14,
+  },
+  {
     name: "generic_remediation",
     patterns: [
       /(?:it\s+is\s+(?:recommended|advised)|we\s+recommend|the\s+(?:fix|solution|remediation)\s+is)\s+to/i,
       /(?:implement|ensure|enforce)\s+(?:proper|adequate|robust)\s+(?:input\s+validation|authentication|authorization|sanitization)/i,
     ],
     weight: 7,
+  },
+  {
+    name: "executive_summary_template",
+    patterns: [
+      /executive\s+summary\s*:/i,
+      /detailed\s+description\s*:/i,
+    ],
+    requiredCount: 2,
+    weight: 10,
   },
 ];
 
@@ -332,7 +371,7 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
 
 function analyzeTemplates(text: string): { score: number; evidence: LinguisticEvidence[] } {
   const evidence: LinguisticEvidence[] = [];
-  let maxScore = 0;
+  let totalWeight = 0;
 
   for (const template of SLOP_TEMPLATES) {
     let matchCount = 0;
@@ -344,8 +383,7 @@ function analyzeTemplates(text: string): { score: number; evidence: LinguisticEv
 
     const needed = template.requiredCount || template.minMatches || 1;
     if (matchCount >= needed) {
-      const templateScore = Math.min(100, template.weight * 10);
-      maxScore = Math.max(maxScore, templateScore);
+      totalWeight += template.weight;
       evidence.push({
         type: "template_match",
         description: `Matches "${template.name.replace(/_/g, " ")}" slop template pattern`,
@@ -355,7 +393,8 @@ function analyzeTemplates(text: string): { score: number; evidence: LinguisticEv
     }
   }
 
-  return { score: maxScore, evidence };
+  const score = Math.min(100, Math.round(totalWeight * 5));
+  return { score, evidence };
 }
 
 export function analyzeLinguistic(text: string): LinguisticResult {

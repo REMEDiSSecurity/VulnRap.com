@@ -365,9 +365,33 @@ function analyzeFabricatedCves(text: string): { score: number; evidence: Factual
   return { score, evidence };
 }
 
+const KNOWN_NONEXISTENT_FUNCTIONS: Record<string, string[]> = {
+  curl: ["curl_parse_header_secure", "curl_http_validate_request", "curl_safe_header", "curl_validate_host"],
+  nginx: ["ngx_secure_filter", "ngx_safe_concat", "ngx_validate_input"],
+  apache: ["ap_safe_copy", "ap_validate_header", "ap_secure_handler"],
+  openssl: ["SSL_validate_chain_secure", "EVP_encrypt_safe"],
+};
+
 function analyzeHallucinatedFunctions(text: string): { score: number; evidence: FactualEvidence[] } {
   const evidence: FactualEvidence[] = [];
   let totalWeight = 0;
+
+  const lowerText = text.toLowerCase();
+  for (const [project, funcs] of Object.entries(KNOWN_NONEXISTENT_FUNCTIONS)) {
+    if (!lowerText.includes(project)) continue;
+    for (const func of funcs) {
+      if (text.includes(func)) {
+        totalWeight += 25;
+        evidence.push({
+          type: "hallucinated_function",
+          description: `References nonexistent function ${func}() in ${project} — this function does not exist in the project source`,
+          weight: 25,
+          matched: func,
+        });
+        break;
+      }
+    }
+  }
 
   const stackFuncPattern = /(?:in|at|from)\s+([a-zA-Z_][a-zA-Z0-9_]{2,}(?:::[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\(/g;
   let match;

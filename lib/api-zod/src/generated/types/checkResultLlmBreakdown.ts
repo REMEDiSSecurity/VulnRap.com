@@ -10,6 +10,14 @@
  * @nullable
  */
 export type CheckResultLlmBreakdown = {
+  claimSpecificity?: number;
+  evidenceQuality?: number;
+  internalConsistency?: number;
+  hallucinationSignals?: number;
+  validityScore?: number;
+  redFlags?: string[];
+  greenFlags?: string[];
+  verdict?: string;
   specificity?: number;
   originality?: number;
   voice?: number;

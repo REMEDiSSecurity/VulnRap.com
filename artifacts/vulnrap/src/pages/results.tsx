@@ -990,7 +990,7 @@ export default function Results() {
     if (!report) return;
     const bd = report.breakdown as { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number } | undefined;
     const ev = report.evidence as Array<{ type: string; description: string; weight: number; matched?: string | null }> | undefined;
-    const llmBd = report.llmBreakdown as { specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number } | undefined;
+    const llmBd = report.llmBreakdown as { claimSpecificity?: number; evidenceQuality?: number; internalConsistency?: number; hallucinationSignals?: number; validityScore?: number; verdict?: string; specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number } | undefined;
     const lines: string[] = [
       `VulnRap Analysis Report — ${anonymizeId(id)}`,
       `Generated: ${new Date().toISOString()}`,
@@ -1017,12 +1017,21 @@ export default function Results() {
       lines.push(``);
     }
     if (llmBd && report.llmEnhanced) {
-      lines.push(`LLM DIMENSIONS:`);
-      if (llmBd.specificity != null) lines.push(`  Specificity: ${llmBd.specificity}/100`);
-      if (llmBd.originality != null) lines.push(`  Originality: ${llmBd.originality}/100`);
-      if (llmBd.voice != null) lines.push(`  Voice: ${llmBd.voice}/100`);
-      if (llmBd.coherence != null) lines.push(`  Coherence: ${llmBd.coherence}/100`);
-      if (llmBd.hallucination != null) lines.push(`  Hallucination: ${llmBd.hallucination}/100`);
+      lines.push(`LLM VALIDITY ASSESSMENT:`);
+      if (llmBd.claimSpecificity != null) {
+        lines.push(`  Claim Specificity: ${llmBd.claimSpecificity}/25`);
+        lines.push(`  Evidence Quality: ${llmBd.evidenceQuality ?? "N/A"}/25`);
+        lines.push(`  Internal Consistency: ${llmBd.internalConsistency ?? "N/A"}/25`);
+        lines.push(`  Hallucination Signals: ${llmBd.hallucinationSignals ?? "N/A"}/25`);
+        if (llmBd.validityScore != null) lines.push(`  Overall Validity: ${llmBd.validityScore}/100`);
+        if (llmBd.verdict) lines.push(`  Verdict: ${llmBd.verdict}`);
+      } else {
+        if (llmBd.specificity != null) lines.push(`  Specificity: ${llmBd.specificity}/100`);
+        if (llmBd.originality != null) lines.push(`  Originality: ${llmBd.originality}/100`);
+        if (llmBd.voice != null) lines.push(`  Voice: ${llmBd.voice}/100`);
+        if (llmBd.coherence != null) lines.push(`  Coherence: ${llmBd.coherence}/100`);
+        if (llmBd.hallucination != null) lines.push(`  Hallucination: ${llmBd.hallucination}/100`);
+      }
       lines.push(``);
     }
     if (ev && ev.length > 0) {
@@ -1159,7 +1168,7 @@ export default function Results() {
   const temporalSignals = triage?.temporalSignals ?? [];
   const templateMatch = triage?.templateMatch ?? null;
   const revisionInfo = triage?.revision ?? null;
-  const llmBreakdown = report.llmBreakdown as { specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number } | undefined;
+  const llmBreakdown = report.llmBreakdown as { claimSpecificity?: number; evidenceQuality?: number; internalConsistency?: number; hallucinationSignals?: number; validityScore?: number; verdict?: string; redFlags?: string[]; greenFlags?: string[]; specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number } | undefined;
   const humanIndicators = (report.humanIndicators ?? []) as Array<{ type: string; description: string; weight: number; matched?: string | null }>;
   const qualityScore = report.qualityScore as number | undefined;
   const confidence = report.confidence as number | undefined;
@@ -1472,37 +1481,74 @@ export default function Results() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Brain className="w-5 h-5 text-cyan-400" />
-              LLM Dimension Scores
+              LLM Validity Assessment
               <Badge variant="outline" className="border-cyan-500/50 text-cyan-400 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 normal-case">
                 <Brain className="w-2.5 h-2.5" />
                 LLM Enhanced
               </Badge>
-              <Hint text="Five semantic dimensions evaluated by the LLM: Specificity (technical detail), Originality (unique observations), Voice (natural writing style), Coherence (logical consistency), Hallucination (fabricated details). Higher = more AI-like." />
+              <Hint text="Four substance criteria evaluated by the LLM: Claim Specificity, Evidence Quality, Internal Consistency, and Hallucination Signals. Each scored 0-25. Higher = more credible report." />
             </CardTitle>
-            <CardDescription>Per-dimension LLM semantic analysis</CardDescription>
+            <CardDescription>Per-criterion LLM validity analysis</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col md:flex-row items-center gap-6">
-              <div className="flex-shrink-0">
-                <RadarChart
-                  data={[
-                    { label: "Specificity", value: llmBreakdown.specificity ?? 0, max: 100 },
-                    { label: "Originality", value: llmBreakdown.originality ?? 0, max: 100 },
-                    { label: "Voice", value: llmBreakdown.voice ?? 0, max: 100 },
-                    { label: "Coherence", value: llmBreakdown.coherence ?? 0, max: 100 },
-                    { label: "Hallucination", value: llmBreakdown.hallucination ?? 0, max: 100 },
-                  ]}
-                  size={220}
-                />
+            {llmBreakdown.claimSpecificity != null ? (
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="flex-shrink-0">
+                  <RadarChart
+                    data={[
+                      { label: "Claim Specificity", value: (llmBreakdown.claimSpecificity ?? 0) * 4, max: 100 },
+                      { label: "Evidence Quality", value: (llmBreakdown.evidenceQuality ?? 0) * 4, max: 100 },
+                      { label: "Consistency", value: (llmBreakdown.internalConsistency ?? 0) * 4, max: 100 },
+                      { label: "Hallucination", value: (llmBreakdown.hallucinationSignals ?? 0) * 4, max: 100 },
+                    ]}
+                    size={220}
+                  />
+                </div>
+                <div className="flex-1 w-full space-y-3">
+                  <LlmDimensionBar label="Claim Specificity" score={(llmBreakdown.claimSpecificity ?? 0) * 4} />
+                  <LlmDimensionBar label="Evidence Quality" score={(llmBreakdown.evidenceQuality ?? 0) * 4} />
+                  <LlmDimensionBar label="Internal Consistency" score={(llmBreakdown.internalConsistency ?? 0) * 4} />
+                  <LlmDimensionBar label="Hallucination Signals" score={(llmBreakdown.hallucinationSignals ?? 0) * 4} />
+                  {llmBreakdown.validityScore != null && (
+                    <div className="pt-2 border-t border-white/5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Overall Validity</span>
+                        <span className={`font-mono font-bold ${llmBreakdown.validityScore >= 70 ? "text-green-400" : llmBreakdown.validityScore >= 40 ? "text-yellow-400" : "text-red-400"}`}>
+                          {llmBreakdown.validityScore}/100
+                        </span>
+                      </div>
+                      {llmBreakdown.verdict && (
+                        <span className={`text-[10px] font-mono ${llmBreakdown.verdict === "LIKELY_VALID" ? "text-green-400" : llmBreakdown.verdict === "UNCERTAIN" ? "text-yellow-400" : "text-red-400"}`}>
+                          {llmBreakdown.verdict.replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex-1 w-full space-y-3">
-                {llmBreakdown.specificity != null && <LlmDimensionBar label="Specificity" score={llmBreakdown.specificity} />}
-                {llmBreakdown.originality != null && <LlmDimensionBar label="Originality" score={llmBreakdown.originality} />}
-                {llmBreakdown.voice != null && <LlmDimensionBar label="Voice" score={llmBreakdown.voice} />}
-                {llmBreakdown.coherence != null && <LlmDimensionBar label="Coherence" score={llmBreakdown.coherence} />}
-                {llmBreakdown.hallucination != null && <LlmDimensionBar label="Hallucination" score={llmBreakdown.hallucination} />}
+            ) : (
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="flex-shrink-0">
+                  <RadarChart
+                    data={[
+                      { label: "Specificity", value: llmBreakdown.specificity ?? 0, max: 100 },
+                      { label: "Originality", value: llmBreakdown.originality ?? 0, max: 100 },
+                      { label: "Voice", value: llmBreakdown.voice ?? 0, max: 100 },
+                      { label: "Coherence", value: llmBreakdown.coherence ?? 0, max: 100 },
+                      { label: "Hallucination", value: llmBreakdown.hallucination ?? 0, max: 100 },
+                    ]}
+                    size={220}
+                  />
+                </div>
+                <div className="flex-1 w-full space-y-3">
+                  {llmBreakdown.specificity != null && <LlmDimensionBar label="Specificity" score={llmBreakdown.specificity} />}
+                  {llmBreakdown.originality != null && <LlmDimensionBar label="Originality" score={llmBreakdown.originality} />}
+                  {llmBreakdown.voice != null && <LlmDimensionBar label="Voice" score={llmBreakdown.voice} />}
+                  {llmBreakdown.coherence != null && <LlmDimensionBar label="Coherence" score={llmBreakdown.coherence} />}
+                  {llmBreakdown.hallucination != null && <LlmDimensionBar label="Hallucination" score={llmBreakdown.hallucination} />}
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1868,7 +1914,7 @@ export default function Results() {
                 <Brain className="w-2.5 h-2.5" />
                 LLM Enhanced
               </Badge>
-              <Hint text="Semantic observations from the LLM analyzer, evaluating reports from a PSIRT triage perspective. Covers specificity, originality, voice, coherence, and hallucination signals." />
+              <Hint text="Semantic observations from the LLM analyzer, evaluating reports from a PSIRT triage perspective. Assesses claim specificity, evidence quality, internal consistency, and hallucination signals." />
             </CardTitle>
             <CardDescription>PSIRT triage observations across five credibility dimensions</CardDescription>
           </CardHeader>

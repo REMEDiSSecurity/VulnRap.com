@@ -54,7 +54,21 @@ export const reportsTable = pgTable("reports", {
   feedback: jsonb("feedback").notNull().$type<string[]>().default([]),
   llmSlopScore: integer("llm_slop_score"),
   llmFeedback: jsonb("llm_feedback").$type<string[]>(),
-  llmBreakdown: jsonb("llm_breakdown").$type<{ specificity: number; originality: number; voice: number; coherence: number; hallucination: number }>(),
+  llmBreakdown: jsonb("llm_breakdown").$type<{
+    claimSpecificity?: number;
+    evidenceQuality?: number;
+    internalConsistency?: number;
+    hallucinationSignals?: number;
+    validityScore?: number;
+    redFlags?: string[];
+    greenFlags?: string[];
+    verdict?: string;
+    specificity?: number;
+    originality?: number;
+    voice?: number;
+    coherence?: number;
+    hallucination?: number;
+  }>(),
   authenticityScore: integer("authenticity_score").notNull().default(0),
   validityScore: integer("validity_score").notNull().default(0),
   quadrant: varchar("quadrant", { length: 30 }).notNull().default("WEAK_HUMAN"),
