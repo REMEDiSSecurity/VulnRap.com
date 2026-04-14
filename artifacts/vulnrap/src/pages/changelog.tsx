@@ -1,12 +1,103 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText } from "lucide-react";
+import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout } from "lucide-react";
 
-export const CURRENT_VERSION = "3.1.0";
-export const RELEASE_DATE = "2026-04-13";
+export const CURRENT_VERSION = "3.2.0";
+export const RELEASE_DATE = "2026-04-14";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.2.0",
+    date: "2026-04-14",
+    label: "Detection Engine Overhaul",
+    labelColor: "border-red-500 text-red-400",
+    sections: [
+      {
+        icon: <Bug className="w-4 h-4 text-red-400" />,
+        title: "Template Detection Fix & Expansion",
+        type: "fix",
+        items: [
+          "Fixed critical bounty_template bug: single alternation regex with minMatches:3 could never fire (max matchCount was always 1) — split into 10 individual header patterns so minMatches logic works correctly",
+          "New formal_letter template: detects 'Dear Team / Best regards' letter-style reports (2-of-5 pattern match)",
+          "Template-heavy slop reports now score 68+ (previously ~20-30 due to broken detection)",
+        ],
+      },
+      {
+        icon: <Brain className="w-4 h-4 text-cyan-400" />,
+        title: "Linguistic Analysis Expansion",
+        type: "improvement",
+        items: [
+          "6 new sycophantic patterns: 'years of experience', 'discovered a critical', 'industry-leading tools', 'look forward to hearing', 'certified professional', 'engagement/assessment' claims",
+          "Total sycophantic pattern library now at 32 patterns for AI-generated filler detection",
+        ],
+      },
+      {
+        icon: <Search className="w-4 h-4 text-green-400" />,
+        title: "Factual Verification Expansion",
+        type: "improvement",
+        items: [
+          "Hallucinated function detection expanded: websocket/http3 fake functions (ws_validate_frame_secure, h3_parse_qpack_header_safe, etc.)",
+          "Fake file path detection: flags references to non-existent source files in known projects (e.g. lib/header_parser.c in curl)",
+          "Test certificate abuse detection: flags reports referencing demo/test certificates as real vulnerabilities",
+          "Weight redistribution across factual sub-signals for better balance",
+        ],
+      },
+      {
+        icon: <Zap className="w-4 h-4 text-yellow-400" />,
+        title: "LLM Speed & Reliability",
+        type: "improvement",
+        items: [
+          "Model switched from gpt-4o-mini to gpt-5-nano for faster, cheaper analysis",
+          "Timeout reduced from 30s to 15s; max_tokens from 2500 to 1000; input truncation from 6000 to 4000 characters",
+          "LLM now runs in parallel with heuristics instead of waiting for preliminary scores — shaves seconds off every analysis",
+          "LLM prompt refocused on report validity and substance assessment rather than pure AI detection",
+        ],
+      },
+      {
+        icon: <Target className="w-4 h-4 text-indigo-400" />,
+        title: "Score Tiers & Fusion",
+        type: "fix",
+        items: [
+          "Tier thresholds fixed to match spec: >=80 Slop, >=60 Likely Slop, >=40 Questionable, >=20 Likely Human, <20 Clean (was >75/>55/>35/>20)",
+          "safeBreakdown() hotfix: safely defaults all breakdown fields (template=0, linguistic=0, factual=0, quality=50) for pre-Sprint-6 cached records — eliminates ZodError crashes on legacy data",
+          "Applied breakdown safety at all 4 response-building sites (feed, cached check, new submission, GET by ID)",
+        ],
+      },
+      {
+        icon: <Layout className="w-4 h-4 text-purple-400" />,
+        title: "Reports Explorer",
+        type: "feature",
+        items: [
+          "New reports explorer page with filterable feed view",
+          "Dynamic tier filter badges with per-tier report counts",
+          "Report feed display fixes for consistent card rendering",
+        ],
+      },
+      {
+        icon: <FlaskConical className="w-4 h-4 text-emerald-400" />,
+        title: "Testing & Reliability",
+        type: "improvement",
+        items: [
+          "Comprehensive unit test suite: 114 tests across 10 test files covering all scoring modules",
+          "Global error boundary added — unhandled frontend crashes show recovery UI instead of blank screen",
+          "LLM-free fallback mode: full analysis pipeline works without any LLM configuration",
+          "Config impact notices: UI warns when settings changes affect scoring behavior",
+        ],
+      },
+      {
+        icon: <Code2 className="w-4 h-4 text-orange-400" />,
+        title: "API & Developer Experience",
+        type: "improvement",
+        items: [
+          "parseBoolParam() fix: skipLlm and skipRedaction now accept both string 'true' and boolean true",
+          "Report submission rate limit increased for higher-throughput triage workflows",
+          "Embedded API documentation with Swagger/Scalar toggle directly in the developers page",
+          "Mobile UX improvements: all controls visible and tappable on small screens",
+        ],
+      },
+    ],
+  },
   {
     version: "3.1.0",
     date: "2026-04-13",

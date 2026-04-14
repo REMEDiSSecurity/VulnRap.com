@@ -134,7 +134,7 @@ VulnRap works without any AI API key — the linguistic, factual, and template a
 
 ```bash
 OPENAI_API_KEY=sk-...
-# Optional: override model (default: gpt-4o-mini)
+# Optional: override model (default: gpt-5-nano)
 # OPENAI_MODEL=gpt-4o
 # Optional: use a compatible API (Ollama, vLLM, Azure, etc.)
 # OPENAI_BASE_URL=http://localhost:11434/v1
@@ -218,7 +218,8 @@ Multi-axis score fusion architecture (v3.0):
 Deterministic analysis that checks for:
 - **AI filler phrases** — ~50 weighted phrases ("It is important to note," "As an AI language model," etc.)
 - **Statistical text analysis** — Sentence length variance, passive voice ratio, contraction absence, bigram entropy
-- **Template detection** — "Dear security team" openings, dependency dumps, OWASP padding
+- **Template detection** — Bounty template headers (Vulnerability Type, Severity, CVSS Score, etc.), formal letter patterns (Dear Team / Best regards), dependency dumps, OWASP padding
+- **Sycophantic phrase detection** — 32 AI-generated filler patterns (years of experience, industry tools, discovered a critical, etc.)
 
 ### Axis 2: Quality vs Slop Separation
 - **qualityScore** (0-100) — Report completeness: version info, code blocks, repro steps
@@ -229,7 +230,9 @@ Deterministic analysis that checks for:
 - **Placeholder URLs** — example.com, target.com, and other generic domains
 - **Fabricated debug output** — Fake ASan addresses, GDB register values
 - **Fabricated CVEs** — Sequential IDs, round numbers, unusually long digits
-- **Hallucinated function names** — Generic CamelCase compositions, mixed naming conventions
+- **Hallucinated function names** — Generic CamelCase compositions, mixed naming conventions, known-fake functions for curl/websocket/http3
+- **Fake file paths** — References to non-existent source files in known projects (e.g. lib/header_parser.c in curl)
+- **Test certificate abuse** — Reports referencing demo/test certificates as real vulnerabilities
 
 ### Axis 4: LLM Semantic Analysis (optional)
 When `OPENAI_API_KEY` is configured, an LLM evaluates five weighted dimensions:
@@ -259,11 +262,11 @@ The LLM also produces **triage guidance** (reproduction steps, missing informati
 - **Score spread**: ~85pts (slop→90, legit→5)
 
 ### Score Tiers
-- **0-20**: Clean
-- **21-35**: Likely Human
-- **36-55**: Questionable
-- **56-75**: Likely Slop
-- **76-100**: Slop
+- **0-19**: Clean
+- **20-39**: Likely Human
+- **40-59**: Questionable
+- **60-79**: Likely Slop
+- **80-100**: Slop
 
 ## PSIRT Triage Workflow
 
