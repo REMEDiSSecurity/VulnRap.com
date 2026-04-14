@@ -1460,12 +1460,28 @@ export const LookupByHashResponse = zod.object({
 export const getReportFeedQueryLimitDefault = 10;
 export const getReportFeedQueryLimitMax = 50;
 
+export const getReportFeedQueryOffsetDefault = 0;
+export const getReportFeedQueryOffsetMin = 0;
+
+export const getReportFeedQuerySortDefault = `newest`;
+
 export const GetReportFeedQueryParams = zod.object({
   limit: zod.coerce
     .number()
     .min(1)
     .max(getReportFeedQueryLimitMax)
     .default(getReportFeedQueryLimitDefault),
+  offset: zod.coerce
+    .number()
+    .min(getReportFeedQueryOffsetMin)
+    .default(getReportFeedQueryOffsetDefault),
+  tier: zod.coerce
+    .string()
+    .optional()
+    .describe("Filter by slop tier name (exact match)"),
+  sort: zod
+    .enum(["newest", "oldest", "score_asc", "score_desc"])
+    .default(getReportFeedQuerySortDefault),
 });
 
 export const GetReportFeedResponse = zod.object({
@@ -1480,6 +1496,8 @@ export const GetReportFeedResponse = zod.object({
       createdAt: zod.coerce.date(),
     }),
   ),
+  total: zod.number(),
+  hasMore: zod.boolean(),
 });
 
 /**

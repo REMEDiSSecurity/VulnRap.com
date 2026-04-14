@@ -52,6 +52,7 @@ export * from "./gapItem";
 export * from "./gapItemAudience";
 export * from "./gapItemSeverity";
 export * from "./getReportFeedParams";
+export * from "./getReportFeedSort";
 export * from "./hardwareComponent";
 export * from "./hardwareComponentType";
 export * from "./hashLookupResult";

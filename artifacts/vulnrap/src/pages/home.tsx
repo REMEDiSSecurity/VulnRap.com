@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle, Trash2, Mail, BrainCircuit, ShieldOff } from "lucide-react";
 import { LogoBeams } from "@/components/laser-effects";
-import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed } from "@workspace/api-client-react";
+import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed, getGetReportFeedQueryKey } from "@workspace/api-client-react";
 import { addHistoryEntry } from "@/lib/history";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -1278,8 +1278,16 @@ function TransparencySection() {
 }
 
 function RecentReportsFeed() {
-  const { data, isLoading } = useGetReportFeed({ limit: 10 });
-  const reports = (data as unknown as { reports: Array<{ id: number; reportCode: string; slopScore: number; slopTier: string; matchCount: number; contentMode: string; createdAt: string }> })?.reports;
+  const { data, isLoading } = useGetReportFeed({ limit: 10 }, {
+    query: {
+      queryKey: getGetReportFeedQueryKey({ limit: 10 }),
+      staleTime: 15_000,
+      refetchOnMount: "always",
+      refetchOnWindowFocus: true,
+    },
+  });
+  const reports = data?.reports;
+  const total = data?.total ?? 0;
 
   if (isLoading) {
     return (
@@ -1318,7 +1326,7 @@ function RecentReportsFeed() {
           <Clock className="w-4 sm:w-5 h-4 sm:h-5 text-primary" />
           Recent Reports
         </h2>
-        <span className="text-[10px] sm:text-xs text-muted-foreground">{reports.length} report{reports.length !== 1 ? "s" : ""}</span>
+        <span className="text-[10px] sm:text-xs text-muted-foreground">{total} public report{total !== 1 ? "s" : ""}</span>
       </div>
       <div className="space-y-2">
         {reports.map((report) => (
@@ -1349,6 +1357,15 @@ function RecentReportsFeed() {
           </Link>
         ))}
       </div>
+      {total > 10 && (
+        <Link
+          to="/reports"
+          className="flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors group"
+        >
+          <span>View all {total} reports</span>
+          <ExternalLink className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      )}
     </div>
   );
 }

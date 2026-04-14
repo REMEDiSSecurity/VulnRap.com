@@ -5,6 +5,7 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { GetReportFeedSort } from "./getReportFeedSort";
 
 export type GetReportFeedParams = {
   /**
@@ -12,4 +13,13 @@ export type GetReportFeedParams = {
    * @maximum 50
    */
   limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
+  /**
+   * Filter by slop tier name (exact match)
+   */
+  tier?: string;
+  sort?: GetReportFeedSort;
 };

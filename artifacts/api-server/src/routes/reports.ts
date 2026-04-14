@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import multer from "multer";
-import { eq, or, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { reportsTable, reportHashesTable, similarityResultsTable, reportStatsTable } from "@workspace/db";
 import {
@@ -941,6 +941,37 @@ router.post("/reports/check", async (req, res): Promise<void> => {
 router.get("/reports/feed", async (req, res): Promise<void> => {
   const limitParam = parseInt(String(req.query.limit || "10"), 10);
   const limit = Math.max(1, Math.min(50, isNaN(limitParam) ? 10 : limitParam));
+  const offsetParam = parseInt(String(req.query.offset || "0"), 10);
+  const offset = Math.max(0, isNaN(offsetParam) ? 0 : offsetParam);
+  const tierFilter = req.query.tier ? String(req.query.tier) : null;
+  const sortParam = String(req.query.sort || "newest");
+
+  const conditions = [eq(reportsTable.showInFeed, true)];
+  if (tierFilter) {
+    conditions.push(eq(reportsTable.slopTier, tierFilter));
+  }
+  const whereClause = and(...conditions)!;
+
+  let orderClause;
+  switch (sortParam) {
+    case "oldest":
+      orderClause = sql`${reportsTable.createdAt} asc, ${reportsTable.id} asc`;
+      break;
+    case "score_asc":
+      orderClause = sql`${reportsTable.slopScore} asc, ${reportsTable.id} desc`;
+      break;
+    case "score_desc":
+      orderClause = sql`${reportsTable.slopScore} desc, ${reportsTable.id} desc`;
+      break;
+    default:
+      orderClause = sql`${reportsTable.createdAt} desc, ${reportsTable.id} desc`;
+  }
+
+  const [countResult] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(reportsTable)
+    .where(whereClause);
+  const total = countResult?.count ?? 0;
 
   const feedReports = await db
     .select({
@@ -952,9 +983,10 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       createdAt: reportsTable.createdAt,
     })
     .from(reportsTable)
-    .where(eq(reportsTable.showInFeed, true))
-    .orderBy(sql`${reportsTable.createdAt} desc`)
-    .limit(limit);
+    .where(whereClause)
+    .orderBy(orderClause)
+    .limit(limit)
+    .offset(offset);
 
   const mapped = feedReports.map((r) => {
     const matches = r.similarityMatches as Array<{ reportId: number }>;
@@ -969,7 +1001,11 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
     };
   });
 
-  const response = GetReportFeedResponse.parse({ reports: mapped });
+  const response = GetReportFeedResponse.parse({
+    reports: mapped,
+    total,
+    hasMore: offset + limit < total,
+  });
   res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
   res.json(response);
 });

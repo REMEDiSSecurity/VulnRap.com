@@ -9,4 +9,6 @@ import type { ReportFeedReportsItem } from "./reportFeedReportsItem";
 
 export interface ReportFeed {
   reports: ReportFeedReportsItem[];
+  total: number;
+  hasMore: boolean;
 }

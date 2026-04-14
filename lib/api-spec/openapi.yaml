@@ -333,6 +333,26 @@ paths:
             minimum: 1
             maximum: 50
             default: 10
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tier
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by slop tier name (exact match)
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [newest, oldest, score_asc, score_desc]
+            default: newest
       responses:
         "200":
           description: Recent public reports
@@ -1142,8 +1162,14 @@ components:
               - matchCount
               - contentMode
               - createdAt
+        total:
+          type: integer
+        hasMore:
+          type: boolean
       required:
         - reports
+        - total
+        - hasMore
 
     SlopDistribution:
       type: object

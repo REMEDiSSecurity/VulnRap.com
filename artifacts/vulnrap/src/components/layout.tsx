@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Activity, Search, Code, BookOpen, Target, MessageSquare, Menu, X, Github, Clock, GitCompare, UploadCloud, BarChart3 } from "lucide-react";
+import { Activity, Search, Code, BookOpen, Target, MessageSquare, Menu, X, Github, Clock, GitCompare, UploadCloud, BarChart3, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { to: "/batch", label: "Batch", icon: <UploadCloud className="w-3.5 h-3.5" /> },
   { to: "/compare", label: "Compare", icon: <GitCompare className="w-3.5 h-3.5" /> },
   { to: "/history", label: "History", icon: <Clock className="w-3.5 h-3.5" /> },
+  { to: "/reports", label: "Reports", icon: <Database className="w-3.5 h-3.5" /> },
   { to: "/stats", label: "Stats", icon: <Activity className="w-3.5 h-3.5" /> },
   { to: "/feedback-analytics", label: "Feedback", icon: <BarChart3 className="w-3.5 h-3.5" /> },
   { to: "/developers", label: "API", icon: <Code className="w-3.5 h-3.5" /> },

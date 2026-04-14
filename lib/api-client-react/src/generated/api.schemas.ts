@@ -893,6 +893,8 @@ export type ReportFeedReportsItem = {
 
 export interface ReportFeed {
   reports: ReportFeedReportsItem[];
+  total: number;
+  hasMore: boolean;
 }
 
 export type SlopDistributionBucketsItem = {
@@ -1279,4 +1281,23 @@ export type GetReportFeedParams = {
    * @maximum 50
    */
   limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
+  /**
+   * Filter by slop tier name (exact match)
+   */
+  tier?: string;
+  sort?: GetReportFeedSort;
 };
+
+export type GetReportFeedSort =
+  (typeof GetReportFeedSort)[keyof typeof GetReportFeedSort];
+
+export const GetReportFeedSort = {
+  newest: "newest",
+  oldest: "oldest",
+  score_asc: "score_asc",
+  score_desc: "score_desc",
+} as const;
