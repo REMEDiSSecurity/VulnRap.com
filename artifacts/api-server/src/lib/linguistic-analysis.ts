@@ -103,6 +103,12 @@ const SYCOPHANTIC_PHRASES: SycophraticPattern[] = [
   { pattern: /(?:ensure|make\s+sure)\s+that\s+(?:all|proper|adequate|appropriate)/i, weight: 6, type: "ai_ensure_proper" },
   { pattern: /(?:critical|significant|severe)\s+(?:security\s+)?(?:vulnerability|flaw|weakness|issue)/i, weight: 4, type: "ai_severity_inflation" },
   { pattern: /(?:compromise|impact)\s+the\s+(?:entire|whole|complete)\s+(?:system|application|infrastructure)/i, weight: 7, type: "ai_total_compromise" },
+  { pattern: /with\s+over\s+\d+\s+years?\s+of\s+experience/i, weight: 8, type: "ai_years_experience" },
+  { pattern: /i\s+(?:have\s+)?discovered\s+a\s+critical/i, weight: 5, type: "ai_discovered_critical" },
+  { pattern: /using\s+(?:industry-leading|advanced|comprehensive|cutting-edge)\s+(?:tools|methodologies|techniques)/i, weight: 10, type: "ai_industry_tools" },
+  { pattern: /i\s+look\s+forward\s+to\s+hearing\s+from/i, weight: 8, type: "ai_look_forward" },
+  { pattern: /i\s+am\s+a\s+(?:certified|professional)\s+(?:security|penetration|ethical)/i, weight: 8, type: "ai_certified_claim" },
+  { pattern: /during\s+(?:a\s+)?(?:recent\s+)?(?:security\s+)?(?:engagement|assessment|penetration\s+test)/i, weight: 6, type: "ai_engagement_claim" },
 ];
 
 const SLOP_TEMPLATES = [
@@ -143,10 +149,31 @@ const SLOP_TEMPLATES = [
   {
     name: "bounty_template",
     patterns: [
-      /(?:vulnerability\s+type|severity|impact|steps\s+to\s+reproduce|remediation|recommendation)\s*[:]/i,
+      /vulnerability\s+type\s*:/i,
+      /severity\s*:/i,
+      /impact\s*:/i,
+      /steps\s+to\s+reproduce\s*:/i,
+      /remediation\s*:/i,
+      /recommendation\s*:/i,
+      /proof\s+of\s+concept\s*:/i,
+      /affected\s+(?:url|component|endpoint)\s*:/i,
+      /attack\s+vector\s*:/i,
+      /privileges\s+required\s*:/i,
     ],
     minMatches: 3,
-    weight: 6,
+    weight: 8,
+  },
+  {
+    name: "formal_letter",
+    patterns: [
+      /dear\s+(?:security\s+team|sir\/madam|team|vulnerability\s+team)/i,
+      /(?:best|kind)\s+regards/i,
+      /i\s+hope\s+this\s+(?:message|report|finding)\s+finds\s+you/i,
+      /thank\s+you\s+for\s+your\s+time\s+and\s+attention/i,
+      /i\s+look\s+forward\s+to\s+hearing/i,
+    ],
+    minMatches: 2,
+    weight: 14,
   },
   {
     name: "full_template_headers",

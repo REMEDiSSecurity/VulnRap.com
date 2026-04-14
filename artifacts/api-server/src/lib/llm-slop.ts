@@ -41,7 +41,7 @@ export interface LLMBreakdown {
   verdict: string;
 }
 
-const LLM_TIMEOUT_MS = 30_000;
+const LLM_TIMEOUT_MS = 15_000;
 
 const COST_GUARD_LOW = 25;
 const COST_GUARD_HIGH = 60;
@@ -242,7 +242,7 @@ async function analyzeSlopWithLLMOnce(
   const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
   try {
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const model = process.env.OPENAI_MODEL || "gpt-5-nano";
     const startMs = Date.now();
     logger.info({ model, textLength: truncatedText.length }, "LLM slop: sending request");
 
@@ -250,7 +250,7 @@ async function analyzeSlopWithLLMOnce(
       {
         model,
         temperature: 0.1,
-        max_completion_tokens: 2500,
+        max_completion_tokens: 1000,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -497,7 +497,7 @@ export async function analyzeSlopWithLLM(
   }
 
   const truncatedText =
-    text.length > 6000 ? text.slice(0, 6000) + "\n\n[truncated for analysis]" : text;
+    text.length > 4000 ? text.slice(0, 4000) + "\n\n[truncated for analysis]" : text;
 
   const cached = getCachedResult(truncatedText);
   if (cached) {

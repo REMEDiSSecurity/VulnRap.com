@@ -366,10 +366,12 @@ function analyzeFabricatedCves(text: string): { score: number; evidence: Factual
 }
 
 const KNOWN_NONEXISTENT_FUNCTIONS: Record<string, string[]> = {
-  curl: ["curl_parse_header_secure", "curl_http_validate_request", "curl_safe_header", "curl_validate_host"],
+  curl: ["curl_parse_header_secure", "curl_http_validate_request", "curl_safe_header", "curl_validate_host", "curl_validate_input", "curl_validate_response", "curl_validate_cert", "curl_secure_connect"],
   nginx: ["ngx_secure_filter", "ngx_safe_concat", "ngx_validate_input"],
   apache: ["ap_safe_copy", "ap_validate_header", "ap_secure_handler"],
   openssl: ["SSL_validate_chain_secure", "EVP_encrypt_safe"],
+  websocket: ["ws_frame_handshake", "ws_process_frame", "ws_validate_frame", "ws_secure_handshake"],
+  http3: ["h3_process_priority", "h3_resolve_deps", "h3_validate_frame"],
 };
 
 function analyzeHallucinatedFunctions(text: string): { score: number; evidence: FactualEvidence[] } {
@@ -451,13 +453,18 @@ export function analyzeFactual(text: string): FactualResult {
   const fabricatedCves = analyzeFabricatedCves(text);
   const hallucinatedFuncs = analyzeHallucinatedFunctions(text);
 
+  const fakeFilePaths = analyzeFakeFilePaths(text);
+  const testCertAbuse = analyzeTestCertAbuse(text);
+
   const combinedScore = Math.min(100, Math.round(
-    severity.score * 0.25 +
-    placeholders.score * 0.20 +
-    fabricated.score * 0.20 +
+    severity.score * 0.20 +
+    placeholders.score * 0.15 +
+    fabricated.score * 0.15 +
     cveCheck.score * 0.15 +
     fabricatedCves.score * 0.10 +
-    hallucinatedFuncs.score * 0.10
+    hallucinatedFuncs.score * 0.15 +
+    fakeFilePaths.score * 0.05 +
+    testCertAbuse.score * 0.05
   ));
 
   return {
@@ -472,6 +479,74 @@ export function analyzeFactual(text: string): FactualResult {
       ...cveCheck.evidence,
       ...fabricatedCves.evidence,
       ...hallucinatedFuncs.evidence,
+      ...fakeFilePaths.evidence,
+      ...testCertAbuse.evidence,
     ],
   };
+}
+
+function analyzeFakeFilePaths(text: string): { score: number; evidence: FactualEvidence[] } {
+  const evidence: FactualEvidence[] = [];
+  let totalWeight = 0;
+
+  if (/lib\/header_parser\.c/i.test(text) && /curl/i.test(text)) {
+    totalWeight += 15;
+    evidence.push({
+      type: "fake_file_path",
+      description: "References lib/header_parser.c in curl — this file does not exist in the curl source tree",
+      weight: 15,
+      matched: "lib/header_parser.c",
+    });
+  }
+
+  if (/lib\/http3\.c/i.test(text) && /curl/i.test(text)) {
+    totalWeight += 10;
+    evidence.push({
+      type: "fake_file_path",
+      description: "References lib/http3.c in curl — curl uses lib/vquic/ for HTTP/3 code, not lib/http3.c",
+      weight: 10,
+      matched: "lib/http3.c",
+    });
+  }
+
+  if (/src\/core\/(?:security|auth|crypto)\.c/i.test(text)) {
+    const knownProjects = /(?:nginx|apache|curl|openssl)/i.test(text);
+    if (knownProjects) {
+      totalWeight += 8;
+      evidence.push({
+        type: "fake_file_path",
+        description: "References a generic src/core/ path that doesn't match known project directory structures",
+        weight: 8,
+      });
+    }
+  }
+
+  const score = Math.min(100, Math.round(30 * Math.log1p(totalWeight)));
+  return { score, evidence };
+}
+
+function analyzeTestCertAbuse(text: string): { score: number; evidence: FactualEvidence[] } {
+  const evidence: FactualEvidence[] = [];
+  let totalWeight = 0;
+
+  if (/tests\/certs\/.*\.pem/i.test(text) && /(?:credential|private\s+key|security\s+risk|sensitive|exposed)/i.test(text)) {
+    totalWeight += 15;
+    evidence.push({
+      type: "test_cert_abuse",
+      description: "Claims test certificates (tests/certs/*.pem) are credentials or security risks — test certs are intentionally public fixtures",
+      weight: 15,
+    });
+  }
+
+  if (/(?:test|example|sample|demo)[\s_-]?(?:key|cert|certificate)/i.test(text) && /(?:leaked|exposed|hardcoded|credential)/i.test(text)) {
+    totalWeight += 10;
+    evidence.push({
+      type: "test_cert_abuse",
+      description: "Claims test/example certificates are leaked credentials — these are typically intentional fixtures",
+      weight: 10,
+    });
+  }
+
+  const score = Math.min(100, Math.round(30 * Math.log1p(totalWeight)));
+  return { score, evidence };
 }

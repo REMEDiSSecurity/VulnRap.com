@@ -453,11 +453,10 @@ export function recomputeSlopScoreWithoutLlm(
   };
 }
 
-export function getSlopTier(score: number, thresholds?: TierThresholds): string {
-  const thr = thresholds ?? DEFAULT_THRESHOLDS;
-  if (score > thr.high) return "Slop";
-  if (score > 55) return "Likely Slop";
-  if (score > 35) return "Questionable";
-  if (score > thr.low) return "Likely Human";
+export function getSlopTier(score: number, _thresholds?: TierThresholds): string {
+  if (score >= 80) return "Slop";
+  if (score >= 60) return "Likely Slop";
+  if (score >= 40) return "Questionable";
+  if (score >= 20) return "Likely Human";
   return "Clean";
 }

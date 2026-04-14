@@ -145,6 +145,14 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
     });
   }
 
+  const userSkippedLlm = opts?.skipLlm === true;
+  const llmAvailable = isLLMAvailable();
+  const callLlm = !userSkippedLlm && llmAvailable;
+
+  const llmPromise = callLlm
+    ? runStage("llm_analysis", () => analyzeSlopWithLLM(redactedText), diagnostics)
+    : Promise.resolve(null);
+
   const [heuristic, linguistic, factual, verification] = await Promise.all([
     runStage("heuristic_analysis", () => analyzeSloppiness(originalText), diagnostics),
     runStage("linguistic_analysis", () => analyzeLinguistic(originalText), diagnostics),
@@ -152,16 +160,27 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
     runStage("active_verification", () => performActiveVerification(redactedText), diagnostics),
   ]);
 
+  const llmResult: LLMSlopResult | null = (await llmPromise) ?? null;
+
+  if (!callLlm) {
+    diagnostics.stages["llm_analysis"] = { status: "ok", durationMs: 0, error: userSkippedLlm ? "skipped_by_user" : "not_needed" };
+  }
+
   const safeLinguistic = linguistic ?? { score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0, evidence: [] };
   const safeFactual = factual ?? { score: 0, evidence: [] };
   const safeQuality = heuristic?.qualityScore ?? 50;
 
-  const preliminary = await runStage("score_fusion_preliminary", () =>
-    fuseScores(safeLinguistic, safeFactual, null, safeQuality, originalText, undefined, verification),
+  logger.info(
+    { llmAvailable, callLlm, userSkippedLlm, llmSucceeded: !!llmResult },
+    "LLM decision"
+  );
+
+  const fusion = await runStage("score_fusion", () =>
+    fuseScores(safeLinguistic, safeFactual, llmResult, safeQuality, originalText, undefined, verification),
     diagnostics,
   );
 
-  const safePreliminary = preliminary ?? {
+  const safeFusion = fusion ?? {
     slopScore: 50, qualityScore: safeQuality, confidence: 0.3,
     breakdown: { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: safeQuality },
     evidence: [], humanIndicators: [], slopTier: "Questionable",
@@ -169,31 +188,10 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
     archetype: "REQUEST_DETAILS" as const, analysisMode: "heuristic_only" as const, confidenceNote: null,
   };
 
-  let llmResult: LLMSlopResult | null = null;
-  const llmAvailable = isLLMAvailable();
-  const userSkippedLlm = opts?.skipLlm === true;
-  const callLlm = !userSkippedLlm && shouldCallLLM(safePreliminary.slopScore, safePreliminary.confidence);
-  logger.info(
-    { preliminaryScore: safePreliminary.slopScore, confidence: safePreliminary.confidence, llmAvailable, callLlm, userSkippedLlm },
-    "LLM decision"
-  );
-  if (callLlm) {
-    llmResult = await runStage("llm_analysis", () => analyzeSlopWithLLM(redactedText), diagnostics) ?? null;
-  } else {
-    diagnostics.stages["llm_analysis"] = { status: "ok", durationMs: 0, error: userSkippedLlm ? "skipped_by_user" : "not_needed" };
-  }
-
-  const fusion = llmResult
-    ? (await runStage("score_fusion_final", () =>
-        fuseScores(safeLinguistic, safeFactual, llmResult!, safeQuality, originalText, undefined, verification),
-        diagnostics,
-      ) ?? safePreliminary)
-    : safePreliminary;
-
   let triageRecommendation: TriageRecommendation | null = null;
   const triageRecResult = await runStage("triage_recommendation", () => {
     const base = generateTriageRecommendation(
-      fusion.slopScore, fusion.confidence, verification, fusion.evidence,
+      safeFusion.slopScore, safeFusion.confidence, verification, safeFusion.evidence,
     );
     const temporalSignals = computeTemporalSignals(verification);
     return { ...base, temporalSignals, templateMatch: null, revision: null };
@@ -203,7 +201,7 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
   let triageAssistant: TriageAssistantResult | null = null;
   const triageAstResult = await runStage("triage_assistant", () =>
     generateTriageAssistant(
-      originalText, fusion.slopScore, fusion.confidence, fusion.evidence,
+      originalText, safeFusion.slopScore, safeFusion.confidence, safeFusion.evidence,
       verification, llmResult?.llmTriageGuidance ?? null, llmResult?.llmReproRecipe ?? null,
     ), diagnostics);
   triageAssistant = triageAstResult;
@@ -211,7 +209,7 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
   diagnostics.totalDurationMs = Date.now() - pipelineStart;
 
   return {
-    ...fusion,
+    ...safeFusion,
     feedback: heuristic?.feedback ?? [],
     llmResult,
     verification,

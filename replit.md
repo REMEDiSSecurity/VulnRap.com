@@ -54,9 +54,10 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
     - **Linguistic AI Fingerprinting**: Detects lexical markers, statistical text patterns, and template usage.
     - **Quality vs Slop Separation**: Assesses report completeness (`qualityScore`) distinct from AI provenance.
     - **Factual Verification**: Identifies fabricated details like severity inflation, placeholder URLs, fabricated debug output, and hallucinated function names.
-    - **LLM Semantic Analysis V2**: Evaluates reports across 4 substance-focused criteria (claimSpecificity, evidenceQuality, internalConsistency, hallucinationSignals) each 0-25, producing validityScore, red_flags, green_flags, verdict, reproduction_recipe, and triage_guidance. Score conflict detection flags LLM vs heuristic divergence >30 pts and uses conservative score.
+    - **LLM Semantic Analysis V2**: Uses gpt-5-nano (fast, cost-effective) to evaluate reports across 4 substance-focused criteria (claimSpecificity, evidenceQuality, internalConsistency, hallucinationSignals) each 0-25, producing validityScore, red_flags, green_flags, verdict, reproduction_recipe, and triage_guidance. Score conflict detection flags LLM vs heuristic divergence >30 pts and uses conservative score. LLM runs in parallel with heuristics for faster analysis.
     - **Substance Gate**: When both claimSpecificity and evidenceQuality are below 10, hallucination and consistency scores are capped at 40 to prevent "no issues found" from inflating validity of empty reports.
-    - **Known-Nonexistent Function Detection**: Catches fabricated API functions (e.g., curl_parse_header_secure) that don't exist in real projects.
+    - **Known-Nonexistent Function Detection**: Catches fabricated API functions (e.g., curl_parse_header_secure, ws_frame_handshake, h3_process_priority) that don't exist in real projects. Also detects fake file paths (e.g., lib/header_parser.c in curl) and test certificate abuse claims.
+    - **Template Detection**: Detects cookie-cutter report templates (bounty templates with 3+ section headers, formal letter patterns, generic SQLi templates, executive summaries) with additive scoring.
     - **Human Indicator Detection**: Identifies human writing traits (contractions, informal style, commit refs, pre-redaction) to reduce slop scores.
     - **Active Content Verification**: Verifies referenced projects, file paths, function names via GitHub API, and CVEs via NVD 2.0 API, including plagiarism detection and PoC plausibility.
     - **Score Fusion v4.0**: Two-axis model computing authenticityScore and validityScore, with quadrant classification and derived slopScore for backward compatibility.
@@ -80,7 +81,7 @@ The project is structured as a pnpm workspace monorepo using TypeScript, with di
 
 ## External Dependencies
 
-- **OpenAI-compatible API**: Used for LLM Semantic Analysis, configurable via Replit AI Integrations or standard OpenAI environment variables.
+- **OpenAI-compatible API**: Used for LLM Semantic Analysis (default: gpt-5-nano), configurable via Replit AI Integrations or standard OpenAI environment variables. Override model with OPENAI_MODEL env var.
 - **GitHub API**: Used by Active Content Verification for file path and code reference verification.
 - **NVD API 2.0**: Used by Active Content Verification for CVE cross-referencing and description plagiarism detection.
 - **PostgreSQL**: The primary database for storing report data, hashes, and similarity results.
