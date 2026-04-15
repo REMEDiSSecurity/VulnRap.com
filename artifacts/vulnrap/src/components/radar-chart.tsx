@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 interface RadarDataPoint {
   label: string;
@@ -28,6 +28,25 @@ export function RadarChart({
   const levels = 4;
   const n = data.length;
 
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    setProgress(0);
+    let frame: number;
+    let start: number | null = null;
+    const duration = 800;
+    const animate = (ts: number) => {
+      if (!start) start = ts;
+      const elapsed = ts - start;
+      const t = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setProgress(eased);
+      if (t < 1) frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, [data]);
+
   const points = useMemo(() => {
     return data.map((d, i) => {
       const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
@@ -43,6 +62,17 @@ export function RadarChart({
     });
   }, [data, n, center, radius]);
 
+  const animatedPoints = useMemo(() => {
+    return points.map((p) => {
+      const r = ((p.value / p.max) * radius) * progress;
+      return {
+        ...p,
+        ax: center + r * Math.cos(p.angle),
+        ay: center + r * Math.sin(p.angle),
+      };
+    });
+  }, [points, progress, center, radius]);
+
   const gridPolygons = useMemo(() => {
     return Array.from({ length: levels }, (_, lvl) => {
       const r = (radius * (lvl + 1)) / levels;
@@ -54,7 +84,7 @@ export function RadarChart({
     });
   }, [n, center, radius, levels]);
 
-  const dataPolygon = points.map((p) => `${p.x},${p.y}`).join(" ");
+  const dataPolygon = animatedPoints.map((p) => `${p.ax},${p.ay}`).join(" ");
 
   const valueColor = (val: number, max: number) => {
     const pct = val / max;
@@ -72,6 +102,7 @@ export function RadarChart({
           fill="none"
           stroke={gridColor}
           strokeWidth={1}
+          style={{ opacity: Math.min(1, progress * 2) }}
         />
       ))}
 
@@ -84,6 +115,7 @@ export function RadarChart({
           y2={center + radius * Math.sin(p.angle)}
           stroke={gridColor}
           strokeWidth={0.5}
+          style={{ opacity: Math.min(1, progress * 2) }}
         />
       ))}
 
@@ -93,17 +125,19 @@ export function RadarChart({
         stroke={color}
         strokeWidth={1.5}
         strokeLinejoin="round"
+        style={{ opacity: progress }}
       />
 
-      {points.map((p, i) => (
+      {animatedPoints.map((p, i) => (
         <circle
           key={`dot-${i}`}
-          cx={p.x}
-          cy={p.y}
-          r={3}
+          cx={p.ax}
+          cy={p.ay}
+          r={3 * progress}
           fill={valueColor(p.value, p.max)}
           stroke="rgba(0,0,0,0.3)"
           strokeWidth={0.5}
+          style={{ opacity: progress }}
         />
       ))}
 
@@ -115,7 +149,7 @@ export function RadarChart({
             : "end";
         const dy = p.angle > 0 && p.angle < Math.PI ? 12 : p.angle < 0 ? -4 : 4;
         return (
-          <g key={`label-${i}`}>
+          <g key={`label-${i}`} style={{ opacity: progress }}>
             <text
               x={p.labelX}
               y={p.labelY + dy}
@@ -135,7 +169,7 @@ export function RadarChart({
               fontWeight={700}
               fontFamily="monospace"
             >
-              {p.value}
+              {Math.round(p.value * progress)}
             </text>
           </g>
         );

@@ -68,26 +68,95 @@ function RatingBar({ rating, count, maxCount }: { rating: number; count: number;
   );
 }
 
-function CorrelationRow({ bucket, avgRating, helpfulPct, count }: {
-  bucket: string; avgRating: number; helpfulPct: number; count: number;
+function CorrelationScatter({ data }: {
+  data: Array<{ scoreBucket: string; avgRating: number; helpfulPct: number; count: number }>;
 }) {
-  const ratingColor = avgRating >= 4 ? "text-green-400" : avgRating >= 3 ? "text-yellow-400" : "text-red-400";
-  const helpfulColor = helpfulPct >= 70 ? "text-green-400" : helpfulPct >= 50 ? "text-yellow-400" : "text-red-400";
+  if (data.length === 0) return <p className="text-xs text-muted-foreground/50 py-4 text-center">No linked feedback yet</p>;
+
+  const W = 300;
+  const H = 200;
+  const PAD = { top: 12, right: 12, bottom: 28, left: 34 };
+  const pw = W - PAD.left - PAD.right;
+  const ph = H - PAD.top - PAD.bottom;
+
+  const bucketOrder = ["0-20", "21-40", "41-60", "61-80", "81-100"];
+  const bucketColors: Record<string, string> = {
+    "0-20": "#22c55e",
+    "21-40": "#34d399",
+    "41-60": "#eab308",
+    "61-80": "#f97316",
+    "81-100": "#ef4444",
+  };
+
+  const maxCount = Math.max(...data.map(d => d.count), 1);
+
+  const points = data.map(d => {
+    const bIdx = bucketOrder.indexOf(d.scoreBucket);
+    const x = PAD.left + ((bIdx >= 0 ? bIdx : 0) / (bucketOrder.length - 1)) * pw;
+    const y = PAD.top + ph - ((d.avgRating - 1) / 4) * ph;
+    const r = 4 + (d.count / maxCount) * 10;
+    const color = bucketColors[d.scoreBucket] || "#06b6d4";
+    return { ...d, x, y, r, color };
+  });
+
   return (
-    <div className="flex items-center gap-4 py-3 border-b border-border/30 last:border-0">
-      <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium text-foreground">{bucket}</span>
-      </div>
-      <div className="text-right w-20">
-        <div className={cn("text-sm font-bold tabular-nums", ratingColor)}>{avgRating.toFixed(1)}</div>
-        <div className="text-[10px] text-muted-foreground">avg rating</div>
-      </div>
-      <div className="text-right w-20">
-        <div className={cn("text-sm font-bold tabular-nums", helpfulColor)}>{helpfulPct}%</div>
-        <div className="text-[10px] text-muted-foreground">helpful</div>
-      </div>
-      <div className="text-right w-12">
-        <Badge variant="secondary" className="text-[10px] tabular-nums">{count}</Badge>
+    <div className="space-y-2">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: "220px" }}>
+        {[1, 2, 3, 4, 5].map(rating => {
+          const y = PAD.top + ph - ((rating - 1) / 4) * ph;
+          return (
+            <g key={rating}>
+              <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth={0.5} />
+              <text x={PAD.left - 4} y={y + 3} textAnchor="end" fill="rgba(255,255,255,0.3)" fontSize={8} fontFamily="monospace">{rating}★</text>
+            </g>
+          );
+        })}
+
+        {bucketOrder.map((label, i) => {
+          const x = PAD.left + (i / (bucketOrder.length - 1)) * pw;
+          return (
+            <text key={label} x={x} y={H - 4} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize={7} fontFamily="monospace">{label}</text>
+          );
+        })}
+
+        <text x={W / 2} y={H + 2} textAnchor="middle" fill="rgba(255,255,255,0.2)" fontSize={7}>Slop Score Range</text>
+
+        {points.map((p, i) => (
+          <g key={i} className="group">
+            <circle cx={p.x} cy={p.y} r={p.r + 6} fill="transparent" className="cursor-default" />
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r={p.r}
+              fill={p.color}
+              fillOpacity={0.25}
+              stroke={p.color}
+              strokeWidth={1.5}
+              className="transition-all duration-200"
+            />
+            <circle cx={p.x} cy={p.y} r={2} fill={p.color} />
+
+            <g className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <rect x={p.x - 40} y={p.y - 42} width={80} height={36} rx={4} fill="rgba(0,0,0,0.85)" stroke={p.color} strokeWidth={0.5} />
+              <text x={p.x} y={p.y - 28} textAnchor="middle" fill={p.color} fontSize={8} fontWeight={700} fontFamily="monospace">{p.avgRating.toFixed(1)}★ · {p.helpfulPct}%</text>
+              <text x={p.x} y={p.y - 16} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize={7}>{p.count} entries · {p.scoreBucket}</text>
+            </g>
+          </g>
+        ))}
+      </svg>
+      <div className="grid grid-cols-5 gap-1 text-center">
+        {data.map(d => {
+          const color = bucketColors[d.scoreBucket] || "#06b6d4";
+          const ratingColor = d.avgRating >= 4 ? "text-green-400" : d.avgRating >= 3 ? "text-yellow-400" : "text-red-400";
+          return (
+            <div key={d.scoreBucket} className="space-y-0.5 py-1.5 px-1 rounded-md" style={{ borderLeft: `2px solid ${color}` }}>
+              <div className="text-[10px] font-mono font-bold" style={{ color }}>{d.scoreBucket}</div>
+              <div className={cn("text-[10px] font-bold tabular-nums", ratingColor)}>{d.avgRating.toFixed(1)}★</div>
+              <div className="text-[9px] text-muted-foreground/50">{d.helpfulPct}% helpful</div>
+              <div className="text-[9px] text-muted-foreground/30">{d.count} entries</div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -556,21 +625,7 @@ export default function FeedbackAnalytics() {
             <CardDescription>How user ratings correlate with slop scores — are we calibrated?</CardDescription>
           </CardHeader>
           <CardContent>
-            {scoreCorrelation.length === 0 ? (
-              <p className="text-xs text-muted-foreground/50 py-4 text-center">No linked feedback yet</p>
-            ) : (
-              <div>
-                {scoreCorrelation.map((row: FeedbackAnalyticsScoreCorrelationItem) => (
-                  <CorrelationRow
-                    key={row.scoreBucket}
-                    bucket={row.scoreBucket}
-                    avgRating={row.avgRating}
-                    helpfulPct={row.helpfulPct}
-                    count={row.count}
-                  />
-                ))}
-              </div>
-            )}
+            <CorrelationScatter data={scoreCorrelation} />
           </CardContent>
         </Card>
       </div>

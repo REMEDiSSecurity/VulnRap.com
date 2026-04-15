@@ -3,11 +3,43 @@ import { useGetStats, useGetRecentActivity, useGetSlopDistribution, getGetStatsQ
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, BarChart3, Database, ShieldAlert, Users, TrendingUp, FileText, Lock, RefreshCw } from "lucide-react";
+import { Activity, BarChart3, Database, ShieldAlert, Users, RefreshCw, TrendingUp, TrendingDown, Minus, FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const REFETCH_INTERVAL = 30_000;
+
+const TIER_COLORS: Record<string, { bar: string; text: string; border: string }> = {
+  "Clean": {
+    bar: "bg-gradient-to-t from-green-500/60 to-green-400/80",
+    text: "text-green-400",
+    border: "border-green-500/30",
+  },
+  "Likely Human": {
+    bar: "bg-gradient-to-t from-emerald-500/60 to-emerald-400/80",
+    text: "text-emerald-400",
+    border: "border-emerald-500/30",
+  },
+  "Questionable": {
+    bar: "bg-gradient-to-t from-yellow-500/60 to-yellow-400/80",
+    text: "text-yellow-400",
+    border: "border-yellow-500/30",
+  },
+  "Likely Slop": {
+    bar: "bg-gradient-to-t from-orange-500/60 to-orange-400/80",
+    text: "text-orange-400",
+    border: "border-orange-500/30",
+  },
+  "Slop": {
+    bar: "bg-gradient-to-t from-red-500/60 to-red-400/80",
+    text: "text-red-400",
+    border: "border-red-500/30",
+  },
+};
+
+function getTierColor(label: string) {
+  return TIER_COLORS[label] || TIER_COLORS["Questionable"];
+}
 
 function StatCard({
   title,
@@ -82,6 +114,62 @@ function StatCard({
   );
 }
 
+function HeadlineNarrative({
+  totalReports,
+  reportsToday,
+  reportsThisWeek,
+  avgSlop,
+  dupRate,
+  distribution,
+}: {
+  totalReports: number;
+  reportsToday: number;
+  reportsThisWeek: number;
+  avgSlop: number;
+  dupRate: number;
+  distribution?: { buckets: Array<{ label: string; count: number }> };
+}) {
+  const slopCount = distribution?.buckets
+    .filter(b => b.label === "Likely Slop" || b.label === "Slop")
+    .reduce((sum, b) => sum + b.count, 0) ?? 0;
+  const cleanCount = distribution?.buckets
+    .filter(b => b.label === "Clean" || b.label === "Likely Human")
+    .reduce((sum, b) => sum + b.count, 0) ?? 0;
+  const slopPct = totalReports > 0 ? Math.round((slopCount / totalReports) * 100) : 0;
+  const cleanPct = totalReports > 0 ? Math.round((cleanCount / totalReports) * 100) : 0;
+
+  if (totalReports === 0) return null;
+
+  return (
+    <div className="glass-card rounded-xl p-5 border-l-2 border-l-primary/40">
+      <div className="flex items-start gap-3">
+        <FileText className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+        <div className="text-sm text-muted-foreground leading-relaxed">
+          <span className="text-foreground font-medium">{totalReports.toLocaleString()} reports</span> analyzed
+          {reportsThisWeek > 0 && (
+            <> &mdash; <span className="text-foreground font-medium">{reportsThisWeek}</span> this week</>
+          )}
+          {reportsToday > 0 && (
+            <>, <span className="text-foreground font-medium">{reportsToday}</span> today</>
+          )}.
+          {avgSlop > 0 && (
+            <> Average slop score sits at <span className={cn("font-mono font-medium", avgSlop > 55 ? "text-orange-400" : avgSlop > 35 ? "text-yellow-400" : "text-green-400")}>{Math.round(avgSlop)}</span>.</>
+          )}
+          {slopPct > 0 && (
+            <> <span className="text-red-400 font-medium">{slopPct}%</span> flagged as likely slop or worse.</>
+          )}
+          {cleanPct > 0 && (
+            <> <span className="text-green-400 font-medium">{cleanPct}%</span> rated clean or likely human.</>
+          )}
+          {dupRate > 0 && (
+            <> Duplicate detection rate: <span className="text-foreground font-mono">{dupRate}%</span>.</>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Stats() {
   const { data: stats, isLoading: statsLoading, dataUpdatedAt } = useGetStats({
     query: {
@@ -127,13 +215,24 @@ export default function Stats() {
           {dataUpdatedAt > 0 && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground/50">
               <RefreshCw className="w-3 h-3 animate-spin" style={{ animationDuration: "3s" }} />
-              <span>Live — refreshes every 30s</span>
+              <span>Live &mdash; refreshes every 30s</span>
             </div>
           )}
         </div>
         <p className="text-muted-foreground mt-2">Aggregate metrics across the VulnRap validation network.</p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-6" />
       </div>
+
+      {!statsLoading && stats && (
+        <HeadlineNarrative
+          totalReports={stats.totalReports}
+          reportsToday={stats.reportsToday}
+          reportsThisWeek={stats.reportsThisWeek}
+          avgSlop={stats.avgSlopScore}
+          dupRate={dupRate}
+          distribution={distribution ?? undefined}
+        />
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
@@ -200,7 +299,7 @@ export default function Stats() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="uppercase tracking-wide text-sm text-muted-foreground">Slop Score Distribution</CardTitle>
-                <CardDescription>Histogram of AI-generation probability</CardDescription>
+                <CardDescription>Reports by tier &mdash; color-coded by classification</CardDescription>
               </div>
               {distribution?.totalReports != null && (
                 <Badge variant="outline" className="text-xs font-mono">
@@ -213,42 +312,75 @@ export default function Stats() {
             {distLoading ? (
               <Skeleton className="h-64 w-full" />
             ) : distribution?.buckets ? (
-              <div className="mt-4 pt-4 border-b border-border/30 px-2">
-                <div className="flex items-end gap-2" style={{ height: "224px" }}>
+              <div className="space-y-4">
+                <div className="flex items-end gap-2 px-2" style={{ height: "224px" }}>
                   {distribution.buckets.map((bucket, i) => {
                     const maxCount = Math.max(...distribution.buckets.map(b => b.count));
                     const heightPct = maxCount > 0 ? (bucket.count / maxCount) * 100 : 0;
                     const pct = distribution.totalReports > 0
                       ? Math.round((bucket.count / distribution.totalReports) * 100)
                       : 0;
+                    const tierColor = getTierColor(bucket.label);
 
                     return (
-                      <button key={i} type="button" className="flex-1 flex flex-col items-center group relative h-full cursor-default focus:outline-none" aria-label={`${bucket.count} reports, ${pct}% of total, ${bucket.min}–${bucket.max} score range`}>
+                      <button key={i} type="button" className="flex-1 flex flex-col items-center group relative h-full cursor-default focus:outline-none" aria-label={`${bucket.count} reports, ${pct}% of total, ${bucket.label}`}>
                         <div className="w-full flex-1 relative">
                           <div
-                            className="absolute bottom-0 left-0 right-0 bar-gradient rounded-t-sm transition-all duration-500"
+                            className={cn(
+                              "absolute bottom-0 left-0 right-0 rounded-t-sm transition-all duration-700 ease-out",
+                              tierColor.bar,
+                            )}
                             style={{
                               height: `${Math.max(heightPct, 3)}%`,
                               opacity: 0.5 + (heightPct / 200),
+                              animationDelay: `${i * 100}ms`,
                             }}
                           />
+                          {bucket.count > 0 && (
+                            <div
+                              className={cn("absolute left-1/2 -translate-x-1/2 font-mono text-[10px] font-bold transition-opacity", tierColor.text)}
+                              style={{ bottom: `${Math.max(heightPct, 3) + 2}%` }}
+                            >
+                              {bucket.count}
+                            </div>
+                          )}
                         </div>
 
                         <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity glass-card text-popover-foreground text-xs px-3 py-2 rounded-lg pointer-events-none z-10 glow-border space-y-0.5">
-                          <div className="font-mono font-bold text-primary">{bucket.count} reports</div>
+                          <div className={cn("font-mono font-bold", tierColor.text)}>{bucket.count} reports</div>
                           <div className="text-muted-foreground">{pct}% of total</div>
-                          <div className="text-muted-foreground/60 text-[10px]">{bucket.min}–{bucket.max} score range</div>
+                          <div className="text-muted-foreground/60 text-[10px]">{bucket.label} ({bucket.min}&ndash;{bucket.max})</div>
                         </div>
                       </button>
                     );
                   })}
                 </div>
-                <div className="flex gap-2 mt-2">
-                  {distribution.buckets.map((bucket, i) => (
-                    <div key={i} className="flex-1 text-[10px] text-muted-foreground font-mono text-center whitespace-nowrap truncate">
-                      {bucket.label}
-                    </div>
-                  ))}
+
+                <div className="flex gap-2 px-2">
+                  {distribution.buckets.map((bucket, i) => {
+                    const tierColor = getTierColor(bucket.label);
+                    return (
+                      <div key={i} className="flex-1 text-center">
+                        <div className={cn("text-[10px] font-bold truncate", tierColor.text)}>{bucket.label}</div>
+                        <div className="text-[9px] text-muted-foreground/50 font-mono">{bucket.min}&ndash;{bucket.max}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-3 pt-2 border-t border-border/20 px-2">
+                  {distribution.buckets.map((bucket, i) => {
+                    const pct = distribution.totalReports > 0
+                      ? Math.round((bucket.count / distribution.totalReports) * 100)
+                      : 0;
+                    const tierColor = getTierColor(bucket.label);
+                    return (
+                      <div key={i} className="flex-1">
+                        <div className={cn("h-1.5 rounded-full", tierColor.bar)} style={{ width: `${Math.max(pct, 2)}%`, opacity: 0.7 }} />
+                        <div className="text-[9px] text-muted-foreground/40 mt-1 font-mono">{pct}%</div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -268,28 +400,30 @@ export default function Stats() {
               </div>
             ) : activity?.recentReports && activity.recentReports.length > 0 ? (
               <div className="space-y-3">
-                {activity.recentReports.map((report) => (
-                  <Link key={report.id} to={`/results/${report.id}`} className="block">
-                    <div className="p-3 glass-card rounded-lg hover:border-primary/20 transition-all group">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="font-mono text-sm text-primary glow-text-sm group-hover:glow-text transition-all">#{report.id}</div>
-                        <div className="text-xs text-muted-foreground">{new Date(report.createdAt).toLocaleTimeString()}</div>
+                {activity.recentReports.map((report) => {
+                  const tierColor = getTierColor(report.slopTier);
+                  return (
+                    <Link key={report.id} to={`/results/${report.id}`} className="block">
+                      <div className={cn("p-3 glass-card rounded-lg hover:border-primary/20 transition-all group border-l-2", tierColor.border)}>
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-mono text-sm text-primary glow-text-sm group-hover:glow-text transition-all">#{report.id}</div>
+                          <div className="text-xs text-muted-foreground">{new Date(report.createdAt).toLocaleTimeString()}</div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <Badge variant="outline" className={cn("text-[10px]", tierColor.text, tierColor.border)}>
+                            {report.slopTier}
+                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("text-xs font-mono font-bold", tierColor.text)}>{report.slopScore}</span>
+                            <span className="text-xs font-mono text-muted-foreground/50">
+                              {report.matchCount > 0 ? `${report.matchCount} match${report.matchCount > 1 ? "es" : ""}` : ""}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <Badge variant="outline" className={
-                          report.slopScore > 70 ? "border-destructive text-destructive" :
-                          report.slopScore > 30 ? "border-yellow-500 text-yellow-500" :
-                          "border-green-500 text-green-500"
-                        }>
-                          {report.slopTier}
-                        </Badge>
-                        <span className="text-xs font-mono">
-                          {report.matchCount > 0 ? `${report.matchCount} matches` : 'Clean'}
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
             ) : (
               <div className="py-8 text-center text-muted-foreground text-sm">No recent activity</div>

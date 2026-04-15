@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useId } from "react";
 
 interface ConfidenceGaugeProps {
   value: number;
@@ -11,11 +11,33 @@ export function ConfidenceGauge({ value, size = 140, label }: ConfidenceGaugePro
   const strokeWidth = 10;
   const r = (size - strokeWidth) / 2 - 4;
   const center = size / 2;
+  const filterId = useId().replace(/:/g, "_");
+
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    setProgress(0);
+    let frame: number;
+    let start: number | null = null;
+    const duration = 1000;
+    const animate = (ts: number) => {
+      if (!start) start = ts;
+      const elapsed = ts - start;
+      const t = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setProgress(eased);
+      if (t < 1) frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+
+  const animatedPct = pct * progress;
 
   const startAngle = Math.PI * 0.8;
   const endAngle = Math.PI * 2.2;
   const totalAngle = endAngle - startAngle;
-  const currentAngle = startAngle + totalAngle * pct;
+  const currentAngle = startAngle + totalAngle * animatedPct;
 
   const arcPath = (angle: number) => {
     const x = center + r * Math.cos(angle);
@@ -43,12 +65,13 @@ export function ConfidenceGauge({ value, size = 140, label }: ConfidenceGaugePro
   }, [pct]);
 
   const confidenceLabel = pct >= 0.8 ? "High" : pct >= 0.5 ? "Medium" : "Low";
+  const displayPct = Math.round(pct * 100 * progress);
 
   return (
     <div className="flex flex-col items-center">
       <svg viewBox={`0 0 ${size} ${size * 0.75}`} width={size} height={size * 0.75}>
         <defs>
-          <filter id="gauge-glow">
+          <filter id={`gauge-glow-${filterId}`}>
             <feGaussianBlur stdDeviation="3" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
@@ -70,7 +93,16 @@ export function ConfidenceGauge({ value, size = 140, label }: ConfidenceGaugePro
             stroke={color.stroke}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
-            filter="url(#gauge-glow)"
+            filter={`url(#gauge-glow-${filterId})`}
+          />
+        )}
+        {fgPath && (
+          <circle
+            cx={current.x}
+            cy={current.y}
+            r={4}
+            fill={color.stroke}
+            style={{ filter: `drop-shadow(0 0 4px ${color.glow})` }}
           />
         )}
         <text
@@ -83,7 +115,7 @@ export function ConfidenceGauge({ value, size = 140, label }: ConfidenceGaugePro
           fontFamily="monospace"
           className={color.text}
         >
-          {Math.round(pct * 100)}%
+          {displayPct}%
         </text>
         <text
           x={center}
@@ -92,7 +124,7 @@ export function ConfidenceGauge({ value, size = 140, label }: ConfidenceGaugePro
           fill="rgba(255,255,255,0.45)"
           fontSize={9}
           fontWeight={500}
-          style={{ textTransform: "uppercase" }}
+          style={{ textTransform: "uppercase", opacity: progress }}
         >
           {confidenceLabel}
         </text>
