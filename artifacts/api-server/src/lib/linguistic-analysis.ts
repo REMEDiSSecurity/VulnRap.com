@@ -73,13 +73,13 @@ const AI_PHRASES: WeightedPhrase[] = [
   { phrase: "embark on", weight: 5 },
 ];
 
-interface SycophraticPattern {
+interface FormulaicPattern {
   pattern: RegExp;
   weight: number;
   type: string;
 }
 
-const SYCOPHANTIC_PHRASES: SycophraticPattern[] = [
+const FORMULAIC_AI_PHRASES: FormulaicPattern[] = [
   { pattern: /I\s+(?:sincerely\s+)?apologize\s+for/i, weight: 10, type: "ai_apology" },
   { pattern: /I\s+hope\s+this\s+(?:helps|message\s+finds)/i, weight: 12, type: "ai_pleasantry" },
   { pattern: /(?:Certainly|Absolutely)!\s+(?:Let\s+me|I'll)/i, weight: 15, type: "ai_eager_response" },
@@ -235,16 +235,16 @@ function analyzeLexicalMarkers(text: string): { score: number; evidence: Linguis
     }
   }
 
-  let sycophraticWeight = 0;
-  let sycophraticCount = 0;
-  for (const sp of SYCOPHANTIC_PHRASES) {
+  let formulaicWeight = 0;
+  let formulaicCount = 0;
+  for (const sp of FORMULAIC_AI_PHRASES) {
     const matches = text.match(sp.pattern);
     if (matches) {
-      sycophraticCount++;
-      sycophraticWeight += sp.weight;
+      formulaicCount++;
+      formulaicWeight += sp.weight;
       evidence.push({
         type: sp.type,
-        description: `AI-characteristic phrase detected: "${matches[0]}"`,
+        description: `Formulaic AI pattern detected: "${matches[0]}"`,
         weight: sp.weight,
         matched: matches[0],
       });
@@ -252,11 +252,11 @@ function analyzeLexicalMarkers(text: string): { score: number; evidence: Linguis
   }
 
   const COMPOUND_MULTIPLIERS = [1.0, 1.0, 1.3, 1.7, 2.2, 2.5, 2.8, 3.0];
-  const multiplier = sycophraticCount < COMPOUND_MULTIPLIERS.length
-    ? COMPOUND_MULTIPLIERS[sycophraticCount] : 3.0;
-  const compoundedSycophratic = Math.round(sycophraticWeight * multiplier);
+  const multiplier = formulaicCount < COMPOUND_MULTIPLIERS.length
+    ? COMPOUND_MULTIPLIERS[formulaicCount] : 3.0;
+  const compoundedFormulaic = Math.round(formulaicWeight * multiplier);
 
-  totalWeight += compoundedSycophratic;
+  totalWeight += compoundedFormulaic;
 
   const score = Math.min(100, Math.round(30 * Math.log1p(totalWeight)));
   return { score, evidence };

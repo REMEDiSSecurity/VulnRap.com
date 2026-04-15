@@ -75,6 +75,21 @@ export const GetReportParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const getReportResponseSubstanceOnePocValidityMin = 0;
+export const getReportResponseSubstanceOnePocValidityMax = 100;
+
+export const getReportResponseSubstanceOneClaimSpecificityMin = 0;
+export const getReportResponseSubstanceOneClaimSpecificityMax = 100;
+
+export const getReportResponseSubstanceOneDomainCoherenceMin = 0;
+export const getReportResponseSubstanceOneDomainCoherenceMax = 100;
+
+export const getReportResponseSubstanceOneSubstanceScoreMin = 0;
+export const getReportResponseSubstanceOneSubstanceScoreMax = 100;
+
+export const getReportResponseSubstanceOneCoherenceScoreMin = 0;
+export const getReportResponseSubstanceOneCoherenceScoreMax = 100;
+
 export const GetReportResponse = zod.object({
   id: zod.number(),
   deleteToken: zod
@@ -120,6 +135,22 @@ export const GetReportResponse = zod.object({
         "Active content verification score (0-100, 50=neutral). Null when no verifiable references found.",
       ),
     quality: zod.number().describe("Report quality score (0-100)"),
+    substanceScore: zod
+      .number()
+      .nullish()
+      .describe("LLM substance score (0-100). Null when LLM not used."),
+    coherenceScore: zod
+      .number()
+      .nullish()
+      .describe("LLM coherence score (0-100). Null when LLM not used."),
+    pocValidity: zod
+      .number()
+      .nullish()
+      .describe("LLM PoC validity score (0-100). Null when LLM not used."),
+    domainCoherence: zod
+      .number()
+      .nullish()
+      .describe("LLM domain coherence score (0-100). Null when LLM not used."),
   }),
   evidence: zod
     .array(
@@ -753,6 +784,137 @@ export const GetReportResponse = zod.object({
     .describe(
       "AI triage assistant with reproduction guidance, gap analysis, don't-miss warnings, and reporter feedback. Null when not computed.",
     ),
+  claims: zod
+    .union([
+      zod
+        .object({
+          claimedProject: zod
+            .string()
+            .nullish()
+            .describe("The project the report claims to be about."),
+          claimedVersion: zod
+            .string()
+            .nullish()
+            .describe("The version of the project claimed."),
+          claimedFiles: zod
+            .array(zod.string())
+            .optional()
+            .describe("File paths referenced in the report."),
+          claimedFunctions: zod
+            .array(zod.string())
+            .optional()
+            .describe("Function names referenced in the report."),
+          claimedLineNumbers: zod
+            .array(zod.number())
+            .optional()
+            .describe("Line numbers referenced in the report."),
+          claimedCVEs: zod
+            .array(zod.string())
+            .optional()
+            .describe("CVE or CWE identifiers referenced."),
+          claimedImpact: zod
+            .string()
+            .nullish()
+            .describe(
+              "The impact type claimed (RCE, data_leak, DoS, auth_bypass, etc.).",
+            ),
+          cvssScore: zod
+            .number()
+            .nullish()
+            .describe("CVSS score claimed in the report."),
+          hasPoC: zod
+            .boolean()
+            .optional()
+            .describe("Whether a proof-of-concept is included."),
+          pocTargetsClaimedLibrary: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Whether the PoC actually exercises the claimed library.",
+            ),
+          hasAsanOutput: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Whether AddressSanitizer or similar output is included.",
+            ),
+          asanFromClaimedProject: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Whether the sanitizer output appears to be from the claimed project.",
+            ),
+          selfDisclosesAI: zod
+            .boolean()
+            .optional()
+            .describe("Whether the reporter mentions using AI assistance."),
+          complianceBuzzwords: zod
+            .array(zod.string())
+            .optional()
+            .describe(
+              "Compliance frameworks mentioned (GDPR, PCI-DSS, HIPAA, etc.).",
+            ),
+          complianceRelevance: zod
+            .enum(["high", "medium", "low", "none"])
+            .optional()
+            .describe(
+              "Whether the cited compliance frameworks are relevant to the project type.",
+            ),
+        })
+        .describe(
+          "Extracted claims from the vulnerability report, identified by LLM analysis.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Extracted claims from the report (project, files, functions, PoC presence, etc.). Null when LLM analysis was not performed.",
+    ),
+  substance: zod
+    .union([
+      zod
+        .object({
+          pocValidity: zod
+            .number()
+            .min(getReportResponseSubstanceOnePocValidityMin)
+            .max(getReportResponseSubstanceOnePocValidityMax)
+            .describe(
+              "Does the PoC actually test the claimed vulnerability? 0 = no PoC or doesn't reference the library.",
+            ),
+          claimSpecificity: zod
+            .number()
+            .min(getReportResponseSubstanceOneClaimSpecificityMin)
+            .max(getReportResponseSubstanceOneClaimSpecificityMax)
+            .describe(
+              "Are claims specific AND verifiable? Fabricated specifics score lower than vague claims.",
+            ),
+          domainCoherence: zod
+            .number()
+            .min(getReportResponseSubstanceOneDomainCoherenceMin)
+            .max(getReportResponseSubstanceOneDomainCoherenceMax)
+            .describe(
+              "Do claims make sense for the project's architecture and purpose?",
+            ),
+          substanceScore: zod
+            .number()
+            .min(getReportResponseSubstanceOneSubstanceScoreMin)
+            .max(getReportResponseSubstanceOneSubstanceScoreMax)
+            .describe(
+              "Weighted average of pocValidity, claimSpecificity, and domainCoherence.",
+            ),
+          coherenceScore: zod
+            .number()
+            .min(getReportResponseSubstanceOneCoherenceScoreMin)
+            .max(getReportResponseSubstanceOneCoherenceScoreMax)
+            .describe("How well all claims fit together as a coherent whole."),
+        })
+        .describe("Substance-based scoring dimensions from LLM analysis."),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Substance-based scoring (PoC validity, claim specificity, domain coherence). Null when LLM analysis was not performed.",
+    ),
   fileName: zod.string().nullish(),
   fileSize: zod.number(),
   createdAt: zod.coerce.date(),
@@ -910,6 +1072,21 @@ export const CheckReportBody = zod.object({
     ),
 });
 
+export const checkReportResponseSubstanceOnePocValidityMin = 0;
+export const checkReportResponseSubstanceOnePocValidityMax = 100;
+
+export const checkReportResponseSubstanceOneClaimSpecificityMin = 0;
+export const checkReportResponseSubstanceOneClaimSpecificityMax = 100;
+
+export const checkReportResponseSubstanceOneDomainCoherenceMin = 0;
+export const checkReportResponseSubstanceOneDomainCoherenceMax = 100;
+
+export const checkReportResponseSubstanceOneSubstanceScoreMin = 0;
+export const checkReportResponseSubstanceOneSubstanceScoreMax = 100;
+
+export const checkReportResponseSubstanceOneCoherenceScoreMin = 0;
+export const checkReportResponseSubstanceOneCoherenceScoreMax = 100;
+
 export const CheckReportResponse = zod.object({
   slopScore: zod.number(),
   slopTier: zod.string(),
@@ -936,6 +1113,22 @@ export const CheckReportResponse = zod.object({
         "Active content verification score (0-100, 50=neutral). Null when no verifiable references found.",
       ),
     quality: zod.number().describe("Report quality score (0-100)"),
+    substanceScore: zod
+      .number()
+      .nullish()
+      .describe("LLM substance score (0-100). Null when LLM not used."),
+    coherenceScore: zod
+      .number()
+      .nullish()
+      .describe("LLM coherence score (0-100). Null when LLM not used."),
+    pocValidity: zod
+      .number()
+      .nullish()
+      .describe("LLM PoC validity score (0-100). Null when LLM not used."),
+    domainCoherence: zod
+      .number()
+      .nullish()
+      .describe("LLM domain coherence score (0-100). Null when LLM not used."),
   }),
   evidence: zod.array(
     zod.object({
@@ -1489,6 +1682,137 @@ export const CheckReportResponse = zod.object({
     .optional()
     .describe(
       "AI triage assistant with reproduction guidance, gap analysis, don't-miss warnings, and reporter feedback. Null when not computed.",
+    ),
+  claims: zod
+    .union([
+      zod
+        .object({
+          claimedProject: zod
+            .string()
+            .nullish()
+            .describe("The project the report claims to be about."),
+          claimedVersion: zod
+            .string()
+            .nullish()
+            .describe("The version of the project claimed."),
+          claimedFiles: zod
+            .array(zod.string())
+            .optional()
+            .describe("File paths referenced in the report."),
+          claimedFunctions: zod
+            .array(zod.string())
+            .optional()
+            .describe("Function names referenced in the report."),
+          claimedLineNumbers: zod
+            .array(zod.number())
+            .optional()
+            .describe("Line numbers referenced in the report."),
+          claimedCVEs: zod
+            .array(zod.string())
+            .optional()
+            .describe("CVE or CWE identifiers referenced."),
+          claimedImpact: zod
+            .string()
+            .nullish()
+            .describe(
+              "The impact type claimed (RCE, data_leak, DoS, auth_bypass, etc.).",
+            ),
+          cvssScore: zod
+            .number()
+            .nullish()
+            .describe("CVSS score claimed in the report."),
+          hasPoC: zod
+            .boolean()
+            .optional()
+            .describe("Whether a proof-of-concept is included."),
+          pocTargetsClaimedLibrary: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Whether the PoC actually exercises the claimed library.",
+            ),
+          hasAsanOutput: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Whether AddressSanitizer or similar output is included.",
+            ),
+          asanFromClaimedProject: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Whether the sanitizer output appears to be from the claimed project.",
+            ),
+          selfDisclosesAI: zod
+            .boolean()
+            .optional()
+            .describe("Whether the reporter mentions using AI assistance."),
+          complianceBuzzwords: zod
+            .array(zod.string())
+            .optional()
+            .describe(
+              "Compliance frameworks mentioned (GDPR, PCI-DSS, HIPAA, etc.).",
+            ),
+          complianceRelevance: zod
+            .enum(["high", "medium", "low", "none"])
+            .optional()
+            .describe(
+              "Whether the cited compliance frameworks are relevant to the project type.",
+            ),
+        })
+        .describe(
+          "Extracted claims from the vulnerability report, identified by LLM analysis.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Extracted claims from the report. Null when LLM analysis was not performed.",
+    ),
+  substance: zod
+    .union([
+      zod
+        .object({
+          pocValidity: zod
+            .number()
+            .min(checkReportResponseSubstanceOnePocValidityMin)
+            .max(checkReportResponseSubstanceOnePocValidityMax)
+            .describe(
+              "Does the PoC actually test the claimed vulnerability? 0 = no PoC or doesn't reference the library.",
+            ),
+          claimSpecificity: zod
+            .number()
+            .min(checkReportResponseSubstanceOneClaimSpecificityMin)
+            .max(checkReportResponseSubstanceOneClaimSpecificityMax)
+            .describe(
+              "Are claims specific AND verifiable? Fabricated specifics score lower than vague claims.",
+            ),
+          domainCoherence: zod
+            .number()
+            .min(checkReportResponseSubstanceOneDomainCoherenceMin)
+            .max(checkReportResponseSubstanceOneDomainCoherenceMax)
+            .describe(
+              "Do claims make sense for the project's architecture and purpose?",
+            ),
+          substanceScore: zod
+            .number()
+            .min(checkReportResponseSubstanceOneSubstanceScoreMin)
+            .max(checkReportResponseSubstanceOneSubstanceScoreMax)
+            .describe(
+              "Weighted average of pocValidity, claimSpecificity, and domainCoherence.",
+            ),
+          coherenceScore: zod
+            .number()
+            .min(checkReportResponseSubstanceOneCoherenceScoreMin)
+            .max(checkReportResponseSubstanceOneCoherenceScoreMax)
+            .describe("How well all claims fit together as a coherent whole."),
+        })
+        .describe("Substance-based scoring dimensions from LLM analysis."),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Substance-based scoring. Null when LLM analysis was not performed.",
     ),
   previouslySubmitted: zod
     .boolean()

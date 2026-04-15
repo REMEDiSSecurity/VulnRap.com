@@ -124,30 +124,44 @@ function analyzePlaceholderUrls(text: string): { score: number; evidence: Factua
 
   const lowerText = text.toLowerCase();
 
+  const hasPreRedacted = /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]|\[MASKED\]|\[HIDDEN\]|__PLACEHOLDER__/i.test(text);
+  const RFC_EXAMPLE_DOMAINS = new Set(["example.com", "example.org", "example.net"]);
+
   for (const domain of PLACEHOLDER_DOMAINS) {
     if (lowerText.includes(domain)) {
       const isInCodeBlock = new RegExp("```[\\s\\S]*?" + domain.replace(/\./g, "\\.") + "[\\s\\S]*?```").test(text);
-      const weight = isInCodeBlock ? 6 : 12;
-      totalWeight += weight;
-      evidence.push({
-        type: "placeholder_url",
-        description: `Placeholder domain "${domain}" found${isInCodeBlock ? " (in code block)" : ""} — real reports reference actual target systems`,
-        weight,
-        matched: domain,
-      });
+      const isRfcExample = RFC_EXAMPLE_DOMAINS.has(domain);
+
+      if (isRfcExample || hasPreRedacted) {
+        evidence.push({
+          type: "placeholder_url_info",
+          description: `Placeholder domain "${domain}" found${isInCodeBlock ? " (in code block)" : ""}${hasPreRedacted ? " — report contains redacted values, placeholder may be a sanitization artifact" : " — RFC 2606 reserved domain, common practice in vulnerability reports"}`,
+          weight: 0,
+          matched: domain,
+        });
+      } else {
+        const weight = isInCodeBlock ? 3 : 6;
+        totalWeight += weight;
+        evidence.push({
+          type: "placeholder_url",
+          description: `Placeholder domain "${domain}" found${isInCodeBlock ? " (in code block)" : ""} — may indicate templated content`,
+          weight,
+          matched: domain,
+        });
+      }
     }
   }
 
+  const nonInfoPlaceholders = evidence.filter(e => e.type === "placeholder_url").length;
   for (const path of PLACEHOLDER_PATHS) {
     const pathRegex = new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     if (pathRegex.test(text)) {
-      const alreadyHasPlaceholderDomain = evidence.some(e => e.type === "placeholder_url");
-      if (alreadyHasPlaceholderDomain) {
-        totalWeight += 4;
+      if (nonInfoPlaceholders > 0) {
+        totalWeight += 2;
         evidence.push({
           type: "generic_path",
           description: `Generic API path "${path}" combined with placeholder domain`,
-          weight: 4,
+          weight: 2,
           matched: path,
         });
       }

@@ -67,6 +67,10 @@ function safeBreakdown(bd: unknown): {
     ...(typeof raw.hallucinationDetector === "number" ? { hallucinationDetector: raw.hallucinationDetector } : {}),
     ...(typeof raw.claimSpecificity === "number" ? { claimSpecificity: raw.claimSpecificity } : {}),
     ...(typeof raw.internalConsistency === "number" ? { internalConsistency: raw.internalConsistency } : {}),
+    ...(raw.substanceScore != null ? { substanceScore: raw.substanceScore } : {}),
+    ...(raw.coherenceScore != null ? { coherenceScore: raw.coherenceScore } : {}),
+    ...(raw.pocValidity != null ? { pocValidity: raw.pocValidity } : {}),
+    ...(raw.domainCoherence != null ? { domainCoherence: raw.domainCoherence } : {}),
   };
 }
 
@@ -199,6 +203,7 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
       evidence: [], humanIndicators: [], slopTier: "Questionable",
       authenticityScore: 50, validityScore: 50, quadrant: "WEAK_HUMAN" as const,
       archetype: "REQUEST_DETAILS" as const, analysisMode: "heuristic_only" as const, confidenceNote: null,
+      claims: null, substance: null,
     };
 
     let triageRecommendation: TriageRecommendation | null = null;
@@ -260,6 +265,8 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
       archetype: "REQUEST_DETAILS" as const,
       analysisMode: "heuristic_only" as const,
       confidenceNote: "Analysis ran in degraded mode due to an internal error. Scores may be unreliable.",
+      claims: null,
+      substance: null,
       feedback: [],
       llmResult: null,
       verification: null,
@@ -735,6 +742,8 @@ router.post("/reports", async (req, res): Promise<void> => {
     verification: analysisResult.verification ?? null,
     triageRecommendation: analysisResult.triageRecommendation ?? null,
     triageAssistant: analysisResult.triageAssistant ?? null,
+    claims: analysisResult.claims ?? null,
+    substance: analysisResult.substance ?? null,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
@@ -1028,6 +1037,8 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     verification: analysisResult.verification ?? null,
     triageRecommendation: analysisResult.triageRecommendation ?? null,
     triageAssistant: analysisResult.triageAssistant ?? null,
+    claims: analysisResult.claims ?? null,
+    substance: analysisResult.substance ?? null,
     previouslySubmitted: false,
     existingReportId: null,
   });

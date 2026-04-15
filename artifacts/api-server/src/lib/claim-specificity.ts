@@ -33,9 +33,10 @@ export function computeClaimSpecificity(text: string): ClaimSpecificityResult {
   if (hasCommitSHA) { score += 15; markers.push({ type: "commit_sha_referenced", weight: -8 }); }
   if (hasGHSA) { score += 12; markers.push({ type: "ghsa_referenced", weight: -6 }); }
 
-  if (/example\.com|your-?(?:app|server|domain)/i.test(text)) {
-    score -= 15;
-    markers.push({ type: "generic_placeholder", description: "Uses example.com or your-app placeholder", weight: 10 });
+  const hasPreRedacted = /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]|\[MASKED\]|\[HIDDEN\]/i.test(text);
+  if (/your-?(?:app|server|domain)/i.test(text)) {
+    score -= 10;
+    markers.push({ type: "generic_placeholder", description: "Uses your-app/your-server placeholder instead of actual target name", weight: 8 });
   }
   if (/the\s+application|your\s+(?:code|system|infrastructure)/i.test(text) && !hasProject) {
     score -= 10;

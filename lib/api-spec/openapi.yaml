@@ -837,6 +837,16 @@ components:
             - $ref: "#/components/schemas/TriageAssistant"
             - type: "null"
           description: AI triage assistant with reproduction guidance, gap analysis, don't-miss warnings, and reporter feedback. Null when not computed.
+        claims:
+          oneOf:
+            - $ref: "#/components/schemas/LLMClaims"
+            - type: "null"
+          description: Extracted claims from the report (project, files, functions, PoC presence, etc.). Null when LLM analysis was not performed.
+        substance:
+          oneOf:
+            - $ref: "#/components/schemas/LLMSubstanceScores"
+            - type: "null"
+          description: Substance-based scoring (PoC validity, claim specificity, domain coherence). Null when LLM analysis was not performed.
         fileName:
           type: ["string", "null"]
         fileSize:
@@ -1104,6 +1114,16 @@ components:
             - $ref: "#/components/schemas/TriageAssistant"
             - type: "null"
           description: AI triage assistant with reproduction guidance, gap analysis, don't-miss warnings, and reporter feedback. Null when not computed.
+        claims:
+          oneOf:
+            - $ref: "#/components/schemas/LLMClaims"
+            - type: "null"
+          description: Extracted claims from the report. Null when LLM analysis was not performed.
+        substance:
+          oneOf:
+            - $ref: "#/components/schemas/LLMSubstanceScores"
+            - type: "null"
+          description: Substance-based scoring. Null when LLM analysis was not performed.
         previouslySubmitted:
           type: boolean
           description: Whether this exact report was found in the database
@@ -1476,6 +1496,18 @@ components:
         quality:
           type: integer
           description: Report quality score (0-100)
+        substanceScore:
+          type: ["integer", "null"]
+          description: LLM substance score (0-100). Null when LLM not used.
+        coherenceScore:
+          type: ["integer", "null"]
+          description: LLM coherence score (0-100). Null when LLM not used.
+        pocValidity:
+          type: ["integer", "null"]
+          description: LLM PoC validity score (0-100). Null when LLM not used.
+        domainCoherence:
+          type: ["integer", "null"]
+          description: LLM domain coherence score (0-100). Null when LLM not used.
       required:
         - linguistic
         - factual
@@ -1901,6 +1933,103 @@ components:
         - setupCommands
         - notes
         - hardware
+
+    LLMClaims:
+      type: object
+      description: Extracted claims from the vulnerability report, identified by LLM analysis.
+      properties:
+        claimedProject:
+          type: ["string", "null"]
+          description: The project the report claims to be about.
+        claimedVersion:
+          type: ["string", "null"]
+          description: The version of the project claimed.
+        claimedFiles:
+          type: array
+          items:
+            type: string
+          description: File paths referenced in the report.
+        claimedFunctions:
+          type: array
+          items:
+            type: string
+          description: Function names referenced in the report.
+        claimedLineNumbers:
+          type: array
+          items:
+            type: integer
+          description: Line numbers referenced in the report.
+        claimedCVEs:
+          type: array
+          items:
+            type: string
+          description: CVE or CWE identifiers referenced.
+        claimedImpact:
+          type: ["string", "null"]
+          description: The impact type claimed (RCE, data_leak, DoS, auth_bypass, etc.).
+        cvssScore:
+          type: ["number", "null"]
+          description: CVSS score claimed in the report.
+        hasPoC:
+          type: boolean
+          description: Whether a proof-of-concept is included.
+        pocTargetsClaimedLibrary:
+          type: boolean
+          description: Whether the PoC actually exercises the claimed library.
+        hasAsanOutput:
+          type: boolean
+          description: Whether AddressSanitizer or similar output is included.
+        asanFromClaimedProject:
+          type: boolean
+          description: Whether the sanitizer output appears to be from the claimed project.
+        selfDisclosesAI:
+          type: boolean
+          description: Whether the reporter mentions using AI assistance.
+        complianceBuzzwords:
+          type: array
+          items:
+            type: string
+          description: Compliance frameworks mentioned (GDPR, PCI-DSS, HIPAA, etc.).
+        complianceRelevance:
+          type: string
+          enum: ["high", "medium", "low", "none"]
+          description: Whether the cited compliance frameworks are relevant to the project type.
+
+    LLMSubstanceScores:
+      type: object
+      description: Substance-based scoring dimensions from LLM analysis.
+      properties:
+        pocValidity:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Does the PoC actually test the claimed vulnerability? 0 = no PoC or doesn't reference the library.
+        claimSpecificity:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Are claims specific AND verifiable? Fabricated specifics score lower than vague claims.
+        domainCoherence:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Do claims make sense for the project's architecture and purpose?
+        substanceScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Weighted average of pocValidity, claimSpecificity, and domainCoherence.
+        coherenceScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: How well all claims fit together as a coherent whole.
+      required:
+        - pocValidity
+        - claimSpecificity
+        - domainCoherence
+        - substanceScore
+        - coherenceScore
 
     TriageAssistant:
       type: object

@@ -25,4 +25,24 @@ export interface ScoreBreakdown {
   verification?: number | null;
   /** Report quality score (0-100) */
   quality: number;
+  /**
+   * LLM substance score (0-100). Null when LLM not used.
+   * @nullable
+   */
+  substanceScore?: number | null;
+  /**
+   * LLM coherence score (0-100). Null when LLM not used.
+   * @nullable
+   */
+  coherenceScore?: number | null;
+  /**
+   * LLM PoC validity score (0-100). Null when LLM not used.
+   * @nullable
+   */
+  pocValidity?: number | null;
+  /**
+   * LLM domain coherence score (0-100). Null when LLM not used.
+   * @nullable
+   */
+  domainCoherence?: number | null;
 }

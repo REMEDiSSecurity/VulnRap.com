@@ -159,13 +159,13 @@ export function analyzeSloppiness(text: string): SlopAnalysis {
   const allFeedback = [...slopSignals, ...qualityFeedback];
 
   let tier: string;
-  if (slopScore > 75) {
+  if (slopScore >= 80) {
     tier = "Slop";
-  } else if (slopScore > 55) {
+  } else if (slopScore >= 60) {
     tier = "Likely Slop";
-  } else if (slopScore > 35) {
+  } else if (slopScore >= 40) {
     tier = "Questionable";
-  } else if (slopScore > 20) {
+  } else if (slopScore >= 20) {
     tier = "Likely Human";
   } else {
     tier = "Clean";

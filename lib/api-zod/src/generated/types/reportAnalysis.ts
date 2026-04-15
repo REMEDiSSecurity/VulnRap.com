@@ -7,6 +7,8 @@
  */
 import type { EvidenceItem } from "./evidenceItem";
 import type { HumanIndicator } from "./humanIndicator";
+import type { LLMClaims } from "./lLMClaims";
+import type { LLMSubstanceScores } from "./lLMSubstanceScores";
 import type { RedactionSummary } from "./redactionSummary";
 import type { ReportAnalysisAnalysisMode } from "./reportAnalysisAnalysisMode";
 import type { ReportAnalysisArchetype } from "./reportAnalysisArchetype";
@@ -117,6 +119,10 @@ export interface ReportAnalysis {
   triageRecommendation?: TriageRecommendation | null;
   /** AI triage assistant with reproduction guidance, gap analysis, don't-miss warnings, and reporter feedback. Null when not computed. */
   triageAssistant?: TriageAssistant | null;
+  /** Extracted claims from the report (project, files, functions, PoC presence, etc.). Null when LLM analysis was not performed. */
+  claims?: LLMClaims | null;
+  /** Substance-based scoring (PoC validity, claim specificity, domain coherence). Null when LLM analysis was not performed. */
+  substance?: LLMSubstanceScores | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;

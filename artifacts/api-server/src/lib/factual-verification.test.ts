@@ -2,11 +2,25 @@ import { describe, it, expect } from "vitest";
 import { analyzeFactual } from "./factual-verification.js";
 
 describe("analyzeFactual", () => {
-  it("detects placeholder domains", () => {
+  it("treats RFC example domains as informational (not penalized)", () => {
     const text = "The vulnerability was found at https://example.com/api/v1/users where an attacker can inject SQL commands into the search parameter.";
     const result = analyzeFactual(text);
+    expect(result.placeholderScore).toBe(0);
+    expect(result.evidence.some(e => e.type === "placeholder_url_info" && e.description.includes("RFC 2606"))).toBe(true);
+  });
+
+  it("penalizes non-RFC placeholder domains", () => {
+    const text = "The vulnerability was found at https://target.com/api/v1/users where an attacker can inject SQL commands.";
+    const result = analyzeFactual(text);
     expect(result.placeholderScore).toBeGreaterThan(0);
-    expect(result.evidence.some(e => e.type === "placeholder_domain" || e.description.toLowerCase().includes("placeholder"))).toBe(true);
+    expect(result.evidence.some(e => e.type === "placeholder_url")).toBe(true);
+  });
+
+  it("treats example.com as informational when report has redacted values", () => {
+    const text = "Found XSS at https://example.com/search?q=test. The admin panel at [REDACTED] was also affected.";
+    const result = analyzeFactual(text);
+    expect(result.placeholderScore).toBe(0);
+    expect(result.evidence.some(e => e.type === "placeholder_url_info" && e.description.includes("sanitization artifact"))).toBe(true);
   });
 
   it("detects severity inflation", () => {

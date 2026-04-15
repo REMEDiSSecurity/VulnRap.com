@@ -1,6 +1,6 @@
 import type { LinguisticResult } from "./linguistic-analysis";
 import type { FactualResult } from "./factual-verification";
-import type { LLMSlopResult } from "./llm-slop";
+import type { LLMSlopResult, LLMSubstanceScores, LLMClaims } from "./llm-slop";
 import { detectHumanIndicators, type HumanIndicator } from "./human-indicators";
 import type { VerificationResult } from "./active-verification";
 import { getCurrentConfig, getConfigVersion } from "./scoring-config";
@@ -25,6 +25,10 @@ export interface ScoreBreakdown {
   hallucinationDetector?: number;
   claimSpecificity?: number;
   internalConsistency?: number;
+  substanceScore?: number | null;
+  coherenceScore?: number | null;
+  pocValidity?: number | null;
+  domainCoherence?: number | null;
 }
 
 export interface EvidenceItem {
@@ -61,6 +65,8 @@ export interface FusionResult {
   archetype: Archetype;
   analysisMode: AnalysisMode;
   confidenceNote: string | null;
+  claims: LLMClaims | null;
+  substance: LLMSubstanceScores | null;
 }
 
 export interface TierThresholds {
@@ -189,7 +195,15 @@ function computeValidityScore(
   const heuristic = computeHeuristicValidity(factual, evidenceQuality, hallucination, claimSpec, consistency, verification);
 
   if (llm && llm.llmBreakdown) {
-    const llmRaw = llm.llmBreakdown.validityScore ?? 50;
+    let llmRaw = llm.llmBreakdown.validityScore ?? 50;
+
+    if (llm.llmSubstance) {
+      const sub = llm.llmSubstance;
+      const substanceModifier = (sub.substanceScore - 50) * 0.15;
+      const coherenceModifier = (sub.coherenceScore - 50) * 0.10;
+      llmRaw = Math.min(100, Math.max(0, Math.round(llmRaw + substanceModifier + coherenceModifier)));
+    }
+
     const final = Math.min(100, Math.max(0, Math.round(heuristic * 0.50 + llmRaw * 0.50)));
     return { final, heuristic, llmRaw };
   }
@@ -270,7 +284,36 @@ export function fuseScores(
 
   const humanResult = detectHumanIndicators(originalText);
 
-  const authenticityScore = computeAuthenticityScore(linguistic, llm, spectral, humanResult);
+  let authenticityScore = computeAuthenticityScore(linguistic, llm, spectral, humanResult);
+
+  if (llm?.llmSubstance && llm?.llmClaims) {
+    const sub = llm.llmSubstance;
+    const claims = llm.llmClaims;
+
+    if (sub.pocValidity < 20 && claims.hasPoC) {
+      authenticityScore = Math.min(100, authenticityScore + 10);
+      allEvidence.push({ type: "substance_poc_mismatch", description: "PoC provided but does not exercise the claimed library or vulnerability", weight: 10 });
+    }
+    if (sub.domainCoherence < 25) {
+      authenticityScore = Math.min(100, authenticityScore + 8);
+      allEvidence.push({ type: "substance_domain_incoherent", description: "Claims show fundamental misunderstanding of the project's architecture or purpose", weight: 8 });
+    }
+    if (claims.selfDisclosesAI && (sub.pocValidity < 40 || sub.domainCoherence < 30 || sub.claimSpecificity < 25)) {
+      authenticityScore = Math.min(100, authenticityScore + 8);
+      allEvidence.push({ type: "substance_ai_low_quality", description: "Reporter discloses AI use combined with low substance scores", weight: 8 });
+    }
+    if (claims.complianceRelevance === "low" && claims.complianceBuzzwords.length >= 2) {
+      authenticityScore = Math.min(100, authenticityScore + 6);
+      allEvidence.push({ type: "substance_irrelevant_compliance", description: `Compliance frameworks (${claims.complianceBuzzwords.join(", ")}) cited but irrelevant to the project type`, weight: 6 });
+    }
+    if (sub.pocValidity > 75) {
+      authenticityScore = Math.max(0, authenticityScore - 8);
+    }
+    if (sub.domainCoherence > 70) {
+      authenticityScore = Math.max(0, authenticityScore - 5);
+    }
+  }
+
   const validityResult = computeValidityScore(
     factual, llm, evidenceQuality, hallucination, claimSpec, consistency, verification ?? null,
   );
@@ -349,6 +392,10 @@ export function fuseScores(
     hallucinationDetector: hallucination.score,
     claimSpecificity: claimSpec.score,
     internalConsistency: consistency.score,
+    substanceScore: llm?.llmSubstance?.substanceScore ?? null,
+    coherenceScore: llm?.llmSubstance?.coherenceScore ?? null,
+    pocValidity: llm?.llmSubstance?.pocValidity ?? null,
+    domainCoherence: llm?.llmSubstance?.domainCoherence ?? null,
   };
 
   const analysisMode: AnalysisMode = llm ? "llm_enhanced" : "heuristic_only";
@@ -370,6 +417,8 @@ export function fuseScores(
     archetype,
     analysisMode,
     confidenceNote,
+    claims: llm?.llmClaims ?? null,
+    substance: llm?.llmSubstance ?? null,
   };
 }
 

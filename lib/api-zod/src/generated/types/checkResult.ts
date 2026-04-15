@@ -15,6 +15,8 @@ import type { CheckResultSectionHashes } from "./checkResultSectionHashes";
 import type { CheckResultSensitivityProfile } from "./checkResultSensitivityProfile";
 import type { EvidenceItem } from "./evidenceItem";
 import type { HumanIndicator } from "./humanIndicator";
+import type { LLMClaims } from "./lLMClaims";
+import type { LLMSubstanceScores } from "./lLMSubstanceScores";
 import type { RedactionSummary } from "./redactionSummary";
 import type { ScoreBreakdown } from "./scoreBreakdown";
 import type { SectionMatchItem } from "./sectionMatchItem";
@@ -91,6 +93,10 @@ export interface CheckResult {
   triageRecommendation?: TriageRecommendation | null;
   /** AI triage assistant with reproduction guidance, gap analysis, don't-miss warnings, and reporter feedback. Null when not computed. */
   triageAssistant?: TriageAssistant | null;
+  /** Extracted claims from the report. Null when LLM analysis was not performed. */
+  claims?: LLMClaims | null;
+  /** Substance-based scoring. Null when LLM analysis was not performed. */
+  substance?: LLMSubstanceScores | null;
   /** Whether this exact report was found in the database */
   previouslySubmitted: boolean;
   /**

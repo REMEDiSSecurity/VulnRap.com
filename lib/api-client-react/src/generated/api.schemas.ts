@@ -219,6 +219,26 @@ export interface ScoreBreakdown {
   verification?: number | null;
   /** Report quality score (0-100) */
   quality: number;
+  /**
+   * LLM substance score (0-100). Null when LLM not used.
+   * @nullable
+   */
+  substanceScore?: number | null;
+  /**
+   * LLM coherence score (0-100). Null when LLM not used.
+   * @nullable
+   */
+  coherenceScore?: number | null;
+  /**
+   * LLM PoC validity score (0-100). Null when LLM not used.
+   * @nullable
+   */
+  pocValidity?: number | null;
+  /**
+   * LLM domain coherence score (0-100). Null when LLM not used.
+   * @nullable
+   */
+  domainCoherence?: number | null;
 }
 
 export interface EvidenceItem {
@@ -562,6 +582,103 @@ export interface TriageAssistant {
   reproRecipe?: ReproRecipe | null;
 }
 
+/**
+ * Whether the cited compliance frameworks are relevant to the project type.
+ */
+export type LLMClaimsComplianceRelevance =
+  (typeof LLMClaimsComplianceRelevance)[keyof typeof LLMClaimsComplianceRelevance];
+
+export const LLMClaimsComplianceRelevance = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+  none: "none",
+} as const;
+
+/**
+ * Extracted claims from the vulnerability report, identified by LLM analysis.
+ */
+export interface LLMClaims {
+  /**
+   * The project the report claims to be about.
+   * @nullable
+   */
+  claimedProject?: string | null;
+  /**
+   * The version of the project claimed.
+   * @nullable
+   */
+  claimedVersion?: string | null;
+  /** File paths referenced in the report. */
+  claimedFiles?: string[];
+  /** Function names referenced in the report. */
+  claimedFunctions?: string[];
+  /** Line numbers referenced in the report. */
+  claimedLineNumbers?: number[];
+  /** CVE or CWE identifiers referenced. */
+  claimedCVEs?: string[];
+  /**
+   * The impact type claimed (RCE, data_leak, DoS, auth_bypass, etc.).
+   * @nullable
+   */
+  claimedImpact?: string | null;
+  /**
+   * CVSS score claimed in the report.
+   * @nullable
+   */
+  cvssScore?: number | null;
+  /** Whether a proof-of-concept is included. */
+  hasPoC?: boolean;
+  /** Whether the PoC actually exercises the claimed library. */
+  pocTargetsClaimedLibrary?: boolean;
+  /** Whether AddressSanitizer or similar output is included. */
+  hasAsanOutput?: boolean;
+  /** Whether the sanitizer output appears to be from the claimed project. */
+  asanFromClaimedProject?: boolean;
+  /** Whether the reporter mentions using AI assistance. */
+  selfDisclosesAI?: boolean;
+  /** Compliance frameworks mentioned (GDPR, PCI-DSS, HIPAA, etc.). */
+  complianceBuzzwords?: string[];
+  /** Whether the cited compliance frameworks are relevant to the project type. */
+  complianceRelevance?: LLMClaimsComplianceRelevance;
+}
+
+/**
+ * Substance-based scoring dimensions from LLM analysis.
+ */
+export interface LLMSubstanceScores {
+  /**
+   * Does the PoC actually test the claimed vulnerability? 0 = no PoC or doesn't reference the library.
+   * @minimum 0
+   * @maximum 100
+   */
+  pocValidity: number;
+  /**
+   * Are claims specific AND verifiable? Fabricated specifics score lower than vague claims.
+   * @minimum 0
+   * @maximum 100
+   */
+  claimSpecificity: number;
+  /**
+   * Do claims make sense for the project's architecture and purpose?
+   * @minimum 0
+   * @maximum 100
+   */
+  domainCoherence: number;
+  /**
+   * Weighted average of pocValidity, claimSpecificity, and domainCoherence.
+   * @minimum 0
+   * @maximum 100
+   */
+  substanceScore: number;
+  /**
+   * How well all claims fit together as a coherent whole.
+   * @minimum 0
+   * @maximum 100
+   */
+  coherenceScore: number;
+}
+
 export interface ReportAnalysis {
   id: number;
   /** Secret token for deleting this report. Only returned on initial submission. Store it — it cannot be recovered. */
@@ -655,6 +772,10 @@ export interface ReportAnalysis {
   triageRecommendation?: TriageRecommendation | null;
   /** AI triage assistant with reproduction guidance, gap analysis, don't-miss warnings, and reporter feedback. Null when not computed. */
   triageAssistant?: TriageAssistant | null;
+  /** Extracted claims from the report (project, files, functions, PoC presence, etc.). Null when LLM analysis was not performed. */
+  claims?: LLMClaims | null;
+  /** Substance-based scoring (PoC validity, claim specificity, domain coherence). Null when LLM analysis was not performed. */
+  substance?: LLMSubstanceScores | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;
@@ -867,6 +988,10 @@ export interface CheckResult {
   triageRecommendation?: TriageRecommendation | null;
   /** AI triage assistant with reproduction guidance, gap analysis, don't-miss warnings, and reporter feedback. Null when not computed. */
   triageAssistant?: TriageAssistant | null;
+  /** Extracted claims from the report. Null when LLM analysis was not performed. */
+  claims?: LLMClaims | null;
+  /** Substance-based scoring. Null when LLM analysis was not performed. */
+  substance?: LLMSubstanceScores | null;
   /** Whether this exact report was found in the database */
   previouslySubmitted: boolean;
   /**
