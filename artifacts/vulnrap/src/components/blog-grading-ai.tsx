@@ -19,6 +19,39 @@ function Code({ children }: { children: React.ReactNode }) {
   return <code className="text-primary font-mono text-xs bg-primary/10 px-1 py-0.5 rounded">{children}</code>;
 }
 
+function CodeBlock({ children }: { children: string }) {
+  return (
+    <pre className="bg-background/80 border border-border/50 rounded-lg p-4 text-xs font-mono overflow-x-auto mb-4">
+      {children}
+    </pre>
+  );
+}
+
+function Table({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  return (
+    <div className="overflow-x-auto mb-4">
+      <table className="w-full text-xs border border-border/50 rounded">
+        <thead>
+          <tr className="bg-muted/30">
+            {headers.map((h, i) => (
+              <th key={i} className="text-left p-2 font-semibold text-foreground border-b border-border/50">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className="border-b border-border/30 last:border-0">
+              {row.map((cell, j) => (
+                <td key={j} className="p-2">{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Bold({ children }: { children: React.ReactNode }) {
   return <strong className="text-foreground">{children}</strong>;
 }
@@ -150,6 +183,18 @@ export function BlogGradingAi() {
           We pulled five of them and ran them through VulnRap. The results were devastating.
         </P>
 
+        <Table
+          headers={["HackerOne Report", "Description", "VulnRap Score", "Tier", "Outcome"]}
+          rows={[
+            ["#2298307", "Generic strcpy buffer overflow, template-style", "37", "Questionable", "Caught (barely)"],
+            ["#3295650", "Gitleaks on test certs, compliance buzzwords, self-disclosed AI", "19", "Clean", "Missed"],
+            ["#3116935", "DES in NTLM flagged as broken crypto", "19", "Clean", "Missed"],
+            ["#3125832", "Fabricated pentest report, non-existent function names", "17", "Clean", "Missed"],
+            ["#3340109", "Fabricated ASan output, PoC doesn't reference curl", "20", "Likely Human", "Missed"],
+            ["#2516250", "Real bounty-awarded access control vuln", "Low", "Clean", "Correct"],
+          ]}
+        />
+
         <SubHeading>The one we caught (barely)</SubHeading>
 
         <P>
@@ -257,6 +302,14 @@ export function BlogGradingAi() {
         <P>
           These new scores don't just sit in the response as informational fields &mdash; they directly modify the authenticity and validity axes. Low <Code>pocValidity</Code> combined with the presence of a PoC increases the authenticity score (more likely AI-generated). Low <Code>domainCoherence</Code> increases authenticity. AI self-disclosure combined with low substance scores compounds the signal. Conversely, high <Code>pocValidity</Code> and <Code>domainCoherence</Code> actively <em>reduce</em> the authenticity score &mdash; rewarding reports that demonstrate real understanding.
         </P>
+
+        <CodeBlock>{`Substance scoring rules:
+  pocValidity < 20 + hasPoC        → authenticity +10
+  domainCoherence < 25             → authenticity +8
+  selfDisclosesAI + low substance  → authenticity +8
+  irrelevant compliance buzzwords  → authenticity +6
+  pocValidity > 75                 → authenticity -8  (reward)
+  domainCoherence > 70             → authenticity -5  (reward)`}</CodeBlock>
 
         <P>
           The key philosophical shift: fabricated specifics now score <em>worse</em> than honest vagueness. A report that says "I found a buffer overflow in the parsing code" is vaguer, sure &mdash; but a report that confidently cites a function that doesn't exist is actively fabricating evidence. The old system treated specificity as a positive signal regardless of whether the specifics were real. The new system understands that false specificity is more damning than no specificity.
