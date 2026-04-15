@@ -186,7 +186,7 @@ export function BlogGradingAi() {
         <Table
           headers={["HackerOne Report", "Description", "VulnRap Score", "Tier", "Outcome"]}
           rows={[
-            ["#2298307", "Generic strcpy buffer overflow, template-style", "37", "Questionable", "Caught (barely)"],
+            ["#2298307", "Generic strcpy buffer overflow, template-style", "37", "Likely Human", "Caught (barely)"],
             ["#3295650", "Gitleaks on test certs, compliance buzzwords, self-disclosed AI", "19", "Clean", "Missed"],
             ["#3116935", "DES in NTLM flagged as broken crypto", "19", "Clean", "Missed"],
             ["#3125832", "Fabricated pentest report, non-existent function names", "17", "Clean", "Missed"],
