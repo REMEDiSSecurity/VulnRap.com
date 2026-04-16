@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { useRecordPageView } from "@workspace/api-client-react";
+import { useRecordVisit } from "@workspace/api-client-react";
 
 export function PageViewTracker() {
   const location = useLocation();
-  const { mutate } = useRecordPageView();
+  const { mutate } = useRecordVisit();
   const lastPath = useRef<string | null>(null);
 
   useEffect(() => {
@@ -13,7 +13,7 @@ export function PageViewTracker() {
     lastPath.current = path;
 
     const timer = setTimeout(() => {
-      mutate({ data: { path } });
+      mutate();
     }, 300);
 
     return () => clearTimeout(timer);

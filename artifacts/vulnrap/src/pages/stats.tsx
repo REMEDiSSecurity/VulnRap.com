@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useGetStats, useGetRecentActivity, useGetSlopDistribution, useGetPageViews, getGetStatsQueryKey, getGetRecentActivityQueryKey, getGetSlopDistributionQueryKey, getGetPageViewsQueryKey } from "@workspace/api-client-react";
+import { useGetStats, useGetRecentActivity, useGetSlopDistribution, useGetVisitorStats, getGetStatsQueryKey, getGetRecentActivityQueryKey, getGetSlopDistributionQueryKey, getGetVisitorStatsQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, BarChart3, Database, ShieldAlert, Users, RefreshCw, TrendingUp, TrendingDown, Minus, FileText, Eye, Cpu } from "lucide-react";
+import { Activity, BarChart3, Database, ShieldAlert, Users, RefreshCw, FileText, Eye } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -189,9 +189,9 @@ export default function Stats() {
       refetchInterval: REFETCH_INTERVAL,
     },
   });
-  const { data: pageViews, isLoading: pvLoading } = useGetPageViews({
+  const { data: pageViews, isLoading: pvLoading } = useGetVisitorStats({
     query: {
-      queryKey: getGetPageViewsQueryKey(),
+      queryKey: getGetVisitorStatsQueryKey(),
       refetchInterval: REFETCH_INTERVAL,
     },
   });
@@ -438,63 +438,26 @@ export default function Stats() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard
-          title="Page Views"
-          value={formatNumber(pageViews?.totalPageViews || 0)}
+          title="Total Visits"
+          value={formatNumber(pageViews?.totalVisits || 0)}
           loading={pvLoading}
           icon={<Eye className="w-4 h-4 text-emerald-400" />}
           accentClass="stat-accent-cyan"
           glowClass="icon-glow-cyan"
           valueClass="text-emerald-400"
-          detail={formatNumber(pageViews?.pageViewsToday || 0)}
-          detailLabel="Today"
-          secondDetail={formatNumber(pageViews?.pageViewsThisWeek || 0)}
-          secondDetailLabel="This week"
         />
 
         <StatCard
-          title="API Reports"
-          value={formatNumber(pageViews?.apiReportsProcessed || 0)}
+          title="Unique Visitors"
+          value={formatNumber(pageViews?.totalUniqueVisitors || 0)}
           loading={pvLoading}
-          icon={<Cpu className="w-4 h-4 text-cyan-400" />}
-          accentClass="stat-accent-cyan"
-          glowClass="icon-glow-cyan"
-          detail={formatNumber(pageViews?.apiReportsToday || 0)}
-          detailLabel="Processed today"
+          icon={<Users className="w-4 h-4 text-violet-400" />}
+          accentClass="stat-accent-violet"
+          glowClass="icon-glow-violet"
+          valueClass="text-violet-400"
         />
-
-        <Card className="sm:col-span-2 glass-card rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="uppercase tracking-wide text-sm text-muted-foreground">Top Pages</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {pvLoading ? (
-              <Skeleton className="h-32 w-full" />
-            ) : pageViews?.topPages && pageViews.topPages.length > 0 ? (
-              <div className="space-y-1.5">
-                {pageViews.topPages.slice(0, 8).map((page) => {
-                  const maxViews = Math.max(...pageViews.topPages.map(p => p.views));
-                  const widthPct = maxViews > 0 ? (page.views / maxViews) * 100 : 0;
-                  return (
-                    <div key={page.path} className="flex items-center gap-3 text-xs">
-                      <span className="text-muted-foreground font-mono w-24 truncate shrink-0">{page.path}</span>
-                      <div className="flex-1 h-4 rounded-sm overflow-hidden bg-muted/20 relative">
-                        <div
-                          className="h-full bg-gradient-to-r from-emerald-500/60 to-emerald-400/40 rounded-sm transition-all duration-700"
-                          style={{ width: `${Math.max(widthPct, 2)}%` }}
-                        />
-                      </div>
-                      <span className="font-mono text-foreground font-medium w-12 text-right">{formatNumber(page.views)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="py-4 text-center text-muted-foreground text-sm">No page view data yet</div>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

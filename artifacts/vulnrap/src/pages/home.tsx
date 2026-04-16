@@ -318,22 +318,22 @@ function SectionHashingCard() {
   );
 }
 
-const slopSignals = [
+const authenticitySignals = [
   {
-    label: "AI Phrase Detection",
+    label: "Formulaic Phrase Detection",
     color: "text-violet-400",
-    description: "Scans for 30+ phrases that are hallmarks of AI-generated text.",
+    description: "Scans for 30+ weighted phrases that are hallmarks of AI-generated text. Compound multipliers increase the score when multiple phrases appear together.",
     phrases: [
       "it is important to note", "delve into", "comprehensive analysis", "in today's digital landscape",
       "robust security", "multifaceted", "paramount", "holistic approach", "meticulous",
       "it's crucial to", "represents a significant", "proactive measures",
     ],
-    scoring: "1 phrase = +5 pts, 3+ = +15 pts, 5+ = +30 pts",
+    scoring: "Each phrase has an individual weight (3–10). Multiple hits apply compound multipliers (1.0× → 1.2× → 1.5× → 2.0× → 3.0×).",
   },
   {
-    label: "Structure Quality",
+    label: "Template Detection",
     color: "text-cyan-400",
-    description: "Checks for technical elements that real vulnerability reports include.",
+    description: "Detects known report templates and boilerplate structure. Contributes 35% of the Authenticity axis.",
     checks: [
       { what: "Software version", points: "+8 if missing", example: "version 2.4.1" },
       { what: "Affected component/path", points: "+8 if missing", example: "/api/auth/login" },
@@ -345,52 +345,52 @@ const slopSignals = [
     ],
   },
   {
-    label: "Writing Analysis",
+    label: "Spectral & Statistical Analysis",
     color: "text-orange-400",
-    description: "Statistical analysis of writing style and document structure.",
+    description: "Analyzes text entropy, periodicity, sentence structure, and vocabulary diversity. Contributes 25% of the Authenticity axis.",
     checks: [
       { what: "Report length", points: "<30 words: +25, <100: +10, >5000: +10", example: "Extremely short or padded" },
       { what: "Average sentence length", points: "+8 if avg >30 words/sentence", example: "AI tends to write long sentences" },
       { what: "Vocabulary diversity", points: "+10 if unique ratio <30%", example: "Repetitive, low-diversity language" },
-      { what: "Wall of text", points: "+5 if single paragraph >200 words", example: "No structure or formatting" },
+      { what: "Text entropy & periodicity", points: "Spectral analysis of character patterns", example: "AI text is more uniform" },
     ],
   },
 ];
 
-const llmDimensions = [
+const llmSubstanceDimensions = [
   {
-    label: "Specificity (weight: 0.15)",
-    description: "Are version numbers, endpoints, and payloads concrete and internally consistent, or vague placeholders?",
-    example: "\"/api/v2/users/profile\" vs \"the API endpoint\"",
+    label: "PoC Validity (pocValidity)",
+    description: "Does the proof-of-concept actually exercise the claimed vulnerability? Does it target the right library, use realistic inputs, and produce the described outcome?",
+    example: "A real curl command hitting the vulnerable endpoint vs. a generic template with placeholder URLs",
   },
   {
-    label: "Originality (weight: 0.25)",
-    description: "Does the report contain unique observations and original analysis, or rehash generic vulnerability descriptions?",
-    example: "Specific error messages encountered vs. textbook vulnerability definitions",
+    label: "Claim Specificity (claimSpecificity)",
+    description: "Are version numbers, file paths, endpoints, and payloads concrete and internally consistent, or vague placeholders?",
+    example: "\"/api/v2/users/profile\" with version 2.4.1 vs. \"the API endpoint\"",
   },
   {
-    label: "Voice (weight: 0.20)",
-    description: "Does the writing have a natural, human voice with varied sentence structure, or read like AI-generated prose?",
-    example: "Casual \"I noticed the cookie wasn't httponly\" vs. \"It is important to note that the cookie lacks the HttpOnly attribute\"",
+    label: "Domain Coherence (domainCoherence)",
+    description: "Does the reporter understand what the project actually does? Do the claimed vulnerabilities make sense for this type of software?",
+    example: "Claiming SSRF in a client-side UI library, or SQLi in a project that doesn't use a database",
   },
   {
-    label: "Coherence (weight: 0.15)",
-    description: "Is the report internally consistent? Do reproduction steps match claims? Does the narrative flow logically?",
-    example: "SQLi claim with an XSS payload, or steps that don't produce the described outcome",
+    label: "Substance Score (substanceScore)",
+    description: "Overall technical depth — does the report contain real evidence, original analysis, and actionable details? Or is it generic padding?",
+    example: "Specific error messages and stack traces vs. textbook vulnerability definitions",
   },
   {
-    label: "Hallucination (weight: 0.25)",
-    description: "Does the report contain fabricated details — invented function names, non-existent API endpoints, or made-up CVE references?",
-    example: "Referencing CVE-2024-99999 or function processSecurityValidationHandler()",
+    label: "Coherence Score (coherenceScore)",
+    description: "Is the report internally consistent? Do reproduction steps match claims? Does the narrative flow logically without contradictions?",
+    example: "SQLi claim matched with SQLi payload vs. an XSS payload paired with a SQLi description",
   },
 ];
 
 const slopTiers = [
-  { tier: "Clean", range: "0–20", color: "text-green-500", bg: "bg-green-500/10" },
-  { tier: "Likely Human", range: "21–35", color: "text-emerald-400", bg: "bg-emerald-400/10" },
-  { tier: "Questionable", range: "36–55", color: "text-yellow-500", bg: "bg-yellow-500/10" },
-  { tier: "Likely Slop", range: "56–75", color: "text-orange-500", bg: "bg-orange-500/10" },
-  { tier: "Slop", range: "76–100", color: "text-destructive", bg: "bg-destructive/10" },
+  { tier: "Clean", range: "0–19", color: "text-green-500", bg: "bg-green-500/10" },
+  { tier: "Likely Human", range: "20–39", color: "text-emerald-400", bg: "bg-emerald-400/10" },
+  { tier: "Questionable", range: "40–59", color: "text-yellow-500", bg: "bg-yellow-500/10" },
+  { tier: "Likely Slop", range: "60–79", color: "text-orange-500", bg: "bg-orange-500/10" },
+  { tier: "Slop", range: "80–100", color: "text-destructive", bg: "bg-destructive/10" },
 ];
 
 function SlopDetectionCard() {
@@ -411,7 +411,7 @@ function SlopDetectionCard() {
             Validity Scoring
             <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
           </h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">Scores how likely a report describes a real, verifiable issue — factual claims, PoC plausibility, and content originality. Tap to see what we check.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">Two-axis scoring: Authenticity measures AI-authorship patterns, Validity measures technical substance. Combined into a single slopScore with quadrant classification. Tap to see how.</p>
         </div>
       </button>
 
@@ -419,19 +419,22 @@ function SlopDetectionCard() {
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
 
           <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2.5 space-y-1">
-            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Multi-Axis Score Fusion (v3.0)</p>
+            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Two-Axis Scoring (v4.0)</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Every report is analyzed across five independent axes: <span className="text-foreground font-mono">Linguistic + Factual + LLM + Template + Active Verification</span>. Active axes (those with enough evidence) are converted to probabilities and combined via <span className="text-foreground font-mono">Noisy-OR fusion: 1 - ∏(1 - p_i)</span> into a single slopScore. A separate qualityScore measures report completeness independently. If the LLM axis is unavailable, the remaining axes still produce a score. Active content verification checks referenced files, CVEs, and endpoints against live sources (GitHub API, NVD). Fabrication evidence (fake CVEs, hallucinated functions) triggers a 1.3x boost on the factual axis. Verified references reduce the score. Human-writing signals (contractions, terse style, commit refs) reduce the score post-fusion.
+              Every report is scored on two independent axes: <span className="text-foreground font-mono">Authenticity (0–100)</span> measures AI-authorship likelihood from linguistic fingerprinting, spectral analysis, and template detection. <span className="text-foreground font-mono">Validity (0–100)</span> measures technical substance from evidence quality, hallucination detection, claim specificity, internal consistency, and factual verification. The final slopScore is derived as <span className="text-foreground font-mono">authenticity × 0.65 + (100 − validity) × 0.35</span>. Reports are classified into quadrants: AI Slop (high auth, low validity → auto-close), AI Assisted (high auth, high validity → prioritize review), Weak Human (low auth, low validity → request details), Strong Human (low auth, high validity → accept). Fabrication evidence (fake CVEs, hallucinated functions) triggers a 1.3× boost. Verified references reduce the score. Human-writing signals (contractions, terse style, commit refs) reduce authenticity post-fusion.
             </p>
           </div>
 
           <div className="space-y-2">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-violet-400/60" />
-              Linguistic + Factual + Template Axes (deterministic)
+              Authenticity Axis — AI surface patterns (deterministic)
             </h4>
+            <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
+              Three components feed the authenticity score: <span className="font-mono text-violet-300">Linguistic (40%)</span> = lexical 60% + statistical 40%, <span className="font-mono text-cyan-300">Template (35%)</span>, <span className="font-mono text-orange-300">Spectral (25%)</span>. If both linguistic and template scores are high, a compound boost of up to 15 points is applied.
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {slopSignals.map((signal) => (
+              {authenticitySignals.map((signal) => (
                 <div key={signal.label} className="space-y-2 rounded-lg bg-muted/20 p-3">
                   <h4 className={`text-xs font-bold ${signal.color}`}>{signal.label}</h4>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">{signal.description}</p>
@@ -469,13 +472,23 @@ function SlopDetectionCard() {
           <div className="space-y-2 border-t border-border/30 pt-4">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60" />
-              LLM Semantic Analysis Axis (optional)
+              Validity Axis — technical substance
             </h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
-              The LLM evaluates reports from a PSIRT triage perspective across five semantic dimensions that regex fundamentally cannot assess. It returns a 0–100 score and 2–4 concrete observations specific to the report content.
+              Six heuristic components feed the validity score: <span className="font-mono text-cyan-300">Evidence Quality (25%) + Hallucination (20%) + Claim Specificity (20%) + Internal Consistency (15%) + Factual (10%) + Verification (10%)</span>. When LLM analysis is enabled, heuristic and LLM validity scores are blended 50/50. If they disagree by more than 30 points, the lower (more conservative) score is used.
+            </p>
+          </div>
+
+          <div className="space-y-2 border-t border-border/30 pt-4">
+            <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60" />
+              LLM Substance Analysis (optional)
+            </h4>
+            <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
+              The LLM evaluates reports from a PSIRT triage perspective across five substance dimensions that regex cannot assess. It returns per-dimension 0–100 scores plus concrete observations. LLM substance scores also feed back into the authenticity axis — low PoC validity or domain coherence increases the authenticity score, while high scores reduce it.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {llmDimensions.map((dim) => (
+              {llmSubstanceDimensions.map((dim) => (
                 <div key={dim.label} className="rounded-lg bg-cyan-500/5 border border-cyan-500/10 p-3 space-y-1">
                   <p className="text-[11px] font-bold text-cyan-300">{dim.label}</p>
                   <p className="text-[10px] text-muted-foreground leading-relaxed">{dim.description}</p>
@@ -485,7 +498,7 @@ function SlopDetectionCard() {
             </div>
             <div className="rounded-md bg-muted/20 px-3 py-2 mt-1">
               <p className="text-[10px] text-muted-foreground leading-relaxed">
-                <span className="text-foreground font-medium">Fusion:</span> LLM dimension scores are weighted (<span className="font-mono text-cyan-400">specificity×0.15 + originality×0.25 + voice×0.20 + coherence×0.15 + hallucination×0.25</span>) into the LLM axis score, which enters the Noisy-OR multi-axis fusion with weight 0.35. Per-dimension scores are shown on the results page.
+                <span className="text-foreground font-medium">LLM → Validity fusion:</span> The LLM's <span className="font-mono text-cyan-400">validityScore</span> is adjusted by <span className="font-mono text-cyan-400">substanceScore</span> and <span className="font-mono text-cyan-400">coherenceScore</span> modifiers, then blended 50/50 with the heuristic validity score. Per-dimension scores are shown on the results page.
               </p>
             </div>
           </div>
@@ -1216,7 +1229,7 @@ function TransparencySection() {
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">1.</span>Your raw text is received over HTTPS. For URLs, we fetch the content server-side (HTTPS only, allowlisted hosts).</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">2.</span>The redaction engine runs immediately — regex patterns strip PII, secrets, credentials, and company names. The raw text is discarded and never stored.</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">3.</span>All analysis (hashing, similarity, slop scoring) runs on the redacted text only.</li>
-                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The multi-axis scoring engine analyzes the original text in server memory for linguistic and factual analysis accuracy — this text is never written to disk or database. When the optional LLM axis is enabled, the redacted version is sent to the configured AI provider for semantic analysis. All axis scores are fused into a single slopScore via Noisy-OR combination, with human-writing signals applied post-fusion.</li>
+                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The two-axis scoring engine analyzes the original text in server memory — Authenticity (linguistic, template, spectral) and Validity (evidence quality, hallucination, claim specificity, internal consistency, factual verification). This text is never written to disk or database. When the optional LLM is enabled, the redacted version is sent to the configured AI provider for substance analysis. The final slopScore is derived as authenticity × 0.65 + (100 − validity) × 0.35, with human-writing signals applied post-fusion.</li>
               </ul>
             </div>
           </div>
@@ -1281,9 +1294,9 @@ function TransparencySection() {
                 <ul className="space-y-1.5 text-xs text-muted-foreground">
                   <li className="flex gap-2"><span className="text-blue-400">1.</span>Your report text is PII-redacted first (unless you disable redaction).</li>
                   <li className="flex gap-2"><span className="text-blue-400">2.</span>The redacted text is truncated to 6,000 characters.</li>
-                  <li className="flex gap-2"><span className="text-blue-400">3.</span>That truncated snippet is sent to the <span className="text-foreground font-medium">OpenAI API</span> (gpt-4o-mini) via a managed proxy for semantic analysis across 5 dimensions.</li>
+                  <li className="flex gap-2"><span className="text-blue-400">3.</span>That truncated snippet is sent to the <span className="text-foreground font-medium">OpenAI API</span> (gpt-4o-mini) via a managed proxy for substance analysis across 5 dimensions: PoC validity, claim specificity, domain coherence, substance depth, and internal coherence.</li>
                   <li className="flex gap-2"><span className="text-blue-400">4.</span>OpenAI's API data policy: they do <strong className="text-foreground">not</strong> train on API data. <a href="https://openai.com/enterprise-privacy/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Read their policy</a>.</li>
-                  <li className="flex gap-2"><span className="text-blue-400">5.</span>The LLM score is fused with heuristic scores via Noisy-OR combination for a more robust result.</li>
+                  <li className="flex gap-2"><span className="text-blue-400">5.</span>The LLM's substance scores are blended 50/50 with heuristic validity scores. If they disagree by more than 30 points, the more conservative (lower) score is used.</li>
                 </ul>
               </div>
               <div className="space-y-2">
