@@ -29,6 +29,7 @@ export interface ScoreBreakdown {
   coherenceScore?: number | null;
   pocValidity?: number | null;
   domainCoherence?: number | null;
+  substanceAxis?: number;
 }
 
 export interface EvidenceItem {
@@ -104,7 +105,6 @@ export function loadScoringParams() {
     FLOOR: config.floor,
     CEILING: config.ceiling,
     AXIS_THRESHOLDS: config.axisThresholds,
-    FABRICATION_BOOST: config.fabricationBoost,
   };
 }
 
@@ -145,6 +145,62 @@ function computeAuthenticityScore(
   auth = Math.max(0, auth + humanResult.totalReduction);
 
   return Math.min(100, Math.max(0, Math.round(auth)));
+}
+
+function computeSubstanceAxis(
+  llm: LLMSlopResult | null,
+  factual: FactualResult,
+  allEvidence: EvidenceItem[],
+): number {
+  let score = 0;
+
+  if (llm?.llmSubstance && llm?.llmClaims) {
+    const sub = llm.llmSubstance;
+    const claims = llm.llmClaims;
+
+    if (sub.pocValidity < 20 && claims.hasPoC) {
+      score += 30;
+      allEvidence.push({ type: "substance_poc_mismatch", description: "PoC provided but does not exercise the claimed library or vulnerability", weight: 30 });
+    }
+    if (sub.domainCoherence < 25) {
+      score += 20;
+      allEvidence.push({ type: "substance_domain_incoherent", description: "Claims show fundamental misunderstanding of the project's architecture or purpose", weight: 20 });
+    }
+    if (claims.selfDisclosesAI && (sub.pocValidity < 40 || sub.domainCoherence < 30 || sub.claimSpecificity < 25)) {
+      score += 12;
+      allEvidence.push({ type: "substance_ai_low_quality", description: "Reporter discloses AI use combined with low substance scores", weight: 12 });
+    }
+    if (claims.complianceRelevance === "low" && claims.complianceBuzzwords.length >= 2) {
+      score += 10;
+      allEvidence.push({ type: "substance_irrelevant_compliance", description: `Compliance frameworks (${claims.complianceBuzzwords.join(", ")}) cited but irrelevant to the project type`, weight: 10 });
+    }
+
+    if (sub.pocValidity > 75) {
+      score -= 15;
+    }
+    if (sub.domainCoherence > 70) {
+      score -= 10;
+    }
+    if (sub.claimSpecificity > 70) {
+      score -= 5;
+    }
+  }
+
+  const hasHallucinatedFunction = factual.evidence.some(
+    e => e.type === "hallucinated_function"
+  );
+  const hasFabricatedCve = factual.evidence.some(
+    e => e.type === "fabricated_cve"
+  );
+  const hasFutureCve = factual.evidence.some(e => e.type === "future_cve");
+  const hasFakeAsan = factual.evidence.some(e => e.type === "fake_asan");
+
+  if (hasHallucinatedFunction) score += 35;
+  if (hasFabricatedCve) score += 28;
+  if (hasFutureCve) score += 25;
+  if (hasFakeAsan) score += 20;
+
+  return Math.min(100, Math.max(0, score));
 }
 
 function computeHeuristicValidity(
@@ -284,35 +340,9 @@ export function fuseScores(
 
   const humanResult = detectHumanIndicators(originalText);
 
-  let authenticityScore = computeAuthenticityScore(linguistic, llm, spectral, humanResult);
+  const authenticityScore = computeAuthenticityScore(linguistic, llm, spectral, humanResult);
 
-  if (llm?.llmSubstance && llm?.llmClaims) {
-    const sub = llm.llmSubstance;
-    const claims = llm.llmClaims;
-
-    if (sub.pocValidity < 20 && claims.hasPoC) {
-      authenticityScore = Math.min(100, authenticityScore + 10);
-      allEvidence.push({ type: "substance_poc_mismatch", description: "PoC provided but does not exercise the claimed library or vulnerability", weight: 10 });
-    }
-    if (sub.domainCoherence < 25) {
-      authenticityScore = Math.min(100, authenticityScore + 8);
-      allEvidence.push({ type: "substance_domain_incoherent", description: "Claims show fundamental misunderstanding of the project's architecture or purpose", weight: 8 });
-    }
-    if (claims.selfDisclosesAI && (sub.pocValidity < 40 || sub.domainCoherence < 30 || sub.claimSpecificity < 25)) {
-      authenticityScore = Math.min(100, authenticityScore + 8);
-      allEvidence.push({ type: "substance_ai_low_quality", description: "Reporter discloses AI use combined with low substance scores", weight: 8 });
-    }
-    if (claims.complianceRelevance === "low" && claims.complianceBuzzwords.length >= 2) {
-      authenticityScore = Math.min(100, authenticityScore + 6);
-      allEvidence.push({ type: "substance_irrelevant_compliance", description: `Compliance frameworks (${claims.complianceBuzzwords.join(", ")}) cited but irrelevant to the project type`, weight: 6 });
-    }
-    if (sub.pocValidity > 75) {
-      authenticityScore = Math.max(0, authenticityScore - 8);
-    }
-    if (sub.domainCoherence > 70) {
-      authenticityScore = Math.max(0, authenticityScore - 5);
-    }
-  }
+  const substanceAxis = computeSubstanceAxis(llm, factual, allEvidence);
 
   const validityResult = computeValidityScore(
     factual, llm, evidenceQuality, hallucination, claimSpec, consistency, verification ?? null,
@@ -330,18 +360,9 @@ export function fuseScores(
 
   const { quadrant, archetype } = classifyQuadrant(authenticityScore, finalValidityScore);
 
-  let slopScore = Math.round(authenticityScore * 0.65 + (100 - finalValidityScore) * 0.35);
-
-  const hasHallucinatedFunction = factual.evidence.some(
-    e => e.type === "hallucinated_function" || e.type === "fabricated_cve"
-  );
-  const hasFutureCve = factual.evidence.some(e => e.type === "future_cve");
-  const hasFakeAsan = factual.evidence.some(e => e.type === "fake_asan");
-  const hasFabricationBoost = hasHallucinatedFunction || hasFutureCve || hasFakeAsan;
-
-  if (hasFabricationBoost) {
-    slopScore = Math.min(100, Math.round(slopScore * params.FABRICATION_BOOST));
-  }
+  const styleDriven = Math.round(authenticityScore * 0.65 + (100 - finalValidityScore) * 0.35);
+  const substanceDriven = Math.round(substanceAxis * 0.85 + (100 - finalValidityScore) * 0.15);
+  let slopScore = Math.max(styleDriven, substanceDriven);
 
   if (verification) {
     const verifiedCount = verification.checks.filter(c => c.result === "verified").length;
@@ -396,6 +417,7 @@ export function fuseScores(
     coherenceScore: llm?.llmSubstance?.coherenceScore ?? null,
     pocValidity: llm?.llmSubstance?.pocValidity ?? null,
     domainCoherence: llm?.llmSubstance?.domainCoherence ?? null,
+    substanceAxis,
   };
 
   const analysisMode: AnalysisMode = llm ? "llm_enhanced" : "heuristic_only";
@@ -466,14 +488,20 @@ export function recomputeSlopScoreWithoutLlm(
   const validityScore = Math.min(100, Math.max(0, Math.round(validity)));
   const { quadrant, archetype } = classifyQuadrant(authenticityScore, validityScore);
 
-  let slopScore = Math.round(authenticityScore * 0.65 + (100 - validityScore) * 0.35);
+  let substanceAxis = 0;
+  const hasHallucinatedFunction = evidenceItems.some(e => e.type === "hallucinated_function");
+  const hasFabricatedCve = evidenceItems.some(e => e.type === "fabricated_cve");
+  const hasFutureCve = evidenceItems.some(e => e.type === "future_cve");
+  const hasFakeAsan = evidenceItems.some(e => e.type === "fake_asan");
+  if (hasHallucinatedFunction) substanceAxis += 35;
+  if (hasFabricatedCve) substanceAxis += 28;
+  if (hasFutureCve) substanceAxis += 25;
+  if (hasFakeAsan) substanceAxis += 20;
+  substanceAxis = Math.min(100, Math.max(0, substanceAxis));
 
-  const hasFabricationBoost = evidenceItems.some(
-    e => e.type === "hallucinated_function" || e.type === "fabricated_cve" || e.type === "future_cve" || e.type === "fake_asan"
-  );
-  if (hasFabricationBoost) {
-    slopScore = Math.min(100, Math.round(slopScore * params.FABRICATION_BOOST));
-  }
+  const styleDriven = Math.round(authenticityScore * 0.65 + (100 - validityScore) * 0.35);
+  const substanceDriven = Math.round(substanceAxis * 0.85 + (100 - validityScore) * 0.15);
+  let slopScore = Math.max(styleDriven, substanceDriven);
 
   slopScore = Math.min(100, Math.max(0, slopScore));
 

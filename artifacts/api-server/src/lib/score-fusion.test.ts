@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { fuseScores, getSlopTier, loadThresholds } from "./score-fusion.js";
 import type { LinguisticResult } from "./linguistic-analysis.js";
 import type { FactualResult } from "./factual-verification.js";
+import type { LLMSlopResult } from "./llm-slop.js";
 
 function makeLinguistic(overrides: Partial<LinguisticResult> = {}): LinguisticResult {
   return {
@@ -22,6 +23,94 @@ function makeFactual(overrides: Partial<FactualResult> = {}): FactualResult {
     fabricatedOutputScore: 0,
     evidence: [],
     ...overrides,
+  };
+}
+
+function makeFabricatedLlm(): LLMSlopResult {
+  return {
+    llmSlopScore: 70,
+    llmFeedback: ["Fabricated report"],
+    llmBreakdown: {
+      claimSpecificity: 5,
+      evidenceQuality: 5,
+      internalConsistency: 10,
+      hallucinationSignals: 5,
+      validityScore: 25,
+      redFlags: ["PoC does not test claimed library"],
+      greenFlags: [],
+      verdict: "LIKELY_FABRICATED",
+    },
+    llmRedFlags: ["PoC mismatch"],
+    llmTriageGuidance: null,
+    llmReproRecipe: null,
+    llmClaims: {
+      claimedProject: "curl",
+      claimedVersion: "8.13.0",
+      claimedFiles: ["lib/ws.c"],
+      claimedFunctions: ["ws_frame_handshake"],
+      claimedLineNumbers: [],
+      claimedCVEs: [],
+      claimedImpact: "RCE",
+      cvssScore: 9.8,
+      hasPoC: true,
+      pocTargetsClaimedLibrary: false,
+      hasAsanOutput: false,
+      asanFromClaimedProject: false,
+      selfDisclosesAI: false,
+      complianceBuzzwords: [],
+      complianceRelevance: "none",
+    },
+    llmSubstance: {
+      pocValidity: 10,
+      claimSpecificity: 15,
+      domainCoherence: 15,
+      substanceScore: 13,
+      coherenceScore: 20,
+    },
+  };
+}
+
+function makeLegitLlm(): LLMSlopResult {
+  return {
+    llmSlopScore: 15,
+    llmFeedback: ["Legitimate report"],
+    llmBreakdown: {
+      claimSpecificity: 22,
+      evidenceQuality: 20,
+      internalConsistency: 22,
+      hallucinationSignals: 20,
+      validityScore: 82,
+      redFlags: [],
+      greenFlags: ["Real PoC", "Valid domain knowledge"],
+      verdict: "LIKELY_VALID",
+    },
+    llmRedFlags: [],
+    llmTriageGuidance: null,
+    llmReproRecipe: null,
+    llmClaims: {
+      claimedProject: "curl",
+      claimedVersion: "8.11.0",
+      claimedFiles: ["lib/urldata.h"],
+      claimedFunctions: ["Curl_setopt"],
+      claimedLineNumbers: [245],
+      claimedCVEs: ["CVE-2024-12345"],
+      claimedImpact: "info_disclosure",
+      cvssScore: 5.3,
+      hasPoC: true,
+      pocTargetsClaimedLibrary: true,
+      hasAsanOutput: false,
+      asanFromClaimedProject: false,
+      selfDisclosesAI: false,
+      complianceBuzzwords: [],
+      complianceRelevance: "none",
+    },
+    llmSubstance: {
+      pocValidity: 85,
+      claimSpecificity: 80,
+      domainCoherence: 78,
+      substanceScore: 81,
+      coherenceScore: 85,
+    },
   };
 }
 
@@ -56,7 +145,7 @@ describe("fuseScores", () => {
     expect(high.slopScore).toBeGreaterThan(low.slopScore);
   });
 
-  it("applies fabrication boost for fabricated CVEs", () => {
+  it("substance axis independently drives score past detection for fabricated CVEs", () => {
     const withoutFab = fuseScores(
       makeLinguistic({ score: 30 }),
       makeFactual({ score: 30, evidence: [] }),
@@ -75,6 +164,65 @@ describe("fuseScores", () => {
       "Report text.",
     );
     expect(withFab.slopScore).toBeGreaterThan(withoutFab.slopScore);
+  });
+
+  it("substance axis with LLM pushes well-written fabricated report past 60 detection threshold", () => {
+    const result = fuseScores(
+      makeLinguistic({ score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0 }),
+      makeFactual({
+        score: 40,
+        evidence: [
+          { type: "hallucinated_function", description: "References nonexistent function ws_frame_handshake()", weight: 25 },
+        ],
+      }),
+      makeFabricatedLlm(),
+      80,
+      "Professional report text with no AI style signals.",
+    );
+    expect(result.slopScore).toBeGreaterThanOrEqual(60);
+    expect(result.breakdown.substanceAxis).toBeGreaterThanOrEqual(60);
+  });
+
+  it("heuristic-only: multiple fabrication signals push past 60 detection threshold", () => {
+    const result = fuseScores(
+      makeLinguistic({ score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0 }),
+      makeFactual({
+        score: 50,
+        evidence: [
+          { type: "hallucinated_function", description: "References nonexistent function", weight: 25 },
+          { type: "fabricated_cve", description: "CVE does not exist", weight: 15 },
+        ],
+      }),
+      null,
+      80,
+      "Professional report text.",
+    );
+    expect(result.slopScore).toBeGreaterThanOrEqual(60);
+    expect(result.breakdown.substanceAxis).toBeGreaterThanOrEqual(60);
+  });
+
+  it("legitimate report with valid LLM substance scores low — no false positives", () => {
+    const result = fuseScores(
+      makeLinguistic({ score: 5, lexicalScore: 3, statisticalScore: 3, templateScore: 2 }),
+      makeFactual({ score: 5, evidence: [] }),
+      makeLegitLlm(),
+      90,
+      "Clean legitimate vulnerability report with real details and valid PoC.",
+    );
+    expect(result.slopScore).toBeLessThanOrEqual(30);
+    expect(result.breakdown.substanceAxis).toBe(0);
+  });
+
+  it("legitimate report without LLM still scores low", () => {
+    const result = fuseScores(
+      makeLinguistic({ score: 5, lexicalScore: 3, statisticalScore: 3, templateScore: 2 }),
+      makeFactual({ score: 5, evidence: [] }),
+      null,
+      90,
+      "Clean legitimate vulnerability report with real details.",
+    );
+    expect(result.slopScore).toBeLessThanOrEqual(30);
+    expect(result.breakdown.substanceAxis).toBe(0);
   });
 
   it("applies human indicator reduction", () => {
@@ -110,7 +258,7 @@ describe("fuseScores", () => {
     expect(result.humanIndicators).toBeDefined();
   });
 
-  it("returns breakdown with all axis scores", () => {
+  it("returns breakdown with all axis scores including substanceAxis", () => {
     const result = fuseScores(
       makeLinguistic(),
       makeFactual(),
@@ -123,6 +271,7 @@ describe("fuseScores", () => {
     expect(result.breakdown.factual).toBeDefined();
     expect(result.breakdown.template).toBeDefined();
     expect(result.breakdown.quality).toBeDefined();
+    expect(result.breakdown.substanceAxis).toBeDefined();
   });
 });
 
