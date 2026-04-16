@@ -6,6 +6,11 @@
  * OpenAPI spec version: 3.0.0
  */
 
-export type RecordPageViewBody = {
-  path: string;
+export type GetTrendsParams = {
+  /**
+   * Number of days to look back
+   * @minimum 7
+   * @maximum 365
+   */
+  days?: number;
 };

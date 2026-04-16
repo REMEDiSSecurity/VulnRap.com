@@ -1029,20 +1029,6 @@ export interface PlatformStats {
   reportsThisWeek: number;
 }
 
-export type PageViewStatsTopPagesItem = {
-  path: string;
-  views: number;
-};
-
-export interface PageViewStats {
-  totalPageViews: number;
-  pageViewsToday: number;
-  pageViewsThisWeek: number;
-  topPages: PageViewStatsTopPagesItem[];
-  apiReportsProcessed: number;
-  apiReportsToday: number;
-}
-
 export type RecentActivityRecentReportsItem = {
   id: number;
   slopScore: number;
@@ -1370,6 +1356,45 @@ export interface ApplyCalibrationResponse {
   config: ScoringConfigItem;
 }
 
+export interface VisitRecorded {
+  recorded: boolean;
+}
+
+export interface VisitorStats {
+  totalUniqueVisitors: number;
+  totalVisits: number;
+}
+
+export interface TrendsDailyTiers {
+  clean: number;
+  likelyHuman: number;
+  questionable: number;
+  likelySlop: number;
+  slop: number;
+}
+
+export interface TrendsDailyReport {
+  date: string;
+  count: number;
+  avgScore: number;
+  tiers: TrendsDailyTiers;
+}
+
+export interface TrendsFeedbackItem {
+  date: string;
+  count: number;
+  avgRating: number;
+  agreementRate: number;
+}
+
+export interface TrendsData {
+  days: number;
+  totalReports: number;
+  totalFeedback: number;
+  dailyReports: TrendsDailyReport[];
+  feedbackTrend: TrendsFeedbackItem[];
+}
+
 /**
  * Privacy mode — full shares content, similarity_only stores only hashes
  */
@@ -1493,10 +1518,11 @@ export const GetReportFeedSort = {
   score_desc: "score_desc",
 } as const;
 
-export type RecordPageViewBody = {
-  path: string;
-};
-
-export type RecordPageView200 = {
-  ok: boolean;
+export type GetTrendsParams = {
+  /**
+   * Number of days to look back
+   * @minimum 7
+   * @maximum 365
+   */
+  days?: number;
 };

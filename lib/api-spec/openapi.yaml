@@ -517,49 +517,57 @@ paths:
               schema:
                 $ref: "#/components/schemas/SlopDistribution"
 
-  /stats/pageview:
+  /stats/visit:
     post:
-      operationId: recordPageView
+      operationId: recordVisit
       tags: [stats]
-      summary: Record a page view
-      description: Increments the page view counter for a given path
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                path:
-                  type: string
-              required:
-                - path
+      summary: Record a page visit
+      description: Records a privacy-respecting unique visitor count using hashed identifiers
       responses:
         "200":
-          description: Page view recorded
+          description: Visit recorded
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                required:
-                  - ok
+                $ref: "#/components/schemas/VisitRecorded"
 
-  /stats/pageviews:
+  /stats/visitors:
     get:
-      operationId: getPageViews
+      operationId: getVisitorStats
       tags: [stats]
-      summary: Get page view statistics
-      description: Returns aggregate page view counts and API usage statistics
+      summary: Get visitor statistics
+      description: Returns total unique visitors and total visits
       responses:
         "200":
-          description: Page view statistics
+          description: Visitor statistics
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PageViewStats"
+                $ref: "#/components/schemas/VisitorStats"
+
+  /stats/trends:
+    get:
+      operationId: getTrends
+      tags: [stats]
+      summary: Get trend data over time
+      description: Returns daily report volume, tier breakdown, average score, and feedback trends for the specified time window
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 7
+            maximum: 365
+            default: 90
+          description: Number of days to look back
+      responses:
+        "200":
+          description: Trend data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendsData"
 
 components:
   schemas:
@@ -1240,39 +1248,6 @@ components:
         - reportsByMode
         - reportsToday
         - reportsThisWeek
-
-    PageViewStats:
-      type: object
-      properties:
-        totalPageViews:
-          type: integer
-        pageViewsToday:
-          type: integer
-        pageViewsThisWeek:
-          type: integer
-        topPages:
-          type: array
-          items:
-            type: object
-            properties:
-              path:
-                type: string
-              views:
-                type: integer
-            required:
-              - path
-              - views
-        apiReportsProcessed:
-          type: integer
-        apiReportsToday:
-          type: integer
-      required:
-        - totalPageViews
-        - pageViewsToday
-        - pageViewsThisWeek
-        - topPages
-        - apiReportsProcessed
-        - apiReportsToday
 
     RecentActivity:
       type: object
@@ -2456,3 +2431,79 @@ components:
         config:
           $ref: "#/components/schemas/ScoringConfigItem"
       required: [message, config]
+
+    VisitRecorded:
+      type: object
+      properties:
+        recorded:
+          type: boolean
+      required: [recorded]
+
+    VisitorStats:
+      type: object
+      properties:
+        totalUniqueVisitors:
+          type: integer
+        totalVisits:
+          type: integer
+      required: [totalUniqueVisitors, totalVisits]
+
+    TrendsDailyTiers:
+      type: object
+      properties:
+        clean:
+          type: integer
+        likelyHuman:
+          type: integer
+        questionable:
+          type: integer
+        likelySlop:
+          type: integer
+        slop:
+          type: integer
+      required: [clean, likelyHuman, questionable, likelySlop, slop]
+
+    TrendsDailyReport:
+      type: object
+      properties:
+        date:
+          type: string
+        count:
+          type: integer
+        avgScore:
+          type: number
+        tiers:
+          $ref: "#/components/schemas/TrendsDailyTiers"
+      required: [date, count, avgScore, tiers]
+
+    TrendsFeedbackItem:
+      type: object
+      properties:
+        date:
+          type: string
+        count:
+          type: integer
+        avgRating:
+          type: number
+        agreementRate:
+          type: integer
+      required: [date, count, avgRating, agreementRate]
+
+    TrendsData:
+      type: object
+      properties:
+        days:
+          type: integer
+        totalReports:
+          type: integer
+        totalFeedback:
+          type: integer
+        dailyReports:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendsDailyReport"
+        feedbackTrend:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendsFeedbackItem"
+      required: [days, totalReports, totalFeedback, dailyReports, feedbackTrend]

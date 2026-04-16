@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Activity, Search, Code, BookOpen, Target, MessageSquare, Menu, X, Github, Clock, GitCompare, UploadCloud, BarChart3, Database } from "lucide-react";
+import { Activity, Search, Code, BookOpen, Target, MessageSquare, Menu, X, Github, Clock, GitCompare, UploadCloud, BarChart3, Database, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { to: "/reports", label: "Reports", icon: <Database className="w-3.5 h-3.5" /> },
   { to: "/stats", label: "Stats", icon: <Activity className="w-3.5 h-3.5" /> },
   { to: "/feedback-analytics", label: "Feedback", icon: <BarChart3 className="w-3.5 h-3.5" /> },
+  { to: "/transparency", label: "Impact", icon: <Eye className="w-3.5 h-3.5" /> },
   { to: "/developers", label: "API", icon: <Code className="w-3.5 h-3.5" /> },
   { to: "/blog", label: "Blog", icon: <BookOpen className="w-3.5 h-3.5" /> },
 ];
@@ -142,6 +143,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
               <Link to="/terms" className="hover:text-primary transition-colors">Terms</Link>
               <Link to="/stats" className="hover:text-primary transition-colors">Stats</Link>
+              <Link to="/transparency" className="hover:text-primary transition-colors">Impact</Link>
               <Link to="/changelog" className="hover:text-primary transition-colors">Changelog</Link>
             </div>
           </div>

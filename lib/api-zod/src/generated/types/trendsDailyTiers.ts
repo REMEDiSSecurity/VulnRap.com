@@ -6,6 +6,10 @@
  * OpenAPI spec version: 3.0.0
  */
 
-export type RecordPageView200 = {
-  ok: boolean;
-};
+export interface TrendsDailyTiers {
+  clean: number;
+  likelyHuman: number;
+  questionable: number;
+  likelySlop: number;
+  slop: number;
+}

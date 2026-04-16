@@ -2156,31 +2156,63 @@ export const GetSlopDistributionResponse = zod.object({
 });
 
 /**
- * Increments the page view counter for a given path
- * @summary Record a page view
+ * Records a privacy-respecting unique visitor count using hashed identifiers
+ * @summary Record a page visit
  */
-export const RecordPageViewBody = zod.object({
-  path: zod.string(),
-});
-
-export const RecordPageViewResponse = zod.object({
-  ok: zod.boolean(),
+export const RecordVisitResponse = zod.object({
+  recorded: zod.boolean(),
 });
 
 /**
- * Returns aggregate page view counts and API usage statistics
- * @summary Get page view statistics
+ * Returns total unique visitors and total visits
+ * @summary Get visitor statistics
  */
-export const GetPageViewsResponse = zod.object({
-  totalPageViews: zod.number(),
-  pageViewsToday: zod.number(),
-  pageViewsThisWeek: zod.number(),
-  topPages: zod.array(
+export const GetVisitorStatsResponse = zod.object({
+  totalUniqueVisitors: zod.number(),
+  totalVisits: zod.number(),
+});
+
+/**
+ * Returns daily report volume, tier breakdown, average score, and feedback trends for the specified time window
+ * @summary Get trend data over time
+ */
+export const getTrendsQueryDaysDefault = 90;
+export const getTrendsQueryDaysMin = 7;
+export const getTrendsQueryDaysMax = 365;
+
+export const GetTrendsQueryParams = zod.object({
+  days: zod.coerce
+    .number()
+    .min(getTrendsQueryDaysMin)
+    .max(getTrendsQueryDaysMax)
+    .default(getTrendsQueryDaysDefault)
+    .describe("Number of days to look back"),
+});
+
+export const GetTrendsResponse = zod.object({
+  days: zod.number(),
+  totalReports: zod.number(),
+  totalFeedback: zod.number(),
+  dailyReports: zod.array(
     zod.object({
-      path: zod.string(),
-      views: zod.number(),
+      date: zod.string(),
+      count: zod.number(),
+      avgScore: zod.number(),
+      tiers: zod.object({
+        clean: zod.number(),
+        likelyHuman: zod.number(),
+        questionable: zod.number(),
+        likelySlop: zod.number(),
+        slop: zod.number(),
+      }),
     }),
   ),
-  apiReportsProcessed: zod.number(),
-  apiReportsToday: zod.number(),
+  feedbackTrend: zod.array(
+    zod.object({
+      date: zod.string(),
+      count: zod.number(),
+      avgRating: zod.number(),
+      agreementRate: zod.number(),
+    }),
+  ),
 });

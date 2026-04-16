@@ -6,7 +6,7 @@
  * OpenAPI spec version: 3.0.0
  */
 
-export type PageViewStatsTopPagesItem = {
-  path: string;
-  views: number;
-};
+export interface VisitorStats {
+  totalUniqueVisitors: number;
+  totalVisits: number;
+}

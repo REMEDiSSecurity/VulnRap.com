@@ -29,13 +29,11 @@ import type {
   FeedbackChallenge,
   FeedbackResponse,
   GetReportFeedParams,
+  GetTrendsParams,
   HashLookupResult,
   HealthStatus,
-  PageViewStats,
   PlatformStats,
   RecentActivity,
-  RecordPageView200,
-  RecordPageViewBody,
   ReportAnalysis,
   ReportComparison,
   ReportFeed,
@@ -43,7 +41,10 @@ import type {
   SlopDistribution,
   SubmitFeedbackWithChallenge,
   SubmitReportBody,
+  TrendsData,
   VerificationBadge,
+  VisitRecorded,
+  VisitorStats,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1665,43 +1666,40 @@ export function useGetSlopDistribution<
 }
 
 /**
- * Increments the page view counter for a given path
- * @summary Record a page view
+ * Records a privacy-respecting unique visitor count using hashed identifiers
+ * @summary Record a page visit
  */
-export const getRecordPageViewUrl = () => {
-  return `/api/stats/pageview`;
+export const getRecordVisitUrl = () => {
+  return `/api/stats/visit`;
 };
 
-export const recordPageView = async (
-  recordPageViewBody: RecordPageViewBody,
+export const recordVisit = async (
   options?: RequestInit,
-): Promise<RecordPageView200> => {
-  return customFetch<RecordPageView200>(getRecordPageViewUrl(), {
+): Promise<VisitRecorded> => {
+  return customFetch<VisitRecorded>(getRecordVisitUrl(), {
     ...options,
     method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(recordPageViewBody),
   });
 };
 
-export const getRecordPageViewMutationOptions = <
+export const getRecordVisitMutationOptions = <
   TError = ErrorType<unknown>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof recordPageView>>,
+    Awaited<ReturnType<typeof recordVisit>>,
     TError,
-    { data: BodyType<RecordPageViewBody> },
+    void,
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
-  Awaited<ReturnType<typeof recordPageView>>,
+  Awaited<ReturnType<typeof recordVisit>>,
   TError,
-  { data: BodyType<RecordPageViewBody> },
+  void,
   TContext
 > => {
-  const mutationKey = ["recordPageView"];
+  const mutationKey = ["recordVisit"];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation &&
       "mutationKey" in options.mutation &&
@@ -1711,73 +1709,71 @@ export const getRecordPageViewMutationOptions = <
     : { mutation: { mutationKey }, request: undefined };
 
   const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof recordPageView>>,
-    { data: BodyType<RecordPageViewBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return recordPageView(data, requestOptions);
+    Awaited<ReturnType<typeof recordVisit>>,
+    void
+  > = () => {
+    return recordVisit(requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type RecordPageViewMutationResult = NonNullable<
-  Awaited<ReturnType<typeof recordPageView>>
+export type RecordVisitMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recordVisit>>
 >;
-export type RecordPageViewMutationBody = BodyType<RecordPageViewBody>;
-export type RecordPageViewMutationError = ErrorType<unknown>;
+
+export type RecordVisitMutationError = ErrorType<unknown>;
 
 /**
- * @summary Record a page view
+ * @summary Record a page visit
  */
-export const useRecordPageView = <
+export const useRecordVisit = <
   TError = ErrorType<unknown>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof recordPageView>>,
+    Awaited<ReturnType<typeof recordVisit>>,
     TError,
-    { data: BodyType<RecordPageViewBody> },
+    void,
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
-  Awaited<ReturnType<typeof recordPageView>>,
+  Awaited<ReturnType<typeof recordVisit>>,
   TError,
-  { data: BodyType<RecordPageViewBody> },
+  void,
   TContext
 > => {
-  return useMutation(getRecordPageViewMutationOptions(options));
+  return useMutation(getRecordVisitMutationOptions(options));
 };
 
 /**
- * Returns aggregate page view counts and API usage statistics
- * @summary Get page view statistics
+ * Returns total unique visitors and total visits
+ * @summary Get visitor statistics
  */
-export const getGetPageViewsUrl = () => {
-  return `/api/stats/pageviews`;
+export const getGetVisitorStatsUrl = () => {
+  return `/api/stats/visitors`;
 };
 
-export const getPageViews = async (
+export const getVisitorStats = async (
   options?: RequestInit,
-): Promise<PageViewStats> => {
-  return customFetch<PageViewStats>(getGetPageViewsUrl(), {
+): Promise<VisitorStats> => {
+  return customFetch<VisitorStats>(getGetVisitorStatsUrl(), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetPageViewsQueryKey = () => {
-  return [`/api/stats/pageviews`] as const;
+export const getGetVisitorStatsQueryKey = () => {
+  return [`/api/stats/visitors`] as const;
 };
 
-export const getGetPageViewsQueryOptions = <
-  TData = Awaited<ReturnType<typeof getPageViews>>,
+export const getGetVisitorStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getVisitorStats>>,
   TError = ErrorType<unknown>,
 >(options?: {
   query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getPageViews>>,
+    Awaited<ReturnType<typeof getVisitorStats>>,
     TError,
     TData
   >;
@@ -1785,40 +1781,135 @@ export const getGetPageViewsQueryOptions = <
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetPageViewsQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetVisitorStatsQueryKey();
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPageViews>>> = ({
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getVisitorStats>>> = ({
     signal,
-  }) => getPageViews({ signal, ...requestOptions });
+  }) => getVisitorStats({ signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getPageViews>>,
+    Awaited<ReturnType<typeof getVisitorStats>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type GetPageViewsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getPageViews>>
+export type GetVisitorStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getVisitorStats>>
 >;
-export type GetPageViewsQueryError = ErrorType<unknown>;
+export type GetVisitorStatsQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get page view statistics
+ * @summary Get visitor statistics
  */
 
-export function useGetPageViews<
-  TData = Awaited<ReturnType<typeof getPageViews>>,
+export function useGetVisitorStats<
+  TData = Awaited<ReturnType<typeof getVisitorStats>>,
   TError = ErrorType<unknown>,
 >(options?: {
   query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getPageViews>>,
+    Awaited<ReturnType<typeof getVisitorStats>>,
     TError,
     TData
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetPageViewsQueryOptions(options);
+  const queryOptions = getGetVisitorStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns daily report volume, tier breakdown, average score, and feedback trends for the specified time window
+ * @summary Get trend data over time
+ */
+export const getGetTrendsUrl = (params?: GetTrendsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/stats/trends?${stringifiedParams}`
+    : `/api/stats/trends`;
+};
+
+export const getTrends = async (
+  params?: GetTrendsParams,
+  options?: RequestInit,
+): Promise<TrendsData> => {
+  return customFetch<TrendsData>(getGetTrendsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTrendsQueryKey = (params?: GetTrendsParams) => {
+  return [`/api/stats/trends`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetTrendsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTrends>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetTrendsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTrends>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTrendsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrends>>> = ({
+    signal,
+  }) => getTrends(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTrends>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTrendsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTrends>>
+>;
+export type GetTrendsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get trend data over time
+ */
+
+export function useGetTrends<
+  TData = Awaited<ReturnType<typeof getTrends>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetTrendsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTrends>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTrendsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

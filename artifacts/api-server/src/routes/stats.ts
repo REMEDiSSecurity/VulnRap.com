@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { sql, gte, eq } from "drizzle-orm";
+import { sql, gte, and, eq } from "drizzle-orm";
+import { createHash } from "crypto";
 import { db } from "@workspace/db";
-import { reportsTable, pageViewsTable } from "@workspace/db";
+import { reportsTable, pageViewsTable, userFeedbackTable } from "@workspace/db";
 import {
   GetStatsResponse,
   GetRecentActivityResponse,
@@ -126,90 +127,105 @@ router.get("/stats/distribution", async (_req, res): Promise<void> => {
   res.json(response);
 });
 
-router.post("/stats/pageview", async (req, res): Promise<void> => {
-  const { path } = req.body;
-  if (!path || typeof path !== "string") {
-    res.status(400).json({ error: "path is required" });
-    return;
-  }
+const VISITOR_HMAC_KEY = process.env.VISITOR_HMAC_KEY || "vulnrap-visitor-tracking-key";
 
-  const cleanPath = path.slice(0, 255).replace(/[^a-zA-Z0-9/\-_]/g, "");
-  if (!cleanPath) {
-    res.status(400).json({ error: "invalid path" });
-    return;
-  }
+router.post("/stats/visit", async (req, res): Promise<void> => {
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  const ua = req.headers["user-agent"] || "";
+  const raw = `${ip}::${ua}`;
+  const visitorHash = createHash("sha256").update(VISITOR_HMAC_KEY).update(raw).digest("hex");
   const today = new Date().toISOString().slice(0, 10);
 
   await db
     .insert(pageViewsTable)
-    .values({ path: cleanPath, viewDate: today, count: 1 })
-    .onConflictDoUpdate({
-      target: [pageViewsTable.path, pageViewsTable.viewDate],
-      set: { count: sql`${pageViewsTable.count} + 1` },
-    });
+    .values({ visitorHash, viewDate: today })
+    .onConflictDoNothing({ target: [pageViewsTable.visitorHash, pageViewsTable.viewDate] });
 
-  res.json({ ok: true });
+  res.json({ recorded: true });
 });
 
-router.get("/stats/pageviews", async (_req, res): Promise<void> => {
-  const [totals] = await db
+router.get("/stats/visitors", async (_req, res): Promise<void> => {
+  const [result] = await db
     .select({
-      totalViews: sql<number>`coalesce(sum(${pageViewsTable.count}), 0)::int`,
+      totalUniqueVisitors: sql<number>`count(distinct ${pageViewsTable.visitorHash})::int`,
+      totalVisits: sql<number>`count(distinct ${pageViewsTable.viewDate})::int`,
     })
     .from(pageViewsTable);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekDate = weekAgo.toISOString().slice(0, 10);
+  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+  res.json({
+    totalUniqueVisitors: result.totalUniqueVisitors,
+    totalVisits: result.totalVisits,
+  });
+});
 
-  const [todayViews] = await db
+router.get("/stats/trends", async (req, res): Promise<void> => {
+  const daysParam = parseInt(req.query?.days as string) || 90;
+  const days = Math.min(Math.max(daysParam, 7), 365);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
+  const dailyReports = await db
     .select({
-      count: sql<number>`coalesce(sum(${pageViewsTable.count}), 0)::int`,
+      date: sql<string>`${reportsTable.createdAt}::date::text`,
+      count: sql<number>`count(*)::int`,
+      avgScore: sql<number>`coalesce(round(avg(${reportsTable.slopScore})::numeric, 1), 0)::float`,
+      clean: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 0 and ${reportsTable.slopScore} <= 20)::int`,
+      likelyHuman: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 21 and ${reportsTable.slopScore} <= 35)::int`,
+      questionable: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 36 and ${reportsTable.slopScore} <= 55)::int`,
+      likelySlop: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 56 and ${reportsTable.slopScore} <= 75)::int`,
+      slop: sql<number>`count(*) filter (where ${reportsTable.slopScore} >= 76 and ${reportsTable.slopScore} <= 100)::int`,
     })
-    .from(pageViewsTable)
-    .where(eq(pageViewsTable.viewDate, today));
+    .from(reportsTable)
+    .where(gte(reportsTable.createdAt, cutoff))
+    .groupBy(sql`${reportsTable.createdAt}::date`)
+    .orderBy(sql`${reportsTable.createdAt}::date asc`);
 
-  const [weekViews] = await db
+  const dailyFeedback = await db
     .select({
-      count: sql<number>`coalesce(sum(${pageViewsTable.count}), 0)::int`,
+      date: sql<string>`${userFeedbackTable.createdAt}::date::text`,
+      count: sql<number>`count(*)::int`,
+      avgRating: sql<number>`coalesce(round(avg(${userFeedbackTable.rating})::numeric, 1), 0)::float`,
+      helpfulCount: sql<number>`count(*) filter (where ${userFeedbackTable.helpful} = true)::int`,
+      totalCount: sql<number>`count(*)::int`,
     })
-    .from(pageViewsTable)
-    .where(gte(pageViewsTable.viewDate, weekDate));
+    .from(userFeedbackTable)
+    .where(gte(userFeedbackTable.createdAt, cutoff))
+    .groupBy(sql`${userFeedbackTable.createdAt}::date`)
+    .orderBy(sql`${userFeedbackTable.createdAt}::date asc`);
 
-  const byPage = await db
-    .select({
-      path: pageViewsTable.path,
-      views: sql<number>`sum(${pageViewsTable.count})::int`,
-    })
-    .from(pageViewsTable)
-    .groupBy(pageViewsTable.path)
-    .orderBy(sql`sum(${pageViewsTable.count}) desc`)
-    .limit(20);
+  const feedbackTrend = dailyFeedback.map((row) => ({
+    date: row.date,
+    count: row.count,
+    avgRating: row.avgRating,
+    agreementRate: row.totalCount > 0 ? Math.round((row.helpfulCount / row.totalCount) * 100) : 0,
+  }));
 
-  const [apiHits] = await db
+  const [totals] = await db
     .select({
-      total: sql<number>`count(*)::int`,
+      totalReports: sql<number>`count(*)::int`,
+      totalFeedback: sql<number>`(select count(*) from user_feedback)::int`,
     })
     .from(reportsTable);
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const [apiHitsToday] = await db
-    .select({
-      count: sql<number>`count(*)::int`,
-    })
-    .from(reportsTable)
-    .where(gte(reportsTable.createdAt, todayStart));
-
-  res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+  res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
   res.json({
-    totalPageViews: totals.totalViews,
-    pageViewsToday: todayViews.count,
-    pageViewsThisWeek: weekViews.count,
-    topPages: byPage,
-    apiReportsProcessed: apiHits.total,
-    apiReportsToday: apiHitsToday.count,
+    days,
+    totalReports: totals.totalReports,
+    totalFeedback: totals.totalFeedback,
+    dailyReports: dailyReports.map((row) => ({
+      date: row.date,
+      count: row.count,
+      avgScore: row.avgScore,
+      tiers: {
+        clean: row.clean,
+        likelyHuman: row.likelyHuman,
+        questionable: row.questionable,
+        likelySlop: row.likelySlop,
+        slop: row.slop,
+      },
+    })),
+    feedbackTrend,
   });
 });
 

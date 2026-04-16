@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle, Trash2, Mail, BrainCircuit, ShieldOff } from "lucide-react";
+import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle, Trash2, Mail, BrainCircuit, ShieldOff, Users } from "lucide-react";
 import { LogoBeams } from "@/components/laser-effects";
 import { CrawlingBugs } from "@/components/crawling-bugs";
-import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed, getGetReportFeedQueryKey } from "@workspace/api-client-react";
+import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed, getGetReportFeedQueryKey, useGetVisitorStats, getGetVisitorStatsQueryKey, recordVisit } from "@workspace/api-client-react";
 import { addHistoryEntry } from "@/lib/history";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -1142,6 +1142,34 @@ export default function Home() {
       <TransparencySection />
 
       <RecentReportsFeed />
+
+      <VisitorCounter />
+    </div>
+  );
+}
+
+function VisitorCounter() {
+  const { data: visitors } = useGetVisitorStats({
+    query: { queryKey: getGetVisitorStatsQueryKey(), refetchInterval: 120_000 },
+  });
+
+  useEffect(() => {
+    const key = "vulnrap_visit_recorded";
+    const today = new Date().toISOString().slice(0, 10);
+    if (sessionStorage.getItem(key) !== today) {
+      recordVisit().then(() => sessionStorage.setItem(key, today)).catch(() => {});
+    }
+  }, []);
+
+  if (!visitors || visitors.totalUniqueVisitors === 0) return null;
+
+  return (
+    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/50 py-2">
+      <Users className="w-3.5 h-3.5" />
+      <span>
+        <span className="font-mono font-medium text-muted-foreground/70">{visitors.totalUniqueVisitors.toLocaleString()}</span>
+        {" "}unique visitors
+      </span>
     </div>
   );
 }
