@@ -1029,6 +1029,20 @@ export interface PlatformStats {
   reportsThisWeek: number;
 }
 
+export type PageViewStatsTopPagesItem = {
+  path: string;
+  views: number;
+};
+
+export interface PageViewStats {
+  totalPageViews: number;
+  pageViewsToday: number;
+  pageViewsThisWeek: number;
+  topPages: PageViewStatsTopPagesItem[];
+  apiReportsProcessed: number;
+  apiReportsToday: number;
+}
+
 export type RecentActivityRecentReportsItem = {
   id: number;
   slopScore: number;
@@ -1478,3 +1492,11 @@ export const GetReportFeedSort = {
   score_asc: "score_asc",
   score_desc: "score_desc",
 } as const;
+
+export type RecordPageViewBody = {
+  path: string;
+};
+
+export type RecordPageView200 = {
+  ok: boolean;
+};

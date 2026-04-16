@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import logoSrc from "@/assets/logo.png";
 import { BlogBuildingVulnrap } from "@/components/blog-building-vulnrap";
 import { BlogGradingAi } from "@/components/blog-grading-ai";
+import { BlogDataIsThere } from "@/components/blog-data-is-there";
 
 function FirstPost() {
   return (
@@ -137,6 +138,12 @@ export default function Blog() {
           Updates, technical deep-dives, and the occasional rant about vulnerability report quality.
         </p>
       </div>
+
+      <Card className="glass-card rounded-xl">
+        <CardContent className="p-8">
+          <BlogDataIsThere />
+        </CardContent>
+      </Card>
 
       <Card className="glass-card rounded-xl">
         <CardContent className="p-8">

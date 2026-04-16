@@ -31,8 +31,11 @@ import type {
   GetReportFeedParams,
   HashLookupResult,
   HealthStatus,
+  PageViewStats,
   PlatformStats,
   RecentActivity,
+  RecordPageView200,
+  RecordPageViewBody,
   ReportAnalysis,
   ReportComparison,
   ReportFeed,
@@ -1653,6 +1656,169 @@ export function useGetSlopDistribution<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSlopDistributionQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Increments the page view counter for a given path
+ * @summary Record a page view
+ */
+export const getRecordPageViewUrl = () => {
+  return `/api/stats/pageview`;
+};
+
+export const recordPageView = async (
+  recordPageViewBody: RecordPageViewBody,
+  options?: RequestInit,
+): Promise<RecordPageView200> => {
+  return customFetch<RecordPageView200>(getRecordPageViewUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(recordPageViewBody),
+  });
+};
+
+export const getRecordPageViewMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordPageView>>,
+    TError,
+    { data: BodyType<RecordPageViewBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recordPageView>>,
+  TError,
+  { data: BodyType<RecordPageViewBody> },
+  TContext
+> => {
+  const mutationKey = ["recordPageView"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordPageView>>,
+    { data: BodyType<RecordPageViewBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return recordPageView(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecordPageViewMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recordPageView>>
+>;
+export type RecordPageViewMutationBody = BodyType<RecordPageViewBody>;
+export type RecordPageViewMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record a page view
+ */
+export const useRecordPageView = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordPageView>>,
+    TError,
+    { data: BodyType<RecordPageViewBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordPageView>>,
+  TError,
+  { data: BodyType<RecordPageViewBody> },
+  TContext
+> => {
+  return useMutation(getRecordPageViewMutationOptions(options));
+};
+
+/**
+ * Returns aggregate page view counts and API usage statistics
+ * @summary Get page view statistics
+ */
+export const getGetPageViewsUrl = () => {
+  return `/api/stats/pageviews`;
+};
+
+export const getPageViews = async (
+  options?: RequestInit,
+): Promise<PageViewStats> => {
+  return customFetch<PageViewStats>(getGetPageViewsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPageViewsQueryKey = () => {
+  return [`/api/stats/pageviews`] as const;
+};
+
+export const getGetPageViewsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPageViews>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPageViews>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPageViewsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPageViews>>> = ({
+    signal,
+  }) => getPageViews({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPageViews>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPageViewsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPageViews>>
+>;
+export type GetPageViewsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get page view statistics
+ */
+
+export function useGetPageViews<
+  TData = Awaited<ReturnType<typeof getPageViews>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPageViews>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPageViewsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -37,6 +37,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "react-router-dom": "^7.14.0"
+    "react-router-dom": "^7.14.0",
+    "recharts": "^2.15.4"
   }
 }

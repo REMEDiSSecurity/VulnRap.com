@@ -435,6 +435,9 @@ importers:
       react-router-dom:
         specifier: ^7.14.0
         version: 7.14.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      recharts:
+        specifier: ^2.15.4
+        version: 2.15.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
     devDependencies:
       '@radix-ui/react-label':
         specifier: ^2.1.3

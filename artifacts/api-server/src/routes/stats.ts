@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { sql, gte } from "drizzle-orm";
+import { sql, gte, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { reportsTable } from "@workspace/db";
+import { reportsTable, pageViewsTable } from "@workspace/db";
 import {
   GetStatsResponse,
   GetRecentActivityResponse,
@@ -124,6 +124,93 @@ router.get("/stats/distribution", async (_req, res): Promise<void> => {
 
   res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
   res.json(response);
+});
+
+router.post("/stats/pageview", async (req, res): Promise<void> => {
+  const { path } = req.body;
+  if (!path || typeof path !== "string") {
+    res.status(400).json({ error: "path is required" });
+    return;
+  }
+
+  const cleanPath = path.slice(0, 255).replace(/[^a-zA-Z0-9/\-_]/g, "");
+  if (!cleanPath) {
+    res.status(400).json({ error: "invalid path" });
+    return;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+
+  await db
+    .insert(pageViewsTable)
+    .values({ path: cleanPath, viewDate: today, count: 1 })
+    .onConflictDoUpdate({
+      target: [pageViewsTable.path, pageViewsTable.viewDate],
+      set: { count: sql`${pageViewsTable.count} + 1` },
+    });
+
+  res.json({ ok: true });
+});
+
+router.get("/stats/pageviews", async (_req, res): Promise<void> => {
+  const [totals] = await db
+    .select({
+      totalViews: sql<number>`coalesce(sum(${pageViewsTable.count}), 0)::int`,
+    })
+    .from(pageViewsTable);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekDate = weekAgo.toISOString().slice(0, 10);
+
+  const [todayViews] = await db
+    .select({
+      count: sql<number>`coalesce(sum(${pageViewsTable.count}), 0)::int`,
+    })
+    .from(pageViewsTable)
+    .where(eq(pageViewsTable.viewDate, today));
+
+  const [weekViews] = await db
+    .select({
+      count: sql<number>`coalesce(sum(${pageViewsTable.count}), 0)::int`,
+    })
+    .from(pageViewsTable)
+    .where(gte(pageViewsTable.viewDate, weekDate));
+
+  const byPage = await db
+    .select({
+      path: pageViewsTable.path,
+      views: sql<number>`sum(${pageViewsTable.count})::int`,
+    })
+    .from(pageViewsTable)
+    .groupBy(pageViewsTable.path)
+    .orderBy(sql`sum(${pageViewsTable.count}) desc`)
+    .limit(20);
+
+  const [apiHits] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+    })
+    .from(reportsTable);
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const [apiHitsToday] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+    })
+    .from(reportsTable)
+    .where(gte(reportsTable.createdAt, todayStart));
+
+  res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+  res.json({
+    totalPageViews: totals.totalViews,
+    pageViewsToday: todayViews.count,
+    pageViewsThisWeek: weekViews.count,
+    topPages: byPage,
+    apiReportsProcessed: apiHits.total,
+    apiReportsToday: apiHitsToday.count,
+  });
 });
 
 export default router;

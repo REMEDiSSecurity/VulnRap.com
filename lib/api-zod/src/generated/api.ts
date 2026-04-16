@@ -2154,3 +2154,33 @@ export const GetSlopDistributionResponse = zod.object({
   ),
   totalReports: zod.number(),
 });
+
+/**
+ * Increments the page view counter for a given path
+ * @summary Record a page view
+ */
+export const RecordPageViewBody = zod.object({
+  path: zod.string(),
+});
+
+export const RecordPageViewResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * Returns aggregate page view counts and API usage statistics
+ * @summary Get page view statistics
+ */
+export const GetPageViewsResponse = zod.object({
+  totalPageViews: zod.number(),
+  pageViewsToday: zod.number(),
+  pageViewsThisWeek: zod.number(),
+  topPages: zod.array(
+    zod.object({
+      path: zod.string(),
+      views: zod.number(),
+    }),
+  ),
+  apiReportsProcessed: zod.number(),
+  apiReportsToday: zod.number(),
+});

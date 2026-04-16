@@ -3,10 +3,41 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout } from "lucide-react";
 
-export const CURRENT_VERSION = "3.3.0";
-export const RELEASE_DATE = "2026-04-14";
+export const CURRENT_VERSION = "3.4.0";
+export const RELEASE_DATE = "2026-04-16";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.4.0",
+    date: "2026-04-16",
+    label: "Blog & Analytics",
+    labelColor: "border-emerald-500 text-emerald-400",
+    sections: [
+      {
+        icon: <BookOpen className="w-4 h-4 text-emerald-400" />,
+        title: "Blog Post: The Data Is There, the Score Isn't Listening",
+        type: "feature",
+        items: [
+          "Published Sprint 8 deep-dive blog post covering pipeline stability fixes, substance-based detection, scoring formula limitations, prompt injection defense, and the LLM blind spot",
+          "Four interactive inline Recharts visualizations embedded directly in blog prose: Pipeline Health bar chart, Scoring Formula Ceiling gauge, Detection Rate Over Time line chart, and Sprint 8 Scorecard comparison table",
+          "Charts use site color palette (cyan/purple accents, dark card backgrounds) and match existing stats page visual language",
+          "Blog page now shows posts newest-first with the new post at the top",
+        ],
+      },
+      {
+        icon: <Eye className="w-4 h-4 text-cyan-400" />,
+        title: "Page View Analytics",
+        type: "feature",
+        items: [
+          "Server-side page view tracking: every page navigation records a view counter aggregated by path and date",
+          "New page_views database table with path-based daily counters and upsert-on-duplicate logic",
+          "Live Page Views and API Reports Processed stat cards on the stats page with today/this-week breakdowns",
+          "Top Pages bar chart showing the most visited pages ranked by total view count",
+          "POST /stats/pageview and GET /stats/pageviews API endpoints added to OpenAPI spec",
+        ],
+      },
+    ],
+  },
   {
     version: "3.3.0",
     date: "2026-04-14",

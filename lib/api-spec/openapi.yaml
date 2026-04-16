@@ -517,6 +517,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/SlopDistribution"
 
+  /stats/pageview:
+    post:
+      operationId: recordPageView
+      tags: [stats]
+      summary: Record a page view
+      description: Increments the page view counter for a given path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+              required:
+                - path
+      responses:
+        "200":
+          description: Page view recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required:
+                  - ok
+
+  /stats/pageviews:
+    get:
+      operationId: getPageViews
+      tags: [stats]
+      summary: Get page view statistics
+      description: Returns aggregate page view counts and API usage statistics
+      responses:
+        "200":
+          description: Page view statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageViewStats"
+
 components:
   schemas:
     HealthStatus:
@@ -1196,6 +1240,39 @@ components:
         - reportsByMode
         - reportsToday
         - reportsThisWeek
+
+    PageViewStats:
+      type: object
+      properties:
+        totalPageViews:
+          type: integer
+        pageViewsToday:
+          type: integer
+        pageViewsThisWeek:
+          type: integer
+        topPages:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              views:
+                type: integer
+            required:
+              - path
+              - views
+        apiReportsProcessed:
+          type: integer
+        apiReportsToday:
+          type: integer
+      required:
+        - totalPageViews
+        - pageViewsToday
+        - pageViewsThisWeek
+        - topPages
+        - apiReportsProcessed
+        - apiReportsToday
 
     RecentActivity:
       type: object
