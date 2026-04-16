@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { registerCvePublicationDate } from "./triage-recommendation";
+import { persistentCacheGet, persistentCacheSet, type TtlCategory } from "./cache-service";
 
 export interface VerificationCheck {
   type: string;
@@ -7,6 +8,7 @@ export interface VerificationCheck {
   result: "verified" | "not_found" | "warning" | "error" | "skipped";
   detail: string;
   weight: number;
+  cacheSource?: "l1" | "db" | "fresh";
 }
 
 export interface VerificationSummary {
@@ -16,12 +18,17 @@ export interface VerificationSummary {
   errors: number;
 }
 
+export interface CacheMetadata {
+  hits: { l1: number; db: number; fresh: number };
+}
+
 export interface VerificationResult {
   checks: VerificationCheck[];
   summary: VerificationSummary;
   triageNotes: string[];
   score: number;
   detectedProjects: DetectedProject[];
+  cacheMetadata?: CacheMetadata;
 }
 
 interface DetectedProject {
@@ -30,30 +37,12 @@ interface DetectedProject {
   source: string;
 }
 
-interface CacheEntry<T> {
-  value: T;
-  ts: number;
-}
+const cacheTracker = { l1: 0, db: 0, fresh: 0 };
 
-const CACHE_TTL_MS = 30 * 60 * 1000;
-const apiCache = new Map<string, CacheEntry<unknown>>();
-
-function cacheGet<T>(key: string): T | undefined {
-  const entry = apiCache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() - entry.ts > CACHE_TTL_MS) {
-    apiCache.delete(key);
-    return undefined;
-  }
-  return entry.value as T;
-}
-
-function cacheSet<T>(key: string, value: T): void {
-  apiCache.set(key, { value, ts: Date.now() });
-  if (apiCache.size > 500) {
-    const oldest = [...apiCache.entries()].sort((a, b) => a[1].ts - b[1].ts);
-    for (let i = 0; i < 100; i++) apiCache.delete(oldest[i][0]);
-  }
+function resetCacheTracker(): void {
+  cacheTracker.l1 = 0;
+  cacheTracker.db = 0;
+  cacheTracker.fresh = 0;
 }
 
 function contentCacheKey(prefix: string, text: string): string {
@@ -211,10 +200,23 @@ function extractCodeReferences(text: string): { functions: string[]; filePaths: 
   return { functions: functions.slice(0, 20), filePaths: filePaths.slice(0, 20) };
 }
 
-async function githubFetch(url: string): Promise<{ ok: boolean; status: number; data?: unknown }> {
+type GhResult = { ok: boolean; status: number; data?: unknown };
+
+function classifyGithubTtl(url: string): TtlCategory {
+  if (/\/tags\b/.test(url) || /\/releases\b/.test(url)) return "immutable";
+  if (/\/contents\//.test(url) && /ref=/.test(url)) return "immutable";
+  if (/\/contents\//.test(url)) return "mutable";
+  if (/\/search\//.test(url)) return "mutable";
+  return "mutable";
+}
+
+async function githubFetch(url: string): Promise<GhResult & { cacheSource?: "l1" | "db" | "fresh" }> {
   const cacheKey = "gh:" + url;
-  const cached = cacheGet<{ ok: boolean; status: number; data?: unknown }>(cacheKey);
-  if (cached) return cached;
+  const cached = await persistentCacheGet<GhResult>(cacheKey);
+  if (cached) {
+    cacheTracker[cached.source]++;
+    return { ...cached.value, cacheSource: cached.source };
+  }
 
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
   const headers: Record<string, string> = {
@@ -229,15 +231,22 @@ async function githubFetch(url: string): Promise<{ ok: boolean; status: number; 
     const resp = await fetch(url, { headers, signal: controller.signal });
     clearTimeout(timeout);
 
-    const result = {
+    const result: GhResult = {
       ok: resp.ok,
       status: resp.status,
       data: resp.ok ? await resp.json() : undefined,
     };
-    cacheSet(cacheKey, result);
-    return result;
+
+    if (resp.ok || resp.status === 404) {
+      const ttlCategory = classifyGithubTtl(url);
+      await persistentCacheSet(cacheKey, result, ttlCategory);
+    }
+
+    cacheTracker.fresh++;
+    return { ...result, cacheSource: "fresh" };
   } catch {
-    return { ok: false, status: 0 };
+    cacheTracker.fresh++;
+    return { ok: false, status: 0, cacheSource: "fresh" };
   }
 }
 
@@ -265,6 +274,7 @@ async function verifyGitHubReferences(
         result: "error",
         detail: `GitHub API unreachable while verifying "${fp}"`,
         weight: 0,
+        cacheSource: resp.cacheSource,
       });
       continue;
     } else if (resp.ok) {
@@ -274,6 +284,7 @@ async function verifyGitHubReferences(
         result: "verified",
         detail: `File path "${fp}" exists in ${repoSlug}`,
         weight: -8,
+        cacheSource: resp.cacheSource,
       });
     } else if (resp.status === 404) {
       checks.push({
@@ -282,6 +293,7 @@ async function verifyGitHubReferences(
         result: "not_found",
         detail: `File path "${fp}" does not exist in ${repoSlug}`,
         weight: 20,
+        cacheSource: resp.cacheSource,
       });
     } else if (resp.status === 403) {
       checks.push({
@@ -290,6 +302,7 @@ async function verifyGitHubReferences(
         result: "error",
         detail: "GitHub API rate limit reached",
         weight: 0,
+        cacheSource: resp.cacheSource,
       });
       break;
     } else {
@@ -299,6 +312,7 @@ async function verifyGitHubReferences(
         result: "error",
         detail: `GitHub API returned ${resp.status} while verifying "${fp}"`,
         weight: 0,
+        cacheSource: resp.cacheSource,
       });
     }
   }
@@ -318,6 +332,7 @@ async function verifyGitHubReferences(
         result: "error",
         detail: `GitHub API unreachable while searching for "${fn}"`,
         weight: 0,
+        cacheSource: resp.cacheSource,
       });
       continue;
     } else if (resp.ok && resp.data) {
@@ -329,6 +344,7 @@ async function verifyGitHubReferences(
           result: "verified",
           detail: `Function/symbol "${fn}" found in ${repoSlug}`,
           weight: -8,
+          cacheSource: resp.cacheSource,
         });
       } else {
         checks.push({
@@ -337,6 +353,7 @@ async function verifyGitHubReferences(
           result: "not_found",
           detail: `Function/symbol "${fn}" not found in ${repoSlug}`,
           weight: 20,
+          cacheSource: resp.cacheSource,
         });
       }
     } else if (resp.status === 403) {
@@ -346,6 +363,7 @@ async function verifyGitHubReferences(
         result: "error",
         detail: "GitHub API rate limit reached",
         weight: 0,
+        cacheSource: resp.cacheSource,
       });
       break;
     } else {
@@ -355,6 +373,7 @@ async function verifyGitHubReferences(
         result: "error",
         detail: `GitHub API returned ${resp.status} while searching for "${fn}"`,
         weight: 0,
+        cacheSource: resp.cacheSource,
       });
     }
   }
@@ -372,10 +391,15 @@ interface NvdVulnerability {
   };
 }
 
-async function nvdFetch(cveId: string): Promise<{ found: boolean; description?: string; published?: string; error?: boolean }> {
+type NvdResult = { found: boolean; description?: string; published?: string; error?: boolean; cacheSource?: "l1" | "db" | "fresh" };
+
+async function nvdFetch(cveId: string): Promise<NvdResult> {
   const cacheKey = "nvd:" + cveId;
-  const cached = cacheGet<{ found: boolean; description?: string; published?: string; error?: boolean }>(cacheKey);
-  if (cached) return cached;
+  const cached = await persistentCacheGet<Omit<NvdResult, "cacheSource">>(cacheKey);
+  if (cached) {
+    cacheTracker[cached.source]++;
+    return { ...cached.value, cacheSource: cached.source };
+  }
 
   try {
     const controller = new AbortController();
@@ -390,27 +414,32 @@ async function nvdFetch(cveId: string): Promise<{ found: boolean; description?: 
     if (!resp.ok) {
       if (resp.status === 404) {
         const result = { found: false };
-        cacheSet(cacheKey, result);
-        return result;
+        await persistentCacheSet(cacheKey, result, "nvd");
+        cacheTracker.fresh++;
+        return { ...result, cacheSource: "fresh" };
       }
-      return { found: false, error: true };
+      cacheTracker.fresh++;
+      return { found: false, error: true, cacheSource: "fresh" };
     }
 
     const data = (await resp.json()) as { vulnerabilities?: NvdVulnerability[] };
     const vulns = data.vulnerabilities ?? [];
     if (vulns.length === 0) {
       const result = { found: false };
-      cacheSet(cacheKey, result);
-      return result;
+      await persistentCacheSet(cacheKey, result, "nvd");
+      cacheTracker.fresh++;
+      return { ...result, cacheSource: "fresh" };
     }
 
     const desc = vulns[0]?.cve?.descriptions?.find((d) => d.lang === "en")?.value ?? "";
     const published = vulns[0]?.cve?.published ?? undefined;
     const result = { found: true, description: desc, published };
-    cacheSet(cacheKey, result);
-    return result;
+    await persistentCacheSet(cacheKey, result, "nvd");
+    cacheTracker.fresh++;
+    return { ...result, cacheSource: "fresh" };
   } catch {
-    return { found: false, error: true };
+    cacheTracker.fresh++;
+    return { found: false, error: true, cacheSource: "fresh" };
   }
 }
 
@@ -479,6 +508,7 @@ async function verifyCveReferences(text: string): Promise<VerificationCheck[]> {
         result: "error",
         detail: `NVD API error while looking up ${cveId} — skipped verification`,
         weight: 0,
+        cacheSource: nvdResult.cacheSource,
       });
     } else if (!nvdResult.found) {
       const currentYear = new Date().getFullYear();
@@ -508,6 +538,7 @@ async function verifyCveReferences(text: string): Promise<VerificationCheck[]> {
         result: yearsOld <= 1 ? "info" : "not_found",
         detail: freshReason,
         weight: freshWeight,
+        cacheSource: nvdResult.cacheSource,
       });
     } else {
       if (nvdResult.published) {
@@ -522,6 +553,7 @@ async function verifyCveReferences(text: string): Promise<VerificationCheck[]> {
           result: "warning",
           detail: `Report shares ${similarity}% phrase overlap with NVD description for ${cveId} — possible copy-paste from NVD`,
           weight: 15,
+          cacheSource: nvdResult.cacheSource,
         });
       } else {
         checks.push({
@@ -530,6 +562,7 @@ async function verifyCveReferences(text: string): Promise<VerificationCheck[]> {
           result: "verified",
           detail: `${cveId} confirmed in NVD with independent description (${similarity}% overlap)`,
           weight: -5,
+          cacheSource: nvdResult.cacheSource,
         });
       }
     }
@@ -677,8 +710,12 @@ function delay(ms: number): Promise<void> {
 
 export async function performActiveVerification(text: string): Promise<VerificationResult> {
   const cacheKey = contentCacheKey("verify", text);
-  const cached = cacheGet<VerificationResult>(cacheKey);
-  if (cached) return cached;
+  const cached = await persistentCacheGet<VerificationResult>(cacheKey);
+  if (cached) {
+    return { ...cached.value, cacheMetadata: { hits: { l1: cached.source === "l1" ? 1 : 0, db: cached.source === "db" ? 1 : 0, fresh: 0 } } };
+  }
+
+  resetCacheTracker();
 
   const detectedProjects = detectProjects(text);
   const codeRefs = extractCodeReferences(text);
@@ -733,14 +770,19 @@ export async function performActiveVerification(text: string): Promise<Verificat
     errors: allChecks.filter((c) => c.result === "error").length,
   };
 
+  const cacheMetadata: CacheMetadata = {
+    hits: { ...cacheTracker },
+  };
+
   const result: VerificationResult = {
     checks: allChecks,
     summary,
     triageNotes,
     score,
     detectedProjects,
+    cacheMetadata,
   };
 
-  cacheSet(cacheKey, result);
+  await persistentCacheSet(cacheKey, result, "mutable");
   return result;
 }

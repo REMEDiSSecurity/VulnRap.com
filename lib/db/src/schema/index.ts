@@ -4,3 +4,4 @@ export * from "./similarity_results";
 export * from "./report_stats";
 export * from "./user_feedback";
 export * from "./page_views";
+export * from "./api_cache";
