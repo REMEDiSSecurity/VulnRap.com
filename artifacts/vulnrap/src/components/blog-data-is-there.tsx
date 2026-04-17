@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import heroSrc from "@assets/generated_images/blog-data-is-there-hero.png";
 import {
   BarChart,
   Bar,
@@ -50,21 +52,36 @@ const chartFont = "'Inter', 'Space Grotesk', system-ui, sans-serif";
 
 function ChartCard({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
-    <div className="bg-card/80 border border-border/50 rounded-lg p-6 my-6">
-      <h4 className="text-foreground font-semibold text-sm mb-1">{title}</h4>
-      <p className="text-muted-foreground text-xs mb-5">{subtitle}</p>
+    <div className="bg-card/80 border border-border/50 rounded-lg p-3 sm:p-6 my-6">
+      <h4 className="text-foreground font-semibold text-sm mb-1 leading-snug">{title}</h4>
+      <p className="text-muted-foreground text-xs mb-5 leading-snug">{subtitle}</p>
       {children}
     </div>
   );
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches,
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isMobile;
+}
+
 function PipelineHealthChart() {
+  const isMobile = useIsMobile();
   const data = [
-    { sprint: "7 — fix 1", rate: 27, count: "4/15", color: CHART_COLORS.cyanDim },
-    { sprint: "7 — fix 2", rate: 13, count: "2/15", color: CHART_COLORS.cyanDim },
-    { sprint: "7 — fix 3", rate: 27, count: "4/15", color: CHART_COLORS.cyanDim },
-    { sprint: "7 — fix 4", rate: 13, count: "2/15", color: CHART_COLORS.cyanDim },
-    { sprint: "Sprint 8", rate: 80, count: "12/15", color: CHART_COLORS.cyan },
+    { sprint: isMobile ? "fix 1" : "7 — fix 1", rate: 27, count: "4/15", color: CHART_COLORS.cyanDim },
+    { sprint: isMobile ? "fix 2" : "7 — fix 2", rate: 13, count: "2/15", color: CHART_COLORS.cyanDim },
+    { sprint: isMobile ? "fix 3" : "7 — fix 3", rate: 27, count: "4/15", color: CHART_COLORS.cyanDim },
+    { sprint: isMobile ? "fix 4" : "7 — fix 4", rate: 13, count: "2/15", color: CHART_COLORS.cyanDim },
+    { sprint: isMobile ? "S8" : "Sprint 8", rate: 80, count: "12/15", color: CHART_COLORS.cyan },
   ];
 
   return (
@@ -72,21 +89,23 @@ function PipelineHealthChart() {
       title="Pipeline Health: Reports with Working Heuristic Analysis"
       subtitle="Synthetic corpus (15 reports) — percentage receiving full detector analysis across Sprint 7 hotfixes and Sprint 8"
     >
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer width="100%" height={isMobile ? 220 : 260}>
         <BarChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.gridLine} vertical={false} />
           <XAxis
             dataKey="sprint"
-            tick={{ fill: CHART_COLORS.textMuted, fontFamily: chartFont, fontSize: 12 }}
+            tick={{ fill: CHART_COLORS.textMuted, fontFamily: chartFont, fontSize: isMobile ? 10 : 12 }}
             axisLine={{ stroke: CHART_COLORS.gridLine }}
             tickLine={false}
+            interval={0}
           />
           <YAxis
-            tick={{ fill: CHART_COLORS.textMuted, fontFamily: chartFont, fontSize: 12 }}
+            tick={{ fill: CHART_COLORS.textMuted, fontFamily: chartFont, fontSize: isMobile ? 10 : 12 }}
             axisLine={false}
             tickLine={false}
             domain={[0, 100]}
             tickFormatter={(v: number) => `${v}%`}
+            width={isMobile ? 32 : 40}
           />
           <Tooltip
             contentStyle={{
@@ -116,6 +135,9 @@ function PipelineHealthChart() {
 function ScoringFormulaChart() {
   const substanceMax = 32;
   const slopScoreResult = Math.round(substanceMax * 0.65 + 50 * 0.35);
+  // Detection threshold marker is at 60% of full scale; max-possible at slopScoreResult%.
+  // On a 5px-wide track these labels overlap badly. Place them on opposite sides of each
+  // marker and rely on the >20pt gap to avoid collision on every screen size.
 
   return (
     <ChartCard
@@ -124,52 +146,58 @@ function ScoringFormulaChart() {
     >
       <div className="flex flex-col gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-muted-foreground text-xs w-[140px] shrink-0">authenticityScore</span>
-            <div className="flex-1 flex h-8 rounded overflow-hidden">
+          <div className="text-muted-foreground text-[11px] uppercase tracking-wider mb-1.5 font-semibold">
+            authenticityScore (max reachable: 32 / 100)
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex h-8 rounded overflow-hidden min-w-0">
               <div
-                className="flex items-center justify-center text-[11px] font-semibold"
+                className="flex items-center justify-center text-[10px] sm:text-[11px] font-semibold whitespace-nowrap px-1"
                 style={{ width: `${substanceMax}%`, background: CHART_COLORS.cyan, color: CHART_COLORS.bg }}
               >
                 +32 substance
               </div>
               <div
-                className="flex-1 flex items-center pl-2 text-[11px] text-muted-foreground"
+                className="flex-1 flex items-center pl-2 text-[10px] sm:text-[11px] text-muted-foreground truncate"
                 style={{ background: "hsl(220, 20%, 10%)" }}
               >
-                unreachable (style base = 0)
+                <span className="hidden sm:inline">unreachable (style base = 0)</span>
+                <span className="sm:hidden">unreachable</span>
               </div>
             </div>
-            <span className="text-foreground text-sm font-semibold w-[30px] text-right">32</span>
+            <span className="text-foreground text-sm font-semibold w-7 text-right shrink-0">32</span>
           </div>
         </div>
 
-        <div className="bg-background/80 rounded-md px-4 py-3 font-mono text-[13px] text-muted-foreground">
+        <div className="bg-background/80 rounded-md px-3 py-3 font-mono text-[11px] sm:text-[13px] text-muted-foreground break-words">
           <span style={{ color: CHART_COLORS.cyan }}>slopScore</span> = 32 × 0.65 + (100 − 50) × 0.35 ={" "}
           <span className="font-semibold" style={{ color: CHART_COLORS.amber }}>{slopScoreResult}</span>
         </div>
 
-        <div className="relative h-10">
-          <div className="absolute top-0 left-0 right-0 h-2 rounded" style={{ background: "hsl(220, 20%, 10%)" }} />
+        <div className="relative pt-1 pb-8">
+          <div className="relative h-2 rounded" style={{ background: "hsl(220, 20%, 10%)" }}>
+            {/* Markers */}
+            <div
+              className="absolute top-[-3px] w-3 h-3 rounded-full border-2"
+              style={{ left: `${slopScoreResult}%`, transform: "translateX(-50%)", background: CHART_COLORS.amber, borderColor: CHART_COLORS.bg }}
+            />
+            <div
+              className="absolute top-[-5px] w-0.5 h-5"
+              style={{ left: "60%", transform: "translateX(-50%)", background: CHART_COLORS.red }}
+            />
+          </div>
+          {/* Labels: amber goes on the left, red on the right — they're 22pts apart so no overlap */}
           <div
-            className="absolute top-[-2px] w-3 h-3 rounded-full border-2"
-            style={{ left: `${slopScoreResult}%`, background: CHART_COLORS.amber, borderColor: CHART_COLORS.bg }}
-          />
-          <div
-            className="absolute top-[-4px] w-0.5 h-4"
-            style={{ left: "60%", background: CHART_COLORS.red }}
-          />
-          <div
-            className="absolute top-[18px] text-[11px] whitespace-nowrap -translate-x-1/2"
-            style={{ left: `${slopScoreResult}%`, color: CHART_COLORS.amber }}
+            className="absolute top-[18px] text-[10px] sm:text-[11px] whitespace-nowrap"
+            style={{ left: `${slopScoreResult}%`, transform: "translateX(-100%) translateX(-4px)", color: CHART_COLORS.amber }}
           >
-            max possible: {slopScoreResult}
+            max: {slopScoreResult}
           </div>
           <div
-            className="absolute top-[18px] text-[11px] whitespace-nowrap -translate-x-1/2"
-            style={{ left: "60%", color: CHART_COLORS.red }}
+            className="absolute top-[18px] text-[10px] sm:text-[11px] whitespace-nowrap"
+            style={{ left: "60%", transform: "translateX(4px)", color: CHART_COLORS.red }}
           >
-            "Likely Slop" ≥60
+            ≥60 Likely Slop
           </div>
         </div>
       </div>
@@ -178,12 +206,13 @@ function ScoringFormulaChart() {
 }
 
 function DetectionRateChart() {
+  const isMobile = useIsMobile();
   const data = [
-    { sprint: "7 — fix 1", synthetic: 0, realWorld: null },
-    { sprint: "7 — fix 2", synthetic: 0, realWorld: null },
-    { sprint: "7 — fix 3", synthetic: 0, realWorld: null },
-    { sprint: "7 — fix 4", synthetic: 0, realWorld: 20 },
-    { sprint: "Sprint 8", synthetic: 10, realWorld: 20 },
+    { sprint: isMobile ? "fix 1" : "7 — fix 1", synthetic: 0, realWorld: null },
+    { sprint: isMobile ? "fix 2" : "7 — fix 2", synthetic: 0, realWorld: null },
+    { sprint: isMobile ? "fix 3" : "7 — fix 3", synthetic: 0, realWorld: null },
+    { sprint: isMobile ? "fix 4" : "7 — fix 4", synthetic: 0, realWorld: 20 },
+    { sprint: isMobile ? "S8" : "Sprint 8", synthetic: 10, realWorld: 20 },
   ];
 
   return (
@@ -191,21 +220,23 @@ function DetectionRateChart() {
       title="Detection Rate Over Time"
       subtitle="Percentage of known-slop reports scoring above the detection threshold (≥60) — Sprint 7 hotfixes through Sprint 8"
     >
-      <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={isMobile ? 220 : 240}>
+        <LineChart data={data} margin={{ top: 10, right: isMobile ? 40 : 10, left: -10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.gridLine} vertical={false} />
           <XAxis
             dataKey="sprint"
-            tick={{ fill: CHART_COLORS.textMuted, fontFamily: chartFont, fontSize: 12 }}
+            tick={{ fill: CHART_COLORS.textMuted, fontFamily: chartFont, fontSize: isMobile ? 10 : 12 }}
             axisLine={{ stroke: CHART_COLORS.gridLine }}
             tickLine={false}
+            interval={0}
           />
           <YAxis
-            tick={{ fill: CHART_COLORS.textMuted, fontFamily: chartFont, fontSize: 12 }}
+            tick={{ fill: CHART_COLORS.textMuted, fontFamily: chartFont, fontSize: isMobile ? 10 : 12 }}
             axisLine={false}
             tickLine={false}
             domain={[0, 100]}
             tickFormatter={(v: number) => `${v}%`}
+            width={isMobile ? 32 : 40}
           />
           <ReferenceLine
             y={60}
@@ -229,9 +260,10 @@ function DetectionRateChart() {
               fontSize: 13,
               color: CHART_COLORS.text,
             }}
-            formatter={(value: number | null) =>
-              value !== null ? [`${value}%`, ""] : ["—", ""]
-            }
+            formatter={(value) => {
+              const v = value as number | null;
+              return v !== null ? [`${v}%`, ""] : ["—", ""];
+            }}
           />
           <Line
             type="monotone"
@@ -284,16 +316,17 @@ function ScorecardChart() {
 
   return (
     <ChartCard title="Sprint 8 Scorecard" subtitle="What changed between end-of-Sprint-7 and end-of-Sprint-8">
-      <div className="flex flex-col gap-0.5">
+      {/* Desktop: table layout */}
+      <div className="hidden sm:flex flex-col gap-0.5">
         <div
           className="flex items-center py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider"
           style={{ borderBottom: `1px solid ${CHART_COLORS.gridLine}` }}
         >
           <span className="w-5" />
           <span className="flex-1">Metric</span>
-          <span className="w-[100px] text-right">Sprint 7</span>
+          <span className="w-[110px] text-right">Sprint 7</span>
           <span className="w-5 text-center" />
-          <span className="w-[120px] text-left">Sprint 8</span>
+          <span className="w-[130px] text-left">Sprint 8</span>
         </div>
         {items.map((item, i) => (
           <div
@@ -304,12 +337,35 @@ function ScorecardChart() {
             <span className="w-5 text-[10px] text-center" style={{ color: statusColor[item.status] }}>
               {statusIcon[item.status]}
             </span>
-            <span className="text-foreground flex-1">{item.label}</span>
-            <span className="text-muted-foreground w-[100px] text-right">{item.before}</span>
+            <span className="text-foreground flex-1 pr-2">{item.label}</span>
+            <span className="text-muted-foreground w-[110px] text-right text-xs">{item.before}</span>
             <span className="text-muted-foreground w-5 text-center">→</span>
-            <span className="w-[120px] text-left font-medium" style={{ color: statusColor[item.status] }}>
+            <span className="w-[130px] text-left font-medium text-xs" style={{ color: statusColor[item.status] }}>
               {item.after}
             </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Mobile: stacked card layout */}
+      <div className="sm:hidden flex flex-col gap-3">
+        {items.map((item, i) => (
+          <div
+            key={i}
+            className="flex flex-col gap-1.5 pb-3"
+            style={{ borderBottom: i < items.length - 1 ? `1px solid ${CHART_COLORS.gridLine}` : "none" }}
+          >
+            <div className="flex items-start gap-2">
+              <span className="text-[11px] mt-0.5 shrink-0" style={{ color: statusColor[item.status] }}>
+                {statusIcon[item.status]}
+              </span>
+              <span className="text-foreground text-[13px] font-medium leading-snug">{item.label}</span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] pl-5 font-mono">
+              <span className="text-muted-foreground/70">{item.before}</span>
+              <span className="text-muted-foreground/50">→</span>
+              <span className="font-semibold" style={{ color: statusColor[item.status] }}>{item.after}</span>
+            </div>
           </div>
         ))}
       </div>
@@ -320,8 +376,18 @@ function ScorecardChart() {
 export function BlogDataIsThere() {
   return (
     <article className="space-y-4">
+      <div className="-mx-8 -mt-8 mb-2 relative overflow-hidden rounded-t-xl">
+        <img
+          src={heroSrc}
+          alt="A glowing analog gauge with its needle stuck near zero while red warning flags and data streams flood around it — visualizing detection signals being ignored by the score"
+          className="w-full h-44 sm:h-64 object-cover"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent pointer-events-none" />
+      </div>
+
       <div className="space-y-3">
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
           <Badge variant="outline" className="border-cyan-500/30 text-cyan-400 text-[10px]">Sprint 8</Badge>
           <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> April 2026</span>
           <span>by the REMEDiS Security team</span>
