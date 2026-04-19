@@ -11,6 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn, anonymizeId } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
@@ -577,20 +578,24 @@ function VideoSection() {
 function Explainer({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <span className="group relative inline-flex ml-1 cursor-help">
-      <button
+    <Tooltip open={open} onOpenChange={setOpen} delayDuration={150}>
+      <TooltipTrigger
         type="button"
-        className="inline-flex"
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-        onBlur={() => setOpen(false)}
         aria-label="More info"
+        className="inline-flex ml-1 cursor-help"
       >
         <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-primary transition-colors" />
-      </button>
-      <span className={`pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-popover border border-border px-3 py-2 text-xs text-popover-foreground transition-opacity z-50 shadow-lg text-left font-normal normal-case ${open ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        align="center"
+        collisionPadding={12}
+        className="w-56 bg-popover border border-border text-popover-foreground shadow-lg text-left font-normal normal-case px-3 py-2 whitespace-normal"
+      >
         {text}
-      </span>
-    </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
