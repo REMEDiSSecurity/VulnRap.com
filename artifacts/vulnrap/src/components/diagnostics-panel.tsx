@@ -109,6 +109,7 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
   const overrides = data?.composite?.overridesApplied ?? data?.trace?.composite?.overridesApplied ?? [];
   const warnings = data?.engines?.warnings ?? data?.trace?.composite?.warnings ?? [];
   const compositeBreakdown = data?.engines?.compositeBreakdown;
+  const signalsSummary = data?.trace?.signalsSummary ?? null;
 
   return (
     <Card className="glass-card rounded-xl">
@@ -196,6 +197,48 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
                         </div>
                       ))}
                     </div>
+                  </section>
+                </>
+              )}
+
+              {signalsSummary && (
+                <>
+                  <Separator className="bg-border/30" />
+                  <section className="space-y-2">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Input Signals</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                      <Stat label="Word Count" value={`${signalsSummary.wordCount}`} />
+                      <Stat label="Code Blocks" value={`${signalsSummary.codeBlockCount}`} />
+                      <Stat label="Real URLs" value={`${signalsSummary.realUrlCount}`} />
+                      <Stat
+                        label="Completeness"
+                        value={signalsSummary.completenessScore.toFixed(2)}
+                        sub="0 – 1"
+                      />
+                      <Stat
+                        label="Claim/Evidence"
+                        value={signalsSummary.claimEvidenceRatio.toFixed(2)}
+                        sub="ratio"
+                      />
+                    </div>
+                    {signalsSummary.claimedCwes.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Claimed CWEs
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {signalsSummary.claimedCwes.map((cwe) => (
+                            <Badge
+                              key={cwe}
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0 h-5 font-mono text-muted-foreground border-muted-foreground/30"
+                            >
+                              {cwe}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </section>
                 </>
               )}
