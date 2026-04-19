@@ -61,3 +61,8 @@ artifact.toml
 attached_assets/
 artifacts/mockup-sandbox/
 attached_assets/
+
+# Playwright
+artifacts/*/test-results/
+artifacts/*/playwright-report/
+artifacts/*/playwright/.cache/
