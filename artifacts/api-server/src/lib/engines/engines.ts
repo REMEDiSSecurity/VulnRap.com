@@ -21,7 +21,7 @@ export interface EngineResult {
   verdict: Verdict;
   confidence: Confidence;
   triggeredIndicators: TriggeredIndicator[];
-  signalBreakdown: Record<string, { score: number; weight: number } | string[] | Record<string, number>>;
+  signalBreakdown: Record<string, { score: number; weight: number } | string[] | Record<string, number | string>>;
   note: string;
 }
 

@@ -564,14 +564,14 @@ export function generateReproRecipe(
   const notes: string[] = [];
 
   if (verification) {
-    const verified = verification.results?.filter(r => r.status === "verified") || [];
-    const notFound = verification.results?.filter(r => r.status === "not_found") || [];
+    const verified = verification.checks.filter(c => c.result === "verified");
+    const notFound = verification.checks.filter(c => c.result === "not_found");
 
     if (verified.length > 0) {
-      notes.push(`${verified.length} reference(s) verified against live sources (${verified.map(r => r.target).join(", ")})`);
+      notes.push(`${verified.length} reference(s) verified against live sources (${verified.map(c => c.target).join(", ")})`);
     }
     if (notFound.length > 0) {
-      notes.push(`WARNING: ${notFound.length} reference(s) not found — ${notFound.map(r => `${r.target}: ${r.detail || "not found"}`).join("; ")}`);
+      notes.push(`WARNING: ${notFound.length} reference(s) not found — ${notFound.map(c => `${c.target}: ${c.detail || "not found"}`).join("; ")}`);
     }
   }
 

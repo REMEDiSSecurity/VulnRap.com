@@ -333,7 +333,7 @@ async function analyzeSlopWithLLMOnce(
     const finishReason = choice?.finish_reason ?? "unknown";
     const usage = response.usage;
     if (raw.length === 0 && choice) {
-      logger.warn({ messageKeys: Object.keys(choice.message || {}), choiceKeys: Object.keys(choice), refusal: (choice.message as Record<string, unknown>)?.refusal }, "LLM slop: empty content debug");
+      logger.warn({ messageKeys: Object.keys(choice.message || {}), choiceKeys: Object.keys(choice), refusal: choice.message?.refusal }, "LLM slop: empty content debug");
     }
     logger.info({ rawLength: raw.length, elapsedMs, finishReason, completionTokens: usage?.completion_tokens, promptTokens: usage?.prompt_tokens }, "LLM slop: received response");
 

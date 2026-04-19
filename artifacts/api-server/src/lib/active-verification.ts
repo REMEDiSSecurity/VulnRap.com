@@ -5,7 +5,7 @@ import { persistentCacheGet, persistentCacheSet, type TtlCategory } from "./cach
 export interface VerificationCheck {
   type: string;
   target: string;
-  result: "verified" | "not_found" | "warning" | "error" | "skipped";
+  result: "verified" | "not_found" | "warning" | "error" | "skipped" | "info";
   detail: string;
   weight: number;
   cacheSource?: "l1" | "db" | "fresh";
