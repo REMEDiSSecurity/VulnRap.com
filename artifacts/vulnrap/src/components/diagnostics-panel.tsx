@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown, ChevronUp, Activity, AlertCircle } from "lucide-react";
+import { ChevronDown, ChevronUp, Activity, AlertCircle, Download, ClipboardCopy } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface PerplexityBreakdown {
   bigramEntropy?: number;
@@ -94,6 +95,7 @@ async function fetchDiagnostics(reportId: number): Promise<DiagnosticsResponse> 
 
 export function DiagnosticsPanel({ reportId }: { reportId: number }) {
   const [expanded, setExpanded] = useState(false);
+  const { toast } = useToast();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["report-diagnostics", reportId],
@@ -101,6 +103,29 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
     enabled: expanded,
     staleTime: 60_000,
   });
+
+  const exportJSON = () => {
+    if (!data) return;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vulnrap-diagnostics-${reportId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Exported", description: "Diagnostics JSON downloaded." });
+  };
+
+  const copyMarkdown = async () => {
+    if (!data) return;
+    const md = buildMarkdownSummary(data);
+    try {
+      await navigator.clipboard.writeText(md);
+      toast({ title: "Copied", description: "Diagnostics markdown summary copied to clipboard." });
+    } catch {
+      toast({ title: "Copy failed", description: "Could not copy to clipboard.", variant: "destructive" });
+    }
+  };
 
   const perplexity: PerplexityBreakdown | undefined =
     data?.engines?.engines?.find(e => !!e.signalBreakdown?.perplexity)?.signalBreakdown?.perplexity;
@@ -127,18 +152,47 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
               Pipeline timings, per-engine breakdown, applied overrides, perplexity signals, and the legacy slop-score mapping for triage auditing.
             </CardDescription>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="shrink-0"
-            aria-expanded={expanded}
-            aria-controls={`diagnostics-body-${reportId}`}
-            onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
-          >
-            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            <span className="ml-1 text-xs">{expanded ? "Hide" : "Show"}</span>
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {expanded && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 h-8"
+                  disabled={!data}
+                  aria-label="Export diagnostics JSON"
+                  onClick={(e) => { e.stopPropagation(); exportJSON(); }}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="text-xs">Export JSON</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 h-8"
+                  disabled={!data}
+                  aria-label="Copy diagnostics markdown summary"
+                  onClick={(e) => { e.stopPropagation(); void copyMarkdown(); }}
+                >
+                  <ClipboardCopy className="w-3.5 h-3.5" />
+                  <span className="text-xs">Copy Markdown</span>
+                </Button>
+              </>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-expanded={expanded}
+              aria-controls={`diagnostics-body-${reportId}`}
+              onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+            >
+              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              <span className="ml-1 text-xs">{expanded ? "Hide" : "Show"}</span>
+            </Button>
+          </div>
         </div>
       </CardHeader>
 
@@ -360,6 +414,79 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
       )}
     </Card>
   );
+}
+
+function buildMarkdownSummary(data: DiagnosticsResponse): string {
+  const lines: string[] = [];
+  lines.push(`# VulnRap Diagnostics — Report ${data.reportId}`);
+  if (data.correlationId) lines.push(`_Correlation: \`${data.correlationId}\`_`);
+  lines.push("");
+
+  const totalMs = data.trace?.totalDurationMs ?? data.durationMs;
+  if (totalMs != null) {
+    lines.push(`**Total pipeline duration:** ${Math.round(totalMs)} ms`);
+    lines.push("");
+  }
+
+  if (data.composite) {
+    lines.push("## Composite");
+    lines.push(`- Score: **${data.composite.score}** (${data.composite.label})`);
+    const cb = data.engines?.compositeBreakdown;
+    if (cb) {
+      lines.push(`- Weighted Sum: ${cb.weightedSum.toFixed(2)} / Total Weight: ${cb.totalWeight.toFixed(2)}`);
+      lines.push(`- Before → After Override: ${cb.beforeOverride} → ${cb.afterOverride}`);
+    }
+    lines.push("");
+  }
+
+  const engines = data.engines?.engines ?? [];
+  if (engines.length > 0) {
+    lines.push("## Per-Engine Scores");
+    lines.push("| Engine | Score | Verdict | Confidence |");
+    lines.push("| --- | --- | --- | --- |");
+    for (const e of engines) {
+      lines.push(`| ${e.engine} | ${e.score} | ${e.verdict} | ${e.confidence ?? "—"} |`);
+    }
+    lines.push("");
+  }
+
+  const overrides = data.composite?.overridesApplied ?? data.trace?.composite?.overridesApplied ?? [];
+  if (overrides.length > 0) {
+    lines.push("## Overrides Applied");
+    for (const o of overrides) lines.push(`- ${o}`);
+    lines.push("");
+  }
+
+  const warnings = data.engines?.warnings ?? data.trace?.composite?.warnings ?? [];
+  if (warnings.length > 0) {
+    lines.push("## Warnings");
+    for (const w of warnings) lines.push(`- ${w}`);
+    lines.push("");
+  }
+
+  const perplexityEngine = engines.find(e => !!e.signalBreakdown?.perplexity);
+  const perplexity = perplexityEngine?.signalBreakdown?.perplexity;
+  if (perplexity) {
+    lines.push(`## Perplexity Signals (${perplexityEngine?.engine ?? "Engine 1"})`);
+    if (typeof perplexity.bigramEntropy === "number") lines.push(`- Bigram Entropy: ${perplexity.bigramEntropy.toFixed(3)} bits`);
+    if (typeof perplexity.functionWordRate === "number") lines.push(`- Function-Word Rate: ${perplexity.functionWordRate.toFixed(2)} per 1k tokens`);
+    if (typeof perplexity.syntaxValidityScore === "number") lines.push(`- Syntax Validity: ${perplexity.syntaxValidityScore.toFixed(2)}`);
+    if (typeof perplexity.combinedScore === "number") lines.push(`- Combined AI-ness: ${perplexity.combinedScore.toFixed(1)}`);
+    if (typeof perplexity.rawEngine1Score === "number" || perplexity.rawEngine1Verdict) {
+      lines.push(`- Raw Engine 1: ${perplexity.rawEngine1Score ?? "—"}${perplexity.rawEngine1Verdict ? ` (${perplexity.rawEngine1Verdict})` : ""}`);
+    }
+    lines.push("");
+  }
+
+  if (data.legacyMapping) {
+    lines.push("## Legacy Slop-Score Mapping");
+    lines.push(`- Legacy Slop Score: ${data.legacyMapping.slopScore} (0 = clean, 100 = pure slop)`);
+    lines.push(`- Display Mode: ${data.legacyMapping.displayMode}`);
+    lines.push(`- Note: ${data.legacyMapping.note}`);
+    lines.push("");
+  }
+
+  return lines.join("\n");
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
