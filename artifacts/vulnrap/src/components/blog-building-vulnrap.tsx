@@ -53,7 +53,7 @@ function Table({ headers, rows }: { headers: string[]; rows: string[][] }) {
 
 export function BlogBuildingVulnrap() {
   return (
-    <article className="space-y-4">
+    <article id="building-vulnrap" className="space-y-4">
       <div className="space-y-3">
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <Badge variant="outline" className="border-primary/30 text-primary text-[10px]">Deep Dive</Badge>

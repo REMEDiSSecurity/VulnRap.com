@@ -58,7 +58,7 @@ function Bold({ children }: { children: React.ReactNode }) {
 
 export function BlogGradingAi() {
   return (
-    <article className="space-y-4">
+    <article id="grading-ai-with-ai" className="space-y-4">
       <div className="space-y-3">
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <Badge variant="outline" className="border-cyan-500/30 text-cyan-400 text-[10px]">Update</Badge>

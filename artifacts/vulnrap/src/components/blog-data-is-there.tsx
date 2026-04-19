@@ -375,7 +375,7 @@ function ScorecardChart() {
 
 export function BlogDataIsThere() {
   return (
-    <article className="space-y-4">
+    <article id="the-data-is-there" className="space-y-4">
       <div className="-mx-8 -mt-8 mb-2 relative overflow-hidden rounded-t-xl">
         <img
           src={heroSrc}
