@@ -196,3 +196,35 @@ describe("VulnRap engines benchmark", () => {
     expect(rows.length).toBe(11);
   });
 });
+
+const BORDERLINE_FIXTURES: Fixture[] = [
+  {
+    name: "borderline-01-thin-but-plausible",
+    claimedCwes: ["CWE-79"],
+    text: `# Reflected XSS in /search endpoint
+
+The \`q\` parameter on GET /search is reflected unencoded:
+
+\`\`\`html
+<input value="<script>alert(1)</script>" />
+\`\`\`
+
+Reproduction:
+1. curl 'https://app.example.com/search?q=<script>alert(1)</script>'
+2. Inspect response: payload echoes inside the search-bar input.
+
+Suggested fix: HTML-encode the parameter via the existing \`escapeHtml()\` helper in src/views/search.tsx:42.`,
+    expectMinScore: 35,
+    expectMaxScore: 65,
+  },
+];
+
+describe("VulnRap engines borderline fixtures", () => {
+  for (const f of BORDERLINE_FIXTURES) {
+    it(`borderline fixture ${f.name} should land between ${f.expectMinScore} and ${f.expectMaxScore}`, () => {
+      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes });
+      expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeGreaterThanOrEqual(f.expectMinScore!);
+      expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeLessThanOrEqual(f.expectMaxScore!);
+    });
+  }
+});

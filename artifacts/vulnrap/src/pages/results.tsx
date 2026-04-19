@@ -1318,10 +1318,78 @@ export default function Results() {
         </div>
       )}
 
+      {vulnrap && vulnrap.engines && vulnrap.engines.length > 0 && (
+        <Card className="glass-card-accent rounded-xl border-primary/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 flex-wrap">
+              <Layers className="w-6 h-6 text-primary" />
+              <span className="text-base">VulnRap Multi-Engine Consensus</span>
+              <Badge variant="outline" className={`text-[11px] px-2 py-0.5 h-6 font-mono ${VULNRAP_LABEL_COLOR[vulnrap.label] || "text-muted-foreground"}`}>
+                {vulnrap.label}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Three independent engines (AI Authorship 5%, Technical Substance 55%, CWE Coherence 40%) score this report. Higher composite = stronger evidence of a real, reproducible issue.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="flex flex-col items-center justify-center py-2">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Composite Score</div>
+              <div className={`text-7xl font-bold font-mono tracking-tighter glow-text ${vulnrap.compositeScore <= 35 ? "text-red-400" : vulnrap.compositeScore <= 50 ? "text-orange-400" : vulnrap.compositeScore <= 65 ? "text-yellow-400" : vulnrap.compositeScore <= 80 ? "text-emerald-400" : "text-green-400"}`}>
+                {vulnrap.compositeScore}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1 font-mono">/ 100</div>
+            </div>
+            <div className="space-y-3">
+              {vulnrap.engines.map((eng) => (
+                <div key={eng.engine} className="glass-card rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-semibold truncate">{eng.engine}</span>
+                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 font-mono ${eng.verdict === "RED" ? "text-red-400 border-red-500/40" : eng.verdict === "YELLOW" ? "text-yellow-400 border-yellow-500/40" : eng.verdict === "GREEN" ? "text-green-400 border-green-500/40" : "text-muted-foreground"}`}>
+                        {eng.verdict}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">conf: {eng.confidence}</span>
+                    </div>
+                    <span className="font-mono text-sm font-bold">{eng.score}</span>
+                  </div>
+                  <Progress value={eng.score} className="h-1.5" indicatorClassName={VULNRAP_VERDICT_COLOR[eng.verdict] || "bg-muted"} />
+                  {eng.note && <p className="text-[11px] text-muted-foreground leading-relaxed">{eng.note}</p>}
+                  {eng.triggeredIndicators && eng.triggeredIndicators.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      {eng.triggeredIndicators.slice(0, 4).map((ind, i) => (
+                        <div key={i} className="flex items-start gap-2 text-[11px]">
+                          <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 font-mono shrink-0 ${ind.strength === "HIGH" ? "text-red-400 border-red-500/40" : ind.strength === "MEDIUM" ? "text-yellow-400 border-yellow-500/40" : "text-muted-foreground"}`}>
+                            {ind.signal}
+                          </Badge>
+                          <span className="text-muted-foreground leading-snug">{ind.explanation}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {vulnrap.overridesApplied && vulnrap.overridesApplied.length > 0 && (
+              <>
+                <Separator className="bg-border/30" />
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Composite Overrides Applied</div>
+                  {vulnrap.overridesApplied.map((rule, i) => (
+                    <div key={i} className="text-[11px] font-mono text-orange-400/90">· {rule}</div>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2 glass-card-accent rounded-xl">
+        <Card className="md:col-span-2 glass-card rounded-xl opacity-90">
           <CardHeader>
             <CardTitle className="uppercase tracking-wide text-sm text-muted-foreground flex items-center gap-2">
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-muted-foreground/30 text-muted-foreground/70 normal-case">Legacy v4 (supplementary)</Badge>
               AI Detection Score
               {report.llmEnhanced ? (
                 <Badge variant="outline" className="border-cyan-500/50 text-cyan-400 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1 normal-case">
@@ -1358,7 +1426,7 @@ export default function Results() {
             <div className="flex items-center gap-8 w-full max-w-lg justify-center">
               <div className="flex flex-col items-center">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">AI Likelihood</div>
-                <div className={`text-6xl font-bold font-mono tracking-tighter ${slopColor} glow-text`}>
+                <div className={`text-3xl font-bold font-mono tracking-tighter ${slopColor}`}>
                   {displayScore}
                 </div>
                 <div className="mt-2 text-sm font-medium tracking-wide uppercase">
@@ -1375,7 +1443,7 @@ export default function Results() {
                   <div className="h-20 w-px bg-border/30" />
                   <div className="flex flex-col items-center">
                     <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Report Quality</div>
-                    <div className={`text-6xl font-bold font-mono tracking-tighter ${getQualityColor(qualityScore)} glow-text`}>
+                    <div className={`text-3xl font-bold font-mono tracking-tighter ${getQualityColor(qualityScore)}`}>
                       {qualityScore}
                     </div>
                     <div className="mt-2 text-sm font-medium tracking-wide uppercase text-muted-foreground">
@@ -1506,66 +1574,6 @@ export default function Results() {
                   </div>
                   <Progress value={qualityScore} className="h-1.5" indicatorClassName={getQualityProgressColor(qualityScore)} />
                   <p className="text-[10px] text-muted-foreground mt-1">Measures report completeness (version info, code blocks, repro steps) — does not affect AI detection score.</p>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {vulnrap && vulnrap.engines && vulnrap.engines.length > 0 && (
-        <Card className="glass-card rounded-xl border-primary/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Layers className="w-5 h-5 text-primary" />
-              VulnRap Multi-Engine Consensus
-              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-mono ${VULNRAP_LABEL_COLOR[vulnrap.label] || "text-muted-foreground"}`}>
-                {vulnrap.label} · {vulnrap.compositeScore}/100
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              Three independent engines (AI Authorship 5%, Technical Substance 55%, CWE Coherence 40%) score this report. Higher composite = stronger evidence of a real, reproducible issue.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              {vulnrap.engines.map((eng) => (
-                <div key={eng.engine} className="glass-card rounded-lg p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-semibold truncate">{eng.engine}</span>
-                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 font-mono ${eng.verdict === "RED" ? "text-red-400 border-red-500/40" : eng.verdict === "YELLOW" ? "text-yellow-400 border-yellow-500/40" : eng.verdict === "GREEN" ? "text-green-400 border-green-500/40" : "text-muted-foreground"}`}>
-                        {eng.verdict}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">conf: {eng.confidence}</span>
-                    </div>
-                    <span className="font-mono text-sm font-bold">{eng.score}</span>
-                  </div>
-                  <Progress value={eng.score} className="h-1.5" indicatorClassName={VULNRAP_VERDICT_COLOR[eng.verdict] || "bg-muted"} />
-                  {eng.note && <p className="text-[11px] text-muted-foreground leading-relaxed">{eng.note}</p>}
-                  {eng.triggeredIndicators && eng.triggeredIndicators.length > 0 && (
-                    <div className="space-y-1 pt-1">
-                      {eng.triggeredIndicators.slice(0, 4).map((ind, i) => (
-                        <div key={i} className="flex items-start gap-2 text-[11px]">
-                          <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 font-mono shrink-0 ${ind.strength === "HIGH" ? "text-red-400 border-red-500/40" : ind.strength === "MEDIUM" ? "text-yellow-400 border-yellow-500/40" : "text-muted-foreground"}`}>
-                            {ind.signal}
-                          </Badge>
-                          <span className="text-muted-foreground leading-snug">{ind.explanation}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            {vulnrap.overridesApplied && vulnrap.overridesApplied.length > 0 && (
-              <>
-                <Separator className="bg-border/30" />
-                <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Composite Overrides Applied</div>
-                  {vulnrap.overridesApplied.map((rule, i) => (
-                    <div key={i} className="text-[11px] font-mono text-orange-400/90">· {rule}</div>
-                  ))}
                 </div>
               </>
             )}
