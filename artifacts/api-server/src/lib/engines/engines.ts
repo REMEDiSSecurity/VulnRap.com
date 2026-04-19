@@ -277,7 +277,7 @@ export function runEngine2(s: ExtractedSignals): EngineResult {
   const verdict: Verdict =
     finalScore >= 61 ? "GREEN" :
     finalScore >= 41 ? "YELLOW" :
-    finalScore >= 21 ? "YELLOW" : "RED";
+    "RED";
 
   const indicators: TriggeredIndicator[] = [];
   if (s.claimsPoCPresent && s.codeBlockCount === 0) {
@@ -456,7 +456,7 @@ export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult 
   const avg = Object.values(perCWEScores).reduce((a, b) => a + b, 0) / claimedCwes.length;
   const score = Math.round(avg);
   const verdict: Verdict =
-    score >= 71 ? "GREEN" : score >= 51 ? "YELLOW" : score >= 31 ? "YELLOW" : "RED";
+    score >= 71 ? "GREEN" : score >= 41 ? "YELLOW" : "RED";
 
   return {
     engine: "CWE Coherence Checker",
