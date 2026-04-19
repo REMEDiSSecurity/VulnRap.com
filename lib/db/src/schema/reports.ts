@@ -75,6 +75,13 @@ export const reportsTable = pgTable("reports", {
   archetype: varchar("archetype", { length: 30 }).notNull().default("REQUEST_DETAILS"),
   humanIndicators: jsonb("human_indicators").$type<HumanIndicatorItem[]>().default([]),
   templateHash: varchar("template_hash", { length: 64 }),
+  // Sprint 9 Phase 1: VulnRap multi-engine composite scoring (3 engines).
+  // These columns sit alongside the legacy slop_score / authenticity_score /
+  // validity_score columns so existing trend dashboards keep populating.
+  vulnrapCompositeScore: integer("vulnrap_composite_score"),
+  vulnrapCompositeLabel: varchar("vulnrap_composite_label", { length: 32 }),
+  vulnrapEngineResults: jsonb("vulnrap_engine_results").$type<unknown>(),
+  vulnrapOverridesApplied: jsonb("vulnrap_overrides_applied").$type<string[]>(),
   showInFeed: boolean("show_in_feed").notNull().default(false),
   fileName: varchar("file_name", { length: 255 }),
   fileSize: integer("file_size").notNull(),

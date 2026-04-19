@@ -31,6 +31,7 @@ import { sanitizeText, sanitizeForAnalysis, sanitizeFileName, detectBinaryConten
 import { extractTextFromPdf } from "../lib/pdf";
 import { logger } from "../lib/logger";
 import { performActiveVerification, type VerificationResult } from "../lib/active-verification";
+import { analyzeWithEngines, type CompositeResult as VulnrapComposite } from "../lib/engines";
 import {
   generateTriageRecommendation,
   computeTemporalSignals,
@@ -558,6 +559,14 @@ router.post("/reports", async (req, res): Promise<void> => {
   const analysisResult = await performAnalysis(text, redactedText, { skipLlm });
   const { llmResult } = analysisResult;
 
+  // Sprint 9 Phase 1: 3-engine consensus scorer (runs alongside legacy scoring).
+  let vulnrapComposite: VulnrapComposite | null = null;
+  try {
+    vulnrapComposite = analyzeWithEngines(redactedText);
+  } catch (engineErr) {
+    logger.error({ err: engineErr }, "[VULNRAP] engines crashed; continuing without composite");
+  }
+
   const deleteToken = crypto.randomBytes(32).toString("hex");
   const templateHash = computeTemplateHash(redactedText);
 
@@ -668,6 +677,12 @@ router.post("/reports", async (req, res): Promise<void> => {
         fileName: safeFileName,
         fileSize: rawFileSize,
         templateHash,
+        vulnrapCompositeScore: vulnrapComposite?.overallScore ?? null,
+        vulnrapCompositeLabel: vulnrapComposite?.label ?? null,
+        vulnrapEngineResults: vulnrapComposite
+          ? { engines: vulnrapComposite.engineResults, compositeBreakdown: vulnrapComposite.compositeBreakdown, warnings: vulnrapComposite.warnings, engineCount: vulnrapComposite.engineCount }
+          : null,
+        vulnrapOverridesApplied: vulnrapComposite?.overridesApplied ?? null,
       })
       .returning();
 
@@ -744,6 +759,17 @@ router.post("/reports", async (req, res): Promise<void> => {
     triageAssistant: analysisResult.triageAssistant ?? null,
     claims: analysisResult.claims ?? null,
     substance: analysisResult.substance ?? null,
+    vulnrap: vulnrapComposite
+      ? {
+          compositeScore: vulnrapComposite.overallScore,
+          label: vulnrapComposite.label,
+          engines: vulnrapComposite.engineResults,
+          compositeBreakdown: vulnrapComposite.compositeBreakdown,
+          overridesApplied: vulnrapComposite.overridesApplied,
+          warnings: vulnrapComposite.warnings,
+          engineCount: vulnrapComposite.engineCount,
+        }
+      : null,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
@@ -1459,6 +1485,24 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     verification,
     triageRecommendation,
     triageAssistant,
+    vulnrap: (() => {
+      if (report.vulnrapCompositeScore == null || report.vulnrapCompositeLabel == null) return null;
+      const stored = (report.vulnrapEngineResults ?? {}) as {
+        engines?: unknown[];
+        compositeBreakdown?: { weightedSum: number; totalWeight: number; beforeOverride: number; afterOverride: number };
+        warnings?: string[];
+        engineCount?: number;
+      };
+      return {
+        compositeScore: report.vulnrapCompositeScore,
+        label: report.vulnrapCompositeLabel,
+        engines: (stored.engines ?? []) as Array<{ engine: string; score: number; verdict: string; confidence: string }>,
+        compositeBreakdown: stored.compositeBreakdown,
+        overridesApplied: (report.vulnrapOverridesApplied ?? []) as string[],
+        warnings: stored.warnings ?? [],
+        engineCount: stored.engineCount ?? (stored.engines?.length ?? 0),
+      };
+    })(),
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,

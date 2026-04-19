@@ -25,6 +25,7 @@ import type { SimilarityMatch } from "./similarityMatch";
 import type { TriageAssistant } from "./triageAssistant";
 import type { TriageRecommendation } from "./triageRecommendation";
 import type { Verification } from "./verification";
+import type { VulnrapComposite } from "./vulnrapComposite";
 
 export interface ReportAnalysis {
   id: number;
@@ -123,6 +124,8 @@ export interface ReportAnalysis {
   claims?: LLMClaims | null;
   /** Substance-based scoring (PoC validity, claim specificity, domain coherence). Null when LLM analysis was not performed. */
   substance?: LLMSubstanceScores | null;
+  /** Sprint 9 multi-engine consensus score (3 engines). Null when not computed (e.g., legacy reports). */
+  vulnrap?: VulnrapComposite | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;

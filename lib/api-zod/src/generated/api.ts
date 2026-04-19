@@ -915,6 +915,76 @@ export const GetReportResponse = zod.object({
     .describe(
       "Substance-based scoring (PoC validity, claim specificity, domain coherence). Null when LLM analysis was not performed.",
     ),
+  vulnrap: zod
+    .union([
+      zod
+        .object({
+          compositeScore: zod
+            .number()
+            .describe(
+              "Composite score 0-100, where higher = stronger evidence of a real, reproducible vulnerability.",
+            ),
+          label: zod.enum([
+            "LIKELY INVALID",
+            "HIGH RISK",
+            "NEEDS REVIEW",
+            "REASONABLE",
+            "PROMISING",
+            "STRONG",
+          ]),
+          engines: zod.array(
+            zod.object({
+              engine: zod.string().describe("Human-readable engine name."),
+              score: zod.number(),
+              verdict: zod.enum(["GREEN", "YELLOW", "RED", "GREY"]),
+              confidence: zod.enum(["HIGH", "MEDIUM", "LOW"]),
+              triggeredIndicators: zod
+                .array(
+                  zod.object({
+                    signal: zod.string().optional(),
+                    value: zod
+                      .unknown()
+                      .optional()
+                      .describe(
+                        "Indicator value; may be string, number, or boolean.",
+                      ),
+                    threshold: zod.number().optional(),
+                    strength: zod.enum(["HIGH", "MEDIUM", "LOW"]).optional(),
+                    explanation: zod.string().optional(),
+                  }),
+                )
+                .optional(),
+              signalBreakdown: zod
+                .record(zod.string(), zod.unknown())
+                .optional(),
+              note: zod.string().optional(),
+            }),
+          ),
+          compositeBreakdown: zod
+            .object({
+              weightedSum: zod.number().optional(),
+              totalWeight: zod.number().optional(),
+              beforeOverride: zod.number().optional(),
+              afterOverride: zod.number().optional(),
+            })
+            .optional(),
+          overridesApplied: zod
+            .array(zod.string())
+            .describe(
+              "Composite-level override rules that fired (e.g. CONVERGENT_NEGATIVE, CWE_TYPE_SWAP).",
+            ),
+          warnings: zod.array(zod.string()).optional(),
+          engineCount: zod.number().optional(),
+        })
+        .describe(
+          "VulnRap multi-engine consensus score with per-engine breakdowns.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Sprint 9 multi-engine consensus score (3 engines). Null when not computed (e.g., legacy reports).",
+    ),
   fileName: zod.string().nullish(),
   fileSize: zod.number(),
   createdAt: zod.coerce.date(),

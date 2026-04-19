@@ -498,6 +498,42 @@ function RecipeTabContent({ recipe, toast }: { recipe: ReproRecipe; toast: Retur
 
 type AssistantTab = "reproduce" | "recipe" | "gaps" | "dontmiss" | "feedback";
 
+interface VulnrapEngineResultPanel {
+  engine: string;
+  score: number;
+  verdict: "GREEN" | "YELLOW" | "RED" | "GREY";
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  triggeredIndicators?: Array<{ signal: string; explanation: string; strength?: "HIGH" | "MEDIUM" | "LOW" }>;
+  signalBreakdown?: Record<string, unknown>;
+  note?: string;
+}
+
+interface VulnrapPanelData {
+  compositeScore: number;
+  label: string;
+  engines: VulnrapEngineResultPanel[];
+  overridesApplied: string[];
+  warnings?: string[];
+  engineCount?: number;
+  compositeBreakdown?: { weightedSum: number; totalWeight: number; beforeOverride: number; afterOverride: number };
+}
+
+const VULNRAP_LABEL_COLOR: Record<string, string> = {
+  "LIKELY INVALID": "text-red-400 border-red-500/40",
+  "HIGH RISK": "text-orange-400 border-orange-500/40",
+  "NEEDS REVIEW": "text-yellow-400 border-yellow-500/40",
+  REASONABLE: "text-emerald-300 border-emerald-500/40",
+  PROMISING: "text-emerald-400 border-emerald-500/40",
+  STRONG: "text-green-400 border-green-500/40",
+};
+
+const VULNRAP_VERDICT_COLOR: Record<string, string> = {
+  RED: "bg-destructive",
+  YELLOW: "bg-yellow-500",
+  GREEN: "bg-green-500",
+  GREY: "bg-muted",
+};
+
 function TriageAssistantPanel({ assistant, toast }: { assistant: TriageAssistant; toast: ReturnType<typeof useToast>["toast"] }) {
   const [expanded, setExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<AssistantTab>("reproduce");
@@ -1171,6 +1207,7 @@ export default function Results() {
   const llmBreakdown = report.llmBreakdown as { claimSpecificity?: number; evidenceQuality?: number; internalConsistency?: number; hallucinationSignals?: number; validityScore?: number; verdict?: string; redFlags?: string[]; greenFlags?: string[]; specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number } | undefined;
   const humanIndicators = (report.humanIndicators ?? []) as Array<{ type: string; description: string; weight: number; matched?: string | null }>;
   const qualityScore = report.qualityScore as number | undefined;
+  const vulnrap = (report as { vulnrap?: VulnrapPanelData | null }).vulnrap ?? null;
   const confidence = report.confidence as number | undefined;
 
   const adjusted = adjustScore(report.slopScore, sensitivity, breakdown, humanIndicators);
@@ -1469,6 +1506,66 @@ export default function Results() {
                   </div>
                   <Progress value={qualityScore} className="h-1.5" indicatorClassName={getQualityProgressColor(qualityScore)} />
                   <p className="text-[10px] text-muted-foreground mt-1">Measures report completeness (version info, code blocks, repro steps) — does not affect AI detection score.</p>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {vulnrap && vulnrap.engines && vulnrap.engines.length > 0 && (
+        <Card className="glass-card rounded-xl border-primary/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Layers className="w-5 h-5 text-primary" />
+              VulnRap Multi-Engine Consensus
+              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-mono ${VULNRAP_LABEL_COLOR[vulnrap.label] || "text-muted-foreground"}`}>
+                {vulnrap.label} · {vulnrap.compositeScore}/100
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Three independent engines (AI Authorship 5%, Technical Substance 55%, CWE Coherence 40%) score this report. Higher composite = stronger evidence of a real, reproducible issue.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              {vulnrap.engines.map((eng) => (
+                <div key={eng.engine} className="glass-card rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-semibold truncate">{eng.engine}</span>
+                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 font-mono ${eng.verdict === "RED" ? "text-red-400 border-red-500/40" : eng.verdict === "YELLOW" ? "text-yellow-400 border-yellow-500/40" : eng.verdict === "GREEN" ? "text-green-400 border-green-500/40" : "text-muted-foreground"}`}>
+                        {eng.verdict}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">conf: {eng.confidence}</span>
+                    </div>
+                    <span className="font-mono text-sm font-bold">{eng.score}</span>
+                  </div>
+                  <Progress value={eng.score} className="h-1.5" indicatorClassName={VULNRAP_VERDICT_COLOR[eng.verdict] || "bg-muted"} />
+                  {eng.note && <p className="text-[11px] text-muted-foreground leading-relaxed">{eng.note}</p>}
+                  {eng.triggeredIndicators && eng.triggeredIndicators.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      {eng.triggeredIndicators.slice(0, 4).map((ind, i) => (
+                        <div key={i} className="flex items-start gap-2 text-[11px]">
+                          <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 font-mono shrink-0 ${ind.strength === "HIGH" ? "text-red-400 border-red-500/40" : ind.strength === "MEDIUM" ? "text-yellow-400 border-yellow-500/40" : "text-muted-foreground"}`}>
+                            {ind.signal}
+                          </Badge>
+                          <span className="text-muted-foreground leading-snug">{ind.explanation}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {vulnrap.overridesApplied && vulnrap.overridesApplied.length > 0 && (
+              <>
+                <Separator className="bg-border/30" />
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Composite Overrides Applied</div>
+                  {vulnrap.overridesApplied.map((rule, i) => (
+                    <div key={i} className="text-[11px] font-mono text-orange-400/90">· {rule}</div>
+                  ))}
                 </div>
               </>
             )}

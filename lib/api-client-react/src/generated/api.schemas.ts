@@ -679,6 +679,90 @@ export interface LLMSubstanceScores {
   coherenceScore: number;
 }
 
+export type VulnrapCompositeLabel =
+  (typeof VulnrapCompositeLabel)[keyof typeof VulnrapCompositeLabel];
+
+export const VulnrapCompositeLabel = {
+  LIKELY_INVALID: "LIKELY INVALID",
+  HIGH_RISK: "HIGH RISK",
+  NEEDS_REVIEW: "NEEDS REVIEW",
+  REASONABLE: "REASONABLE",
+  PROMISING: "PROMISING",
+  STRONG: "STRONG",
+} as const;
+
+export type VulnrapEngineResultVerdict =
+  (typeof VulnrapEngineResultVerdict)[keyof typeof VulnrapEngineResultVerdict];
+
+export const VulnrapEngineResultVerdict = {
+  GREEN: "GREEN",
+  YELLOW: "YELLOW",
+  RED: "RED",
+  GREY: "GREY",
+} as const;
+
+export type VulnrapEngineResultConfidence =
+  (typeof VulnrapEngineResultConfidence)[keyof typeof VulnrapEngineResultConfidence];
+
+export const VulnrapEngineResultConfidence = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+export type VulnrapEngineResultTriggeredIndicatorsItemStrength =
+  (typeof VulnrapEngineResultTriggeredIndicatorsItemStrength)[keyof typeof VulnrapEngineResultTriggeredIndicatorsItemStrength];
+
+export const VulnrapEngineResultTriggeredIndicatorsItemStrength = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+export type VulnrapEngineResultTriggeredIndicatorsItem = {
+  signal?: string;
+  /** Indicator value; may be string, number, or boolean. */
+  value?: unknown;
+  threshold?: number;
+  strength?: VulnrapEngineResultTriggeredIndicatorsItemStrength;
+  explanation?: string;
+};
+
+export type VulnrapEngineResultSignalBreakdown = { [key: string]: unknown };
+
+export interface VulnrapEngineResult {
+  /** Human-readable engine name. */
+  engine: string;
+  score: number;
+  verdict: VulnrapEngineResultVerdict;
+  confidence: VulnrapEngineResultConfidence;
+  triggeredIndicators?: VulnrapEngineResultTriggeredIndicatorsItem[];
+  signalBreakdown?: VulnrapEngineResultSignalBreakdown;
+  note?: string;
+}
+
+export type VulnrapCompositeCompositeBreakdown = {
+  weightedSum?: number;
+  totalWeight?: number;
+  beforeOverride?: number;
+  afterOverride?: number;
+};
+
+/**
+ * VulnRap multi-engine consensus score with per-engine breakdowns.
+ */
+export interface VulnrapComposite {
+  /** Composite score 0-100, where higher = stronger evidence of a real, reproducible vulnerability. */
+  compositeScore: number;
+  label: VulnrapCompositeLabel;
+  engines: VulnrapEngineResult[];
+  compositeBreakdown?: VulnrapCompositeCompositeBreakdown;
+  /** Composite-level override rules that fired (e.g. CONVERGENT_NEGATIVE, CWE_TYPE_SWAP). */
+  overridesApplied: string[];
+  warnings?: string[];
+  engineCount?: number;
+}
+
 export interface ReportAnalysis {
   id: number;
   /** Secret token for deleting this report. Only returned on initial submission. Store it — it cannot be recovered. */
@@ -776,6 +860,8 @@ export interface ReportAnalysis {
   claims?: LLMClaims | null;
   /** Substance-based scoring (PoC validity, claim specificity, domain coherence). Null when LLM analysis was not performed. */
   substance?: LLMSubstanceScores | null;
+  /** Sprint 9 multi-engine consensus score (3 engines). Null when not computed (e.g., legacy reports). */
+  vulnrap?: VulnrapComposite | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;

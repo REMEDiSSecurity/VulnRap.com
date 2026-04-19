@@ -899,6 +899,11 @@ components:
             - $ref: "#/components/schemas/LLMSubstanceScores"
             - type: "null"
           description: Substance-based scoring (PoC validity, claim specificity, domain coherence). Null when LLM analysis was not performed.
+        vulnrap:
+          oneOf:
+            - $ref: "#/components/schemas/VulnrapComposite"
+            - type: "null"
+          description: Sprint 9 multi-engine consensus score (3 engines). Null when not computed (e.g., legacy reports).
         fileName:
           type: ["string", "null"]
         fileSize:
@@ -924,6 +929,89 @@ components:
         - llmEnhanced
         - fileSize
         - createdAt
+
+    VulnrapComposite:
+      type: object
+      description: VulnRap multi-engine consensus score with per-engine breakdowns.
+      properties:
+        compositeScore:
+          type: integer
+          description: Composite score 0-100, where higher = stronger evidence of a real, reproducible vulnerability.
+        label:
+          type: string
+          enum: ["LIKELY INVALID", "HIGH RISK", "NEEDS REVIEW", "REASONABLE", "PROMISING", "STRONG"]
+        engines:
+          type: array
+          items:
+            $ref: "#/components/schemas/VulnrapEngineResult"
+        compositeBreakdown:
+          type: object
+          properties:
+            weightedSum:
+              type: number
+            totalWeight:
+              type: number
+            beforeOverride:
+              type: integer
+            afterOverride:
+              type: integer
+        overridesApplied:
+          type: array
+          items:
+            type: string
+          description: Composite-level override rules that fired (e.g. CONVERGENT_NEGATIVE, CWE_TYPE_SWAP).
+        warnings:
+          type: array
+          items:
+            type: string
+        engineCount:
+          type: integer
+      required:
+        - compositeScore
+        - label
+        - engines
+        - overridesApplied
+
+    VulnrapEngineResult:
+      type: object
+      properties:
+        engine:
+          type: string
+          description: Human-readable engine name.
+        score:
+          type: integer
+        verdict:
+          type: string
+          enum: ["GREEN", "YELLOW", "RED", "GREY"]
+        confidence:
+          type: string
+          enum: ["HIGH", "MEDIUM", "LOW"]
+        triggeredIndicators:
+          type: array
+          items:
+            type: object
+            properties:
+              signal:
+                type: string
+              value:
+                description: Indicator value; may be string, number, or boolean.
+              threshold:
+                type: number
+              strength:
+                type: string
+                enum: ["HIGH", "MEDIUM", "LOW"]
+              explanation:
+                type: string
+        signalBreakdown:
+          type: object
+          additionalProperties: true
+        note:
+          type: string
+      required:
+        - engine
+        - score
+        - verdict
+        - confidence
 
     VerificationBadge:
       type: object

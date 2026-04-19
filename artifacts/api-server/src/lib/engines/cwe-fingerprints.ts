@@ -1,0 +1,210 @@
+// Sprint 9 Engine 3: CWE fingerprint library.
+// Phase 1 ships fingerprints for the top ~25 CWEs. Unknown CWEs score
+// neutral (50). Per spec §C0–C2.
+
+export interface CWEFingerprint {
+  cweId: string;
+  name: string;
+  requiredTerms: string[];   // Must see >=1 to pass basic check
+  expectedTerms: string[];   // Should see for coherence score
+  negativeTerms: string[];   // Conflict with this CWE
+  minTermDensity: number;    // Per-CWE minimum density (relative)
+  knownAliases: string[];    // Variant phrasings
+  rejectionRate: number;     // Historical rejection multiplier
+}
+
+export const HIGH_REJECTION_CWES: Record<string, number> = {
+  "CWE-1021": 4.7, // Clickjacking
+  "CWE-327": 2.7,  // Cryptographic — Generic
+  "CWE-657": 2.6,  // Violation of Secure Design Principles
+  "CWE-16": 1.9,   // Misconfiguration
+  "CWE-436": 1.8,  // Unexpected Session State
+};
+
+export const CWE_FINGERPRINTS: Record<string, CWEFingerprint> = {
+  "CWE-79": {
+    cweId: "CWE-79", name: "Cross-Site Scripting (XSS)",
+    requiredTerms: ["script", "inject", "xss", "payload"],
+    expectedTerms: ["reflected", "stored", "dom", "innerhtml", "alert", "browser", "sanitize", "escape", "csp", "javascript", "html"],
+    negativeTerms: ["sql", "select", "union", "buffer", "overflow", "free", "malloc"],
+    minTermDensity: 0.06,
+    knownAliases: ["cross-site scripting", "client-side", "javascript injection"],
+    rejectionRate: 0.08,
+  },
+  "CWE-89": {
+    cweId: "CWE-89", name: "SQL Injection",
+    requiredTerms: ["sql", "query", "database", "injection"],
+    expectedTerms: ["select", "union", "where", "prepared", "parameterized", "orm", "blind", "time-based", "error-based", "sqlmap", "insert", "drop"],
+    negativeTerms: ["script", "innerhtml", "alert", "xss", "dom"],
+    minTermDensity: 0.08,
+    knownAliases: ["sql injection", "sqli", "database injection"],
+    rejectionRate: 0.06,
+  },
+  "CWE-416": {
+    cweId: "CWE-416", name: "Use After Free",
+    requiredTerms: ["free", "memory", "uaf"],
+    expectedTerms: ["heap", "pointer", "allocat", "glibc", "malloc", "aslr", "chunk", "tcache", "double-free", "dangling", "asan"],
+    negativeTerms: ["sql", "script", "xss", "clickjack", "csrf"],
+    minTermDensity: 0.10,
+    knownAliases: ["use-after-free", "uaf", "accessing freed memory"],
+    rejectionRate: 0.14,
+  },
+  "CWE-22": {
+    cweId: "CWE-22", name: "Path Traversal",
+    requiredTerms: ["path", "traversal"],
+    expectedTerms: ["../", "absolute", "relative", "sanitize", "canonical", "realpath", "directory", "escape", "file"],
+    negativeTerms: ["sql", "xss", "script", "overflow", "memory"],
+    minTermDensity: 0.06,
+    knownAliases: ["directory traversal", "path traversal", "lfi", "local file inclusion"],
+    rejectionRate: 0.10,
+  },
+  "CWE-1021": {
+    cweId: "CWE-1021", name: "Clickjacking",
+    requiredTerms: [],
+    expectedTerms: ["clickjack", "overlay", "frame", "x-frame-options", "iframe", "framing", "ui redress"],
+    negativeTerms: ["sql", "rce", "memory", "buffer", "overflow"],
+    minTermDensity: 0.04,
+    knownAliases: ["clickjacking", "ui redressing"],
+    rejectionRate: 4.7,
+  },
+  "CWE-327": {
+    cweId: "CWE-327", name: "Cryptographic Issues",
+    requiredTerms: [],
+    expectedTerms: ["crypto", "tls", "ssl", "rsa", "aes", "hash", "md5", "sha1", "weak cipher", "deprecated", "key", "cert"],
+    negativeTerms: ["sql", "xss", "buffer overflow"],
+    minTermDensity: 0.04,
+    knownAliases: ["crypto", "weak cryptography", "broken cryptography"],
+    rejectionRate: 2.7,
+  },
+  "CWE-657": {
+    cweId: "CWE-657", name: "Violation of Secure Design Principles",
+    requiredTerms: [], expectedTerms: ["design", "principle", "least privilege", "defense"],
+    negativeTerms: ["sql", "xss", "memory"],
+    minTermDensity: 0.02, knownAliases: ["secure design"], rejectionRate: 2.6,
+  },
+  "CWE-16": {
+    cweId: "CWE-16", name: "Configuration",
+    requiredTerms: [],
+    expectedTerms: ["config", "configuration", "default", "setting", "exposed", "header", "permission"],
+    negativeTerms: ["sql", "xss", "buffer"],
+    minTermDensity: 0.03, knownAliases: ["misconfiguration"], rejectionRate: 1.9,
+  },
+  "CWE-436": {
+    cweId: "CWE-436", name: "Interpretation Conflict",
+    requiredTerms: [], expectedTerms: ["session", "state", "smuggling", "interpretation", "parsing"],
+    negativeTerms: ["sql", "xss", "memory"], minTermDensity: 0.04,
+    knownAliases: ["session state"], rejectionRate: 1.8,
+  },
+  "CWE-444": {
+    cweId: "CWE-444", name: "HTTP Request Smuggling",
+    requiredTerms: ["http", "smuggling"],
+    expectedTerms: ["content-length", "transfer-encoding", "chunked", "request", "header", "proxy", "frontend", "backend", "te.cl", "cl.te"],
+    negativeTerms: ["sql", "xss", "memory", "buffer"],
+    minTermDensity: 0.06, knownAliases: ["request smuggling", "http smuggling"], rejectionRate: 0.5,
+  },
+  "CWE-287": {
+    cweId: "CWE-287", name: "Improper Authentication",
+    requiredTerms: ["auth"],
+    expectedTerms: ["authentication", "bypass", "credential", "login", "session", "token", "jwt", "oauth", "saml"],
+    negativeTerms: ["buffer overflow", "use after free"],
+    minTermDensity: 0.04, knownAliases: ["authentication bypass"], rejectionRate: 0.3,
+  },
+  "CWE-502": {
+    cweId: "CWE-502", name: "Deserialization of Untrusted Data",
+    requiredTerms: ["deserial"],
+    expectedTerms: ["pickle", "marshal", "yaml", "json", "object", "gadget", "rce", "java", "php", "unmarshal"],
+    negativeTerms: ["xss", "sql injection", "clickjack"],
+    minTermDensity: 0.06, knownAliases: ["unsafe deserialization"], rejectionRate: 0.2,
+  },
+  "CWE-798": {
+    cweId: "CWE-798", name: "Hard-coded Credentials",
+    requiredTerms: ["credential"],
+    expectedTerms: ["hardcoded", "hard-coded", "password", "secret", "api key", "token", "embedded"],
+    negativeTerms: ["xss", "sql injection", "buffer"], minTermDensity: 0.04,
+    knownAliases: ["hardcoded credentials"], rejectionRate: 0.2,
+  },
+  "CWE-119": {
+    cweId: "CWE-119", name: "Buffer Errors",
+    requiredTerms: ["buffer"],
+    expectedTerms: ["overflow", "underflow", "out-of-bounds", "memcpy", "strcpy", "heap", "stack", "memory", "size"],
+    negativeTerms: ["sql", "xss", "clickjack"], minTermDensity: 0.06,
+    knownAliases: ["buffer overflow", "memory corruption"], rejectionRate: 0.10,
+  },
+  "CWE-125": {
+    cweId: "CWE-125", name: "Out-of-bounds Read",
+    requiredTerms: ["read"],
+    expectedTerms: ["out-of-bounds", "out of bounds", "oob", "buffer", "heap", "stack", "memory", "leak"],
+    negativeTerms: ["sql", "xss"], minTermDensity: 0.05,
+    knownAliases: ["oob read"], rejectionRate: 0.12,
+  },
+  "CWE-200": {
+    cweId: "CWE-200", name: "Information Exposure",
+    requiredTerms: [],
+    expectedTerms: ["disclosure", "leak", "expose", "information", "sensitive", "stack trace", "debug", "error message"],
+    negativeTerms: ["overflow", "free"], minTermDensity: 0.03,
+    knownAliases: ["information disclosure", "info leak"], rejectionRate: 0.4,
+  },
+  "CWE-78": {
+    cweId: "CWE-78", name: "OS Command Injection",
+    requiredTerms: ["command"],
+    expectedTerms: ["injection", "shell", "exec", "system", "popen", "spawn", "subprocess", "rce", "os"],
+    negativeTerms: ["xss", "sql injection", "clickjack"], minTermDensity: 0.06,
+    knownAliases: ["command injection", "shell injection"], rejectionRate: 0.10,
+  },
+  "CWE-352": {
+    cweId: "CWE-352", name: "Cross-Site Request Forgery",
+    requiredTerms: ["csrf"],
+    expectedTerms: ["forgery", "token", "samesite", "cookie", "referer", "origin", "request"],
+    negativeTerms: ["sql", "buffer", "memory"], minTermDensity: 0.04,
+    knownAliases: ["cross-site request forgery", "xsrf"], rejectionRate: 0.6,
+  },
+  "CWE-434": {
+    cweId: "CWE-434", name: "Unrestricted File Upload",
+    requiredTerms: ["upload"],
+    expectedTerms: ["file", "extension", "mime", "type", "validation", "rce", "shell", "executable"],
+    negativeTerms: ["sql", "buffer"], minTermDensity: 0.04,
+    knownAliases: ["unrestricted upload"], rejectionRate: 0.3,
+  },
+  "CWE-918": {
+    cweId: "CWE-918", name: "Server-Side Request Forgery",
+    requiredTerms: ["ssrf"],
+    expectedTerms: ["server-side", "request", "internal", "metadata", "169.254", "localhost", "url", "fetch"],
+    negativeTerms: ["sql", "xss", "buffer"], minTermDensity: 0.06,
+    knownAliases: ["ssrf", "server side request forgery"], rejectionRate: 0.2,
+  },
+  "CWE-415": {
+    cweId: "CWE-415", name: "Double Free",
+    requiredTerms: ["free"],
+    expectedTerms: ["double", "memory", "heap", "pointer", "asan", "tcache"],
+    negativeTerms: ["sql", "xss"], minTermDensity: 0.08,
+    knownAliases: ["double-free"], rejectionRate: 0.1,
+  },
+  "CWE-787": {
+    cweId: "CWE-787", name: "Out-of-bounds Write",
+    requiredTerms: ["write"],
+    expectedTerms: ["out-of-bounds", "buffer", "overflow", "heap", "stack", "memory"],
+    negativeTerms: ["sql", "xss"], minTermDensity: 0.05,
+    knownAliases: ["oob write"], rejectionRate: 0.1,
+  },
+  "CWE-190": {
+    cweId: "CWE-190", name: "Integer Overflow",
+    requiredTerms: ["integer"],
+    expectedTerms: ["overflow", "wrap", "size", "size_t", "int32", "int64", "arithmetic"],
+    negativeTerms: ["sql", "xss"], minTermDensity: 0.05,
+    knownAliases: ["int overflow"], rejectionRate: 0.15,
+  },
+  "CWE-611": {
+    cweId: "CWE-611", name: "XML External Entity",
+    requiredTerms: ["xml"],
+    expectedTerms: ["xxe", "external entity", "doctype", "system", "parser", "libxml"],
+    negativeTerms: ["sql injection"], minTermDensity: 0.06,
+    knownAliases: ["xxe"], rejectionRate: 0.2,
+  },
+  "CWE-770": {
+    cweId: "CWE-770", name: "Allocation Without Limits",
+    requiredTerms: [],
+    expectedTerms: ["dos", "denial of service", "memory", "exhaustion", "limit", "rate"],
+    negativeTerms: [], minTermDensity: 0.03,
+    knownAliases: ["resource exhaustion", "denial of service"], rejectionRate: 0.6,
+  },
+};
