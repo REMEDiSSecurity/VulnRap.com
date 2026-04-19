@@ -82,6 +82,8 @@ export const reportsTable = pgTable("reports", {
   vulnrapCompositeLabel: varchar("vulnrap_composite_label", { length: 32 }),
   vulnrapEngineResults: jsonb("vulnrap_engine_results").$type<unknown>(),
   vulnrapOverridesApplied: jsonb("vulnrap_overrides_applied").$type<string[]>(),
+  vulnrapCorrelationId: varchar("vulnrap_correlation_id", { length: 64 }),
+  vulnrapDurationMs: real("vulnrap_duration_ms"),
   showInFeed: boolean("show_in_feed").notNull().default(false),
   fileName: varchar("file_name", { length: 255 }),
   fileSize: integer("file_size").notNull(),

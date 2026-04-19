@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import multer from "multer";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, or, sql, desc } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { reportsTable, reportHashesTable, similarityResultsTable, reportStatsTable } from "@workspace/db";
 import {
@@ -31,7 +31,15 @@ import { sanitizeText, sanitizeForAnalysis, sanitizeFileName, detectBinaryConten
 import { extractTextFromPdf } from "../lib/pdf";
 import { logger } from "../lib/logger";
 import { performActiveVerification, type VerificationResult } from "../lib/active-verification";
-import { analyzeWithEngines, type CompositeResult as VulnrapComposite } from "../lib/engines";
+import {
+  analyzeWithEngines,
+  analyzeWithEnginesTraced,
+  isNewCompositeEnabled,
+  compositeToLegacySlopScore,
+  type CompositeResult as VulnrapComposite,
+  type PipelineTrace,
+} from "../lib/engines";
+import { analysisTracesTable } from "@workspace/db";
 import {
   generateTriageRecommendation,
   computeTemporalSignals,
@@ -559,12 +567,21 @@ router.post("/reports", async (req, res): Promise<void> => {
   const analysisResult = await performAnalysis(text, redactedText, { skipLlm });
   const { llmResult } = analysisResult;
 
-  // Sprint 9 Phase 1: 3-engine consensus scorer (runs alongside legacy scoring).
+  // Sprint 9 Phase 1+v3: 3-engine consensus scorer with full pipeline trace.
+  // Feature-flag (VULNRAP_USE_NEW_COMPOSITE=false) lets ops disable the new
+  // composite without touching code. Trace persists for observability.
   let vulnrapComposite: VulnrapComposite | null = null;
-  try {
-    vulnrapComposite = analyzeWithEngines(redactedText);
-  } catch (engineErr) {
-    logger.error({ err: engineErr }, "[VULNRAP] engines crashed; continuing without composite");
+  let vulnrapTrace: PipelineTrace | null = null;
+  if (isNewCompositeEnabled()) {
+    try {
+      const traced = analyzeWithEnginesTraced(redactedText);
+      vulnrapComposite = traced.composite;
+      vulnrapTrace = traced.trace;
+    } catch (engineErr) {
+      logger.error({ err: engineErr }, "[VULNRAP] engines crashed; continuing without composite");
+    }
+  } else {
+    logger.info({ flag: "VULNRAP_USE_NEW_COMPOSITE=false" }, "[VULNRAP] new composite disabled by feature flag");
   }
 
   const deleteToken = crypto.randomBytes(32).toString("hex");
@@ -683,8 +700,35 @@ router.post("/reports", async (req, res): Promise<void> => {
           ? { engines: vulnrapComposite.engineResults, compositeBreakdown: vulnrapComposite.compositeBreakdown, warnings: vulnrapComposite.warnings, engineCount: vulnrapComposite.engineCount }
           : null,
         vulnrapOverridesApplied: vulnrapComposite?.overridesApplied ?? null,
+        vulnrapCorrelationId: vulnrapTrace?.correlationId ?? null,
+        vulnrapDurationMs: vulnrapTrace?.totalDurationMs ?? null,
       })
       .returning();
+
+    if (vulnrapTrace) {
+      // Strict policy: trace persistence is part of the report-creation transaction.
+      // If this insert fails the whole transaction rolls back so we never end up
+      // with a report that has a correlation_id pointing at a non-existent trace.
+      // Set VULNRAP_TRACE_BEST_EFFORT=true to downgrade to logged-warning behavior
+      // (useful only during the analysis_traces table rollout).
+      const persistedTrace: PipelineTrace = { ...vulnrapTrace, reportId: inserted.id };
+      const bestEffort = (process.env.VULNRAP_TRACE_BEST_EFFORT ?? "").toLowerCase() === "true";
+      try {
+        await tx.insert(analysisTracesTable).values({
+          correlationId: persistedTrace.correlationId,
+          reportId: inserted.id,
+          totalDurationMs: persistedTrace.totalDurationMs,
+          trace: persistedTrace,
+        });
+      } catch (traceErr) {
+        if (bestEffort) {
+          logger.warn({ err: traceErr, correlationId: persistedTrace.correlationId }, "[VULNRAP] best-effort trace persistence failed");
+        } else {
+          logger.error({ err: traceErr, correlationId: persistedTrace.correlationId }, "[VULNRAP] trace persistence failed; rolling back report");
+          throw traceErr;
+        }
+      }
+    }
 
     await tx.insert(reportHashesTable).values([
       { reportId: inserted.id, hashType: "sha256", hashValue: contentHash },
@@ -1509,6 +1553,67 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
   });
 
   res.json(response);
+});
+
+// Sprint 9 v3: Per-report diagnostics endpoint. Returns the persisted pipeline
+// trace (per-stage timings, signals summary, feature flags, overrides). Sits
+// outside the OpenAPI-typed GetReport response so we can iterate freely.
+router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
+  const params = GetReportParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [report] = await db.select().from(reportsTable).where(eq(reportsTable.id, params.data.id));
+  if (!report) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+
+  // Prefer the trace whose correlation_id matches what was stored on the report
+  // row (exact pairing). Fall back to the most-recent trace for the report if
+  // no correlation_id is set (legacy rows analyzed before the column existed).
+  let traceRow: typeof analysisTracesTable.$inferSelect | null = null;
+  if (report.vulnrapCorrelationId) {
+    const [t] = await db
+      .select()
+      .from(analysisTracesTable)
+      .where(eq(analysisTracesTable.correlationId, report.vulnrapCorrelationId))
+      .limit(1);
+    traceRow = t ?? null;
+  }
+  if (!traceRow) {
+    const rows = await db
+      .select()
+      .from(analysisTracesTable)
+      .where(eq(analysisTracesTable.reportId, report.id))
+      .orderBy(desc(analysisTracesTable.createdAt))
+      .limit(1);
+    traceRow = rows[0] ?? null;
+  }
+
+  res.json({
+    reportId: report.id,
+    correlationId: report.vulnrapCorrelationId,
+    durationMs: report.vulnrapDurationMs,
+    composite: report.vulnrapCompositeScore == null ? null : {
+      score: report.vulnrapCompositeScore,
+      label: report.vulnrapCompositeLabel,
+      overridesApplied: report.vulnrapOverridesApplied ?? [],
+    },
+    legacyMapping: report.vulnrapCompositeScore == null ? null : {
+      slopScore: compositeToLegacySlopScore(report.vulnrapCompositeScore),
+      displayMode: isNewCompositeEnabled() ? "vulnrap-composite" : "legacy-slop",
+      note: "slopScore = 100 - vulnrap.compositeScore (higher slopScore = worse). " +
+            "Toggle VULNRAP_USE_NEW_COMPOSITE=false to fall back to legacy scoring.",
+    },
+    featureFlags: {
+      VULNRAP_USE_NEW_COMPOSITE: isNewCompositeEnabled(),
+    },
+    trace: traceRow?.trace ?? null,
+    engines: report.vulnrapEngineResults ?? null,
+  });
 });
 
 router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {

@@ -5,3 +5,4 @@ export * from "./report_stats";
 export * from "./user_feedback";
 export * from "./page_views";
 export * from "./api_cache";
+export * from "./analysis_traces";
