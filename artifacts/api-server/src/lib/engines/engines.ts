@@ -254,12 +254,19 @@ export function runEngine2(s: ExtractedSignals): EngineResult {
   const pocScore = clamp(50 + pocRaw * 2.5);
   const ce = analyzeClaimEvidenceRatio(s);
 
-  const baseScore =
+  // Calibration note: each subcomponent's own internal cap (75 / 60 / 60) is
+  // the *theoretical* ceiling assuming every signal is present. We divide by a
+  // smaller "calibrated maximum" (50 / 40 / 35) reflecting what real
+  // expert-quality reports actually accumulate, then clamp the final composite
+  // to [0, 100]. This gives well-evidenced reports a fair chance to reach
+  // GREEN without requiring every conceivable signal.
+  const baseScore = clamp(
     (codeScore / 50 * 100) * 0.35 +
     (refScore / 40 * 100) * 0.30 +
     (reproScore / 35 * 100) * 0.20 +
     pocScore * 0.10 +
-    ce.ratioScore * 0.05;
+    ce.ratioScore * 0.05
+  );
 
   let finalScore = baseScore;
   // OVERRIDE: extreme claim:evidence ratios force low scores
