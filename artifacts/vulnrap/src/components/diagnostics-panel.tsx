@@ -32,7 +32,7 @@ interface PipelineStageTiming {
   endedAt?: number;
 }
 
-interface DiagnosticsResponse {
+export interface DiagnosticsResponse {
   reportId: number;
   correlationId: string | null;
   durationMs: number | null;
@@ -84,7 +84,7 @@ const VERDICT_COLOR: Record<string, string> = {
   GREY: "text-muted-foreground border-muted-foreground/30",
 };
 
-async function fetchDiagnostics(reportId: number): Promise<DiagnosticsResponse> {
+export async function fetchDiagnostics(reportId: number): Promise<DiagnosticsResponse> {
   const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
   const res = await fetch(`${baseUrl}/api/reports/${reportId}/diagnostics`);
   if (!res.ok) {
@@ -416,7 +416,7 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
   );
 }
 
-function buildMarkdownSummary(data: DiagnosticsResponse): string {
+export function buildMarkdownSummary(data: DiagnosticsResponse): string {
   const lines: string[] = [];
   lines.push(`# VulnRap Diagnostics — Report ${data.reportId}`);
   if (data.correlationId) lines.push(`_Correlation: \`${data.correlationId}\`_`);

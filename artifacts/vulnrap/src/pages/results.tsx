@@ -16,7 +16,7 @@ import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCust
 import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport } from "@/components/evidence-highlighter";
-import { DiagnosticsPanel } from "@/components/diagnostics-panel";
+import { DiagnosticsPanel, fetchDiagnostics, buildMarkdownSummary, type DiagnosticsResponse } from "@/components/diagnostics-panel";
 
 function getQualityColor(score: number) {
   if (score >= 70) return "text-green-500";
@@ -1011,19 +1011,37 @@ export default function Results() {
 
   const settings = getSettings();
 
-  const exportJSON = () => {
+  const loadDiagnosticsForExport = async (): Promise<DiagnosticsResponse | null> => {
+    try {
+      return await fetchDiagnostics(id);
+    } catch (err) {
+      toast({
+        title: "Diagnostics unavailable",
+        description: err instanceof Error ? err.message : "Could not load pipeline diagnostics; export will omit them.",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  const exportJSON = async () => {
     if (!report) return;
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const diagnostics = await loadDiagnosticsForExport();
+    const payload = { ...report, diagnostics };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `vulnrap-report-${anonymizeId(id)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Exported", description: "JSON report downloaded." });
+    toast({
+      title: "Exported",
+      description: diagnostics ? "JSON report downloaded with diagnostics." : "JSON report downloaded (diagnostics omitted).",
+    });
   };
 
-  const exportText = () => {
+  const exportText = async () => {
     if (!report) return;
     const bd = report.breakdown as { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number } | undefined;
     const ev = report.evidence as Array<{ type: string; description: string; weight: number; matched?: string | null }> | undefined;
@@ -1108,6 +1126,12 @@ export default function Results() {
     if (report.llmFeedback && report.llmFeedback.length > 0) {
       lines.push(`LLM FEEDBACK:`);
       report.llmFeedback.forEach((f) => lines.push(`  • ${f}`));
+      lines.push(``);
+    }
+    const diagnostics = await loadDiagnosticsForExport();
+    if (diagnostics) {
+      lines.push(`PIPELINE DIAGNOSTICS:`);
+      lines.push(buildMarkdownSummary(diagnostics));
       lines.push(``);
     }
     lines.push(`---`);
