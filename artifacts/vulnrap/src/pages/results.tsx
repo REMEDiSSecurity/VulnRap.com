@@ -16,6 +16,7 @@ import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCust
 import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport } from "@/components/evidence-highlighter";
+import { DiagnosticsPanel } from "@/components/diagnostics-panel";
 
 function getQualityColor(score: number) {
   if (score >= 70) return "text-green-500";
@@ -1384,6 +1385,8 @@ export default function Results() {
           </CardContent>
         </Card>
       )}
+
+      {vulnrap && <DiagnosticsPanel reportId={report.id} />}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 glass-card rounded-xl opacity-90">
