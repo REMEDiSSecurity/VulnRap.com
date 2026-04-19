@@ -33,7 +33,7 @@ const endpoints = [
     method: "POST",
     path: "/api/reports",
     title: "Submit a Report",
-    description: "Upload a vulnerability report for full analysis — similarity matching, AI slop scoring, auto-redaction, and section-level hashing.",
+    description: "Upload a vulnerability report for full analysis — multi-engine consensus scoring, similarity matching, auto-redaction, and section-level hashing.",
     badge: "Write",
     badgeColor: "border-green-500 text-green-500",
     example: `# Upload a file
@@ -45,7 +45,7 @@ curl -X POST https://vulnrap.com/api/reports \\
 curl -X POST https://vulnrap.com/api/reports \\
   -F "reportUrl=https://github.com/user/repo/blob/main/report.md" \\
   -F "contentMode=full"`,
-    responseHint: "Returns report ID, delete token, slopScore (blended), llmSlopScore, llmEnhanced flag, llmFeedback, heuristic feedback, similarity matches, redaction summary",
+    responseHint: "Returns report ID, delete token, vulnrap composite (score + label + per-engine breakdown for AI Authorship / Technical Substance / CWE Coherence), legacy slopScore (mapped from composite), llmFeedback, heuristic feedback, similarity matches, redaction summary, and a correlation id for diagnostics lookup",
   },
   {
     method: "DELETE",
@@ -73,7 +73,7 @@ curl -X POST https://vulnrap.com/api/reports/check \\
 # Or check via URL
 curl -X POST https://vulnrap.com/api/reports/check \\
   -F "reportUrl=https://gist.github.com/user/abc123"`,
-    responseHint: "Returns slopScore (blended), llmSlopScore, llmEnhanced, llmFeedback, similarity matches, section hashes — nothing saved",
+    responseHint: "Returns vulnrap composite (score + label + per-engine breakdown), legacy slopScore (mapped from composite), llmFeedback, similarity matches, section hashes — nothing saved",
   },
   {
     method: "GET",
@@ -84,6 +84,16 @@ curl -X POST https://vulnrap.com/api/reports/check \\
     badgeColor: "border-blue-500 text-blue-500",
     example: `curl https://vulnrap.com/api/reports/42`,
     responseHint: "Returns full analysis: redacted text, slop score, matches, sections",
+  },
+  {
+    method: "GET",
+    path: "/api/reports/:id/diagnostics",
+    title: "Pipeline Diagnostics",
+    description: "Returns the full pipeline trace for a report — composite breakdown, per-engine scores and verdicts, applied overrides, perplexity signals, input signals summary, per-stage timings (correlation id), and the legacy slop-score mapping. Powers the \"Why this score?\" panel on the report detail page.",
+    badge: "Read",
+    badgeColor: "border-blue-500 text-blue-500",
+    example: `curl https://vulnrap.com/api/reports/42/diagnostics`,
+    responseHint: "Returns composite, engines[], perplexity, overridesApplied, warnings, trace { correlationId, stages[], signalsSummary }, legacyMapping { slopScore, displayMode, note }, featureFlags",
   },
   {
     method: "GET",
