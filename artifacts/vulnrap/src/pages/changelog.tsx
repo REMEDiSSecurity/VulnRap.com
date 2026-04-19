@@ -3,10 +3,80 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout } from "lucide-react";
 
-export const CURRENT_VERSION = "3.4.0";
-export const RELEASE_DATE = "2026-04-16";
+export const CURRENT_VERSION = "3.5.0";
+export const RELEASE_DATE = "2026-04-19";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.5.0",
+    date: "2026-04-19",
+    label: "Multi-Engine Consensus + Observability",
+    labelColor: "border-fuchsia-500 text-fuchsia-400",
+    sections: [
+      {
+        icon: <Brain className="w-4 h-4 text-fuchsia-400" />,
+        title: "Multi-Engine Consensus Scoring",
+        type: "feature",
+        items: [
+          "VirusTotal-style consensus: every report is scored by three independent engines (AI Authorship Detector, Technical Substance Analyzer, CWE Coherence Checker) and combined into a single composite score with a 6-tier label",
+          "Engine 1 uplift: blends bigram entropy, function-word rate, and code-block syntax sanity into the AI authorship signal (60% original / 40% perplexity-blend); engine verdict is re-derived from the blended score so override rules see a consistent signal, with raw values preserved for audit",
+          "CWE fingerprint library expanded from 25 to 50 hand-curated entries — auth, IDOR, crypto, open-redirect, and DoS families now covered",
+          "Feature flag VULNRAP_USE_NEW_COMPOSITE (default on) lets operators fall back to the legacy slop-score path without removing the new pipeline; legacy slopScore is exposed as 100 − compositeScore with an explanatory note for backwards compatibility",
+        ],
+      },
+      {
+        icon: <Eye className="w-4 h-4 text-cyan-400" />,
+        title: "Pipeline Observability",
+        type: "feature",
+        items: [
+          "New analysis_traces table persists a per-report PipelineTrace: correlation id, per-stage timings (extract → perplexity → engine 1 → engine 2 → engine 3 → composite), input signals summary, applied overrides, and feature-flag state",
+          "Reports table gained vulnrap_correlation_id and vulnrap_duration_ms columns for end-to-end request tracing",
+          "Trace persistence is strict by default — a failed insert rolls back the whole report transaction; opt into best-effort logging with VULNRAP_TRACE_BEST_EFFORT=true",
+          "New endpoint GET /api/reports/:id/diagnostics returns the full trace, composite breakdown, perplexity signals, override rules, and legacy slop-score mapping; matches by correlation id first and falls back to most-recent for that report",
+        ],
+      },
+      {
+        icon: <Layout className="w-4 h-4 text-primary" />,
+        title: "\"Why this score?\" Diagnostics Panel",
+        type: "feature",
+        items: [
+          "Collapsible diagnostics card on the report detail page surfaces what was previously curl-only: composite breakdown, per-engine scores and verdicts, input signals (word count, code blocks, real URLs, completeness, claim/evidence ratio, claimed CWEs), applied overrides, warnings, perplexity signals, per-stage pipeline timings with correlation id, and legacy slop-score mapping",
+          "Lazy-loaded — the diagnostics request only fires when an analyst expands the panel",
+          "Per-panel \"Export JSON\" downloads the full diagnostics payload as vulnrap-diagnostics-<id>.json; \"Copy Markdown\" puts a human-readable summary on the clipboard for case files and tickets",
+          "Top-level JSON / TXT exports on the results page now bundle the diagnostics payload automatically — JSON gets a top-level diagnostics key, TXT appends a PIPELINE DIAGNOSTICS section",
+        ],
+      },
+      {
+        icon: <Zap className="w-4 h-4 text-orange-400" />,
+        title: "Performance",
+        type: "improvement",
+        items: [
+          "Performance benchmark asserts <500ms median for typical reports and <1500ms for 8K-word adversarial inputs; current end-to-end pipeline runs in single-digit milliseconds",
+          "Sub-millisecond per-stage timing visibility via the new traced engine pipeline",
+        ],
+      },
+      {
+        icon: <FlaskConical className="w-4 h-4 text-emerald-400" />,
+        title: "Testing & Release Pipeline",
+        type: "improvement",
+        items: [
+          "159 unit tests passing across 15 test files (up from 128) plus 2 dataset-gated skips for the curated 1,554-report validation gates",
+          "New supertest-style integration tests for the diagnostics HTTP surface: 404, happy path, legacy-report fallback, correlation-id pairing, feature-flag legacy path, strict-mode rollback, and best-effort downgrade",
+          "Live-server Playwright smoke test seeds a real report, asserts the diagnostics payload, then re-asserts the same fields render in the live UI",
+          "Production deploys are now gated on the e2e smoke test — a failure aborts the release with a clear blocked message",
+          "Dataset auto-discovery: drop the curated v2 dataset into /mnt/vulnrap/data and Gate 2 (label distribution, <15% overlap) plus Gate 3 (25 known curl-slop H1 IDs all <50 composite) auto-run on the next test invocation",
+        ],
+      },
+      {
+        icon: <Wrench className="w-4 h-4 text-yellow-400" />,
+        title: "Type Safety Cleanup",
+        type: "fix",
+        items: [
+          "Cleared the leftover api-server typecheck errors in the LLM slop, repro recipe, active verification, and engines libraries; project-reference declaration files for the shared db package were regenerated so the new analysis_traces schema is visible across packages",
+        ],
+      },
+    ],
+  },
   {
     version: "3.4.0",
     date: "2026-04-16",
