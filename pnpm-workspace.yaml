@@ -10,7 +10,7 @@ catalog:
   '@tailwindcss/vite': ^4.1.14
   '@tanstack/react-query': ^5.90.21
   '@types/node': ^25.3.3
-  '@types/react': ^19.2.0
+  '@types/react': 19.2.14
   '@types/react-dom': ^19.2.0
   '@vitejs/plugin-react': ^5.0.4
   class-variance-authority: ^0.7.1
@@ -37,10 +37,6 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
-  lodash: ^4.18.0
-  path-to-regexp: ^8.4.0
-  picomatch@2: ^2.3.2
-  picomatch@4: ^4.0.4
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'
@@ -98,6 +94,10 @@ overrides:
   lightningcss>lightningcss-linux-x64-musl: '-'
   lightningcss>lightningcss-win32-arm64-msvc: '-'
   lightningcss>lightningcss-win32-x64-msvc: '-'
+  lodash: ^4.18.0
+  path-to-regexp: ^8.4.0
+  picomatch@2: ^2.3.2
+  picomatch@4: ^4.0.4
   rollup>@rollup/rollup-android-arm-eabi: '-'
   rollup>@rollup/rollup-android-arm64: '-'
   rollup>@rollup/rollup-darwin-arm64: '-'
