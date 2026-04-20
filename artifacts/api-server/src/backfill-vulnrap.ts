@@ -185,6 +185,7 @@ function parsePositiveInt(raw: string, flag: string): number {
 function parseArgs(argv: string[]): CliOpts {
   const opts: CliOpts = { dryRun: false, limit: null, batchSize: 50 };
   for (const arg of argv.slice(2)) {
+    if (arg === "--" || arg === "") continue;
     if (arg === "--dry-run") opts.dryRun = true;
     else if (arg.startsWith("--limit=")) opts.limit = parsePositiveInt(arg.slice("--limit=".length), "--limit");
     else if (arg.startsWith("--batch-size=")) opts.batchSize = parsePositiveInt(arg.slice("--batch-size=".length), "--batch-size");

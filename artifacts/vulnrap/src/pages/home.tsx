@@ -829,14 +829,6 @@ export default function Home() {
         </p>
       </div>
 
-      <VideoSection />
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        <AutoRedactionCard />
-        <SectionHashingCard />
-        <SlopDetectionCard />
-      </div>
-
       <Card className="glass-card-accent rounded-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1120,6 +1112,14 @@ export default function Home() {
 
       <AnalysisStepper isActive={isProcessing && stage !== "done"} mode="submit" className="my-4" />
 
+      <VideoSection />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <AutoRedactionCard />
+        <SectionHashingCard />
+        <SlopDetectionCard />
+      </div>
+
       <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5">
         <h2 className="text-lg font-bold flex items-center gap-2">
           <Zap className="w-5 h-5 text-primary" />
@@ -1153,6 +1153,165 @@ export default function Home() {
             <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
               Get a validity score, similarity matches, verification results, triage recommendation, and redaction summary.
             </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5" data-testid="section-methodology">
+        <div className="space-y-1">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <BrainCircuit className="w-5 h-5 text-primary" />
+            How We Score Your Report (in plain English)
+          </h2>
+          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            No black box. Here's exactly what runs against your text, what each piece is looking for, and how much it counts toward the final score.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-foreground/90">Three engines, voting with different weights</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            We run three independent analyzers over your report and combine their scores. They don't all count equally — we weight them based on which signals actually predicted slop in our test corpus.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-cyan-400" />
+                  Technical Substance
+                </h4>
+                <span className="font-mono text-xs font-bold text-cyan-400">55%</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                The biggest single vote. Looks at whether the report actually contains a real proof of concept — concrete steps, real file paths, working commands, specific line numbers — versus vague hand-waving like "an attacker could potentially…". Reports that describe what they did get rewarded; reports that only describe what an attacker might do get penalized.
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                  <Shield className="w-4 h-4 text-violet-400" />
+                  CWE Coherence
+                </h4>
+                <span className="font-mono text-xs font-bold text-violet-400">40%</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Checks that the vulnerability class the report claims (e.g. "SQL injection", "buffer overflow", "SSRF") matches the evidence shown. If the title says "XSS" but the proof of concept is hitting a database error, that disagreement counts heavily against the report — it's one of the strongest tells of an LLM-generated submission.
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                  <BrainCircuit className="w-4 h-4 text-amber-400" />
+                  AI Authorship
+                </h4>
+                <span className="font-mono text-xs font-bold text-amber-400">5%</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Linguistic fingerprinting — sentence-length variance, vocabulary patterns, telltale phrasing. We deliberately keep this small because lots of legitimate analysts use AI to clean up their writing. It nudges the score, it doesn't drive it.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-foreground/90">How we check the claims (validation sources)</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Engine scoring tells us if the report <em>looks</em> real. Active verification tells us if it <em>is</em> real. Anything we can verify, we go check live:
+          </p>
+          <ul className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+            <li className="flex gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+              <span><strong className="text-foreground">CVE database (NVD):</strong> Every CVE the report cites is looked up live. We check the ID actually exists, that the description and CWE match what the report claims, and we flag anything that's hallucinated or misattributed.</span>
+            </li>
+            <li className="flex gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+              <span><strong className="text-foreground">GitHub repositories &amp; commits:</strong> If the report references a repo, file path, line number, or commit SHA, we fetch it to verify the file exists, the line is real, and the commit hash resolves. Fake-looking paths like <code className="font-mono text-[10px] bg-muted px-1 rounded">src/utils/helper.js:42</code> with nothing else specific are a classic slop signal.</span>
+            </li>
+            <li className="flex gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+              <span><strong className="text-foreground">Package → repository mapping:</strong> When a report names an npm/PyPI/Maven package, we map it to its real source repo and verify the affected version actually exists in the registry's release history.</span>
+            </li>
+            <li className="flex gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+              <span><strong className="text-foreground">Section fingerprints (duplicate detection):</strong> Every paragraph is hashed and compared against every other report we've ever seen. If your "novel" finding is paragraph-for-paragraph identical to a report we processed three months ago, we'll tell you.</span>
+            </li>
+            <li className="flex gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+              <span><strong className="text-foreground">Verification tags:</strong> Each verified claim is tagged <em className="text-foreground">referenced</em> (the report itself pointed to a real, checkable source) or <em className="text-foreground">fallback</em> (we had to go find a likely source ourselves). Referenced verifications carry more weight than fallbacks.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-foreground/90">Evidence multipliers — what bumps the score up or down</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            On top of the engine vote, certain pieces of evidence get an outsized effect because they were the most reliable signal in our calibration data:
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-3 space-y-1.5">
+              <h4 className="text-xs font-bold text-green-400">Pulls the score toward "looks real"</h4>
+              <ul className="space-y-1 text-[11px] text-muted-foreground">
+                <li>• A CVE ID that resolves and matches the described bug</li>
+                <li>• A real commit SHA on the affected repo</li>
+                <li>• Real file paths with real line numbers</li>
+                <li>• A working command-line PoC with actual output</li>
+                <li>• Tight CWE/PoC alignment</li>
+              </ul>
+            </div>
+            <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3 space-y-1.5">
+              <h4 className="text-xs font-bold text-red-400">Pulls the score toward "likely slop"</h4>
+              <ul className="space-y-1 text-[11px] text-muted-foreground">
+                <li>• Hallucinated CVE IDs or non-existent paths</li>
+                <li>• Generic "an attacker could…" speculation with no PoC</li>
+                <li>• Title CWE doesn't match the evidence shown</li>
+                <li>• Section-for-section duplicate of an earlier report</li>
+                <li>• Test/example certificates being claimed as live findings</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4" data-testid="section-methodology-origin">
+        <h2 className="text-lg font-bold flex items-center gap-2">
+          <Search className="w-5 h-5 text-primary" />
+          How we landed on this methodology — and how to make it better
+        </h2>
+        <div className="space-y-3 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+          <p>
+            These weights and signals didn't come out of thin air. We worked through a large corpus of real-world vulnerability submissions — a mix of well-known confirmed reports, public bug-bounty disclosures, and the increasingly familiar wave of LLM-generated slop that PSIRT inboxes have been flooded with over the last two years. For each report we recorded what humans ultimately decided about it (real, duplicate, or noise), then tuned the engine weights and the evidence multipliers until the model's verdicts lined up with the human verdicts.
+          </p>
+          <p>
+            That's how we ended up at the 55% / 40% / 5% split: substance-of-PoC and CWE-coherence were the two signals that consistently separated real submissions from generated ones, while pure linguistic "this sounds like an LLM wrote it" cues turned out to be much noisier than they look in isolation. The blog post on the field test walks through specific examples from that round of calibration if you want to see the receipts.
+          </p>
+          <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 space-y-3">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Mail className="w-4 h-4 text-primary" />
+              Got a better idea? We genuinely want to hear it.
+            </h3>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              We don't think this is the final word on triage scoring. If you've got a signal we're missing, a verification source we should be hitting, an evidence pattern that fooled us, or a corpus we should be calibrating against — please reach out. The more analyst experience we can fold into the weights, the better this gets for everyone drowning in incoming reports.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <a
+                href="mailto:remedisllc@gmail.com?subject=VulnRap%20methodology%20feedback"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors glow-button"
+                data-testid="link-methodology-feedback"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                Email the team
+              </a>
+              <a
+                href="https://github.com/REMEDiSSecurity/VulnRap.Com/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border hover:border-primary/40 text-xs font-medium text-foreground transition-colors"
+                data-testid="link-methodology-issues"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Open an issue on GitHub
+              </a>
+            </div>
           </div>
         </div>
       </div>
