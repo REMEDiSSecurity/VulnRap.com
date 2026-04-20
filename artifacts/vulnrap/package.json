@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
-    "build": "vite build --config vite.config.ts",
+    "build": "vite build --config vite.config.ts && (playwright install chromium >/dev/null 2>&1 || true) && node scripts/prerender.mjs",
+    "build:no-prerender": "vite build --config vite.config.ts",
+    "prerender": "node scripts/prerender.mjs",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run && pnpm run test:e2e",
