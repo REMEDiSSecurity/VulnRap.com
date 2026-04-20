@@ -32,6 +32,9 @@ interface NavGroup {
   // The nav root used for "active" highlighting (any of these prefixes match)
   matchPrefixes: string[];
   items: NavLeafItem[];
+  // Anchor the dropdown to the trigger's left or right edge. Use "right" for
+  // groups near the right side of the navbar so the panel doesn't overflow.
+  align?: "left" | "right";
 }
 
 type NavEntry = NavLeafItem | NavGroup;
@@ -68,6 +71,7 @@ const NAV: NavEntry[] = [
     label: "Docs",
     icon: <BookOpen className="w-3.5 h-3.5" />,
     matchPrefixes: ["/developers", "/blog", "/changelog"],
+    align: "right",
     items: [
       { to: "/developers", label: "API", icon: <Code className="w-4 h-4" />, description: "REST endpoints, schemas, and examples." },
       { to: "/blog", label: "Blog", icon: <FileText className="w-4 h-4" />, description: "Field tests, methodology, and post-mortems." },
@@ -137,7 +141,10 @@ function NavDropdown({ group, pathname }: NavDropdownProps) {
       {open && (
         <div
           role="menu"
-          className="absolute top-full left-0 mt-1 w-72 rounded-lg border border-primary/30 bg-popover shadow-2xl shadow-black/60 overflow-hidden"
+          className={cn(
+            "absolute top-full mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-primary/30 bg-popover shadow-2xl shadow-black/60 overflow-hidden",
+            group.align === "right" ? "right-0" : "left-0"
+          )}
           style={{ zIndex: 80, backgroundColor: "hsl(var(--popover))" }}
         >
           <div className="py-1">
