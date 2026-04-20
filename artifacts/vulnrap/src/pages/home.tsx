@@ -602,7 +602,7 @@ function Explainer({ text }: { text: string }) {
 export default function Home() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [inputMode, setInputMode] = useState<InputMode>("file");
+  const [inputMode, setInputMode] = useState<InputMode>("text");
   const [file, setFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState("");
   const [reportUrl, setReportUrl] = useState("");
@@ -946,7 +946,7 @@ export default function Home() {
           <div className="space-y-2">
             <textarea
               data-testid="input-rawtext"
-              className="w-full h-64 rounded-xl glass-card p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/40 bg-transparent"
+              className="w-full h-28 min-h-[7rem] rounded-xl glass-card p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/40 bg-transparent"
               placeholder="Paste your vulnerability report text here...&#10;&#10;This field accepts plain text only. All content is treated as text -- no HTML, markdown rendering, or code execution."
               value={rawText}
               onChange={(e) => { setRawText(e.target.value); setStage("idle"); }}
