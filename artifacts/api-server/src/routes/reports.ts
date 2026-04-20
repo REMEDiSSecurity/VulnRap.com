@@ -1780,6 +1780,17 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     lines.push(`> ${triageRecommendation.note}`);
     lines.push("");
 
+    if (triageRecommendation.matrixInputs) {
+      const mi = triageRecommendation.matrixInputs;
+      lines.push("## Matrix Inputs");
+      lines.push("");
+      lines.push(`- **Composite Score**: ${mi.compositeScore.toFixed(1)}`);
+      lines.push(`- **Engine 2 Score**: ${mi.engine2Score.toFixed(1)}`);
+      lines.push(`- **Verification Ratio**: ${(mi.verificationRatio * 100).toFixed(0)}%`);
+      lines.push(`- **Strong Evidence Count**: ${mi.strongEvidenceCount}`);
+      lines.push("");
+    }
+
     if (triageRecommendation.challengeQuestions.length > 0) {
       lines.push("## Challenge Questions");
       lines.push("");
