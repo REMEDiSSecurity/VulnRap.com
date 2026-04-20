@@ -2,6 +2,7 @@ import { Calendar } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import heroSrc from "@assets/generated_images/blog-field-test-v350-hero.png";
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return <h3 className="text-foreground font-bold text-lg mt-8 mb-3">{children}</h3>;
@@ -34,6 +35,18 @@ export function BlogFieldTestV350() {
       </div>
 
       <Separator className="bg-border/50" />
+
+      <figure className="space-y-2">
+        <img
+          src={heroSrc}
+          alt="Three engines voting on a composite score, with slop reports clustered low and legitimate reports clustered mid-scale, separated by a visible gap"
+          loading="lazy"
+          className="w-full h-auto rounded border border-border/40"
+        />
+        <figcaption className="text-xs text-muted-foreground/80 italic">
+          Three independent engines (E1 / E2 / E3, weighted 5% / 55% / 40%) feed a single composite score. v3.5.0 produces clean separation between slop (left cluster) and legit (right cluster) — but the legit cluster hits a ceiling around 55 instead of clearing 60+. Closing that gap is the v3.6.0 calibration sprint.
+        </figcaption>
+      </figure>
 
       <div className="prose-invert space-y-2 text-sm leading-relaxed text-muted-foreground">
         <P>
