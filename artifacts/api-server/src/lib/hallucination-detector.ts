@@ -26,14 +26,43 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     }
   }
 
+  // v3.6.0 §6: Allowlist of known ASAN/allocator sentinel addresses that look
+  // round but are commonly seen in real crash output. Plus require >=5
+  // trailing zeros (was 4) to reduce false positives like 0x60200000.
+  const KNOWN_ALLOCATOR_ADDRESSES = new Set([
+    "0x60200000",
+    "0x7fff0000",
+    "0x602000000000",
+    "0x10000000",
+    "0x00400000",
+    "0x7f0000000000",
+  ]);
   const addresses = text.match(/0x[0-9a-f]{8,16}/gi) || [];
   const roundAddresses = addresses.filter(a => {
-    const hex = a.replace("0x", "").toLowerCase();
+    const lower = a.toLowerCase();
+    if (KNOWN_ALLOCATOR_ADDRESSES.has(lower)) return false;
+    const hex = lower.replace("0x", "");
     const trailing = hex.match(/0+$/)?.[0].length || 0;
     const sequential = /(?:1234|5678|9abc|abcd|dead|beef|cafe|face)/.test(hex);
-    return trailing >= 4 || sequential;
+    return trailing >= 5 || sequential;
   });
-  if (addresses.length >= 2 && roundAddresses.length / addresses.length > 0.5) {
+  // v3.6.0 §6: Real ASan/gdb crash dumps frequently include some round-looking
+  // addresses (allocator boundaries, page-aligned regions). Only flag the
+  // round-address pattern when there are no other corroborating real-crash
+  // indicators in the surrounding text — otherwise we falsely accuse legit
+  // sanitizer reports that happen to land on aligned addresses.
+  const hasRealCrashIndicators =
+    /SUMMARY:\s*AddressSanitizer/i.test(text) ||
+    /==\d+==ERROR:\s*AddressSanitizer/i.test(text) ||
+    /Thread\s+\d+\s+received\s+signal\s+SIG/i.test(text) ||
+    /Program\s+received\s+signal\s+SIG/i.test(text) ||
+    /\(gdb\)\s+(?:bt|backtrace|info\s+registers)/i.test(text) ||
+    /==\d+==\s*(?:READ|WRITE)\s+of\s+size\s+\d+/i.test(text);
+  if (
+    addresses.length >= 2 &&
+    roundAddresses.length / addresses.length > 0.5 &&
+    !hasRealCrashIndicators
+  ) {
     signals.push({
       type: "fabricated_addresses",
       description: `${roundAddresses.length}/${addresses.length} memory addresses appear artificially constructed (round/sequential values)`,

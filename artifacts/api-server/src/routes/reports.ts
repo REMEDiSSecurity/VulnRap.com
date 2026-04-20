@@ -432,6 +432,37 @@ const upload = multer({
 
 const router: IRouter = Router();
 
+// v3.6.0 §4: Build matrix-triage context from a stored report row + the
+// verification result. Returns undefined when no composite is available, so
+// the legacy slop-only branch in generateTriageRecommendation runs.
+function buildV36TriageContext(
+  report: { vulnrapCompositeScore: number | null; vulnrapEngineResults: unknown },
+  verification: VerificationResult | null,
+): import("../lib/triage-recommendation").TriageDecisionContext | undefined {
+  if (report.vulnrapCompositeScore == null) return undefined;
+  const stored = (report.vulnrapEngineResults ?? {}) as {
+    engines?: Array<{
+      engine: string; score?: number;
+      signalBreakdown?: { evidenceStrength?: { strongCount?: number } };
+    }>;
+  };
+  const e2 = stored.engines?.find(e => e.engine === "Technical Substance Analyzer");
+  // v3.6.0 §2/§4: scoped verification — only checks explicitly tagged
+  // referenced_in_report contribute to the triage ratio. Undefined-source
+  // checks (e.g. NVD CVE lookups) and search_fallback checks are excluded.
+  const referenced = (verification?.checks ?? []).filter(
+    c => c.source === "referenced_in_report",
+  );
+  const refVerified = referenced.filter(c => c.result === "verified").length;
+  const refNotFound = referenced.filter(c => c.result === "not_found").length;
+  return {
+    compositeScore: report.vulnrapCompositeScore ?? 50,
+    engine2Score: e2?.score ?? 50,
+    strongEvidenceCount: e2?.signalBreakdown?.evidenceStrength?.strongCount ?? 0,
+    verificationRatio: (refVerified + refNotFound) > 0 ? refVerified / (refVerified + refNotFound) : 0,
+  };
+}
+
 router.post("/reports", (req, res, next): void => {
   upload.single("file")(req, res, (err) => {
     if (err) {
@@ -645,11 +676,46 @@ router.post("/reports", async (req, res): Promise<void> => {
   }
 
   try {
+    // v3.6.0 §4: Build matrix-triage context from the just-computed composite.
+    const e2 = vulnrapComposite?.engineResults.find(r => r.engine === "Technical Substance Analyzer");
+    const e2Strength = (e2?.signalBreakdown as { evidenceStrength?: { strongCount?: number } } | undefined)
+      ?.evidenceStrength?.strongCount ?? 0;
+    // v3.6.0 §9: Surface verification-source breakdown on Engine 2 so the
+    // diagnostics panel can show reviewers WHERE each verified check came
+    // from (explicit URL in report vs. search fallback). Mutates the
+    // already-computed engine result; safe because we're still pre-persist.
+    if (e2 && analysisResult.verification) {
+      const checks = analysisResult.verification.checks ?? [];
+      const referencedChecks = checks.filter((c: { source?: string }) => c.source === "referenced_in_report");
+      const fallbackChecks = checks.filter((c: { source?: string }) => c.source === "search_fallback");
+      const verifiedRef = referencedChecks.filter((c: { result: string }) => c.result === "verified").length;
+      // Flat shape matches the existing diagnostics UI contract:
+      // verified X/total · referenced: N · search-fallback: M
+      (e2.signalBreakdown as Record<string, unknown>).verificationSources = {
+        referenced: referencedChecks.length,
+        fallback: fallbackChecks.length,
+        verified: verifiedRef,
+        total: referencedChecks.length,
+      };
+    }
+    // v3.6.0 §2/§4: scoped verification — see buildV36TriageContext above.
+    const referencedChecks = (analysisResult.verification?.checks ?? []).filter(
+      (c: { source?: string }) => c.source === "referenced_in_report",
+    );
+    const refVerified = referencedChecks.filter((c: { result: string }) => c.result === "verified").length;
+    const refNotFound = referencedChecks.filter((c: { result: string }) => c.result === "not_found").length;
+    const v36Context = vulnrapComposite ? {
+      compositeScore: vulnrapComposite.overallScore ?? 50,
+      engine2Score: e2?.score ?? 50,
+      strongEvidenceCount: e2Strength,
+      verificationRatio: (refVerified + refNotFound) > 0 ? refVerified / (refVerified + refNotFound) : 0,
+    } : undefined;
     const updatedBase = generateTriageRecommendation(
       analysisResult.slopScore,
       analysisResult.confidence,
       analysisResult.verification,
       analysisResult.evidence,
+      v36Context,
     );
     analysisResult.triageRecommendation = {
       ...updatedBase,
@@ -1436,6 +1502,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
       (report.confidence as number) ?? 0.5,
       verification,
       (report.evidence as EvidenceItem[]) ?? [],
+      buildV36TriageContext(report, verification),
     );
     const temporalSignals = computeTemporalSignals(verification, report.createdAt);
 
@@ -1649,6 +1716,7 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       (report.confidence as number) ?? 0.5,
       verification,
       (report.evidence as EvidenceItem[]) ?? [],
+      buildV36TriageContext(report, verification),
     );
     const temporalSignals = computeTemporalSignals(verification, report.createdAt);
 

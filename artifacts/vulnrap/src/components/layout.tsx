@@ -1,6 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Activity, Search, Code, BookOpen, Target, MessageSquare, Menu, X, Github, Clock, GitCompare, UploadCloud, BarChart3, Database, Eye } from "lucide-react";
+import {
+  Activity, Search, Code, BookOpen, MessageSquare, Menu, X, Github,
+  Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
+  ChevronDown, FileEdit, Sparkles,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
@@ -15,19 +19,163 @@ function feedbackMailto(page: string) {
   return `mailto:remedisllc@gmail.com?subject=${subject}&body=${body}`;
 }
 
-const NAV_ITEMS = [
-  { to: "/", label: "Submit", icon: null },
-  { to: "/check", label: "Check", icon: <Search className="w-3.5 h-3.5" /> },
-  { to: "/batch", label: "Batch", icon: <UploadCloud className="w-3.5 h-3.5" /> },
-  { to: "/compare", label: "Compare", icon: <GitCompare className="w-3.5 h-3.5" /> },
+interface NavLeafItem {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+  description?: string;
+}
+
+interface NavGroup {
+  label: string;
+  icon: React.ReactNode;
+  // The nav root used for "active" highlighting (any of these prefixes match)
+  matchPrefixes: string[];
+  items: NavLeafItem[];
+}
+
+type NavEntry = NavLeafItem | NavGroup;
+
+function isGroup(entry: NavEntry): entry is NavGroup {
+  return (entry as NavGroup).items !== undefined;
+}
+
+const NAV: NavEntry[] = [
+  {
+    label: "Analyze",
+    icon: <Sparkles className="w-3.5 h-3.5" />,
+    matchPrefixes: ["/", "/check", "/batch", "/compare"],
+    items: [
+      { to: "/", label: "Submit", icon: <FileEdit className="w-4 h-4" />, description: "Paste or upload a single report for scoring." },
+      { to: "/check", label: "Check", icon: <Search className="w-4 h-4" />, description: "Look up a previously submitted report by ID." },
+      { to: "/batch", label: "Batch", icon: <UploadCloud className="w-4 h-4" />, description: "Upload many reports at once for bulk scoring." },
+      { to: "/compare", label: "Compare", icon: <GitCompare className="w-4 h-4" />, description: "Diff two reports side-by-side." },
+    ],
+  },
   { to: "/history", label: "History", icon: <Clock className="w-3.5 h-3.5" /> },
   { to: "/reports", label: "Reports", icon: <Database className="w-3.5 h-3.5" /> },
-  { to: "/stats", label: "Stats", icon: <Activity className="w-3.5 h-3.5" /> },
-  { to: "/feedback-analytics", label: "Feedback", icon: <BarChart3 className="w-3.5 h-3.5" /> },
-  { to: "/transparency", label: "Impact", icon: <Eye className="w-3.5 h-3.5" /> },
-  { to: "/developers", label: "API", icon: <Code className="w-3.5 h-3.5" /> },
-  { to: "/blog", label: "Blog", icon: <BookOpen className="w-3.5 h-3.5" /> },
+  {
+    label: "Insights",
+    icon: <BarChart3 className="w-3.5 h-3.5" />,
+    matchPrefixes: ["/stats", "/feedback-analytics", "/transparency"],
+    items: [
+      { to: "/stats", label: "Stats", icon: <Activity className="w-4 h-4" />, description: "Aggregate scoring stats and engine health." },
+      { to: "/feedback-analytics", label: "Feedback", icon: <BarChart3 className="w-4 h-4" />, description: "What analysts are telling us about results." },
+      { to: "/transparency", label: "Impact", icon: <Eye className="w-4 h-4" />, description: "Public-good metrics and transparency report." },
+    ],
+  },
+  {
+    label: "Docs",
+    icon: <BookOpen className="w-3.5 h-3.5" />,
+    matchPrefixes: ["/developers", "/blog", "/changelog"],
+    items: [
+      { to: "/developers", label: "API", icon: <Code className="w-4 h-4" />, description: "REST endpoints, schemas, and examples." },
+      { to: "/blog", label: "Blog", icon: <FileText className="w-4 h-4" />, description: "Field tests, methodology, and post-mortems." },
+      { to: "/changelog", label: "Changelog", icon: <BookOpen className="w-4 h-4" />, description: "Per-release notes and version history." },
+    ],
+  },
 ];
+
+function isPathActive(pathname: string, target: string): boolean {
+  return target === "/" ? pathname === "/" : pathname.startsWith(target);
+}
+
+function isGroupActive(pathname: string, group: NavGroup): boolean {
+  return group.items.some(item => isPathActive(pathname, item.to));
+}
+
+interface NavDropdownProps {
+  group: NavGroup;
+  pathname: string;
+}
+
+function NavDropdown({ group, pathname }: NavDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const active = isGroupActive(pathname, group);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(e: MouseEvent) {
+      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Close on route change
+  useEffect(() => { setOpen(false); }, [pathname]);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn(
+          "text-sm font-medium transition-all px-3 py-1.5 rounded-md flex items-center gap-1.5 whitespace-nowrap",
+          active
+            ? "text-primary bg-primary/10 glow-text-sm"
+            : "text-muted-foreground hover:text-primary hover:bg-primary/5"
+        )}
+      >
+        {group.icon}
+        {group.label}
+        <ChevronDown
+          className={cn("w-3 h-3 transition-transform", open && "rotate-180")}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute top-full left-0 mt-1 w-72 rounded-lg border border-primary/30 bg-popover shadow-2xl shadow-black/60 overflow-hidden"
+          style={{ zIndex: 80, backgroundColor: "hsl(var(--popover))" }}
+        >
+          <div className="py-1">
+            {group.items.map(item => {
+              const itemActive = isPathActive(pathname, item.to);
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    "flex items-start gap-3 px-3 py-2.5 transition-colors",
+                    itemActive
+                      ? "text-primary bg-primary/10"
+                      : "text-foreground/90 hover:text-primary hover:bg-primary/5"
+                  )}
+                >
+                  <span className={cn("mt-0.5 shrink-0", itemActive ? "text-primary" : "text-muted-foreground")}>
+                    {item.icon}
+                  </span>
+                  <span className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-sm font-medium leading-tight">{item.label}</span>
+                    {item.description && (
+                      <span className="text-[11px] leading-snug text-muted-foreground">
+                        {item.description}
+                      </span>
+                    )}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
@@ -59,21 +207,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="hidden lg:flex items-center gap-0.5">
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "text-sm font-medium transition-all px-3 py-1.5 rounded-md flex items-center gap-1.5 whitespace-nowrap",
-                  (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to))
-                    ? "text-primary bg-primary/10 glow-text-sm"
-                    : "text-muted-foreground hover:text-primary hover:bg-primary/5"
-                )}
-              >
-                {item.icon}
-                {item.label}
-              </Link>
-            ))}
+            {NAV.map((entry) => {
+              if (isGroup(entry)) {
+                return <NavDropdown key={entry.label} group={entry} pathname={pathname} />;
+              }
+              const active = isPathActive(pathname, entry.to);
+              return (
+                <Link
+                  key={entry.to}
+                  to={entry.to}
+                  className={cn(
+                    "text-sm font-medium transition-all px-3 py-1.5 rounded-md flex items-center gap-1.5 whitespace-nowrap",
+                    active
+                      ? "text-primary bg-primary/10 glow-text-sm"
+                      : "text-muted-foreground hover:text-primary hover:bg-primary/5"
+                  )}
+                >
+                  {entry.icon}
+                  {entry.label}
+                </Link>
+              );
+            })}
           </nav>
 
           <button
@@ -99,26 +253,62 @@ export function Layout({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileMenuOpen(false)}
           />
           <nav
-            className="relative border-b border-primary/15"
+            className="relative border-b border-primary/15 max-h-[calc(100vh-3.5rem)] overflow-y-auto"
             style={{ backgroundColor: "hsl(220, 30%, 6%)" }}
           >
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-1">
-              {NAV_ITEMS.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3.5 rounded-lg text-base font-semibold transition-all",
-                    (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to))
-                      ? "text-primary bg-primary/15 glow-text-sm"
-                      : "text-white/90 hover:text-primary hover:bg-primary/5"
-                  )}
-                >
-                  <span className="w-5 flex items-center justify-center">{item.icon}</span>
-                  {item.label}
-                </Link>
-              ))}
+              {NAV.map((entry) => {
+                if (isGroup(entry)) {
+                  const active = isGroupActive(pathname, entry);
+                  return (
+                    <div key={entry.label} className="flex flex-col gap-0.5 pt-1">
+                      <div className={cn(
+                        "flex items-center gap-2 px-4 pt-2 pb-1 text-xs uppercase tracking-wide font-semibold",
+                        active ? "text-primary" : "text-muted-foreground"
+                      )}>
+                        <span className="w-4 flex items-center justify-center">{entry.icon}</span>
+                        {entry.label}
+                      </div>
+                      {entry.items.map(item => {
+                        const itemActive = isPathActive(pathname, item.to);
+                        return (
+                          <Link
+                            key={item.to}
+                            to={item.to}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={cn(
+                              "flex items-center gap-3 px-7 py-3 rounded-lg text-base font-medium transition-all",
+                              itemActive
+                                ? "text-primary bg-primary/15 glow-text-sm"
+                                : "text-white/85 hover:text-primary hover:bg-primary/5"
+                            )}
+                          >
+                            <span className="w-4 flex items-center justify-center">{item.icon}</span>
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  );
+                }
+                const active = isPathActive(pathname, entry.to);
+                return (
+                  <Link
+                    key={entry.to}
+                    to={entry.to}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3.5 rounded-lg text-base font-semibold transition-all",
+                      active
+                        ? "text-primary bg-primary/15 glow-text-sm"
+                        : "text-white/90 hover:text-primary hover:bg-primary/5"
+                    )}
+                  >
+                    <span className="w-5 flex items-center justify-center">{entry.icon}</span>
+                    {entry.label}
+                  </Link>
+                );
+              })}
             </div>
           </nav>
         </div>

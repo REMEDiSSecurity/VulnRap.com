@@ -251,7 +251,7 @@ export function CursorBugs() {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="fixed inset-0 z-[60] pointer-events-none"
+      className="fixed inset-0 z-[1] pointer-events-none"
       style={{ mixBlendMode: "screen" }}
     />
   );

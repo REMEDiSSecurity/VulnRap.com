@@ -48,40 +48,126 @@ export interface RevisionResult {
   changeSummary?: string;
 }
 
+// v3.6.0 §4: Optional decision context for matrix-based triage. When provided,
+// the triage decision uses a richer matrix (composite × engine2 × verification
+// ratio × strong-evidence count) instead of the legacy slop-only thresholds.
+// Callers without v3.6.0 context still get the v3.5.0 behavior.
+export interface TriageDecisionContext {
+  compositeScore?: number;       // 0..100, higher=better
+  engine2Score?: number;          // 0..100, technical substance
+  strongEvidenceCount?: number;   // # of CRASH_OUTPUT/STACK_TRACE/CODE_DIFF/etc.
+  suspiciousAddressCount?: number;
+  // Verification ratio: verified / (verified + notFound) over `referenced_in_report` checks only.
+  verificationRatio?: number;     // 0..1
+}
+
 export function generateTriageRecommendation(
   slopScore: number,
   confidence: number,
   verification: VerificationResult | null,
   evidence: EvidenceItem[],
+  context?: TriageDecisionContext,
 ): Omit<TriageRecommendation, "temporalSignals" | "templateMatch" | "revision"> {
-  const notFoundCount = verification?.summary.notFound ?? 0;
-  const verifiedCount = verification?.summary.verified ?? 0;
+  // v3.6.0 §2/§4: Only count notFound/verified from explicit referenced_in_report
+  // sources when computing the triage decision. Checks with undefined source
+  // (e.g. NVD CVE lookups) or search_fallback origin must not influence the
+  // verification ratio, so a search-fallback miss never escalates to
+  // CHALLENGE_REPORTER.
+  const referencedChecks = (verification?.checks ?? []).filter(
+    (c) => c.source === "referenced_in_report",
+  );
+  const notFoundCount = referencedChecks.filter(c => c.result === "not_found").length;
+  const verifiedCount = referencedChecks.filter(c => c.result === "verified").length;
   const warningCount = verification?.summary.warnings ?? 0;
+  const refTotal = notFoundCount + verifiedCount;
+  const verificationRatio = context?.verificationRatio
+    ?? (refTotal > 0 ? verifiedCount / refTotal : 0);
+  const strongEvidence = context?.strongEvidenceCount ?? 0;
 
   let action: TriageAction;
   let reason: string;
   let note: string;
 
-  if (slopScore >= 75 && confidence >= 0.7) {
-    action = "AUTO_CLOSE";
-    reason = `High slop score (${slopScore}) with high confidence (${(confidence * 100).toFixed(0)}%) — strong AI-generation indicators across multiple axes.`;
-    note = "This report exhibits overwhelming AI-generation signals. Consider auto-closing with a template response requesting original research. If your policy requires manual review of all closures, escalate to a senior triager.";
-  } else if (slopScore >= 55) {
-    action = "MANUAL_REVIEW";
-    reason = `Moderate slop score (${slopScore}) — some AI-generation indicators present but not conclusive.`;
-    note = "Assign to a senior triager for manual assessment. Check for concrete reproduction steps, unique observations, and domain-specific details that AI typically cannot fabricate.";
-  } else if (notFoundCount >= 2) {
-    action = "CHALLENGE_REPORTER";
-    reason = `${notFoundCount} referenced items could not be verified — the reporter may be fabricating technical details.`;
-    note = "Send the generated challenge questions below. A legitimate researcher will be able to answer specifics about their environment, exact reproduction steps, and how they discovered the issue. Set a 48-hour response deadline.";
-  } else if (slopScore <= 25 && verifiedCount >= 2) {
-    action = "PRIORITIZE";
-    reason = `Low slop score (${slopScore}) with ${verifiedCount} verified references — strong indicators of legitimate, well-researched report.`;
-    note = "This report shows hallmarks of genuine security research: verified file paths, confirmed function names, and natural writing style. Prioritize for technical review.";
+  // v3.6.0 §4: Matrix-based triage when composite + engine 2 are available.
+  if (context?.compositeScore != null && context?.engine2Score != null) {
+    const comp = context.compositeScore;
+    const e2 = context.engine2Score;
+
+    if (comp >= 70 && e2 >= 60 && (verificationRatio >= 0.5 || strongEvidence >= 2)) {
+      action = "PRIORITIZE";
+      reason = `Composite ${comp} with substance ${e2} and ${strongEvidence} strong evidence signal(s) — high-quality report.`;
+      note = "Strong evidence with coherent technical substance. Prioritize for senior reviewer.";
+    } else if (comp >= 60 && e2 >= 50) {
+      action = "STANDARD_TRIAGE";
+      reason = `Composite ${comp} with substance ${e2} — within legitimate range.`;
+      note = "Process through standard triage workflow.";
+    } else if (comp >= 45) {
+      // Mid-range — only escalate to CHALLENGE if NOT enough strong evidence.
+      if (strongEvidence >= 3) {
+        action = "STANDARD_TRIAGE";
+        reason = `Composite ${comp} but ${strongEvidence} strong evidence signals (crash/diff/stack) — skip challenge.`;
+        note = "Mid composite, but the report carries hard-to-fabricate evidence. Standard triage.";
+      } else if (notFoundCount >= 2 && verificationRatio < 0.3) {
+        action = "CHALLENGE_REPORTER";
+        reason = `${notFoundCount} referenced items could not be verified (verification ratio ${(verificationRatio * 100).toFixed(0)}%).`;
+        note = "Send the generated challenge questions below. A legitimate researcher can substantiate specifics within 48 hours.";
+      } else {
+        action = "MANUAL_REVIEW";
+        reason = `Composite ${comp}, substance ${e2}, ${strongEvidence} strong signal(s) — needs human eyes.`;
+        note = "Assign to a senior triager for manual assessment.";
+      }
+    } else if (comp >= 30) {
+      // Low-mid composite — manual review unless we have enough strong evidence
+      // OR the report is clearly slop.
+      if (strongEvidence >= 3) {
+        action = "MANUAL_REVIEW";
+        reason = `Low composite ${comp} but ${strongEvidence} strong evidence signal(s) — ambiguous.`;
+        note = "Substance disagrees with composite; review manually before any escalation.";
+      } else if (notFoundCount >= 2) {
+        action = "CHALLENGE_REPORTER";
+        reason = `Composite ${comp} with ${notFoundCount} unverifiable references.`;
+        note = "Send challenge questions; set a 48-hour response deadline.";
+      } else {
+        action = "MANUAL_REVIEW";
+        reason = `Low composite ${comp} — needs manual review.`;
+        note = "Assign to a senior triager.";
+      }
+    } else {
+      // composite < 30
+      action = "AUTO_CLOSE";
+      reason = `Very low composite (${comp}) with substance ${e2} — strong AI-generation / low-effort signals.`;
+      note = "Consider auto-closing with a template response requesting original research.";
+    }
+
+    // Override safety: never CHALLENGE_REPORTER if the report has 3+ strong
+    // evidence signals (CRASH_OUTPUT, STACK_TRACE, CODE_DIFF, SHELL_COMMAND, etc.).
+    if (action === "CHALLENGE_REPORTER" && strongEvidence >= 3) {
+      action = "MANUAL_REVIEW";
+      reason += ` Override: ${strongEvidence} strong evidence signals present — escalate to manual review instead of challenge.`;
+    }
   } else {
-    action = "STANDARD_TRIAGE";
-    reason = `Score (${slopScore}) and signals are within normal range — no strong indicators either way.`;
-    note = "Process through standard triage workflow. No automated action recommended.";
+    // v3.5.0 legacy path (no v3.6.0 context).
+    if (slopScore >= 75 && confidence >= 0.7) {
+      action = "AUTO_CLOSE";
+      reason = `High slop score (${slopScore}) with high confidence (${(confidence * 100).toFixed(0)}%) — strong AI-generation indicators across multiple axes.`;
+      note = "This report exhibits overwhelming AI-generation signals. Consider auto-closing with a template response requesting original research. If your policy requires manual review of all closures, escalate to a senior triager.";
+    } else if (slopScore >= 55) {
+      action = "MANUAL_REVIEW";
+      reason = `Moderate slop score (${slopScore}) — some AI-generation indicators present but not conclusive.`;
+      note = "Assign to a senior triager for manual assessment. Check for concrete reproduction steps, unique observations, and domain-specific details that AI typically cannot fabricate.";
+    } else if (notFoundCount >= 2) {
+      action = "CHALLENGE_REPORTER";
+      reason = `${notFoundCount} referenced items could not be verified — the reporter may be fabricating technical details.`;
+      note = "Send the generated challenge questions below. A legitimate researcher will be able to answer specifics about their environment, exact reproduction steps, and how they discovered the issue. Set a 48-hour response deadline.";
+    } else if (slopScore <= 25 && verifiedCount >= 2) {
+      action = "PRIORITIZE";
+      reason = `Low slop score (${slopScore}) with ${verifiedCount} verified references — strong indicators of legitimate, well-researched report.`;
+      note = "This report shows hallmarks of genuine security research: verified file paths, confirmed function names, and natural writing style. Prioritize for technical review.";
+    } else {
+      action = "STANDARD_TRIAGE";
+      reason = `Score (${slopScore}) and signals are within normal range — no strong indicators either way.`;
+      note = "Process through standard triage workflow. No automated action recommended.";
+    }
   }
 
   if (warningCount > 0 && action !== "CHALLENGE_REPORTER") {
@@ -100,7 +186,11 @@ function generateChallengeQuestions(
   const questions: ChallengeQuestion[] = [];
 
   if (verification) {
-    const missingFiles = verification.checks.filter(
+    // v3.6.0 §2: Skip checks done against guessed/search-fallback repos.
+    const trustedChecks = verification.checks.filter(
+      (c) => c.source !== "search_fallback",
+    );
+    const missingFiles = trustedChecks.filter(
       (c) => c.type === "github_file_missing"
     );
     for (const check of missingFiles.slice(0, 2)) {
@@ -112,7 +202,7 @@ function generateChallengeQuestions(
       });
     }
 
-    const missingFunctions = verification.checks.filter(
+    const missingFunctions = trustedChecks.filter(
       (c) => c.type === "github_function_missing"
     );
     for (const check of missingFunctions.slice(0, 2)) {
@@ -124,7 +214,7 @@ function generateChallengeQuestions(
       });
     }
 
-    const plagiarism = verification.checks.filter(
+    const plagiarism = trustedChecks.filter(
       (c) => c.type === "nvd_plagiarism"
     );
     if (plagiarism.length > 0) {
@@ -135,7 +225,7 @@ function generateChallengeQuestions(
       });
     }
 
-    const invalidCves = verification.checks.filter(
+    const invalidCves = trustedChecks.filter(
       (c) => c.type === "cve_not_in_nvd" || c.type === "invalid_cve_year"
     );
     for (const check of invalidCves.slice(0, 1)) {

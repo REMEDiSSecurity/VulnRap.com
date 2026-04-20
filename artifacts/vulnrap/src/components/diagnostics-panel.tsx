@@ -252,6 +252,7 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
                       ))}
                     </div>
                   </section>
+                  <EvidenceStrengthSection engines={data.engines.engines} />
                 </>
               )}
 
@@ -413,6 +414,61 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
         </CardContent>
       )}
     </Card>
+  );
+}
+
+// v3.6.0 §9: Surface Engine 2 evidence-type signals (multipliers) and active
+// verification source breakdown when present in signalBreakdown.
+function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
+  const e2 = engines.find(e => /Technical Substance/i.test(e.engine));
+  const sb = (e2?.signalBreakdown ?? {}) as Record<string, unknown>;
+  const ev = sb.evidenceStrength as
+    | { bonus?: number; strongCount?: number; signalCount?: number; signals?: Array<{ type: string; weight?: number; multiplier?: number }> }
+    | undefined;
+  const verifyBreakdown = sb.verificationSources as
+    | { referenced?: number; fallback?: number; verified?: number; total?: number }
+    | undefined;
+  if (!ev && !verifyBreakdown) return null;
+  return (
+    <>
+      <Separator className="bg-border/30" />
+      <section className="space-y-2">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+          Engine 2 — Evidence Strength &amp; Verification Sources
+        </div>
+        {ev && (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3 text-[11px] font-mono">
+              <span>bonus: <span className="font-bold">+{ev.bonus ?? 0}</span></span>
+              <span className="text-muted-foreground">
+                strong: {ev.strongCount ?? 0}/{ev.signalCount ?? 0}
+              </span>
+            </div>
+            {Array.isArray(ev.signals) && ev.signals.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {ev.signals.slice(0, 12).map((s, i) => (
+                  <Badge
+                    key={`${s.type}-${i}`}
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-5 font-mono"
+                  >
+                    {s.type}
+                    {typeof s.multiplier === "number" ? ` ×${s.multiplier}` : ""}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {verifyBreakdown && (
+          <div className="text-[11px] font-mono text-muted-foreground">
+            verified {verifyBreakdown.verified ?? 0}/{verifyBreakdown.total ?? 0}
+            {" · "}referenced: {verifyBreakdown.referenced ?? 0}
+            {" · "}search-fallback: {verifyBreakdown.fallback ?? 0}
+          </div>
+        )}
+      </section>
+    </>
   );
 }
 

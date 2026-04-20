@@ -7,6 +7,76 @@ export interface CodeBlock {
   body: string;
 }
 
+// v3.6.0 §1: Evidence-type weighting. Each detected signal carries a strength
+// multiplier reflecting how hard it is to fabricate, derived from the
+// expert-vs-slop discriminator ratios in our 460K-report dataset.
+export type EvidenceType =
+  | "FILE_PATH" | "LINE_NUMBER" | "FUNCTION_NAME" | "ENDPOINT_URL"
+  | "CRASH_OUTPUT" | "CODE_DIFF" | "SHELL_COMMAND" | "HTTP_REQUEST"
+  | "MEMORY_ADDRESS" | "CVSS_VECTOR" | "CVE_REFERENCE" | "VERSION_PIN"
+  | "ENVIRONMENT_DETAIL" | "STACK_TRACE";
+
+export interface EvidenceSignal {
+  type: EvidenceType;
+  raw: string;
+  baseWeight: number;
+  strengthMultiplier: number;
+}
+
+export const STRENGTH_MULTIPLIERS: Record<EvidenceType, number> = {
+  CRASH_OUTPUT: 2.5,
+  CODE_DIFF: 2.2,
+  STACK_TRACE: 2.0,
+  SHELL_COMMAND: 1.8,
+  HTTP_REQUEST: 1.6,
+  MEMORY_ADDRESS: 1.5,
+  LINE_NUMBER: 1.4,
+  FUNCTION_NAME: 1.3,
+  FILE_PATH: 1.2,
+  CVSS_VECTOR: 1.2,
+  CVE_REFERENCE: 1.1,
+  VERSION_PIN: 1.1,
+  ENDPOINT_URL: 1.0,
+  ENVIRONMENT_DETAIL: 1.0,
+};
+
+// v3.6.0 §2c: Vulnerability type detector. Used by Engine 3 to penalize reports
+// that describe a specific vulnerability class but do not cite a CWE.
+const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
+  XSS: [/cross.?site.?script/i, /\bXSS\b/, /<script>/i, /document\.cookie/i],
+  SQLi: [/sql.?inject/i, /\bSQLi\b/i, /UNION\s+SELECT/i, /OR\s+1\s*=\s*1/i],
+  SSRF: [/server.?side.?request/i, /\bSSRF\b/, /169\.254\.169\.254/],
+  "Buffer Overflow": [/buffer.?overflow/i, /heap.?overflow/i, /stack.?overflow/i, /out.?of.?bounds/i],
+  "Use After Free": [/use.?after.?free/i, /\bUAF\b/, /CWE-416/],
+  "Path Traversal": [/path.?traversal/i, /directory.?traversal/i, /\.\.\//],
+  "Auth Bypass": [/auth(?:entication|orization).?bypass/i, /\bIDOR\b/i, /broken.?access/i],
+  CSRF: [/cross.?site.?request.?forgery/i, /\bCSRF\b/],
+  RCE: [/remote.?code.?execution/i, /\bRCE\b/, /command.?injection/i],
+  "Info Disclosure": [/information.?disclosure/i, /sensitive.?data.?expos/i, /info.?leak/i],
+};
+
+export function detectVulnerabilityType(text: string): string | null {
+  for (const [name, patterns] of Object.entries(VULN_TYPE_PATTERNS)) {
+    for (const re of patterns) {
+      if (re.test(text)) return name;
+    }
+  }
+  return null;
+}
+
+const KNOWN_ALLOCATOR_ADDRS = new Set([
+  "0x60200000", "0x7fff0000", "0x602000000000",
+  "0x10000000", "0x00400000", "0x7f0000000000",
+]);
+
+export function classifyMemoryAddress(addr: string): "likely_real" | "suspicious" {
+  const lower = addr.toLowerCase();
+  if (KNOWN_ALLOCATOR_ADDRS.has(lower)) return "likely_real";
+  const hex = lower.replace(/^0x/, "");
+  const trailingZeros = hex.match(/0+$/)?.[0]?.length || 0;
+  return trailingZeros >= 5 ? "suspicious" : "likely_real";
+}
+
 export interface ExtractedSignals {
   // Structural
   sectionHeaderCount: number;
@@ -69,6 +139,132 @@ export interface ExtractedSignals {
   wordCount: number;
   termTokens: string[]; // lowercase tokens for CWE coherence
   claimedCwes: string[];
+
+  // v3.6.0 §1: Typed evidence signals with strength multipliers.
+  evidenceSignals: EvidenceSignal[];
+  // v3.6.0 §6: Count of memory addresses that appear suspicious (round/uniform)
+  // and not on the known-allocator allowlist.
+  suspiciousAddressCount: number;
+}
+
+const CRASH_PATTERNS = [
+  /==\d+==ERROR:\s*AddressSanitizer/,
+  /READ of size \d+ at 0x[0-9a-f]+/i,
+  /freed by thread/i,
+  /SUMMARY:\s*(?:Address|Memory|Thread)Sanitizer/,
+  /Segmentation fault.*core dumped/i,
+  /==\d+==\s*(?:Invalid|Conditional).*depends on uninitialised/i,
+  /at 0x[0-9A-Fa-f]+:\s*\w+\s*\([^)]+:\d+\)/,
+];
+
+const DIFF_PATTERNS = [
+  /^[-+]{3}\s+[ab]\//m,
+  /^@@\s*-\d+,?\d*\s*\+\d+,?\d*\s*@@/m,
+];
+
+const SHELL_FLAG_PATTERNS = [
+  /^\$\s+\w+\s+--?\w/m,
+  /^>\s+\w+\s+--?\w/m,
+  /```(?:bash|sh|shell|console)\b[\s\S]+?```/,
+];
+
+const HTTP_REQUEST_RE = /(?:GET|POST|PUT|DELETE|PATCH|HEAD)\s+\/\S*\s+HTTP\/[12]\.[01]/;
+const HTTP_HEADERS_RE = /^(?:Host|User-Agent|Authorization|Cookie|Content-Type|Accept|Content-Length):/m;
+const STACK_FRAME_RE = /(?:#\d+\s+0x[0-9a-fA-F]+\s+in\s+\S+|\bat\s+\S+\s*\([^)]+:\d+\))/g;
+const CVSS_VECTOR_RE = /CVSS:3\.[01]\/AV:[NALP]\/AC:[LH]\/PR:[NLH]\/UI:[NR]\/S:[UC]\/C:[NLH]\/I:[NLH]\/A:[NLH]/;
+
+function buildEvidenceSignals(
+  text: string,
+  filePathMatches: string[],
+  lineNumberCount: number,
+  functionCallCount: number,
+  endpointCount: number,
+  cveCount: number,
+  versionMentionCount: number,
+  hasEnvSpec: boolean,
+  memoryAddrs: string[],
+): { signals: EvidenceSignal[]; suspiciousAddressCount: number } {
+  const signals: EvidenceSignal[] = [];
+  const M = STRENGTH_MULTIPLIERS;
+
+  // CRASH_OUTPUT
+  const crashHits = CRASH_PATTERNS.filter(p => p.test(text)).length;
+  if (crashHits > 0) {
+    signals.push({ type: "CRASH_OUTPUT", raw: `${crashHits} pattern(s)`, baseWeight: 6, strengthMultiplier: M.CRASH_OUTPUT });
+  }
+
+  // CODE_DIFF — require at least 2 patterns
+  const diffHits = DIFF_PATTERNS.filter(p => p.test(text)).length;
+  if (diffHits >= 2) {
+    signals.push({ type: "CODE_DIFF", raw: "unified diff", baseWeight: 6, strengthMultiplier: M.CODE_DIFF });
+  }
+
+  // STACK_TRACE — multi-frame
+  const frames = (text.match(STACK_FRAME_RE) || []).length;
+  if (frames >= 3) {
+    signals.push({ type: "STACK_TRACE", raw: `${frames} frames`, baseWeight: 5, strengthMultiplier: M.STACK_TRACE });
+  }
+
+  // SHELL_COMMAND with flags
+  const shellHits = SHELL_FLAG_PATTERNS.filter(p => p.test(text)).length;
+  if (shellHits > 0) {
+    signals.push({ type: "SHELL_COMMAND", raw: "shell command with flags", baseWeight: 4, strengthMultiplier: M.SHELL_COMMAND });
+  }
+
+  // HTTP_REQUEST — full request line + headers
+  if (HTTP_REQUEST_RE.test(text) && HTTP_HEADERS_RE.test(text)) {
+    signals.push({ type: "HTTP_REQUEST", raw: "full HTTP request", baseWeight: 4, strengthMultiplier: M.HTTP_REQUEST });
+  }
+
+  // MEMORY_ADDRESS — classify and count suspicious vs real
+  let suspiciousAddressCount = 0;
+  let realAddressCount = 0;
+  for (const a of memoryAddrs) {
+    if (classifyMemoryAddress(a) === "suspicious") suspiciousAddressCount++;
+    else realAddressCount++;
+  }
+  if (realAddressCount > 0) {
+    signals.push({ type: "MEMORY_ADDRESS", raw: `${realAddressCount} likely-real address(es)`, baseWeight: 3, strengthMultiplier: M.MEMORY_ADDRESS });
+  }
+  if (suspiciousAddressCount > 0 && realAddressCount === 0) {
+    // §6: negative multiplier when only suspicious addresses are present
+    signals.push({ type: "MEMORY_ADDRESS", raw: `${suspiciousAddressCount} suspicious round address(es)`, baseWeight: -5, strengthMultiplier: 0.5 });
+  }
+
+  // CVSS_VECTOR
+  if (CVSS_VECTOR_RE.test(text)) {
+    signals.push({ type: "CVSS_VECTOR", raw: "CVSS 3.x vector", baseWeight: 3, strengthMultiplier: M.CVSS_VECTOR });
+  }
+
+  // CVE_REFERENCE
+  if (cveCount > 0) {
+    signals.push({ type: "CVE_REFERENCE", raw: `${cveCount} CVE(s)`, baseWeight: 2, strengthMultiplier: M.CVE_REFERENCE });
+  }
+
+  // VERSION_PIN
+  if (versionMentionCount > 0) {
+    signals.push({ type: "VERSION_PIN", raw: `${versionMentionCount} version pin(s)`, baseWeight: 2, strengthMultiplier: M.VERSION_PIN });
+  }
+
+  // FILE_PATH / LINE_NUMBER / FUNCTION_NAME / ENDPOINT_URL / ENVIRONMENT_DETAIL
+  const uniqueFilePaths = new Set(filePathMatches).size;
+  if (uniqueFilePaths > 0) {
+    signals.push({ type: "FILE_PATH", raw: `${uniqueFilePaths} file path(s)`, baseWeight: Math.min(8, uniqueFilePaths * 1.5), strengthMultiplier: M.FILE_PATH });
+  }
+  if (lineNumberCount > 0) {
+    signals.push({ type: "LINE_NUMBER", raw: `${lineNumberCount} line ref(s)`, baseWeight: Math.min(6, lineNumberCount * 0.8), strengthMultiplier: M.LINE_NUMBER });
+  }
+  if (functionCallCount > 0) {
+    signals.push({ type: "FUNCTION_NAME", raw: `${functionCallCount} function ref(s)`, baseWeight: Math.min(6, functionCallCount * 0.5), strengthMultiplier: M.FUNCTION_NAME });
+  }
+  if (endpointCount > 0) {
+    signals.push({ type: "ENDPOINT_URL", raw: `${endpointCount} endpoint(s)`, baseWeight: Math.min(6, endpointCount * 1.5), strengthMultiplier: M.ENDPOINT_URL });
+  }
+  if (hasEnvSpec) {
+    signals.push({ type: "ENVIRONMENT_DETAIL", raw: "environment spec", baseWeight: 3, strengthMultiplier: M.ENVIRONMENT_DETAIL });
+  }
+
+  return { signals, suspiciousAddressCount };
 }
 
 const PLACEHOLDER_DOMAINS = new Set([
@@ -315,6 +511,20 @@ export function extractSignals(rawText: string, claimedCwesArg?: string[]): Extr
     ? claimedCwesArg.map(s => s.toUpperCase())
     : Array.from(new Set(cweRaw)).slice(0, 5);
 
+  // v3.6.0 §1: Build typed evidence signals with strength multipliers.
+  const memoryAddrs = text.match(MEMORY_ADDR_RE) || [];
+  const evidenceBuilt = buildEvidenceSignals(
+    text,
+    filePathMatches,
+    lineNumberCount,
+    functionCallReferences,
+    specificEndpointCount,
+    externalCveReferences,
+    versionMentionCount,
+    hasEnvironmentSpec,
+    memoryAddrs,
+  );
+
   return {
     sectionHeaderCount,
     numberedStepSequences,
@@ -369,5 +579,8 @@ export function extractSignals(rawText: string, claimedCwesArg?: string[]): Extr
     wordCount,
     termTokens: tokens,
     claimedCwes,
+
+    evidenceSignals: evidenceBuilt.signals,
+    suspiciousAddressCount: evidenceBuilt.suspiciousAddressCount,
   };
 }

@@ -1,13 +1,66 @@
 import { Router, type IRouter } from "express";
-import { generateCalibrationReport } from "../lib/calibration";
+import { generateCalibrationReport, type BucketAnalysis } from "../lib/calibration";
 import { getCurrentConfig, getConfigHistory, applyNewConfig } from "../lib/scoring-config";
 
 const router: IRouter = Router();
 
+// v3.6.0 §8: Surface a non-applied "suggestedAdjustments" block alongside the
+// existing calibration report. These are diagnostic suggestions only — the
+// allocator/calibration applier is unchanged and still requires an explicit
+// POST to /feedback/calibration/apply (with the allow-listed keys).
+function buildSuggestedAdjustments(buckets: BucketAnalysis[]): Array<{
+  scope: string;
+  metric: string;
+  observed: number;
+  target: number;
+  delta: number;
+  recommendation: string;
+}> {
+  const out: Array<{ scope: string; metric: string; observed: number; target: number; delta: number; recommendation: string }> = [];
+  for (const b of buckets) {
+    if (!b.meetsThreshold) continue;
+    if (b.signal === "over-scoring" && Math.abs(b.ratingDeviation) >= 0.5) {
+      out.push({
+        scope: b.bucket,
+        metric: "rating_deviation",
+        observed: Number((b.avgRating).toFixed(2)),
+        target: Number((b.avgRating + Math.abs(b.ratingDeviation)).toFixed(2)),
+        delta: Number(b.ratingDeviation.toFixed(2)),
+        recommendation: `Bucket "${b.bucket}" is over-scoring. Consider lowering Engine 1 weight or relaxing slop thresholds for this band.`,
+      });
+    } else if (b.signal === "under-scoring" && Math.abs(b.ratingDeviation) >= 0.5) {
+      out.push({
+        scope: b.bucket,
+        metric: "rating_deviation",
+        observed: Number((b.avgRating).toFixed(2)),
+        target: Number((b.avgRating - Math.abs(b.ratingDeviation)).toFixed(2)),
+        delta: Number(b.ratingDeviation.toFixed(2)),
+        recommendation: `Bucket "${b.bucket}" is under-scoring. Consider tightening evidence requirements (Engine 2) for this band.`,
+      });
+    }
+  }
+  return out;
+}
+
 router.get("/feedback/calibration", async (_req, res) => {
   try {
     const report = await generateCalibrationReport();
-    res.json(report);
+    const suggestedAdjustments = buildSuggestedAdjustments(report.bucketAnalysis);
+    res.json({
+      ...report,
+      // v3.6.0: read-only suggestion field; no auto-apply.
+      suggestedAdjustments,
+      v3_6_0: {
+        engineWeights: { engine1: 0.05, engine2: 0.55, engine3: 0.40 },
+        evidenceTypeMultipliers: {
+          CRASH_OUTPUT: 2.5, CODE_DIFF: 2.2, STACK_TRACE: 2.0, SHELL_COMMAND: 1.8,
+          HTTP_REQUEST: 1.6, MEMORY_ADDRESS: 1.5, LINE_NUMBER: 1.4, FUNCTION_NAME: 1.3,
+          FILE_PATH: 1.2, CVSS_VECTOR: 1.2, CVE_REFERENCE: 1.1, VERSION_PIN: 1.1,
+          ENDPOINT_URL: 1.0, ENVIRONMENT_DETAIL: 1.0,
+        },
+        cweCalibration: { default: 42, vulnTypeNoCwe: 38, strongFitFloor: 68, perfectFitFloor: 78, wrongCweCeiling: 25 },
+      },
+    });
   } catch (err) {
     _req.log?.error(err, "Failed to generate calibration report");
     res.status(500).json({ error: "Failed to generate calibration report." });

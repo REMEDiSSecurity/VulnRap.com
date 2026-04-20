@@ -9,6 +9,11 @@ export interface VerificationCheck {
   detail: string;
   weight: number;
   cacheSource?: "l1" | "db" | "fresh";
+  // v3.6.0 §2: Distinguish checks performed against repos explicitly cited in
+  // the report (`referenced_in_report`) from speculative checks against repos
+  // we guessed from a project name (`search_fallback`). Triage and challenge
+  // questions only act on `referenced_in_report` results.
+  source?: "referenced_in_report" | "search_fallback";
 }
 
 export interface VerificationSummary {
@@ -121,11 +126,30 @@ export function detectProjects(text: string): DetectedProject[] {
     }
   }
 
+  // v3.6.0 §3a: When a known package name appears alongside a concrete
+  // version pattern (e.g. "lodash 4.17.21", "django==4.2.7", "v1.2.0–1.3.4")
+  // within a small text window, treat that as an explicit reference to the
+  // package's repo and tag the project as github_url so downstream
+  // verification counts it under referenced_in_report (not search_fallback).
+  // Bare package mentions without a version stay as known_project (fallback).
+  const VERSION_NEAR = /(?:v?\d+\.\d+(?:\.\d+)?(?:[-_a-zA-Z0-9]+)?|version\s+\d+|==\s*\d+\.\d+|\d+\.\d+\s*[–-]\s*\d+\.\d+)/i;
   const lower = text.toLowerCase();
   for (const [name, slug] of Object.entries(KNOWN_PROJECTS)) {
     if (seen.has(slug)) continue;
     const wordRe = new RegExp(`\\b${name}\\b`, "i");
-    if (wordRe.test(lower)) {
+    const match = wordRe.exec(text);
+    if (match) {
+      const start = Math.max(0, match.index - 80);
+      const end = Math.min(text.length, match.index + name.length + 80);
+      const window = text.slice(start, end);
+      const hasVersion = VERSION_NEAR.test(window);
+      seen.add(slug);
+      projects.push({
+        name,
+        repoSlug: slug,
+        source: hasVersion ? "github_url" : "known_project",
+      });
+    } else if (wordRe.test(lower)) {
       seen.add(slug);
       projects.push({ name, repoSlug: slug, source: "known_project" });
     }
@@ -252,7 +276,8 @@ async function githubFetch(url: string): Promise<GhResult & { cacheSource?: "l1"
 
 async function verifyGitHubReferences(
   repoSlug: string,
-  refs: { functions: string[]; filePaths: string[] }
+  refs: { functions: string[]; filePaths: string[] },
+  source: "referenced_in_report" | "search_fallback" = "referenced_in_report",
 ): Promise<VerificationCheck[]> {
   const checks: VerificationCheck[] = [];
   let checksPerformed = 0;
@@ -721,9 +746,22 @@ export async function performActiveVerification(text: string): Promise<Verificat
   const codeRefs = extractCodeReferences(text);
   const allChecks: VerificationCheck[] = [];
 
-  const githubProjects = detectedProjects.filter(
-    (p) => p.source === "github_url" || p.source === "known_project"
+  // v3.6.0 §2: Prioritize repos explicitly referenced in the report
+  // (github_url / gitlab_url). Fall back to KNOWN_PROJECTS keyword matches
+  // only when no explicit repo URL was found, and tag those checks as
+  // `search_fallback` so triage knows not to challenge based on them.
+  const referencedGithubRepos = detectedProjects.filter(
+    (p) => p.source === "github_url",
   );
+  const fallbackGithubRepos = detectedProjects.filter(
+    (p) => p.source === "known_project",
+  );
+  const githubProjects = referencedGithubRepos.length > 0
+    ? referencedGithubRepos
+    : fallbackGithubRepos;
+  const githubSourceTag: "referenced_in_report" | "search_fallback" =
+    referencedGithubRepos.length > 0 ? "referenced_in_report" : "search_fallback";
+
   const nonGithubProjects = detectedProjects.filter(
     (p) => p.source === "gitlab_url" || p.source === "npm_package" || p.source === "pypi_package"
   );
@@ -735,6 +773,7 @@ export async function performActiveVerification(text: string): Promise<Verificat
       result: "skipped",
       detail: `Detected ${project.source.replace("_", " ")} "${project.name}" — GitHub verification not applicable`,
       weight: 0,
+      source: project.source === "gitlab_url" ? "referenced_in_report" : "search_fallback",
     });
   }
 
@@ -748,8 +787,14 @@ export async function performActiveVerification(text: string): Promise<Verificat
         filePaths: codeRefs.filePaths.slice(0, remainingBudget),
         functions: codeRefs.functions.slice(0, Math.max(0, remainingBudget - codeRefs.filePaths.length)),
       };
-      const ghChecks = await verifyGitHubReferences(project.repoSlug, limitedRefs);
-      allChecks.push(...ghChecks);
+      const ghChecks = await verifyGitHubReferences(project.repoSlug, limitedRefs, githubSourceTag);
+      // v3.6.0 §2: Down-weight checks performed against guessed/search-fallback
+      // repos: 50% of original weight. They still inform the diagnostics panel
+      // but no longer drive a "report fabricated" conclusion.
+      const adjusted = githubSourceTag === "search_fallback"
+        ? ghChecks.map(c => ({ ...c, source: githubSourceTag, weight: Math.round(c.weight * 0.5) }))
+        : ghChecks.map(c => ({ ...c, source: githubSourceTag }));
+      allChecks.push(...adjusted);
       totalGhChecks += ghChecks.length;
     }
   }
@@ -760,14 +805,20 @@ export async function performActiveVerification(text: string): Promise<Verificat
   const pocChecks = checkPocPlausibility(text);
   allChecks.push(...pocChecks);
 
-  const score = computeVerificationScore(allChecks);
-  const triageNotes = buildTriageNotes(allChecks, detectedProjects);
+  // v3.6.0 §2: Confidence/scoring/triage pressure derive ONLY from checks the
+  // reporter explicitly grounded in their write-up (or that have no source
+  // tag at all — e.g. CVE refs, PoC plausibility). Search-fallback checks
+  // remain in `allChecks` for the diagnostics panel breakdown but never pull
+  // the score down or generate "could not be verified" reviewer pressure.
+  const inScopeChecks = allChecks.filter((c) => c.source !== "search_fallback");
+  const score = computeVerificationScore(inScopeChecks);
+  const triageNotes = buildTriageNotes(inScopeChecks, detectedProjects);
 
   const summary: VerificationSummary = {
-    verified: allChecks.filter((c) => c.result === "verified").length,
-    notFound: allChecks.filter((c) => c.result === "not_found").length,
-    warnings: allChecks.filter((c) => c.result === "warning").length,
-    errors: allChecks.filter((c) => c.result === "error").length,
+    verified: inScopeChecks.filter((c) => c.result === "verified").length,
+    notFound: inScopeChecks.filter((c) => c.result === "not_found").length,
+    warnings: inScopeChecks.filter((c) => c.result === "warning").length,
+    errors: inScopeChecks.filter((c) => c.result === "error").length,
   };
 
   const cacheMetadata: CacheMetadata = {

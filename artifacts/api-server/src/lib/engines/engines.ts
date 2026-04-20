@@ -2,6 +2,7 @@
 // Each engine is fully independent (no shared state) per spec §Architecture.
 
 import type { ExtractedSignals } from "./extractors";
+import { detectVulnerabilityType } from "./extractors";
 import { CWE_FINGERPRINTS, HIGH_REJECTION_CWES } from "./cwe-fingerprints";
 
 export type Verdict = "GREEN" | "YELLOW" | "RED" | "GREY";
@@ -21,7 +22,7 @@ export interface EngineResult {
   verdict: Verdict;
   confidence: Confidence;
   triggeredIndicators: TriggeredIndicator[];
-  signalBreakdown: Record<string, { score: number; weight: number } | string[] | Record<string, number | string>>;
+  signalBreakdown: Record<string, unknown>;
   note: string;
 }
 
@@ -279,7 +280,24 @@ export function runEngine2(s: ExtractedSignals): EngineResult {
     finalScore = Math.min(finalScore, 20);
     extremeFlag = true;
   }
-  finalScore = clamp(Math.round(finalScore));
+  // v3.6.0 §1: Strength-multiplier bonus. Each typed evidence signal
+  // contributes baseWeight * strengthMultiplier. We then map the total to a
+  // 0..15 point bonus on top of baseScore, capped so that strong-evidence
+  // reports can climb to 95 substance (target: legit reports ≥60 composite).
+  let strengthBonus = 0;
+  let strongEvidenceCount = 0;
+  if (s.evidenceSignals && s.evidenceSignals.length > 0) {
+    let weightedSum = 0;
+    for (const sig of s.evidenceSignals) {
+      const v = sig.baseWeight * sig.strengthMultiplier;
+      weightedSum += v;
+      if (sig.strengthMultiplier >= 1.5 && sig.baseWeight > 0) strongEvidenceCount++;
+    }
+    // Calibration: 30 weighted points = ~7.5pt bonus, 60+ = full 15pt cap.
+    strengthBonus = Math.max(-8, Math.min(15, weightedSum / 4));
+    finalScore = clamp(Math.round(finalScore + strengthBonus));
+    if (strengthBonus > 0) finalScore = Math.min(finalScore, 95);
+  }
 
   const verdict: Verdict =
     finalScore >= 61 ? "GREEN" :
@@ -343,8 +361,18 @@ export function runEngine2(s: ExtractedSignals): EngineResult {
       reproducibility: { score: Math.round(reproScore / 60 * 100), weight: 0.20 },
       pocIntegrity: { score: Math.round(pocScore), weight: 0.10 },
       claimEvidence: { score: Math.round(ce.ratioScore), weight: 0.05 },
+      evidenceStrength: {
+        bonus: Number(strengthBonus.toFixed(1)),
+        strongCount: strongEvidenceCount,
+        signalCount: s.evidenceSignals?.length ?? 0,
+        signals: (s.evidenceSignals ?? []).map(sig => ({
+          type: sig.type,
+          weight: Number((sig.baseWeight * sig.strengthMultiplier).toFixed(1)),
+          multiplier: sig.strengthMultiplier,
+        })),
+      },
     },
-    note: `Substance is the strongest predictor of report quality. Claim:evidence ratio ${ce.ratio.toFixed(2)} (expert=0.27, slop=0.03).`,
+    note: `Substance is the strongest predictor of report quality. Claim:evidence ratio ${ce.ratio.toFixed(2)} (expert=0.27, slop=0.03). Evidence-strength bonus: ${strengthBonus.toFixed(1)}pt across ${s.evidenceSignals?.length ?? 0} typed signal(s).`,
   };
 }
 
@@ -376,16 +404,30 @@ function phraseMatchCount(text: string, phrases: string[]): number {
 
 export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult {
   const claimedCwes = s.claimedCwes;
+  // v3.6.0 §3: Vuln-type-aware default. If the report describes a known
+  // vulnerability class but omits the CWE label, treat as mildly underspecified
+  // (38) rather than fully neutral. If no vuln type is detected, use 42 — a
+  // small downward bias from 50 so missing CWE never carries the field.
   if (!claimedCwes || claimedCwes.length === 0) {
+    const vulnType = detectVulnerabilityType(fullText);
+    const defaultScore = vulnType ? 38 : 42;
     return {
       engine: "CWE Coherence Checker",
-      score: 50, verdict: "GREY", confidence: "LOW",
+      score: defaultScore,
+      verdict: defaultScore >= 41 ? "YELLOW" : "RED",
+      confidence: "LOW",
       triggeredIndicators: [{
-        signal: "NO_CWE_CLAIMED", value: false, strength: "LOW",
-        explanation: "No CWE claimed in the report; coherence cannot be evaluated.",
+        signal: vulnType ? "VULN_TYPE_NO_CWE" : "NO_CWE_CLAIMED",
+        value: vulnType ?? false,
+        strength: vulnType ? "MEDIUM" : "LOW",
+        explanation: vulnType
+          ? `Report describes a ${vulnType} pattern but no CWE label was claimed; rate as underspecified (${defaultScore}).`
+          : `No CWE claimed and no specific vulnerability pattern detected; default ${defaultScore}.`,
       }],
-      signalBreakdown: { claimedCWEs: [] },
-      note: "No CWE claimed; unable to validate coherence. Score is neutral (50).",
+      signalBreakdown: { claimedCWEs: [], detectedVulnType: vulnType },
+      note: vulnType
+        ? `No CWE label, but ${vulnType} pattern present — partial credit (${defaultScore}).`
+        : `No CWE claimed; default score ${defaultScore}.`,
     };
   }
 
@@ -433,12 +475,20 @@ export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult 
       densityScore * 0.20 +
       rejectionAdjustment * 0.05
     );
-    // Coherent-fit bonus: required terms hit, no contradicting terms, and
-    // expected coverage above half the fingerprint.
+    // v3.6.0 §3: Calibrated coherence bands.
+    //   Strong fit  → floor 68 (was 60-ish via +10 bonus).
+    //   Perfect fit → floor 78 (required+expected≥80%+no contradictions).
+    //   Wrong CWE   → ceil 25 when negativePenalty dominates and required miss.
     if (requiredOverlap === 100 && negativePenalty === 0 && expectedScore >= 50) {
-      cweScore = clamp(cweScore + 10);
+      cweScore = Math.max(cweScore, 68);
     }
-    perCWEScores[cwe] = Math.round(cweScore);
+    if (requiredOverlap === 100 && negativePenalty === 0 && expectedScore >= 80 && densityScore >= 80) {
+      cweScore = Math.max(cweScore, 78);
+    }
+    if (requiredOverlap === 0 && negativePenalty >= 30) {
+      cweScore = Math.min(cweScore, 25);
+    }
+    perCWEScores[cwe] = Math.round(clamp(cweScore));
 
     if (cweScore < 30) {
       indicators.push({
@@ -540,14 +590,21 @@ export function computeComposite(engineResults: EngineResult[]): CompositeResult
   let totalWeight = 0;
   for (const r of engineResults) {
     const w = ENGINE_WEIGHTS_PHASE1[r.engine] || 0;
+    // v3.6.0 §5: Defend against undefined/NaN engine scores (Report 59 path)
+    // by defaulting to neutral 50 before inversion/weighting. Without this
+    // an engine that returned no score would propagate NaN through the
+    // weighted sum and produce a null composite that downstream consumers
+    // (triage matrix, persistence layer) cannot reason about.
+    const safeScore = Number.isFinite(r.score) ? r.score : 50;
     // Engine 1 is "AI authorship likelihood" (high = bad); other engines are
     // already validity-positive (high = good). Convert engine 1 to a quality
     // contribution by inverting it: quality = 100 - aiScore.
-    const contribution = r.engine === "AI Authorship Detector" ? (100 - r.score) : r.score;
+    const contribution = r.engine === "AI Authorship Detector" ? (100 - safeScore) : safeScore;
     weightedSum += contribution * w;
     totalWeight += w;
   }
-  const beforeOverride = totalWeight > 0 ? weightedSum / totalWeight : 50;
+  const beforeOverride =
+    totalWeight > 0 && Number.isFinite(weightedSum) ? weightedSum / totalWeight : 50;
   const applied: string[] = [];
   const afterOverride = applyOverrideRules(beforeOverride, engineResults, applied);
   const finalScore = Math.round(clamp(afterOverride));

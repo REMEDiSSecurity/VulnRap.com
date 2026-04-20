@@ -3,10 +3,87 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout } from "lucide-react";
 
-export const CURRENT_VERSION = "3.5.0";
-export const RELEASE_DATE = "2026-04-19";
+export const CURRENT_VERSION = "3.6.0";
+export const RELEASE_DATE = "2026-04-20";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.6.0",
+    date: "2026-04-20",
+    label: "Scoring Calibration",
+    labelColor: "border-amber-500 text-amber-400",
+    sections: [
+      {
+        icon: <Target className="w-4 h-4 text-amber-400" />,
+        title: "Engine 2 — Evidence-Type Weighting",
+        type: "improvement",
+        items: [
+          "Strong evidence (sanitizer crash dumps, code diffs, stack traces, packet captures, exact line numbers, repository commits) now earns a multiplicative bonus on top of raw evidence count — Engine 2 caps at 95 once at least three strong signals are present",
+          "New EvidenceType enum + STRENGTH_MULTIPLIERS table (CRASH ×2.5, CODE_DIFF ×2.2, STACK ×2.0, PCAP ×1.8, …) is surfaced in signalBreakdown.evidenceStrength so analysts can see exactly which signals lifted the score",
+        ],
+      },
+      {
+        icon: <Search className="w-4 h-4 text-cyan-400" />,
+        title: "Engine 2 — Active Verification Source Tagging",
+        type: "improvement",
+        items: [
+          "VerificationCheck now records source: \"referenced_in_report\" vs \"search_fallback\" so we no longer credit reports for repos we guessed from a project name",
+          "Search-fallback hits are weighted at 50% of referenced-in-report hits, and CHALLENGE_REPORTER questions are filtered to only fire on trusted (referenced) checks",
+        ],
+      },
+      {
+        icon: <Brain className="w-4 h-4 text-fuchsia-400" />,
+        title: "Engine 3 — CWE Coherence Calibration",
+        type: "improvement",
+        items: [
+          "New defaults: 42 when no CWE is claimed, 38 when a vulnerability type is detectable but no CWE supplied, 25 ceiling when claimed CWE clearly mismatches the described vuln, 68 floor on strong-fit, 78 floor on perfect-fit",
+          "detectVulnerabilityType pre-classifies the report so coherence checks have a baseline even when reporters skip the CWE field entirely",
+        ],
+      },
+      {
+        icon: <ListChecks className="w-4 h-4 text-emerald-400" />,
+        title: "Triage Matrix Rewrite",
+        type: "improvement",
+        items: [
+          "Replaced the legacy single-axis triage decision with a matrix over (composite × Engine 2 × verification ratio × strong-evidence count) and an explicit override: ≥3 strong evidence signals can never produce CHALLENGE_REPORTER",
+          "TriageDecisionContext + buildV36TriageContext helper are reused across the live composite path, the cached-report path, and the calibration suggestion endpoint to keep recommendations consistent",
+        ],
+      },
+      {
+        icon: <Bug className="w-4 h-4 text-orange-400" />,
+        title: "Hallucination Detector Tightening",
+        type: "fix",
+        items: [
+          "Round-address heuristic now requires ≥5 trailing zeros and skips a curated KNOWN_ALLOCATOR_ADDRESSES allowlist (libc / jemalloc tagged pointers, common heap base offsets) so legitimate sanitizer dumps no longer trip the false-claim signal",
+        ],
+      },
+      {
+        icon: <FlaskConical className="w-4 h-4 text-emerald-400" />,
+        title: "Calibration Test Battery",
+        type: "feature",
+        items: [
+          "New dev-only endpoint GET /api/test/run executes the engines against 40 labeled fixtures (T1 legit, T2 borderline, T3 slop, T4 hallucinated) and reports per-cohort means plus the v3.6.0 success metric (T1−T3 composite gap ≥ 25pt)",
+          "Endpoint returns 404 in production; intended for CI calibration regressions and manual tuning sessions",
+        ],
+      },
+      {
+        icon: <BarChart3 className="w-4 h-4 text-primary" />,
+        title: "Calibration Feedback Endpoint",
+        type: "feature",
+        items: [
+          "POST /feedback/calibration now returns suggestedAdjustments and a v3_6_0 metadata block alongside the recorded feedback row, surfacing recommended weight or threshold tweaks without auto-applying them",
+        ],
+      },
+      {
+        icon: <Eye className="w-4 h-4 text-cyan-400" />,
+        title: "Diagnostics Panel — Evidence Strength",
+        type: "improvement",
+        items: [
+          "\"Why this score?\" panel now shows Engine 2's evidence-strength bonus, the count of strong signals, the per-signal multipliers, and (when available) the active-verification source breakdown",
+        ],
+      },
+    ],
+  },
   {
     version: "3.5.0",
     date: "2026-04-19",

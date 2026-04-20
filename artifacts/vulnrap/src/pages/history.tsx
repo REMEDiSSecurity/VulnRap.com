@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Trash2, FileText, Search, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Clock, Trash2, FileText, Search, XCircle, Info } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -42,10 +42,11 @@ export default function History() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold uppercase tracking-tight flex items-center gap-2 glow-text">
             <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-primary shrink-0" />
-            Session History
+            Your Bookmarks
           </h1>
           <p className="text-sm text-muted-foreground mt-2 max-w-2xl leading-relaxed">
-            Reports you have analyzed in this browser. Stored locally — nothing leaves your machine.
+            Quick links back to reports you have submitted or looked up from this browser. Because VulnRap has no
+            accounts, this list is the only way to find your past work.
           </p>
         </div>
         {entries.length > 0 && (
@@ -56,11 +57,49 @@ export default function History() {
             className="gap-2 glass-card hover:border-destructive/30 text-destructive hover:text-destructive shrink-0"
           >
             <Trash2 className="w-4 h-4" />
-            Clear History
+            Clear Bookmarks
           </Button>
         )}
       </div>
       <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent -mt-4" />
+
+      <Card className="glass-card rounded-xl border-primary/10">
+        <CardContent className="py-4 px-4 flex items-start gap-3 text-xs text-muted-foreground leading-relaxed">
+          <Info className="w-4 h-4 text-primary/70 shrink-0 mt-0.5" />
+          <div className="space-y-2.5">
+            <div>
+              <p className="text-foreground font-medium mb-1">How this list works</p>
+              <p>
+                VulnRap has no accounts and uses no cookies. This bookmark list is kept in your browser's
+                <code className="text-primary/90 mx-1 px-1 py-0.5 rounded bg-primary/5 font-mono text-[10.5px]">localStorage</code>
+                under the key <code className="text-primary/90 mx-1 px-1 py-0.5 rounded bg-primary/5 font-mono text-[10.5px]">vulnrap_history</code>,
+                so you can find your way back to reports you've already analyzed. It is never transmitted to
+                our servers and contains no login, no session, and no authentication of any kind.
+              </p>
+            </div>
+            <div>
+              <p className="text-foreground font-medium mb-1">What's actually stored</p>
+              <p>
+                For each entry: the public report code, the score and tier, when you opened it, and whether
+                you submitted it or just looked it up. That's it. The report text itself lives on our
+                server (anonymized and redacted) and is referenced here only by its public ID — anyone with
+                that ID can already view the report from the Reports feed.
+              </p>
+            </div>
+            <div>
+              <p className="text-foreground font-medium mb-1">Security notes</p>
+              <p>
+                Because there is no session token here, there is nothing to hijack and no request that
+                could be replayed against the server. The delete tokens for reports you submitted are
+                stored separately in <code className="text-primary/90 mx-1 px-1 py-0.5 rounded bg-primary/5 font-mono text-[10.5px]">sessionStorage</code>
+                and are wiped when you close the tab — they never appear in this list. Clearing
+                bookmarks does <em>not</em> delete the reports themselves; for that, open a report
+                you submitted and use its delete token.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {entries.length === 0 ? (
         <Card className="glass-card rounded-xl">
@@ -68,8 +107,8 @@ export default function History() {
             <div className="p-4 rounded-full icon-glow-green mb-4">
               <Clock className="w-12 h-12 text-primary/50" />
             </div>
-            <p className="font-medium text-foreground">No history yet</p>
-            <p className="text-sm mt-1">Reports you submit or check will appear here.</p>
+            <p className="font-medium text-foreground">No bookmarks yet</p>
+            <p className="text-sm mt-1">Reports you submit or look up will appear here as quick links.</p>
             <div className="flex gap-3 mt-6">
               <Button asChild variant="outline" className="gap-2 glass-card">
                 <Link to="/">
@@ -167,7 +206,7 @@ export default function History() {
 
       {entries.length > 0 && (
         <div className="text-center text-xs text-muted-foreground/50 pb-4">
-          <p>History is stored in your browser's local storage. It is never sent to our servers.</p>
+          <p>Bookmarks live in this browser only. The reports they link to are stored on our server (see Reports feed).</p>
         </div>
       )}
     </div>
