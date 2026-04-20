@@ -45,6 +45,8 @@ import {
   computeTemporalSignals,
   computeTemplateHash,
   detectRevision,
+  buildV36TriageContext,
+  buildV36TriageContextFromComposite,
   type TriageRecommendation,
 } from "../lib/triage-recommendation";
 import {
@@ -116,6 +118,13 @@ interface AnalysisResult extends FusionResult {
   triageRecommendation: TriageRecommendation | null;
   triageAssistant: TriageAssistantResult | null;
   diagnostics: AnalysisDiagnostics;
+  // v3.6.0 §4: Composite + trace are computed inside performAnalysis so the
+  // pre-composite triage call site (formerly the legacy single-axis path) can
+  // feed buildV36TriageContextFromComposite. Both POST /reports and
+  // POST /reports/check then reuse this composite instead of re-running the
+  // engines.
+  vulnrapComposite: VulnrapComposite | null;
+  vulnrapTrace: PipelineTrace | null;
 }
 
 async function runStage<T>(
@@ -215,10 +224,26 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
       claims: null, substance: null,
     };
 
+    // v3.6.0 §4: Compute the engine-composite up-front so the triage call below
+    // flows through the matrix (composite × engine 2 × verification ratio ×
+    // strong-evidence count) instead of the removed legacy single-axis branch.
+    let vulnrapComposite: VulnrapComposite | null = null;
+    let vulnrapTrace: PipelineTrace | null = null;
+    if (isNewCompositeEnabled()) {
+      const traced = await runStage("vulnrap_engines", () => analyzeWithEnginesTraced(safeRedacted), diagnostics);
+      if (traced) {
+        vulnrapComposite = traced.composite;
+        vulnrapTrace = traced.trace;
+      }
+    } else {
+      diagnostics.stages["vulnrap_engines"] = { status: "ok", durationMs: 0, error: "feature_flag_disabled" };
+    }
+
     let triageRecommendation: TriageRecommendation | null = null;
     const triageRecResult = await runStage("triage_recommendation", () => {
       const base = generateTriageRecommendation(
         safeFusion.slopScore, safeFusion.confidence, verification, safeFusion.evidence,
+        buildV36TriageContextFromComposite(vulnrapComposite, verification),
       );
       const temporalSignals = computeTemporalSignals(verification);
       return { ...base, temporalSignals, templateMatch: null, revision: null };
@@ -243,6 +268,8 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
       triageRecommendation,
       triageAssistant,
       diagnostics,
+      vulnrapComposite,
+      vulnrapTrace,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -282,6 +309,8 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
       triageRecommendation: null,
       triageAssistant: null,
       diagnostics,
+      vulnrapComposite: null,
+      vulnrapTrace: null,
     };
   }
 }
@@ -432,37 +461,6 @@ const upload = multer({
 
 const router: IRouter = Router();
 
-// v3.6.0 §4: Build matrix-triage context from a stored report row + the
-// verification result. Returns undefined when no composite is available, so
-// the legacy slop-only branch in generateTriageRecommendation runs.
-function buildV36TriageContext(
-  report: { vulnrapCompositeScore: number | null; vulnrapEngineResults: unknown },
-  verification: VerificationResult | null,
-): import("../lib/triage-recommendation").TriageDecisionContext | undefined {
-  if (report.vulnrapCompositeScore == null) return undefined;
-  const stored = (report.vulnrapEngineResults ?? {}) as {
-    engines?: Array<{
-      engine: string; score?: number;
-      signalBreakdown?: { evidenceStrength?: { strongCount?: number } };
-    }>;
-  };
-  const e2 = stored.engines?.find(e => e.engine === "Technical Substance Analyzer");
-  // v3.6.0 §2/§4: scoped verification — only checks explicitly tagged
-  // referenced_in_report contribute to the triage ratio. Undefined-source
-  // checks (e.g. NVD CVE lookups) and search_fallback checks are excluded.
-  const referenced = (verification?.checks ?? []).filter(
-    c => c.source === "referenced_in_report",
-  );
-  const refVerified = referenced.filter(c => c.result === "verified").length;
-  const refNotFound = referenced.filter(c => c.result === "not_found").length;
-  return {
-    compositeScore: report.vulnrapCompositeScore ?? 50,
-    engine2Score: e2?.score ?? 50,
-    strongEvidenceCount: e2?.signalBreakdown?.evidenceStrength?.strongCount ?? 0,
-    verificationRatio: (refVerified + refNotFound) > 0 ? refVerified / (refVerified + refNotFound) : 0,
-  };
-}
-
 router.post("/reports", (req, res, next): void => {
   upload.single("file")(req, res, (err) => {
     if (err) {
@@ -598,20 +596,12 @@ router.post("/reports", async (req, res): Promise<void> => {
   const analysisResult = await performAnalysis(text, redactedText, { skipLlm });
   const { llmResult } = analysisResult;
 
-  // Sprint 9 Phase 1+v3: 3-engine consensus scorer with full pipeline trace.
-  // Feature-flag (VULNRAP_USE_NEW_COMPOSITE=false) lets ops disable the new
-  // composite without touching code. Trace persists for observability.
-  let vulnrapComposite: VulnrapComposite | null = null;
-  let vulnrapTrace: PipelineTrace | null = null;
-  if (isNewCompositeEnabled()) {
-    try {
-      const traced = analyzeWithEnginesTraced(redactedText);
-      vulnrapComposite = traced.composite;
-      vulnrapTrace = traced.trace;
-    } catch (engineErr) {
-      logger.error({ err: engineErr }, "[VULNRAP] engines crashed; continuing without composite");
-    }
-  } else {
+  // v3.6.0 §4: Composite + trace are now produced inside performAnalysis so the
+  // pre-composite triage call site flows through the matrix. Reuse them here
+  // rather than re-running the engines on the same redacted text.
+  const vulnrapComposite = analysisResult.vulnrapComposite;
+  const vulnrapTrace = analysisResult.vulnrapTrace;
+  if (vulnrapComposite == null && !isNewCompositeEnabled()) {
     logger.info({ flag: "VULNRAP_USE_NEW_COMPOSITE=false" }, "[VULNRAP] new composite disabled by feature flag");
   }
 
@@ -676,14 +666,11 @@ router.post("/reports", async (req, res): Promise<void> => {
   }
 
   try {
-    // v3.6.0 §4: Build matrix-triage context from the just-computed composite.
-    const e2 = vulnrapComposite?.engineResults.find(r => r.engine === "Technical Substance Analyzer");
-    const e2Strength = (e2?.signalBreakdown as { evidenceStrength?: { strongCount?: number } } | undefined)
-      ?.evidenceStrength?.strongCount ?? 0;
     // v3.6.0 §9: Surface verification-source breakdown on Engine 2 so the
     // diagnostics panel can show reviewers WHERE each verified check came
     // from (explicit URL in report vs. search fallback). Mutates the
     // already-computed engine result; safe because we're still pre-persist.
+    const e2 = vulnrapComposite?.engineResults.find(r => r.engine === "Technical Substance Analyzer");
     if (e2 && analysisResult.verification) {
       const checks = analysisResult.verification.checks ?? [];
       const referencedChecks = checks.filter((c: { source?: string }) => c.source === "referenced_in_report");
@@ -698,24 +685,16 @@ router.post("/reports", async (req, res): Promise<void> => {
         total: referencedChecks.length,
       };
     }
-    // v3.6.0 §2/§4: scoped verification — see buildV36TriageContext above.
-    const referencedChecks = (analysisResult.verification?.checks ?? []).filter(
-      (c: { source?: string }) => c.source === "referenced_in_report",
-    );
-    const refVerified = referencedChecks.filter((c: { result: string }) => c.result === "verified").length;
-    const refNotFound = referencedChecks.filter((c: { result: string }) => c.result === "not_found").length;
-    const v36Context = vulnrapComposite ? {
-      compositeScore: vulnrapComposite.overallScore ?? 50,
-      engine2Score: e2?.score ?? 50,
-      strongEvidenceCount: e2Strength,
-      verificationRatio: (refVerified + refNotFound) > 0 ? refVerified / (refVerified + refNotFound) : 0,
-    } : undefined;
+    // v3.6.0 §4: Recompute triage with the templateMatch+temporal-adjusted
+    // slopScore. The matrix decision is composite-driven, but we still rebuild
+    // here because verification may have been mutated above and evidence has
+    // grown. Use the shared helper to avoid drifting from the cached path.
     const updatedBase = generateTriageRecommendation(
       analysisResult.slopScore,
       analysisResult.confidence,
       analysisResult.verification,
       analysisResult.evidence,
-      v36Context,
+      buildV36TriageContextFromComposite(vulnrapComposite, analysisResult.verification),
     );
     analysisResult.triageRecommendation = {
       ...updatedBase,
@@ -983,6 +962,11 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       llmSlopScore: reportsTable.llmSlopScore,
       llmFeedback: reportsTable.llmFeedback,
       llmBreakdown: reportsTable.llmBreakdown,
+      // v3.6.0 §4: Composite + engine results are needed so the cached-report
+      // path can route through buildV36TriageContext and stay in sync with
+      // the live path's matrix-based triage decision.
+      vulnrapCompositeScore: reportsTable.vulnrapCompositeScore,
+      vulnrapEngineResults: reportsTable.vulnrapEngineResults,
     })
     .from(reportsTable)
     .where(eq(reportsTable.contentHash, contentHash))
@@ -1005,8 +989,12 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     let cachedTriageAssistant: TriageAssistantResult | null = null;
     const cachedEvidence = (cached.evidence || []) as EvidenceItem[];
     try {
+      // v3.6.0 §4: Route the cached path through the same matrix helper as
+      // the live path so re-checks of the same content return the same
+      // recommendation instead of the legacy single-axis verdict.
       const baseRec = generateTriageRecommendation(
         cached.slopScore, cached.confidence as number, null, cachedEvidence,
+        buildV36TriageContext(cached, null),
       );
       cachedTriageRecommendation = {
         ...baseRec,

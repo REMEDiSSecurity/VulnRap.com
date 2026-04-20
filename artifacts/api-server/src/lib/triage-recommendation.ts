@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import type { VerificationResult, VerificationCheck } from "./active-verification";
 import type { EvidenceItem } from "./score-fusion";
+import type { CompositeResult } from "./engines";
 
 export type TriageAction =
   | "AUTO_CLOSE"
@@ -88,10 +89,14 @@ export function generateTriageRecommendation(
   let reason: string;
   let note: string;
 
-  // v3.6.0 §4: Matrix-based triage when composite + engine 2 are available.
-  if (context?.compositeScore != null && context?.engine2Score != null) {
-    const comp = context.compositeScore;
-    const e2 = context.engine2Score;
+  // v3.6.0 §4: Matrix-based triage. Composite + engine 2 default to a neutral
+  // 50/50 baseline when the caller has no v3.6.0 context (e.g. legacy stored
+  // reports analyzed before the new composite existed). The legacy single-axis
+  // slop-only branch was removed in v3.6.0 §4 — every call site now flows
+  // through this matrix.
+  {
+    const comp = context?.compositeScore ?? 50;
+    const e2 = context?.engine2Score ?? 50;
 
     if (comp >= 70 && e2 >= 60 && (verificationRatio >= 0.5 || strongEvidence >= 2)) {
       action = "PRIORITIZE";
@@ -144,29 +149,6 @@ export function generateTriageRecommendation(
     if (action === "CHALLENGE_REPORTER" && strongEvidence >= 3) {
       action = "MANUAL_REVIEW";
       reason += ` Override: ${strongEvidence} strong evidence signals present — escalate to manual review instead of challenge.`;
-    }
-  } else {
-    // v3.5.0 legacy path (no v3.6.0 context).
-    if (slopScore >= 75 && confidence >= 0.7) {
-      action = "AUTO_CLOSE";
-      reason = `High slop score (${slopScore}) with high confidence (${(confidence * 100).toFixed(0)}%) — strong AI-generation indicators across multiple axes.`;
-      note = "This report exhibits overwhelming AI-generation signals. Consider auto-closing with a template response requesting original research. If your policy requires manual review of all closures, escalate to a senior triager.";
-    } else if (slopScore >= 55) {
-      action = "MANUAL_REVIEW";
-      reason = `Moderate slop score (${slopScore}) — some AI-generation indicators present but not conclusive.`;
-      note = "Assign to a senior triager for manual assessment. Check for concrete reproduction steps, unique observations, and domain-specific details that AI typically cannot fabricate.";
-    } else if (notFoundCount >= 2) {
-      action = "CHALLENGE_REPORTER";
-      reason = `${notFoundCount} referenced items could not be verified — the reporter may be fabricating technical details.`;
-      note = "Send the generated challenge questions below. A legitimate researcher will be able to answer specifics about their environment, exact reproduction steps, and how they discovered the issue. Set a 48-hour response deadline.";
-    } else if (slopScore <= 25 && verifiedCount >= 2) {
-      action = "PRIORITIZE";
-      reason = `Low slop score (${slopScore}) with ${verifiedCount} verified references — strong indicators of legitimate, well-researched report.`;
-      note = "This report shows hallmarks of genuine security research: verified file paths, confirmed function names, and natural writing style. Prioritize for technical review.";
-    } else {
-      action = "STANDARD_TRIAGE";
-      reason = `Score (${slopScore}) and signals are within normal range — no strong indicators either way.`;
-      note = "Process through standard triage workflow. No automated action recommended.";
     }
   }
 
@@ -382,4 +364,109 @@ export function detectRevision(
     direction,
     changeSummary,
   };
+}
+
+// v3.6.0 §4: Single source of truth for assembling the matrix-triage context.
+// Every triage call site in the API server (live composite path, cached-report
+// path, /reports/:id, /reports/:id/triage-report, calibration suggestion, and
+// the test-fixture battery) routes through one of these two adapters so the
+// composite × engine 2 × verification ratio × strong-evidence inputs are
+// computed identically.
+
+interface NormalizedEngineSource {
+  compositeScore: number | null;
+  engine2Score: number | null;
+  strongEvidenceCount: number;
+}
+
+function pickEngine2Fields(
+  engines: ReadonlyArray<{
+    engine: string;
+    score?: number;
+    signalBreakdown?: { evidenceStrength?: { strongCount?: number } } | unknown;
+  }>,
+): { engine2Score: number | null; strongEvidenceCount: number } {
+  const e2 = engines.find(e => e.engine === "Technical Substance Analyzer");
+  const breakdown = (e2?.signalBreakdown ?? {}) as {
+    evidenceStrength?: { strongCount?: number };
+  };
+  return {
+    engine2Score: typeof e2?.score === "number" ? e2.score : null,
+    strongEvidenceCount: breakdown.evidenceStrength?.strongCount ?? 0,
+  };
+}
+
+function computeReferencedVerificationRatio(
+  verification: VerificationResult | null,
+): number {
+  const referenced = (verification?.checks ?? []).filter(
+    c => c.source === "referenced_in_report",
+  );
+  const verified = referenced.filter(c => c.result === "verified").length;
+  const notFound = referenced.filter(c => c.result === "not_found").length;
+  const total = verified + notFound;
+  return total > 0 ? verified / total : 0;
+}
+
+function buildContext(
+  src: NormalizedEngineSource,
+  verification: VerificationResult | null,
+): TriageDecisionContext | undefined {
+  if (src.compositeScore == null) return undefined;
+  return {
+    compositeScore: src.compositeScore,
+    engine2Score: src.engine2Score ?? 50,
+    strongEvidenceCount: src.strongEvidenceCount,
+    verificationRatio: computeReferencedVerificationRatio(verification),
+  };
+}
+
+/**
+ * Build matrix-triage context from a stored report row (cached path,
+ * /reports/:id, /reports/:id/triage-report). Returns undefined when the row
+ * predates v3.6.0 composite scoring; the caller falls back to the matrix's
+ * neutral 50/50 baseline inside generateTriageRecommendation.
+ */
+export function buildV36TriageContext(
+  report: { vulnrapCompositeScore: number | null; vulnrapEngineResults: unknown },
+  verification: VerificationResult | null,
+): TriageDecisionContext | undefined {
+  const stored = (report.vulnrapEngineResults ?? {}) as {
+    engines?: Array<{
+      engine: string;
+      score?: number;
+      signalBreakdown?: { evidenceStrength?: { strongCount?: number } };
+    }>;
+  };
+  const { engine2Score, strongEvidenceCount } = pickEngine2Fields(stored.engines ?? []);
+  return buildContext(
+    {
+      compositeScore: report.vulnrapCompositeScore,
+      engine2Score,
+      strongEvidenceCount,
+    },
+    verification,
+  );
+}
+
+/**
+ * Build matrix-triage context from a freshly-computed in-memory composite
+ * (live POST /reports path, /reports/check live path, fixture battery).
+ * Returns undefined when no composite was produced (e.g. engines disabled
+ * via the VULNRAP_USE_NEW_COMPOSITE feature flag).
+ */
+export function buildV36TriageContextFromComposite(
+  composite: CompositeResult | null,
+  verification: VerificationResult | null,
+): TriageDecisionContext | undefined {
+  if (!composite) return undefined;
+  const { engine2Score, strongEvidenceCount } = pickEngine2Fields(composite.engineResults);
+  return buildContext(
+    {
+      compositeScore: composite.overallScore ?? null,
+      engine2Score,
+      strongEvidenceCount,
+    },
+    verification,
+  );
 }
