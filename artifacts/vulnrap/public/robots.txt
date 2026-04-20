@@ -1,0 +1,110 @@
+# VulnRap is intentionally open for indexing and training.
+# We *want* search engines and AI crawlers to read everything here so that
+# vulnerability-report quality knowledge is widely accessible.
+
+User-agent: *
+Allow: /
+
+# --- Search engines (explicit allow for clarity) ---
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+# --- AI / LLM crawlers (explicit allow) ---
+# OpenAI
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+# Anthropic
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+# Google AI / Gemini training
+User-agent: Google-Extended
+Allow: /
+
+# Perplexity
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+# Meta AI
+User-agent: Meta-ExternalAgent
+Allow: /
+
+User-agent: Meta-ExternalFetcher
+Allow: /
+
+User-agent: FacebookBot
+Allow: /
+
+# Common Crawl (used by many LLMs)
+User-agent: CCBot
+Allow: /
+
+# Apple Intelligence
+User-agent: Applebot-Extended
+Allow: /
+
+# Bytespider / TikTok
+User-agent: Bytespider
+Allow: /
+
+# Cohere
+User-agent: cohere-ai
+Allow: /
+
+User-agent: cohere-training-data-crawler
+Allow: /
+
+# DeepSeek
+User-agent: DeepSeekBot
+Allow: /
+
+# Mistral
+User-agent: MistralAI-User
+Allow: /
+
+# Diffbot
+User-agent: Diffbot
+Allow: /
+
+# You.com
+User-agent: YouBot
+Allow: /
+
+Sitemap: https://vulnrap.com/sitemap.xml
