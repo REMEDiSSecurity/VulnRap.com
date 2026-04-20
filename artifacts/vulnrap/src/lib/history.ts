@@ -11,6 +11,7 @@ export interface HistoryEntry {
   fileName: string | null;
   timestamp: string;
   type: "submit" | "check";
+  reconstructed?: boolean;
 }
 
 export function getHistory(): HistoryEntry[] {
@@ -42,6 +43,17 @@ export function addHistoryEntry(entry: HistoryEntry): void {
 export function clearHistory(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+  } catch {}
+}
+
+export function markHistoryEntryReconstructed(id: number, type: "submit" | "check", reconstructed: boolean): void {
+  try {
+    const history = getHistory();
+    const idx = history.findIndex((h) => h.id === id && h.type === type);
+    if (idx < 0) return;
+    if ((history[idx].reconstructed ?? false) === reconstructed) return;
+    history[idx] = { ...history[idx], reconstructed };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
   } catch {}
 }
 

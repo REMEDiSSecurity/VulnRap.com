@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Trash2, FileText, Search, XCircle, Info } from "lucide-react";
+import { Clock, Trash2, FileText, Search, XCircle, Info, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -161,6 +161,24 @@ export default function History() {
                         {entry.fileName && (
                           <span className="text-xs text-muted-foreground truncate max-w-[200px]">
                             {entry.fileName}
+                          </span>
+                        )}
+                        {entry.reconstructed && (
+                          <span
+                            className="group/recon relative inline-flex"
+                            data-testid={`badge-history-reconstructed-${entry.id}`}
+                          >
+                            <Badge
+                              variant="outline"
+                              tabIndex={0}
+                              className="text-[9px] px-1.5 py-0 h-4 font-mono uppercase tracking-wide text-amber-300 border-amber-500/50 bg-amber-500/10 flex items-center gap-1 cursor-help focus:outline-none"
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                              recon
+                            </Badge>
+                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 rounded-md glass-card px-3 py-2 text-[11px] text-popover-foreground opacity-0 group-hover/recon:opacity-100 group-focus-within/recon:opacity-100 transition-opacity z-50 glow-border text-left font-normal normal-case leading-relaxed">
+                              Composite was rebuilt from cached signals rather than a fresh pipeline run. Treat this score as approximate.
+                            </span>
                           </span>
                         )}
                       </div>

@@ -8,8 +8,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu, GitCompare, ChevronDown, ChevronUp, Download, BarChart3, Target, Eye, Gauge, Leaf, Shield, MessageSquareWarning, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, FlaskConical, Terminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FeedbackForm from "@/components/feedback-form";
+import { markHistoryEntryReconstructed } from "@/lib/history";
 import { anonymizeId } from "@/lib/utils";
 import { SettingsButton } from "@/components/settings-panel";
 import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCustom, adjustScore, adjustTier, SENSITIVITY_PRESETS, type VulnRapSettings, type SensitivityPreset } from "@/lib/settings";
@@ -1235,6 +1236,19 @@ export default function Results() {
       queryKey: getGetVerificationQueryKey(id),
     },
   });
+
+  // Mirror the reconstructed badge into the user's local history bookmarks so
+  // they can spot approximate scores from the history list without opening
+  // each report. Only updates entries that already exist locally.
+  const reportIdForHistory = report?.id;
+  const reportReconstructed =
+    (report as { vulnrap?: { reconstructed?: boolean } | null } | undefined)
+      ?.vulnrap?.reconstructed === true;
+  useEffect(() => {
+    if (!reportIdForHistory || !reportReconstructed) return;
+    markHistoryEntryReconstructed(reportIdForHistory, "submit", true);
+    markHistoryEntryReconstructed(reportIdForHistory, "check", true);
+  }, [reportIdForHistory, reportReconstructed]);
 
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href);
