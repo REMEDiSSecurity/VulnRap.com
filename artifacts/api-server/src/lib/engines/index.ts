@@ -4,6 +4,7 @@
 import { logger } from "../logger";
 import { extractSignals } from "./extractors";
 import { runEngine1, runEngine2, runEngine3, computeComposite, type CompositeResult } from "./engines";
+export { computeComposite } from "./engines";
 import { computePerplexity, type PerplexityResult } from "./perplexity";
 import type { PipelineTrace, PipelineStageTiming } from "@workspace/db";
 import crypto from "crypto";
