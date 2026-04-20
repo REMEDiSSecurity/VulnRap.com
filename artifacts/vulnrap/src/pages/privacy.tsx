@@ -50,11 +50,11 @@ export default function Privacy() {
           <ul className="space-y-2 list-disc pl-5">
             <li>When you upload a report, we <strong className="text-foreground">auto-redact</strong> sensitive information (PII, secrets, credentials, company names) and store only the redacted version.</li>
             <li>Your redacted report is <strong className="text-foreground">compared against all other reports</strong> in our database. Other users' reports are compared against yours.</li>
-            <li>Similarity scores, section-level hash matches, and AI sloppiness results are <strong className="text-foreground">visible to anyone with the report link</strong>.</li>
-            <li>We do <strong className="text-foreground">not</strong> share your report with vulnerability programs, vendors, or third parties. The comparison happens only within VulnRap.</li>
+            <li>Similarity scores, section-level hash matches, and validity/sloppiness results are <strong className="text-foreground">visible to anyone with the report link</strong>. In <strong className="text-foreground">Full Storage</strong> mode, the auto-redacted report text is also visible at that link. In <strong className="text-foreground">Similarity Only</strong> mode no text is stored, so the link resolves only to scores and hashes.</li>
+            <li>We do <strong className="text-foreground">not</strong> share your report with vulnerability programs, vendors, or other users' organizations. <strong className="text-foreground">One exception:</strong> if you leave AI analysis enabled (the default), the <em>auto-redacted</em> version of your report is sent to our configured AI provider (currently OpenAI's API, via a managed proxy whose policy is not to train on API data) so the substance engine can score it. You can disable this with the <em>Skip AI analysis</em> toggle on the submission form, in which case nothing leaves our infrastructure.</li>
           </ul>
           <p>
-            If you do not want your report stored and compared, do not upload it. There is no "view only" mode -- comparison is the core function of this platform.
+            If you do not want your report stored and compared, do not upload it. There is no "view only" mode -- comparison is the core function of this platform. If you want zero third-party AI involvement, use Similarity Only mode <em>and</em> tick <em>Skip AI analysis</em>.
           </p>
         </CardContent>
       </Card>
@@ -203,7 +203,7 @@ export default function Privacy() {
             </CardHeader>
             <CardContent className="text-sm space-y-3 text-muted-foreground leading-relaxed">
               <p>VulnRap does not require registration, login, or any form of identification. There are no user accounts, no email collection, and no OAuth flows.</p>
-              <p>Every submission is treated as an independent, anonymous event. We cannot correlate multiple submissions to the same person.</p>
+              <p>Every submission is treated as an independent, anonymous event. We do not store any persistent identifier that would let us link multiple reports back to the same person. Within a short rate-limit window we do count requests per source IP in memory to prevent abuse, but those counters are ephemeral and never written to the database.</p>
             </CardContent>
           </Card>
 
@@ -215,8 +215,9 @@ export default function Privacy() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm space-y-3 text-muted-foreground leading-relaxed">
-              <p>We do not use Google Analytics, Mixpanel, Hotjar, or any third-party analytics, tracking pixels, or advertising scripts.</p>
-              <p>No cookies are set. No browser fingerprinting is performed. Server logs are ephemeral and do not record client IP addresses.</p>
+              <p>We do not use Google Analytics, Mixpanel, Hotjar, or any third-party analytics, tracking pixels, or advertising scripts. We set no tracking or advertising cookies and we do not perform browser fingerprinting.</p>
+              <p>Your browser does keep a small amount of local data for the app to function — a one-time delete token, the dismissed-banner flag, your bookmark history, and your filter/sort preferences. None of it is sent to third parties and clearing your browser storage erases all of it.</p>
+              <p>Server-side, we use a per-IP rate-limit counter (held in memory, not the database) to prevent abuse, and a daily salted hash of your IP for the unique-visitor counter on the home page. Raw IP addresses are not written to disk or to the database, and the daily hashes cannot be reversed back to an IP.</p>
             </CardContent>
           </Card>
         </div>
