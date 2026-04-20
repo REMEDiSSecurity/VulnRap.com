@@ -22,13 +22,52 @@ function timeAgo(date: string): string {
   return new Date(date).toLocaleDateString();
 }
 
+const FILTER_SESSION_KEY = "vulnrap_history_filter_reconstructed";
+
+function readFilterFromSession(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(FILTER_SESSION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeFilterToSession(value: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value) {
+      window.sessionStorage.setItem(FILTER_SESSION_KEY, "1");
+    } else {
+      window.sessionStorage.removeItem(FILTER_SESSION_KEY);
+    }
+  } catch {
+    // ignore quota/availability errors
+  }
+}
+
 export default function History() {
   const [entries, setEntries] = useState<HistoryEntry[]>(getHistory());
+  const [showOnlyReconstructed, setShowOnlyReconstructedState] = useState<boolean>(() => readFilterFromSession());
   const settings = getSettings();
+
+  const setShowOnlyReconstructed = (value: boolean | ((prev: boolean) => boolean)) => {
+    setShowOnlyReconstructedState((prev) => {
+      const next = typeof value === "function" ? (value as (p: boolean) => boolean)(prev) : value;
+      writeFilterToSession(next);
+      return next;
+    });
+  };
+
+  const reconstructedCount = entries.filter((e) => e.reconstructed).length;
+  const visibleEntries = showOnlyReconstructed
+    ? entries.filter((e) => e.reconstructed)
+    : entries;
 
   const handleClearAll = () => {
     clearHistory();
     setEntries([]);
+    setShowOnlyReconstructed(false);
   };
 
   const handleRemove = (id: number, type: "submit" | "check") => {
@@ -101,6 +140,38 @@ export default function History() {
         </CardContent>
       </Card>
 
+      {entries.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 -mb-2">
+          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+            <span data-testid="text-history-summary">
+              <span className="font-mono text-foreground">{entries.length}</span> bookmark{entries.length !== 1 ? "s" : ""}
+              {reconstructedCount > 0 && (
+                <>
+                  {" · "}
+                  <span className="font-mono text-amber-300">{reconstructedCount}</span> reconstructed
+                </>
+              )}
+            </span>
+          </div>
+          {reconstructedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowOnlyReconstructed((v) => !v)}
+              data-testid="button-filter-reconstructed"
+              aria-pressed={showOnlyReconstructed}
+              className={`inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wide px-2.5 py-1 rounded-md border transition-colors ${
+                showOnlyReconstructed
+                  ? "border-amber-500/60 bg-amber-500/15 text-amber-200"
+                  : "border-amber-500/30 bg-amber-500/5 text-amber-300/80 hover:bg-amber-500/10"
+              }`}
+            >
+              <AlertTriangle className="w-3 h-3" />
+              {showOnlyReconstructed ? "Showing reconstructed only" : "Only show reconstructed"}
+            </button>
+          )}
+        </div>
+      )}
+
       {entries.length === 0 ? (
         <Card className="glass-card rounded-xl">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
@@ -125,9 +196,28 @@ export default function History() {
             </div>
           </CardContent>
         </Card>
+      ) : visibleEntries.length === 0 ? (
+        <Card className="glass-card rounded-xl">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+            <div className="p-3 rounded-full icon-glow-green mb-3">
+              <AlertTriangle className="w-8 h-8 text-amber-300/60" />
+            </div>
+            <p className="font-medium text-foreground">No reconstructed bookmarks match this filter</p>
+            <p className="text-sm mt-1">Turn the filter off to see all {entries.length} bookmark{entries.length !== 1 ? "s" : ""}.</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowOnlyReconstructed(false)}
+              className="gap-2 glass-card mt-4"
+              data-testid="button-clear-filter"
+            >
+              Show all
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-3">
-          {entries.map((entry) => {
+          {visibleEntries.map((entry) => {
             const slopColor = getSlopColorCustom(entry.slopScore, settings.slopThresholdLow, settings.slopThresholdHigh);
             const progressColor = getSlopProgressColorCustom(entry.slopScore, settings.slopThresholdLow, settings.slopThresholdHigh);
             return (
