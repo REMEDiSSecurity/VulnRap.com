@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "seed": "node --enable-source-maps ./dist/seed.mjs",
+    "backfill:vulnrap": "node --enable-source-maps ./dist/backfill-vulnrap.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
