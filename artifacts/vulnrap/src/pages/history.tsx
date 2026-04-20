@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Trash2, FileText, Search, XCircle, Info, AlertTriangle } from "lucide-react";
+import { Clock, Trash2, FileText, Search, XCircle, Info, AlertTriangle, ArrowDownWideNarrow } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,10 @@ function timeAgo(date: string): string {
 }
 
 const FILTER_STORAGE_KEY = "vulnrap_history_filter_reconstructed";
+const SORT_SESSION_KEY = "vulnrap_history_sort";
+
+type SortMode = "recent" | "score" | "reconstructed";
+const SORT_MODES: SortMode[] = ["recent", "score", "reconstructed"];
 
 function readFilterFromStorage(): boolean {
   if (typeof window === "undefined") return false;
@@ -46,9 +50,51 @@ function writeFilterToStorage(value: boolean): void {
   }
 }
 
+function readSortFromSession(): SortMode {
+  if (typeof window === "undefined") return "recent";
+  try {
+    const raw = window.sessionStorage.getItem(SORT_SESSION_KEY);
+    return SORT_MODES.includes(raw as SortMode) ? (raw as SortMode) : "recent";
+  } catch {
+    return "recent";
+  }
+}
+
+function writeSortToSession(value: SortMode): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value === "recent") {
+      window.sessionStorage.removeItem(SORT_SESSION_KEY);
+    } else {
+      window.sessionStorage.setItem(SORT_SESSION_KEY, value);
+    }
+  } catch {
+    // ignore quota/availability errors
+  }
+}
+
+function sortEntries(entries: HistoryEntry[], mode: SortMode): HistoryEntry[] {
+  const ts = (e: HistoryEntry) => new Date(e.timestamp).getTime();
+  const copy = entries.slice();
+  if (mode === "score") {
+    copy.sort((a, b) => b.slopScore - a.slopScore || ts(b) - ts(a));
+  } else if (mode === "reconstructed") {
+    copy.sort((a, b) => {
+      const ar = a.reconstructed ? 1 : 0;
+      const br = b.reconstructed ? 1 : 0;
+      if (ar !== br) return br - ar;
+      return ts(b) - ts(a);
+    });
+  } else {
+    copy.sort((a, b) => ts(b) - ts(a));
+  }
+  return copy;
+}
+
 export default function History() {
   const [entries, setEntries] = useState<HistoryEntry[]>(getHistory());
   const [showOnlyReconstructed, setShowOnlyReconstructedState] = useState<boolean>(() => readFilterFromStorage());
+  const [sortMode, setSortModeState] = useState<SortMode>(() => readSortFromSession());
   const settings = getSettings();
 
   const setShowOnlyReconstructed = (value: boolean | ((prev: boolean) => boolean)) => {
@@ -59,10 +105,17 @@ export default function History() {
     });
   };
 
+  const setSortMode = (value: SortMode) => {
+    setSortModeState(value);
+    writeSortToSession(value);
+  };
+
   const reconstructedCount = entries.filter((e) => e.reconstructed).length;
-  const visibleEntries = showOnlyReconstructed
+  const filteredEntries = showOnlyReconstructed
     ? entries.filter((e) => e.reconstructed)
     : entries;
+  const effectiveSort: SortMode = showOnlyReconstructed && sortMode === "reconstructed" ? "recent" : sortMode;
+  const visibleEntries = sortEntries(filteredEntries, effectiveSort);
 
   const handleClearAll = () => {
     clearHistory();
@@ -153,22 +206,62 @@ export default function History() {
               )}
             </span>
           </div>
-          {reconstructedCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowOnlyReconstructed((v) => !v)}
-              data-testid="button-filter-reconstructed"
-              aria-pressed={showOnlyReconstructed}
-              className={`inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wide px-2.5 py-1 rounded-md border transition-colors ${
-                showOnlyReconstructed
-                  ? "border-amber-500/60 bg-amber-500/15 text-amber-200"
-                  : "border-amber-500/30 bg-amber-500/5 text-amber-300/80 hover:bg-amber-500/10"
-              }`}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div
+              role="group"
+              aria-label="Sort bookmarks"
+              className="inline-flex items-center rounded-md border border-primary/20 bg-primary/5 overflow-hidden text-[11px] font-mono uppercase tracking-wide"
+              data-testid="group-sort-history"
             >
-              <AlertTriangle className="w-3 h-3" />
-              {showOnlyReconstructed ? "Showing reconstructed only" : "Only show reconstructed"}
-            </button>
-          )}
+              <span className="px-2 py-1 text-muted-foreground border-r border-primary/20 flex items-center gap-1">
+                <ArrowDownWideNarrow className="w-3 h-3" />
+                Sort
+              </span>
+              {([
+                { mode: "recent" as const, label: "Recent" },
+                { mode: "score" as const, label: "Score" },
+                { mode: "reconstructed" as const, label: "Recon first", disabled: showOnlyReconstructed || reconstructedCount === 0 },
+              ]).map((opt) => {
+                const active = effectiveSort === opt.mode;
+                const disabled = (opt as { disabled?: boolean }).disabled ?? false;
+                return (
+                  <button
+                    key={opt.mode}
+                    type="button"
+                    onClick={() => setSortMode(opt.mode)}
+                    disabled={disabled}
+                    aria-pressed={active}
+                    data-testid={`button-sort-${opt.mode}`}
+                    className={`px-2 py-1 transition-colors border-l border-primary/10 first:border-l-0 ${
+                      active
+                        ? "bg-primary/20 text-primary"
+                        : disabled
+                        ? "text-muted-foreground/40 cursor-not-allowed"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            {reconstructedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowOnlyReconstructed((v) => !v)}
+                data-testid="button-filter-reconstructed"
+                aria-pressed={showOnlyReconstructed}
+                className={`inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wide px-2.5 py-1 rounded-md border transition-colors ${
+                  showOnlyReconstructed
+                    ? "border-amber-500/60 bg-amber-500/15 text-amber-200"
+                    : "border-amber-500/30 bg-amber-500/5 text-amber-300/80 hover:bg-amber-500/10"
+                }`}
+              >
+                <AlertTriangle className="w-3 h-3" />
+                {showOnlyReconstructed ? "Showing reconstructed only" : "Only show reconstructed"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
