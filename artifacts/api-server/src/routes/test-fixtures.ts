@@ -889,203 +889,6 @@ in cloud environments.`,
     expectedEngine2: [0, 35],
     expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW"],
   },
-];
-
-// =============================================================================
-// T4 — Hallucinated reports: confident specifics that are fabricated
-// =============================================================================
-
-const T4: Fixture[] = [
-  {
-    id: "T4-01-fake-cve-fake-fn",
-    tier: "T4_HALLUCINATED",
-    text: `# RCE in nodejs/node via fabricated_function()
-
-The function \`fabricated_function()\` in src/imaginary/file.c at line 999999
-allows remote code execution.
-
-\`\`\`
-==99999==ERROR: at 0x10000000: in nonexistent_func (made/up/path:0)
-\`\`\`
-
-CVE-9999-99999 was assigned by an unknown CNA. Memory corruption occurs
-at 0x10000000, then 0x20000000, then 0x30000000, then 0x40000000.
-
-Repository: https://github.com/nodejs/node`,
-    claimedCwes: ["CWE-94"],
-    expectedComposite: [35, 60],
-    expectedEngine2: [30, 55],
-    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
-  },
-  {
-    id: "T4-02-round-addresses",
-    tier: "T4_HALLUCINATED",
-    text: `# Heap overflow in libcurl via memcpy at fixed addresses
-
-I have identified a heap overflow in github.com/curl/curl. The bug occurs
-in the function \`Curl_handle_response()\` at lib/handler.c:50000 where
-memcpy writes to the address 0x40000000 with length 0x80000000.
-
-The vulnerability is triggered by sending a crafted response from the
-server. The corruption pattern is consistent across runs:
-
-- Frame 0: 0x10000000 in handle_chunked
-- Frame 1: 0x20000000 in receive_data
-- Frame 2: 0x30000000 in dispatch_response
-- Frame 3: 0x40000000 in Curl_handle_response
-
-CVE-2099-50000 has been reserved.`,
-    claimedCwes: ["CWE-787"],
-    expectedComposite: [0, 40],
-    expectedEngine2: [0, 50],
-    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
-  },
-  {
-    id: "T4-03-plagiarized-nvd",
-    tier: "T4_HALLUCINATED",
-    text: `# CVE-2024-3094 — XZ Utils Backdoor (independent discovery)
-
-I have independently discovered a malicious code insertion in the upstream
-XZ Utils package versions 5.6.0 and 5.6.1. The backdoor was introduced
-through obfuscated build-time scripts and modifies the liblzma library
-such that any software linked against it can be used to execute arbitrary
-code under specific conditions.
-
-The compromise affects sshd indirectly through libsystemd's dependency on
-liblzma, allowing pre-authentication remote code execution on systems
-where the malicious version was deployed.
-
-Affected: xz-utils 5.6.0–5.6.1
-Repository: https://github.com/tukaani-project/xz`,
-    expectedComposite: [0, 45],
-    expectedEngine2: [0, 55],
-    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
-  },
-  {
-    id: "T4-04-fake-asan-round-addrs",
-    tier: "T4_HALLUCINATED",
-    text: `# Heap-buffer-overflow in libfoo's parse_packet (CVE-2025-99999)
-
-\`\`\`
-==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x600000000000
-READ of size 4 at 0x700000000000 thread T0
-    #0 0x100000000000 in parse_packet libfoo.c:200
-    #1 0x100000000000 in parse_packet libfoo.c:200
-    #2 0x100000000000 in parse_packet libfoo.c:200
-    #3 0x100000000000 in handle_request server.c:500
-\`\`\`
-
-The crash is fully reproducible with the supplied poc.py exploit
-script. Affects libfoo 2.0.0 through 2.4.7.
-
-Note: addresses look round because libfoo allocates page-aligned slabs.
-No SUMMARY: AddressSanitizer line because the process was killed by
-the kernel before ASan could finish writing.`,
-    expectedComposite: [0, 60],
-    expectedEngine2: [0, 65],
-    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
-  },
-  {
-    id: "T4-05-fake-cwe-mismatch",
-    tier: "T4_HALLUCINATED",
-    text: `# SQL Injection in /api/auth/login (CWE-79)
-**Severity: Critical (CVSS 9.8)**
-
-The /api/auth/login endpoint is vulnerable to SQL injection via the
-\`username\` parameter, classified as CWE-79 Cross-Site Scripting.
-
-Proof of concept:
-\`\`\`
-POST /api/auth/login HTTP/1.1
-Content-Type: application/x-www-form-urlencoded
-
-username=admin' OR '1'='1&password=anything
-\`\`\`
-
-This bypasses authentication entirely and dumps the user table. The bug
-exists in the function \`authenticateUser()\` of \`AuthController.java\`,
-specifically the \`validateCredentials()\` helper which uses
-\`PreparedStatement.executeUpdate()\` improperly.
-
-Reference: github.com/example-org/totally-fake-repo-that-does-not-exist`,
-    claimedCwes: ["CWE-79"],
-    expectedComposite: [0, 45],
-    expectedEngine2: [0, 55],
-    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
-  },
-  {
-    id: "T4-06-fake-stacktrace-repeat",
-    tier: "T4_HALLUCINATED",
-    text: `# Use-after-free in nginx mod_http_v3 (CVE-2026-00001)
-
-Confirmed crash with the following stack trace from gdb:
-
-\`\`\`
-#0 0xdeadbeefdead in process_frame at v3_frame.c:100
-#1 0xdeadbeefdead in process_frame at v3_frame.c:100
-#2 0xdeadbeefdead in process_frame at v3_frame.c:100
-#3 0xdeadbeefdead in process_frame at v3_frame.c:100
-#4 0xdeadbeefdead in dispatch_request at v3_dispatch.c:42
-#5 0xdeadbeefdead in main at nginx.c:1
-\`\`\`
-
-PID 11111 was killed after 2 ms. Patch attached as patch.diff.
-
-Affected: nginx 1.27.x mod_http_v3 (HTTP/3 module). I do not have a
-reproducer build script — testing was done internally on a closed
-testbench.`,
-    expectedComposite: [0, 45],
-    expectedEngine2: [0, 55],
-    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
-  },
-  {
-    id: "T4-07-fake-pid-fake-fn",
-    tier: "T4_HALLUCINATED",
-    text: `# Critical: heap corruption in lodash 4.17.21 _.merge
-
-The function \`_.merge\` in lodash 4.17.21 contains a heap corruption bug
-when called with cyclic objects, leading to remote code execution.
-
-\`\`\`
-==99999==ERROR: AddressSanitizer: heap-use-after-free on address 0x10000000
-WRITE of size 8 at 0x00400000 thread T0
-\`\`\`
-
-Internal helper \`_.zorgflux()\` is the root cause; it dereferences a
-freed pointer when processing the second argument's prototype chain.
-
-Working PoC available in exploit.py (not attached). Affects all versions
-of lodash since 4.0.
-
-CVSS: 10.0 (Critical)`,
-    expectedComposite: [0, 45],
-    expectedEngine2: [0, 55],
-    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
-  },
-  {
-    id: "T4-08-fake-cve-id",
-    tier: "T4_HALLUCINATED",
-    text: `# CVE-2099-12345: Authentication bypass in express 4.18.2
-
-I have discovered an authentication bypass affecting express 4.18.2
-which I have responsibly disclosed as CVE-2099-12345.
-
-The vulnerability lies in the session middleware where a crafted Cookie
-header containing exactly 12345 bytes of base64 padding triggers an
-integer overflow in \`session._parseSignedCookie\` and yields the next
-session in memory belonging to another user.
-
-PoC:
-\`\`\`
-curl -H "Cookie: connect.sid=$(python3 -c 'print("A"*12345)')" https://target/me
-\`\`\`
-
-I have not provided the patch script (attack.py) because release is
-embargoed.`,
-    expectedComposite: [0, 45],
-    expectedEngine2: [0, 55],
-    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
-  },
   {
     id: "T3-10-empty-shell",
     tier: "T3_SLOP",
@@ -1107,7 +910,246 @@ Severity: High`,
   },
 ];
 
+// =============================================================================
+// T4 — Hallucinated reports: confident specifics that are fabricated
+// =============================================================================
+
+// All T4 fixtures target composite 0–35 ("LIKELY INVALID" / "HIGH RISK").
+// Designs are anonymized echoes of real public AI-slop H1 reports
+// (curl-slop cohort: H1#2199174, #2298307, #2823554, #2912277, #3100073,
+// #3125832, #3137657, #3231321, #3242005, #3293884) plus typical "AI-tool
+// independent disclosure" patterns. To stay below 35 they either
+// (a) omit a claimed CWE so Engine 3 falls back to ~38–42 instead of
+// hitting the 68/78 strong-fit floor, or (b) claim a strongly mismatched
+// CWE so Engine 3's TYPE_SWAP indicator caps the per-CWE score at 25 and
+// composite override subtracts another 15.
+const T4: Fixture[] = [
+  {
+    id: "T4-01-fake-cve-fake-fn",
+    tier: "T4_HALLUCINATED",
+    text: `# RCE in nodejs/node via fabricated_function()
+
+The helper fabricated_function in nodejs allows remote code execution
+via a crafted JSON payload. PoC available in attack.py (not attached).
+
+CVE-9999-99999 was assigned by an unknown CNA. Memory corruption occurs
+at 0x10000000, then 0x20000000, then 0x30000000, then 0x40000000, then
+0x50000000. Same offset, every run.
+
+==99999==ERROR: address 0x10000000 corrupted (no further details)
+
+I cannot share the reproducer because release is embargoed.
+Severity: Critical. Severity: Critical.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-02-round-addresses",
+    tier: "T4_HALLUCINATED",
+    text: `# Heap overflow in libcurl via memcpy at fixed addresses
+
+I have identified a heap overflow in github.com/curl/curl. The bug occurs
+where memcpy writes to the address 0x40000000 with length 0x80000000.
+
+The vulnerability is triggered by sending a crafted response from the
+server. The corruption pattern is consistent across runs:
+
+- Frame 0: 0x10000000 in handle_chunked
+- Frame 1: 0x20000000 in receive_data
+- Frame 2: 0x30000000 in dispatch_response
+- Frame 3: 0x40000000 in Curl_handle_response
+
+CVE-2099-50000 has been reserved. Working PoC in exploit.py (private).
+Affects all curl versions newer than 7.50.0.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-03-plagiarized-nvd",
+    tier: "T4_HALLUCINATED",
+    text: `# CVE-2024-3094 — XZ Utils Backdoor (independent rediscovery)
+
+I have independently discovered a malicious code insertion in the upstream
+XZ Utils package versions 5.6.0 and 5.6.1. The backdoor was introduced
+through obfuscated build-time scripts and modifies the liblzma library
+such that any software linked against it can be used to execute arbitrary
+code under specific conditions.
+
+The compromise affects sshd indirectly through libsystemd's dependency on
+liblzma, allowing pre-authentication remote code execution on systems
+where the malicious version was deployed.
+
+Affected: xz-utils 5.6.0–5.6.1. Reproduction details intentionally
+withheld pending responsible disclosure.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-04-fake-asan-no-summary",
+    tier: "T4_HALLUCINATED",
+    text: `# Heap-buffer-overflow in libfoo (CVE-2025-99999)
+
+The helper parse_packet in libfoo crashes when called with a malformed
+packet. The crash is fully reproducible with the supplied poc.py
+exploit script (not attached).
+
+Affects libfoo 2.0.0 through 2.4.999. Severity: Critical.
+Severity: Critical. Severity: Critical.
+
+I cannot share a runnable reproducer because release is embargoed
+under responsible disclosure. Patch script attack.py is available on
+request once embargo lifts.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-05-fake-cwe-mismatch",
+    tier: "T4_HALLUCINATED",
+    text: `# Cross-site scripting (CWE-79) bypasses authentication via SQL
+
+The /api/auth/login endpoint is vulnerable to a Cross-site scripting
+flaw classified as CWE-79 that yields full authentication bypass.
+The cross-site scripting payload reflects into the login response and
+is executed in the browser of any user who visits the login page.
+
+I observed that submitting the username \`admin' OR '1'='1\` reflects
+without escaping. The XSS payload triggers an XSS-driven SQL injection
+through document.cookie that yields admin access.
+
+The bug exists in the function \`authenticateUser()\` of
+\`AuthController.java\`, specifically the \`validateCredentials()\` helper
+which uses \`PreparedStatement.executeUpdate()\` improperly. CVSS: 9.8.
+
+Reference: github.com/example-org/totally-fake-repo-that-does-not-exist`,
+    claimedCwes: ["CWE-79"],
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-06-fake-stacktrace-repeat",
+    tier: "T4_HALLUCINATED",
+    text: `# Use-after-free in nginx mod_http_v3 (CVE-2026-00001)
+
+Confirmed crash with the following stack trace from gdb:
+
+#0 0xdeadbeefdead in process_frame
+#1 0xdeadbeefdead in process_frame
+#2 0xdeadbeefdead in process_frame
+#3 0xdeadbeefdead in process_frame
+#4 0xdeadbeefdead in dispatch_request
+#5 0xdeadbeefdead in main
+
+PID 11111 was killed after 2 ms. Patch attached as patch.diff.
+
+Affected: nginx 1.27.x mod_http_v3 (HTTP/3 module). I do not have a
+reproducer build script — testing was done internally on a closed
+testbench. Working PoC in exploit.py (private). Working PoC in
+exploit.py (private).`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-07-fake-pid-fake-fn",
+    tier: "T4_HALLUCINATED",
+    text: `# Critical: heap corruption in lodash 4.17.21 _.merge
+
+The function \`_.merge\` in lodash 4.17.21 contains a heap corruption bug
+when called with cyclic objects, leading to remote code execution.
+
+==99999==ERROR: at 0x80000000000: WRITE of size 8
+
+Internal helper \`_.zorgflux()\` is the root cause; it dereferences a
+freed pointer when processing the second argument's prototype chain.
+A second helper \`_.qwertyplex()\` magnifies the corruption window.
+
+Working PoC available in exploit.py (not attached). Affects all versions
+of lodash since 4.0.
+
+CVSS: 10.0 (Critical). Severity: High.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-08-fake-cve-id",
+    tier: "T4_HALLUCINATED",
+    text: `# CVE-2099-12345: Authentication bypass in express 4.18.2
+
+I have discovered an authentication bypass affecting express 4.18.2
+which I have responsibly disclosed as CVE-2099-12345.
+
+The vulnerability lies in the session middleware where a crafted Cookie
+header containing exactly 12345 bytes of base64 padding triggers an
+integer overflow in \`session._parseSignedCookie\` and yields the next
+session in memory belonging to another user. PID 12345 reproduces the
+issue every time.
+
+I have not provided the patch script (attack.py) because release is
+embargoed under responsible disclosure. The fix involves rejecting
+oversized Cookie headers before parsing.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-09-ai-tool-curl-uaf",
+    tier: "T4_HALLUCINATED",
+    text: `# Use-after-free in libcurl detected by automated analysis
+
+While running an automated AI-assisted code review against
+github.com/curl/curl, the analyzer identified a use-after-free in the
+HTTP/2 frame handling path. The defect appears in the helper
+\`Curl_h2_postprocess_frame_extension_v2()\` which frees a stream-local
+buffer and then re-reads it during the trailer-callback dispatch.
+
+The analysis tool produced this trace:
+
+==54321==ERROR: at 0x100000000: READ of size 8 in nghttp2_dispatch
+==54321==     at 0x100000000: READ of size 8 in nghttp2_dispatch
+==54321==     at 0x100000000: READ of size 8 in nghttp2_dispatch
+
+I have not produced a runnable C reproducer; the model's confidence on
+this finding was rated "very high" so I am submitting as Critical.
+CVSS: 9.8.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-10-fake-openssl-regression",
+    tier: "T4_HALLUCINATED",
+    text: `# OpenSSL 3.2.999 regression — RSA padding oracle (independent finding)
+
+I have independently rediscovered a Bleichenbacher-style padding oracle
+in OpenSSL version 3.2.999 affecting the function
+\`RSA_padding_check_PKCS1_type_2_v3_oracle()\`. The oracle yields the
+plaintext of any TLS RSA-key-exchange handshake within roughly 2^20
+queries.
+
+This was responsibly disclosed and a CVE has been requested. I am unable
+to share the disclosure timeline or the maintainer correspondence at
+this time. The PoC is in attack.py (not attached pending embargo).
+
+Severity: Critical. CVSS: 10.0. Affects every OpenSSL release between
+3.2.0 and 3.2.999. The fix is to reject malformed PKCS#1 v1.5 padding
+in constant time.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+];
+
 const FIXTURES: Fixture[] = [...T1, ...T2, ...T3, ...T4];
+
+// Exported for the structural test (test-fixtures.structure.test.ts) that
+// guards per-tier minimum count and duplicate-text drift.
+export const TEST_FIXTURE_COHORTS = { T1, T2, T3, T4 };
 
 router.get("/test/run", async (_req, res) => {
   if (process.env.NODE_ENV === "production") {
