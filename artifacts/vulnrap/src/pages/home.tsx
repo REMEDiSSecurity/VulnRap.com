@@ -891,7 +891,7 @@ export default function Home() {
           <div
             data-testid="dropzone"
             className={cn(
-              "border-2 border-dashed rounded-xl p-6 sm:p-10 md:p-12 flex flex-col items-center justify-center gap-3 sm:gap-4 transition-all cursor-pointer",
+              "border-2 border-dashed rounded-xl p-3 min-h-[7rem] flex flex-col items-center justify-center gap-2 transition-all cursor-pointer",
               isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/20 hover:border-primary/40",
               file && !fileError ? "border-primary/40 bg-primary/5" : "",
               fileError ? "border-destructive bg-destructive/5" : ""
@@ -911,33 +911,31 @@ export default function Home() {
             />
             {fileError ? (
               <>
-                <div className="p-4 rounded-full bg-destructive/10">
-                  <XCircle className="w-8 h-8 text-destructive" />
-                </div>
+                <XCircle className="w-6 h-6 text-destructive shrink-0" />
                 <div className="text-center">
-                  <p className="font-medium text-destructive">{fileError}</p>
-                  <p className="text-sm text-muted-foreground mt-1">Click to select a different file</p>
+                  <p className="font-medium text-destructive text-sm">{fileError}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Click to select a different file</p>
                 </div>
               </>
             ) : file ? (
               <>
-                <FileText className="w-12 h-12 text-primary" />
-                <div className="text-center">
-                  <p className="font-medium text-lg" data-testid="text-filename">{file.name}</p>
-                  <p className="text-sm text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                <div className="flex items-center gap-2 text-center">
+                  <FileText className="w-5 h-5 text-primary shrink-0" />
+                  <div className="text-left">
+                    <p className="font-medium text-sm leading-tight" data-testid="text-filename">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setFile(null); setFileError(null); setStage("idle"); }} className="mt-2" data-testid="button-clear">
+                <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setFile(null); setFileError(null); setStage("idle"); }} className="h-7 text-xs" data-testid="button-clear">
                   Clear Selection
                 </Button>
               </>
             ) : (
               <>
-                <div className="p-4 rounded-full bg-muted">
-                  <UploadCloud className="w-8 h-8 text-muted-foreground" />
-                </div>
+                <UploadCloud className="w-6 h-6 text-muted-foreground shrink-0" />
                 <div className="text-center">
-                  <p className="font-medium">Drag & drop your report here</p>
-                  <p className="text-sm text-muted-foreground mt-1">or click to browse files (.txt, .md)</p>
+                  <p className="font-medium text-sm">Drag & drop your report here</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">or click to browse files (.txt, .md)</p>
                 </div>
               </>
             )}
