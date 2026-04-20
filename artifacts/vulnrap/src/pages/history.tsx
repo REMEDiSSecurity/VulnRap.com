@@ -22,24 +22,24 @@ function timeAgo(date: string): string {
   return new Date(date).toLocaleDateString();
 }
 
-const FILTER_SESSION_KEY = "vulnrap_history_filter_reconstructed";
+const FILTER_STORAGE_KEY = "vulnrap_history_filter_reconstructed";
 
-function readFilterFromSession(): boolean {
+function readFilterFromStorage(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return window.sessionStorage.getItem(FILTER_SESSION_KEY) === "1";
+    return window.localStorage.getItem(FILTER_STORAGE_KEY) === "1";
   } catch {
     return false;
   }
 }
 
-function writeFilterToSession(value: boolean): void {
+function writeFilterToStorage(value: boolean): void {
   if (typeof window === "undefined") return;
   try {
     if (value) {
-      window.sessionStorage.setItem(FILTER_SESSION_KEY, "1");
+      window.localStorage.setItem(FILTER_STORAGE_KEY, "1");
     } else {
-      window.sessionStorage.removeItem(FILTER_SESSION_KEY);
+      window.localStorage.removeItem(FILTER_STORAGE_KEY);
     }
   } catch {
     // ignore quota/availability errors
@@ -48,13 +48,13 @@ function writeFilterToSession(value: boolean): void {
 
 export default function History() {
   const [entries, setEntries] = useState<HistoryEntry[]>(getHistory());
-  const [showOnlyReconstructed, setShowOnlyReconstructedState] = useState<boolean>(() => readFilterFromSession());
+  const [showOnlyReconstructed, setShowOnlyReconstructedState] = useState<boolean>(() => readFilterFromStorage());
   const settings = getSettings();
 
   const setShowOnlyReconstructed = (value: boolean | ((prev: boolean) => boolean)) => {
     setShowOnlyReconstructedState((prev) => {
       const next = typeof value === "function" ? (value as (p: boolean) => boolean)(prev) : value;
-      writeFilterToSession(next);
+      writeFilterToStorage(next);
       return next;
     });
   };
