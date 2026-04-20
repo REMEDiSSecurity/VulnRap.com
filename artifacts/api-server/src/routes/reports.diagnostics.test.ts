@@ -511,6 +511,54 @@ describe("GET /api/reports/:id/diagnostics", () => {
     expect(body.trace).toEqual({ tag: "newer" });
   });
 
+  it("exposes Engine 2 verificationSources summary with the documented shape", async () => {
+    const report = seedReport({
+      vulnrapCompositeScore: 64,
+      vulnrapCompositeLabel: "REASONABLE",
+      vulnrapCorrelationId: "verif-1",
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 70,
+            verdict: "GREEN",
+            confidence: "HIGH",
+            signalBreakdown: {
+              verificationSources: {
+                referenced: 4,
+                fallback: 2,
+                verified: 3,
+                total: 4,
+              },
+            },
+          },
+        ],
+        compositeBreakdown: {},
+        warnings: [],
+        engineCount: 1,
+      },
+    });
+
+    const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    const e2 = body.engines.engines.find(
+      (e: { engine: string }) => e.engine === "Technical Substance Analyzer",
+    );
+    expect(e2).toBeDefined();
+    const vs = e2.signalBreakdown.verificationSources;
+    expect(vs).toEqual({
+      referenced: 4,
+      fallback: 2,
+      verified: 3,
+      total: 4,
+    });
+    expect(typeof vs.verified).toBe("number");
+    expect(typeof vs.total).toBe("number");
+    expect(typeof vs.referenced).toBe("number");
+    expect(typeof vs.fallback).toBe("number");
+  });
+
   it("prefers correlation_id pairing over the most-recent trace", async () => {
     const report = seedReport({ vulnrapCorrelationId: "match-me" });
     // The matching trace is OLDER than the unrelated one; pairing must still

@@ -520,6 +520,19 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     lines.push("");
   }
 
+  const e2Engine = engines.find(e => /Technical Substance/i.test(e.engine));
+  const verifyBreakdown = (e2Engine?.signalBreakdown ?? {}) as {
+    verificationSources?: { verified?: number; total?: number; referenced?: number; fallback?: number };
+  };
+  const verifySources = verifyBreakdown.verificationSources;
+  if (verifySources) {
+    lines.push("## Active Verification Sources");
+    lines.push(
+      `- verified ${verifySources.verified ?? 0}/${verifySources.total ?? 0} · referenced: ${verifySources.referenced ?? 0} · search-fallback: ${verifySources.fallback ?? 0}`,
+    );
+    lines.push("");
+  }
+
   const perplexityEngine = engines.find(e => !!e.signalBreakdown?.perplexity);
   const perplexity = perplexityEngine?.signalBreakdown?.perplexity;
   if (perplexity) {
