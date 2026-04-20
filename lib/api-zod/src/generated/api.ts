@@ -560,6 +560,37 @@ export const GetReportResponse = zod.object({
           .describe(
             "Template reuse detection result. Null when no template match found.",
           ),
+        matrixInputs: zod
+          .union([
+            zod
+              .object({
+                compositeScore: zod
+                  .number()
+                  .describe("Composite score 0..100, higher = better."),
+                engine2Score: zod
+                  .number()
+                  .describe(
+                    "Engine 2 (Technical Substance Analyzer) score 0..100.",
+                  ),
+                verificationRatio: zod
+                  .number()
+                  .describe(
+                    "Verified \/ (verified + not_found) ratio over referenced_in_report checks (0..1).",
+                  ),
+                strongEvidenceCount: zod
+                  .number()
+                  .describe(
+                    "Count of strong evidence signals (CRASH_OUTPUT, STACK_TRACE, CODE_DIFF, etc.).",
+                  ),
+              })
+              .describe(
+                "The four matrix inputs that drove the v3.6.0 triage decision.",
+              ),
+            zod.null(),
+          ])
+          .describe(
+            "The v3.6.0 matrix inputs (composite, engine 2 substance, verification ratio, strong-evidence count) that drove the triage decision. Null on legacy reports stored before v3.6.0 composite scoring.",
+          ),
         revision: zod
           .union([
             zod.object({
@@ -1528,6 +1559,37 @@ export const CheckReportResponse = zod.object({
           .optional()
           .describe(
             "Template reuse detection result. Null when no template match found.",
+          ),
+        matrixInputs: zod
+          .union([
+            zod
+              .object({
+                compositeScore: zod
+                  .number()
+                  .describe("Composite score 0..100, higher = better."),
+                engine2Score: zod
+                  .number()
+                  .describe(
+                    "Engine 2 (Technical Substance Analyzer) score 0..100.",
+                  ),
+                verificationRatio: zod
+                  .number()
+                  .describe(
+                    "Verified \/ (verified + not_found) ratio over referenced_in_report checks (0..1).",
+                  ),
+                strongEvidenceCount: zod
+                  .number()
+                  .describe(
+                    "Count of strong evidence signals (CRASH_OUTPUT, STACK_TRACE, CODE_DIFF, etc.).",
+                  ),
+              })
+              .describe(
+                "The four matrix inputs that drove the v3.6.0 triage decision.",
+              ),
+            zod.null(),
+          ])
+          .describe(
+            "The v3.6.0 matrix inputs (composite, engine 2 substance, verification ratio, strong-evidence count) that drove the triage decision. Null on legacy reports stored before v3.6.0 composite scoring.",
           ),
         revision: zod
           .union([

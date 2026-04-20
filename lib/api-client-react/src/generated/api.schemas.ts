@@ -363,6 +363,20 @@ export interface TemplateMatch {
   weight: number;
 }
 
+/**
+ * The four matrix inputs that drove the v3.6.0 triage decision.
+ */
+export interface TriageMatrixInputs {
+  /** Composite score 0..100, higher = better. */
+  compositeScore: number;
+  /** Engine 2 (Technical Substance Analyzer) score 0..100. */
+  engine2Score: number;
+  /** Verified / (verified + not_found) ratio over referenced_in_report checks (0..1). */
+  verificationRatio: number;
+  /** Count of strong evidence signals (CRASH_OUTPUT, STACK_TRACE, CODE_DIFF, etc.). */
+  strongEvidenceCount: number;
+}
+
 export type RevisionResultDirection =
   (typeof RevisionResultDirection)[keyof typeof RevisionResultDirection];
 
@@ -396,6 +410,8 @@ export interface TriageRecommendation {
   temporalSignals: TemporalSignal[];
   /** Template reuse detection result. Null when no template match found. */
   templateMatch?: TemplateMatch | null;
+  /** The v3.6.0 matrix inputs (composite, engine 2 substance, verification ratio, strong-evidence count) that drove the triage decision. Null on legacy reports stored before v3.6.0 composite scoring. */
+  matrixInputs: TriageMatrixInputs | null;
   /** Revision tracking result — detected when a report is a revision of a recent submission. Null when not a revision. */
   revision?: RevisionResult | null;
 }

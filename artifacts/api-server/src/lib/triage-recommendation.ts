@@ -18,6 +18,18 @@ export interface TriageRecommendation {
   temporalSignals: TemporalSignal[];
   templateMatch: TemplateMatchResult | null;
   revision: RevisionResult | null;
+  // v3.6.0 §4: The matrix inputs that drove the decision. Surfaced in the
+  // triage UI so reviewers can spot when the matrix is operating near a band
+  // boundary. Null when the report predates v3.6.0 composite scoring (i.e. the
+  // caller passed no TriageDecisionContext).
+  matrixInputs: TriageMatrixInputs | null;
+}
+
+export interface TriageMatrixInputs {
+  compositeScore: number;
+  engine2Score: number;
+  verificationRatio: number;
+  strongEvidenceCount: number;
 }
 
 export interface ChallengeQuestion {
@@ -69,6 +81,16 @@ export function generateTriageRecommendation(
   evidence: EvidenceItem[],
   context?: TriageDecisionContext,
 ): Omit<TriageRecommendation, "temporalSignals" | "templateMatch" | "revision"> {
+  const matrixInputs: TriageMatrixInputs | null = context
+    ? {
+        compositeScore: context.compositeScore ?? 50,
+        engine2Score: context.engine2Score ?? 50,
+        verificationRatio: context.verificationRatio
+          ?? (((verification?.checks ?? []).filter(c => c.source === "referenced_in_report" && c.result === "verified").length)
+            / Math.max(1, (verification?.checks ?? []).filter(c => c.source === "referenced_in_report" && (c.result === "verified" || c.result === "not_found")).length)),
+        strongEvidenceCount: context.strongEvidenceCount ?? 0,
+      }
+    : null;
   // v3.6.0 §2/§4: Only count notFound/verified from explicit referenced_in_report
   // sources when computing the triage decision. Checks with undefined source
   // (e.g. NVD CVE lookups) or search_fallback origin must not influence the
@@ -158,7 +180,7 @@ export function generateTriageRecommendation(
 
   const challengeQuestions = generateChallengeQuestions(verification, evidence);
 
-  return { action, reason, note, challengeQuestions };
+  return { action, reason, note, challengeQuestions, matrixInputs };
 }
 
 function generateChallengeQuestions(

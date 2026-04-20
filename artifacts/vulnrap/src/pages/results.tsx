@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type TriageAssistant, type ReproGuidance, type GapItem, type DontMissItem, type ReporterFeedbackItem, type LLMTriageGuidance, type ReproRecipe, type HardwareComponent } from "@workspace/api-client-react";
+import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type TriageMatrixInputs, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type TriageAssistant, type ReproGuidance, type GapItem, type DontMissItem, type ReporterFeedbackItem, type LLMTriageGuidance, type ReproRecipe, type HardwareComponent } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -232,6 +232,60 @@ function VerificationPanel({ checks, summary }: { checks: VerificationCheck[]; s
   );
 }
 
+function MatrixInputsWidget({ inputs }: { inputs: TriageMatrixInputs }) {
+  const cells: Array<{ label: string; value: string; hint: string; tone: "good" | "warn" | "bad" | "neutral" }> = [
+    {
+      label: "Composite",
+      value: `${Math.round(inputs.compositeScore)}`,
+      hint: "v3.6.0 composite score (0-100, higher = more legitimate). Bands: ≥70 prioritize, ≥60 standard, ≥45 mid, ≥30 low, <30 auto-close.",
+      tone: inputs.compositeScore >= 60 ? "good" : inputs.compositeScore >= 45 ? "warn" : inputs.compositeScore >= 30 ? "warn" : "bad",
+    },
+    {
+      label: "Engine 2",
+      value: `${Math.round(inputs.engine2Score)}`,
+      hint: "Technical Substance Analyzer score (0-100). Reflects evidence strength, claim coherence, and technical depth.",
+      tone: inputs.engine2Score >= 60 ? "good" : inputs.engine2Score >= 50 ? "warn" : "bad",
+    },
+    {
+      label: "Verification",
+      value: `${Math.round(inputs.verificationRatio * 100)}%`,
+      hint: "Ratio of verified vs. not_found checks against items the report explicitly references (search-fallback misses excluded).",
+      tone: inputs.verificationRatio >= 0.5 ? "good" : inputs.verificationRatio >= 0.3 ? "warn" : "bad",
+    },
+    {
+      label: "Strong Evidence",
+      value: `${inputs.strongEvidenceCount}`,
+      hint: "Count of hard-to-fabricate signals (CRASH_OUTPUT, STACK_TRACE, CODE_DIFF, SHELL_COMMAND, etc.). 3+ overrides a CHALLENGE_REPORTER decision.",
+      tone: inputs.strongEvidenceCount >= 3 ? "good" : inputs.strongEvidenceCount >= 1 ? "warn" : "neutral",
+    },
+  ];
+  const toneClass = (t: "good" | "warn" | "bad" | "neutral") =>
+    t === "good" ? "text-green-400 border-green-500/20"
+      : t === "warn" ? "text-yellow-400 border-yellow-500/20"
+      : t === "bad" ? "text-destructive border-destructive/20"
+      : "text-muted-foreground border-border/30";
+  return (
+    <div className="rounded-lg border border-border/30 bg-muted/10 p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <Layers className="w-4 h-4 text-primary" />
+        <h4 className="text-sm font-bold">Matrix Inputs</h4>
+        <Hint text="The four v3.6.0 matrix inputs that drove this recommendation. Watch for values near a band boundary — that's where the matrix is most likely to flip on the next re-check." />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {cells.map((c) => (
+          <div key={c.label} className={`glass-card rounded-md border p-2 text-center ${toneClass(c.tone)}`}>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center justify-center gap-1">
+              {c.label}
+              <Hint text={c.hint} />
+            </div>
+            <div className="text-lg font-mono font-bold leading-tight">{c.value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TriageCard({ triage, challengeQuestions, temporalSignals, templateMatch, revision, toast }: {
   triage: TriageRecommendation;
   challengeQuestions: ChallengeQuestion[];
@@ -263,6 +317,10 @@ function TriageCard({ triage, challengeQuestions, temporalSignals, templateMatch
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="glass-card rounded-lg p-4 text-sm leading-relaxed">{triage.note}</div>
+
+        {triage.matrixInputs && (
+          <MatrixInputsWidget inputs={triage.matrixInputs} />
+        )}
 
         {challengeQuestions.length > 0 && (
           <div className="space-y-3">

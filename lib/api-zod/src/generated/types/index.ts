@@ -125,6 +125,7 @@ export * from "./trendsDailyTiers";
 export * from "./trendsData";
 export * from "./trendsFeedbackItem";
 export * from "./triageAssistant";
+export * from "./triageMatrixInputs";
 export * from "./triageRecommendation";
 export * from "./triageRecommendationAction";
 export * from "./verification";

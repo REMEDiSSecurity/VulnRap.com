@@ -9,6 +9,7 @@ import type { ChallengeQuestion } from "./challengeQuestion";
 import type { RevisionResult } from "./revisionResult";
 import type { TemplateMatch } from "./templateMatch";
 import type { TemporalSignal } from "./temporalSignal";
+import type { TriageMatrixInputs } from "./triageMatrixInputs";
 import type { TriageRecommendationAction } from "./triageRecommendationAction";
 
 export interface TriageRecommendation {
@@ -24,6 +25,8 @@ export interface TriageRecommendation {
   temporalSignals: TemporalSignal[];
   /** Template reuse detection result. Null when no template match found. */
   templateMatch?: TemplateMatch | null;
+  /** The v3.6.0 matrix inputs (composite, engine 2 substance, verification ratio, strong-evidence count) that drove the triage decision. Null on legacy reports stored before v3.6.0 composite scoring. */
+  matrixInputs: TriageMatrixInputs | null;
   /** Revision tracking result — detected when a report is a revision of a recent submission. Null when not a revision. */
   revision?: RevisionResult | null;
 }
