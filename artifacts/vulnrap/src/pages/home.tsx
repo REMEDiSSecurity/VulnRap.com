@@ -823,7 +823,7 @@ export default function Home() {
             <img ref={logoRef} src={logoSrc} alt="VulnRap" className="relative z-10 w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-xl logo-glow gradient-border" />
           </div>
         </div>
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-primary uppercase glow-text" data-testid="text-heading">Vuln Report Validation</h1>
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-primary uppercase glow-text" data-testid="text-heading">Vuln Report Rap Sheet</h1>
         <p className="text-sm sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed px-2">
           Assess the likelihood that an incoming vulnerability report describes a real, reproducible issue. Cross-check claims against live sources, detect duplicate submissions, and surface what deserves analyst time. Built for PSIRT teams, triage analysts, and anyone buried in an inbox full of incoming reports.
         </p>
