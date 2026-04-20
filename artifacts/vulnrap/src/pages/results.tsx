@@ -175,6 +175,13 @@ function LlmDimensionBar({ label, score }: { label: string; score: number }) {
 
 function VerificationPanel({ checks, summary }: { checks: VerificationCheck[]; summary?: VerificationSummary }) {
   const [expanded, setExpanded] = useState(true);
+  // v3.6.0 §2: Surface the same referenced/search-fallback split that the
+  // diagnostics panel shows reviewers, so submitters can see which checks
+  // were against repos they explicitly cited vs. ones VulnRap guessed.
+  const referencedChecks = checks.filter((c) => c.source === "referenced_in_report");
+  const fallbackChecks = checks.filter((c) => c.source === "search_fallback");
+  const verifiedReferenced = referencedChecks.filter((c) => c.result === "verified").length;
+  const hasSourceBreakdown = referencedChecks.length + fallbackChecks.length > 0;
   return (
     <Card className="glass-card rounded-xl">
       <CardHeader className="cursor-pointer" onClick={() => setExpanded(!expanded)}>
@@ -194,6 +201,16 @@ function VerificationPanel({ checks, summary }: { checks: VerificationCheck[]; s
               {(summary.verified ?? 0) > 0 && <span className="flex items-center gap-1 text-green-400"><CheckCircle className="w-3.5 h-3.5" />{summary.verified} verified</span>}
               {(summary.notFound ?? 0) > 0 && <span className="flex items-center gap-1 text-destructive"><AlertCircle className="w-3.5 h-3.5" />{summary.notFound} not found</span>}
               {(summary.warnings ?? 0) > 0 && <span className="flex items-center gap-1 text-yellow-500"><AlertTriangle className="w-3.5 h-3.5" />{summary.warnings} warning{(summary.warnings ?? 0) !== 1 ? "s" : ""}</span>}
+            </div>
+          )}
+          {hasSourceBreakdown && (
+            <div className="flex items-center gap-2 mb-3 text-[11px] font-mono text-muted-foreground">
+              <span>verified {verifiedReferenced}/{referencedChecks.length}</span>
+              <span>·</span>
+              <span>referenced: {referencedChecks.length}</span>
+              <span>·</span>
+              <span>search-fallback: {fallbackChecks.length}</span>
+              <Hint text="Referenced = checks against repos you explicitly cited (GitHub/GitLab URLs, versioned package names). Search-fallback = checks against repos VulnRap guessed from a project keyword. Fallback checks inform diagnostics but do not lower your score." />
             </div>
           )}
           {checks.map((check, i) => {

@@ -1827,11 +1827,22 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   if (verification) {
     lines.push("## Verification Results");
     lines.push("");
-    lines.push(`| Check | Status | Detail |`);
-    lines.push(`|-------|--------|--------|`);
-    for (const check of verification.checks) {
+    // v3.6.0 §2: Mirror the diagnostics-panel breakdown so report exports show
+    // submitters which checks were against repos they cited vs. ones we guessed.
+    const checksWithSource = verification.checks as Array<{ source?: string; result: string; type: string; detail: string }>;
+    const referencedChecks = checksWithSource.filter(c => c.source === "referenced_in_report");
+    const fallbackChecks = checksWithSource.filter(c => c.source === "search_fallback");
+    if (referencedChecks.length + fallbackChecks.length > 0) {
+      const verifiedReferenced = referencedChecks.filter(c => c.result === "verified").length;
+      lines.push(`- verified ${verifiedReferenced}/${referencedChecks.length} · referenced: ${referencedChecks.length} · search-fallback: ${fallbackChecks.length}`);
+      lines.push("");
+    }
+    lines.push(`| Check | Status | Source | Detail |`);
+    lines.push(`|-------|--------|--------|--------|`);
+    for (const check of checksWithSource) {
       const icon = check.result === "verified" ? "✅" : check.result === "not_found" ? "❌" : "⚠️";
-      lines.push(`| ${check.type} | ${icon} ${check.result} | ${check.detail} |`);
+      const source = check.source === "referenced_in_report" ? "referenced" : check.source === "search_fallback" ? "search-fallback" : "—";
+      lines.push(`| ${check.type} | ${icon} ${check.result} | ${source} | ${check.detail} |`);
     }
     lines.push("");
   }

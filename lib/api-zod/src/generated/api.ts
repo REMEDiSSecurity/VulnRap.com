@@ -461,6 +461,12 @@ export const GetReportResponse = zod.object({
               .describe(
                 "Score weight (negative = human signal, positive = slop signal)",
               ),
+            source: zod
+              .enum(["referenced_in_report", "search_fallback"])
+              .optional()
+              .describe(
+                "Whether the check was performed against a repo\/resource explicitly cited in the report (referenced_in_report) or one we guessed via keyword fallback (search_fallback). Absent when not applicable (e.g. CVE\/PoC checks).",
+              ),
           }),
         ),
         summary: zod.object({
@@ -1460,6 +1466,12 @@ export const CheckReportResponse = zod.object({
               .number()
               .describe(
                 "Score weight (negative = human signal, positive = slop signal)",
+              ),
+            source: zod
+              .enum(["referenced_in_report", "search_fallback"])
+              .optional()
+              .describe(
+                "Whether the check was performed against a repo\/resource explicitly cited in the report (referenced_in_report) or one we guessed via keyword fallback (search_fallback). Absent when not applicable (e.g. CVE\/PoC checks).",
               ),
           }),
         ),

@@ -1548,6 +1548,10 @@ components:
         weight:
           type: integer
           description: Score weight (negative = human signal, positive = slop signal)
+        source:
+          type: string
+          enum: [referenced_in_report, search_fallback]
+          description: Whether the check was performed against a repo/resource explicitly cited in the report (referenced_in_report) or one we guessed via keyword fallback (search_fallback). Absent when not applicable (e.g. CVE/PoC checks).
       required:
         - type
         - target

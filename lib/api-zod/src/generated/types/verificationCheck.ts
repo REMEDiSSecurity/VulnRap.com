@@ -6,6 +6,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { VerificationCheckResult } from "./verificationCheckResult";
+import type { VerificationCheckSource } from "./verificationCheckSource";
 
 export interface VerificationCheck {
   /** Check type identifier (e.g. github_file_verified, cve_not_in_nvd, poc_placeholder_textbook) */
@@ -17,4 +18,6 @@ export interface VerificationCheck {
   detail: string;
   /** Score weight (negative = human signal, positive = slop signal) */
   weight: number;
+  /** Whether the check was performed against a repo/resource explicitly cited in the report (referenced_in_report) or one we guessed via keyword fallback (search_fallback). Absent when not applicable (e.g. CVE/PoC checks). */
+  source?: VerificationCheckSource;
 }

@@ -281,6 +281,17 @@ export const VerificationCheckResult = {
   info: "info",
 } as const;
 
+/**
+ * Whether the check was performed against a repo/resource explicitly cited in the report (referenced_in_report) or one we guessed via keyword fallback (search_fallback). Absent when not applicable (e.g. CVE/PoC checks).
+ */
+export type VerificationCheckSource =
+  (typeof VerificationCheckSource)[keyof typeof VerificationCheckSource];
+
+export const VerificationCheckSource = {
+  referenced_in_report: "referenced_in_report",
+  search_fallback: "search_fallback",
+} as const;
+
 export interface VerificationCheck {
   /** Check type identifier (e.g. github_file_verified, cve_not_in_nvd, poc_placeholder_textbook) */
   type: string;
@@ -291,6 +302,8 @@ export interface VerificationCheck {
   detail: string;
   /** Score weight (negative = human signal, positive = slop signal) */
   weight: number;
+  /** Whether the check was performed against a repo/resource explicitly cited in the report (referenced_in_report) or one we guessed via keyword fallback (search_fallback). Absent when not applicable (e.g. CVE/PoC checks). */
+  source?: VerificationCheckSource;
 }
 
 export interface VerificationSummary {
