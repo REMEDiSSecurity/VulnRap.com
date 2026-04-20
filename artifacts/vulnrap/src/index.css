@@ -676,11 +676,17 @@
 }
 
 /* Ensure main content is above laser effects */
-.laser-content-layer > header,
 .laser-content-layer > main,
 .laser-content-layer > footer {
   position: relative;
   z-index: 2;
+}
+
+/* Header must sit above main so its dropdown menus (Analyze, Insights, Docs)
+   are not occluded by in-page popovers like the Tier Breakdown filter. */
+.laser-content-layer > header {
+  position: sticky;
+  z-index: 60;
 }
 
 /* Reduced motion: disable all laser animations */
