@@ -1591,7 +1591,15 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
         compositeBreakdown?: { weightedSum: number; totalWeight: number; beforeOverride: number; afterOverride: number };
         warnings?: string[];
         engineCount?: number;
+        reconstructed?: boolean;
       };
+      // Legacy reports stored without raw text get their composite rebuilt by
+      // backfill-vulnrap.ts from cached v3.5.0 signals. Surface that fact so
+      // the UI can flag the score as approximate (recon- correlation id is
+      // another tell, but the explicit boolean is what reviewers actually see).
+      const reconstructed =
+        stored.reconstructed === true ||
+        (report.vulnrapCorrelationId?.startsWith("recon-") ?? false);
       return {
         compositeScore: report.vulnrapCompositeScore,
         label: report.vulnrapCompositeLabel,
@@ -1600,6 +1608,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
         overridesApplied: (report.vulnrapOverridesApplied ?? []) as string[],
         warnings: stored.warnings ?? [],
         engineCount: stored.engineCount ?? (stored.engines?.length ?? 0),
+        reconstructed,
       };
     })(),
     fileName: report.fileName,
@@ -1770,6 +1779,18 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   lines.push(`**Slop Score**: ${report.slopScore} (${report.slopTier})`);
   lines.push(`**Confidence**: ${((report.confidence as number ?? 0.5) * 100).toFixed(0)}%`);
   lines.push("");
+
+  // Surface backfill-vulnrap reconstructions in the markdown export so the
+  // exported triage report carries the same "approximate" warning that the UI
+  // shows. Mirrors VulnrapPanelData.reconstructed in routes/reports.ts above.
+  const vulnrapBlob = (report.vulnrapEngineResults ?? {}) as { reconstructed?: boolean };
+  const vulnrapReconstructed =
+    vulnrapBlob.reconstructed === true ||
+    (report.vulnrapCorrelationId?.startsWith("recon-") ?? false);
+  if (vulnrapReconstructed) {
+    lines.push("> ⚠️ **Reconstructed composite (approximate).** This report's VulnRap composite was rebuilt from cached v3.5.0 signals (slop / validity / quality / evidence list) because the original report text was not retained. CWE coherence is neutralized at 50, no perplexity is available, and per-engine confidence is LOW. Treat the matrix triage decision below as approximate.");
+    lines.push("");
+  }
 
   if (triageRecommendation) {
     lines.push("## Triage Recommendation");

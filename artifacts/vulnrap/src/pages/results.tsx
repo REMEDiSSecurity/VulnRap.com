@@ -592,6 +592,7 @@ interface VulnrapPanelData {
   warnings?: string[];
   engineCount?: number;
   compositeBreakdown?: { weightedSum: number; totalWeight: number; beforeOverride: number; afterOverride: number };
+  reconstructed?: boolean;
 }
 
 const VULNRAP_LABEL_COLOR: Record<string, string> = {
@@ -1419,7 +1420,7 @@ export default function Results() {
       )}
 
       {vulnrap && vulnrap.engines && vulnrap.engines.length > 0 && (
-        <Card className="glass-card-accent rounded-xl border-primary/40">
+        <Card className={`glass-card-accent rounded-xl ${vulnrap.reconstructed ? "border-amber-500/50" : "border-primary/40"}`}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 flex-wrap">
               <Layers className="w-6 h-6 text-primary" />
@@ -1427,12 +1428,38 @@ export default function Results() {
               <Badge variant="outline" className={`text-[11px] px-2 py-0.5 h-6 font-mono ${VULNRAP_LABEL_COLOR[vulnrap.label] || "text-muted-foreground"}`}>
                 {vulnrap.label}
               </Badge>
+              {vulnrap.reconstructed && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-2 py-0.5 h-6 font-mono uppercase tracking-wide text-amber-300 border-amber-500/50 bg-amber-500/10 flex items-center gap-1"
+                  data-testid="badge-vulnrap-reconstructed"
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  Reconstructed · approximate
+                  <Hint text="Composite was rebuilt from cached v3.5.0 signals (slop / validity / quality / evidence list) because the original report text was not retained. CWE coherence is neutralized to 50, perplexity is unavailable, and per-engine confidence is LOW. Treat the score as approximate." />
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription>
               Three independent engines (AI Authorship 5%, Technical Substance 55%, CWE Coherence 40%) score this report. Higher composite = stronger evidence of a real, reproducible issue.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            {vulnrap.reconstructed && (
+              <div
+                className="rounded-lg bg-amber-500/10 border border-amber-500/40 px-3 py-2 flex items-start gap-2"
+                data-testid="banner-vulnrap-reconstructed"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-200/90 leading-relaxed">
+                  <strong className="text-amber-300">Reconstructed from cached signals.</strong>{" "}
+                  This report was analyzed before raw text was retained, so the composite was rebuilt from cached v3.5.0 signals
+                  (slop, validity, quality, and the evidence list) rather than a fresh pipeline run. CWE coherence is neutralized
+                  at 50, no perplexity is available, and per-engine confidence is <span className="font-mono">LOW</span>.
+                  Triage decisions based on this score should be treated as approximate.
+                </div>
+              </div>
+            )}
             <div className="flex flex-col items-center justify-center py-2">
               <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Composite Score</div>
               <div className={`text-7xl font-bold font-mono tracking-tighter glow-text ${vulnrap.compositeScore <= 35 ? "text-red-400" : vulnrap.compositeScore <= 50 ? "text-orange-400" : vulnrap.compositeScore <= 65 ? "text-yellow-400" : vulnrap.compositeScore <= 80 ? "text-emerald-400" : "text-green-400"}`}>

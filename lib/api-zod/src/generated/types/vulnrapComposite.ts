@@ -22,4 +22,6 @@ export interface VulnrapComposite {
   overridesApplied: string[];
   warnings?: string[];
   engineCount?: number;
+  /** True when the composite was rebuilt by backfill-vulnrap from cached v3.5.0 signals (legacy reports stored without raw text). Reviewers should treat the score as approximate — CWE coherence is neutralized, no perplexity is available, and per-engine scores derive from cached slop / validity / quality / evidence values rather than a fresh pipeline run. */
+  reconstructed?: boolean;
 }

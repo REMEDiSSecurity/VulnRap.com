@@ -1012,6 +1012,12 @@ export const GetReportResponse = zod.object({
             ),
           warnings: zod.array(zod.string()).optional(),
           engineCount: zod.number().optional(),
+          reconstructed: zod
+            .boolean()
+            .optional()
+            .describe(
+              "True when the composite was rebuilt by backfill-vulnrap from cached v3.5.0 signals (legacy reports stored without raw text). Reviewers should treat the score as approximate — CWE coherence is neutralized, no perplexity is available, and per-engine scores derive from cached slop \/ validity \/ quality \/ evidence values rather than a fresh pipeline run.",
+            ),
         })
         .describe(
           "VulnRap multi-engine consensus score with per-engine breakdowns.",
