@@ -790,7 +790,7 @@ export default function Home() {
 
   useEffect(() => {
     if (mirrorBannerDismissed) return;
-    const timer = setTimeout(dismissMirrorBanner, 13370);
+    const timer = setTimeout(dismissMirrorBanner, 5000);
     return () => clearTimeout(timer);
   }, [mirrorBannerDismissed]);
 
