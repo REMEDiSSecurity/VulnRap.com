@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { sql, gte, and, eq } from "drizzle-orm";
-import { createHash } from "crypto";
+import { createHmac, randomBytes } from "crypto";
+import { logger } from "../lib/logger";
 import { db } from "@workspace/db";
 import { reportsTable, pageViewsTable, userFeedbackTable } from "@workspace/db";
 import {
@@ -127,14 +128,22 @@ router.get("/stats/distribution", async (_req, res): Promise<void> => {
   res.json(response);
 });
 
-const VISITOR_HMAC_KEY = process.env.VISITOR_HMAC_KEY || "vulnrap-visitor-tracking-key";
+let VISITOR_HMAC_KEY = process.env.VISITOR_HMAC_KEY;
+if (!VISITOR_HMAC_KEY) {
+  VISITOR_HMAC_KEY = randomBytes(32).toString("hex");
+  logger.warn(
+    "VISITOR_HMAC_KEY environment variable is not set. Generated an ephemeral per-process key. " +
+      "Visitor hashes will rotate on every server restart. Set VISITOR_HMAC_KEY for stable daily rotation.",
+  );
+}
+const VISITOR_HMAC_KEY_FINAL: string = VISITOR_HMAC_KEY;
 
 router.post("/stats/visit", async (req, res): Promise<void> => {
   const ip = req.ip || req.socket.remoteAddress || "unknown";
-  const ua = req.headers["user-agent"] || "";
-  const raw = `${ip}::${ua}`;
-  const visitorHash = createHash("sha256").update(VISITOR_HMAC_KEY).update(raw).digest("hex");
   const today = new Date().toISOString().slice(0, 10);
+  const visitorHash = createHmac("sha256", VISITOR_HMAC_KEY_FINAL)
+    .update(`${today}::${ip}`)
+    .digest("hex");
 
   await db
     .insert(pageViewsTable)

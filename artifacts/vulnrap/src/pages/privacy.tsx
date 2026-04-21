@@ -217,7 +217,8 @@ export default function Privacy() {
             <CardContent className="text-sm space-y-3 text-muted-foreground leading-relaxed">
               <p>We do not use Google Analytics, Mixpanel, Hotjar, or any third-party analytics, tracking pixels, or advertising scripts. We set no tracking or advertising cookies and we do not perform browser fingerprinting.</p>
               <p>Your browser does keep a small amount of local data for the app to function — a one-time delete token, the dismissed-banner flag, your bookmark history, and your filter/sort preferences. None of it is sent to third parties and clearing your browser storage erases all of it.</p>
-              <p>Server-side, we use a per-IP rate-limit counter (held in memory, not the database) to prevent abuse, and a daily salted hash of your IP for the unique-visitor counter on the home page. Raw IP addresses are not written to disk or to the database, and the daily hashes cannot be reversed back to an IP.</p>
+              <p>Server-side, we use a per-IP rate-limit counter (held in memory, not the database) to prevent abuse. We also count unique daily visitors for the public counter on the transparency dashboard: when your browser navigates to a page, we send your current date and IP through an HMAC keyed with a server-side secret and store only the resulting hash in a <code className="text-[11px] bg-muted/50 px-1 rounded font-mono">(hash, date)</code> row. The salt rotates every day at UTC midnight, so the same visitor produces a different hash on different days and the rows cannot be linked across days. Raw IP addresses are never written to disk or the database, and the hash is one-way — it cannot be reversed back to an IP.</p>
+              <p>The visit ping fires once per client-side route change (debounced), not just on the home page, so the counter reflects sitewide unique daily visitors.</p>
             </CardContent>
           </Card>
         </div>
@@ -299,6 +300,13 @@ export default function Privacy() {
             <h3 className="font-bold text-foreground">Open Source & Transparency</h3>
             <p>
               VulnRap's similarity engine uses deterministic, seeded algorithms (SHA-256 for hashing, MinHash with 128 permutations for fuzzy matching, Simhash for structural similarity, section-level SHA-256 for granular matching). Validity scoring uses a VirusTotal-style multi-engine consensus: three independent engines — an AI Authorship Detector (with a perplexity blend covering bigram entropy, function-word rate, and code-block syntax sanity), a Technical Substance Analyzer, and a CWE Coherence Checker against a curated 50-entry fingerprint library — each return their own score and verdict, which are combined into a single composite score with a six-tier label. The legacy <code className="text-primary text-xs bg-muted px-1 py-0.5 rounded">slopScore</code> field remains in API responses (mapped from the new composite) for backwards compatibility, and a feature flag (<code className="text-primary text-xs bg-muted px-1 py-0.5 rounded">VULNRAP_USE_NEW_COMPOSITE</code>) lets operators fall back to the legacy pipeline at any time. Every analysis writes a pipeline trace (correlation id, per-stage timings, applied overrides, input signals summary) that is exposed via <code className="text-primary text-xs bg-muted px-1 py-0.5 rounded">GET /api/reports/:id/diagnostics</code> and surfaced in the &ldquo;Why this score?&rdquo; panel on the report detail page. When the LLM-backed substance engine is enabled, the redacted version of your report is sent to the configured AI provider for analysis; if the LLM is unavailable the remaining engines continue to score the report. The full scoring logic, engine weights, override rules, and LLM prompt are <a href="https://github.com/REMEDiSSecurity/VulnRap.Com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">open source and auditable on GitHub</a>.
+            </p>
+          </div>
+          <Separator />
+          <div className="space-y-3">
+            <h3 className="font-bold text-foreground">What We Publish</h3>
+            <p>
+              Aggregate, non-identifying statistics computed from the data above are published live on our <Link to="/transparency" className="text-primary hover:underline">transparency dashboard</Link>: total reports analyzed, average sloppiness score, detection rate, weekly volume, slop-tier distribution over time, feedback agreement rate, and the unique-daily-visitor counter described in the previous section. No per-report content, file names, or visitor identifiers are ever surfaced — only counts and averages.
             </p>
           </div>
           <Separator />
