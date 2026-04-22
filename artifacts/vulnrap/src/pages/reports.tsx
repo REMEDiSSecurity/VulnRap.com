@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
-import { Activity, ArrowUpDown, ChevronDown, Database, ExternalLink, Filter, Search, TrendingUp } from "lucide-react";
+import { Activity, ArrowUpDown, ChevronDown, Database, ExternalLink, Filter, Search, TrendingUp, X } from "lucide-react";
 
 const PAGE_SIZE = 20;
 
@@ -143,6 +143,13 @@ export default function Reports() {
   const setTierFilter = (value: string) => updateParams({ tier: value, offset: "0" });
   const setFamilyFilter = (value: string) => updateParams({ avriFamily: value, offset: "0" });
   const setOffset = (value: number) => updateParams({ offset: String(value) });
+
+  // Sprint 12 — A filter is "active" when any of tier/family/sort differ from
+  // their default. Offset is intentionally excluded: paging by itself isn't a
+  // filter, and we already reset offset whenever a filter changes.
+  const hasActiveFilters = tierFilter !== "All" || familyFilter !== "All" || sort !== "newest";
+  const clearAllFilters = () =>
+    updateParams({ tier: null, avriFamily: null, sort: null, offset: null });
 
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showTierMenu, setShowTierMenu] = useState(false);
@@ -378,6 +385,20 @@ export default function Reports() {
               </div>
             )}
           </div>
+
+          {/* Sprint 12 — One-click reset back to defaults. Only renders when
+              tier/family/sort have moved off their defaults so it doesn't
+              visually clutter the toolbar in the common case. */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium text-muted-foreground hover:text-primary hover:border-primary/30 transition-all"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Clear filters</span>
+            </button>
+          )}
         </div>
 
         <span className="text-xs text-muted-foreground">
