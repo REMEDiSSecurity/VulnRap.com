@@ -7,9 +7,22 @@
 import { createHash } from "crypto";
 
 const MAX_ENTRIES = 4000;
-const CAMPAIGN_THRESHOLD = 3; // ≥3 hits within the LRU window triggers the penalty.
+const CAMPAIGN_THRESHOLD = 3; // ≥3 hits within the *same UTC day* triggers the penalty.
 const PENALTY_POINTS = -20;
-const STATE: Map<string, { count: number; firstSeenMs: number; lastSeenMs: number }> = new Map();
+// Counts are partitioned by UTC day so a benign recurring format does not
+// accumulate across day boundaries (matches velocity's day-rotation semantics
+// and Sprint 11 spec Part 7: "campaign hit applies within the day").
+// Map key: `${utcDay}|${fingerprint}` — entries from prior days are pruned on
+// access and naturally evicted by the LRU cap.
+const STATE: Map<string, { count: number; firstSeenMs: number; lastSeenMs: number; utcDay: string }> = new Map();
+
+function utcDay(now = Date.now()): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+function dayKey(day: string, fp: string): string {
+  return `${day}|${fp}`;
+}
 
 function bucketLength(words: number): string {
   if (words < 30) return "xs";
@@ -94,13 +107,16 @@ function pruneIfNeeded(): void {
  */
 export function recordAndScore(text: string): FingerprintResult {
   const fp = structuralFingerprint(text);
-  const existing = STATE.get(fp);
+  const day = utcDay();
+  const key = dayKey(day, fp);
+  const existing = STATE.get(key);
   const now = Date.now();
   const count = (existing?.count ?? 0) + 1;
-  STATE.set(fp, {
+  STATE.set(key, {
     count,
     firstSeenMs: existing?.firstSeenMs ?? now,
     lastSeenMs: now,
+    utcDay: day,
   });
   pruneIfNeeded();
   const penalty = count >= CAMPAIGN_THRESHOLD ? PENALTY_POINTS : 0;
@@ -109,7 +125,8 @@ export function recordAndScore(text: string): FingerprintResult {
 
 export function peek(text: string): FingerprintResult {
   const fp = structuralFingerprint(text);
-  const existing = STATE.get(fp);
+  const key = dayKey(utcDay(), fp);
+  const existing = STATE.get(key);
   const count = existing?.count ?? 0;
   const penalty = count >= CAMPAIGN_THRESHOLD ? PENALTY_POINTS : 0;
   return { fingerprint: fp, count, penalty };

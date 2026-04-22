@@ -73,17 +73,25 @@ export function runEngine3Avri(
   const coherenceIssues = checkCoherence(fullText, family);
   const coherencePenalty = coherenceIssues.reduce((s, i) => s + i.penalty, 0);
 
-  // 4. Sprint 11 spec Part 4 — explicit CWE/family outcomes:
-  //    - cited CWE matches detected family                    → 78 floor
-  //    - cited CWE in a *different* family with HIGH detection → 25 ceiling (likely fabricated)
-  //    - no cited CWE but a family was detected                → 38
-  //    - flat fallback (handled at the top of the function)    → 42
-  //    On top of these, gold coverage and behavioural coherence apply
-  //    as small bonuses/penalties so the final score isn't perfectly flat.
+  // 4. Sprint 11 spec Part 4 — explicit CWE/family outcomes.
+  //    The off-family ceiling compares the *cited CWE family* to the
+  //    *evidence-based family* (vuln-type / keyword fallback), independent of
+  //    the rubric family the classifier ultimately selected. Otherwise the
+  //    rule would never fire when a cited CWE wins classification.
+  //    Rules:
+  //      - cited CWE family == evidence family                              → 78 floor
+  //      - cited CWE family != evidence family && evidence is HIGH confidence → 25 ceiling
+  //      - no cited CWE but a family was detected (cwe-less report)          → 38
+  //      - flat fallback (handled at the top of the function)                → 42
+  //    Gold coverage and behavioural coherence then apply as small
+  //    bonuses/penalties on top so the final score isn't perfectly flat.
   const citedFamily = classification.citedFamily;
-  const isCwsCited = !!classification.cweId;
-  const sameFamily = isCwsCited && citedFamily === family.id;
-  const offFamilyHighConf = isCwsCited && citedFamily && citedFamily !== family.id && classification.confidence === "HIGH";
+  const evidenceFamily = classification.evidenceFamily;
+  const evidenceHighConf = classification.evidenceConfidence === "HIGH";
+  const isCweCited = !!classification.cweId;
+  const sameFamily = isCweCited && citedFamily !== null && evidenceFamily !== null && citedFamily === evidenceFamily;
+  const offFamilyHighConf =
+    isCweCited && citedFamily !== null && evidenceFamily !== null && citedFamily !== evidenceFamily && evidenceHighConf;
   let baseScore: number;
   let baseRule: "SAME_FAMILY_FLOOR" | "OFF_FAMILY_CEILING" | "FAMILY_DETECTED_NO_CWE" | "FALLBACK";
   if (sameFamily) {
@@ -92,7 +100,7 @@ export function runEngine3Avri(
   } else if (offFamilyHighConf) {
     baseScore = 25;
     baseRule = "OFF_FAMILY_CEILING";
-  } else if (!isCwsCited) {
+  } else if (!isCweCited) {
     baseScore = 38;
     baseRule = "FAMILY_DETECTED_NO_CWE";
   } else {

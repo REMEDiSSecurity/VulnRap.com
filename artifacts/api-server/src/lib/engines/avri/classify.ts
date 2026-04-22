@@ -25,6 +25,15 @@ export interface ClassificationResult {
   cweId: string | null;
   /** The family that the cited CWE maps to (may differ from `family` when off-topic). */
   citedFamily: FamilyId | null;
+  /**
+   * Family inferred from the report's *content* (vulnerability-type detector,
+   * then keyword fallback) — independent of the cited CWE. When the cited CWE
+   * family disagrees with this evidence family, Engine 3 applies the spec
+   * Part 4 off-family ceiling. Null when neither extractor nor keywords match.
+   */
+  evidenceFamily: FamilyId | null;
+  /** Confidence of the evidence-based family inference (HIGH/MEDIUM/LOW). */
+  evidenceConfidence: ClassificationConfidence | null;
 }
 
 const TECH_PATTERNS: Array<{ tech: string; pattern: RegExp }> = [
@@ -183,6 +192,8 @@ function classifyByCwe(claimedCwes: string[] | undefined): ClassificationResult 
         technology: null,
         cweId: id,
         citedFamily: direct,
+        evidenceFamily: null,
+        evidenceConfidence: null,
       };
     }
     // Walk ancestors.
@@ -200,6 +211,8 @@ function classifyByCwe(claimedCwes: string[] | undefined): ClassificationResult 
           technology: null,
           cweId: id,
           citedFamily: famId,
+          evidenceFamily: null,
+          evidenceConfidence: null,
         };
       }
     }
@@ -240,6 +253,8 @@ function classifyByVulnType(text: string): ClassificationResult | null {
     technology: null,
     cweId: null,
     citedFamily: null,
+    evidenceFamily: null,
+    evidenceConfidence: null,
   };
 }
 
@@ -268,7 +283,21 @@ function classifyByKeywords(text: string): ClassificationResult | null {
     technology: null,
     cweId: null,
     citedFamily: null,
+    evidenceFamily: null,
+    evidenceConfidence: null,
   };
+}
+
+/** Independent of cited CWEs: returns the family inferred purely from report
+ * content (vulnerability-type detector first, then keyword fallback). Used by
+ * Engine 3 so the off-family ceiling can fire when the cited CWE belongs to a
+ * different family than the actual content. */
+function classifyByEvidenceOnly(text: string): { family: FamilyId; confidence: ClassificationConfidence } | null {
+  const byType = classifyByVulnType(text);
+  if (byType) return { family: byType.family.id, confidence: byType.confidence };
+  const byKw = classifyByKeywords(text);
+  if (byKw) return { family: byKw.family.id, confidence: byKw.confidence };
+  return null;
 }
 
 export function classifyReport(
@@ -277,14 +306,18 @@ export function classifyReport(
 ): ClassificationResult {
   const technology = detectTechnology(text);
   // Always compute the cited-CWE family up front so off-family detection works
-  // even when the *detected* family came from keywords/extractors.
+  // even when the *selected* family came from the cited CWE itself.
   const cited = citedCweFamily(claimedCwes);
+  const evidence = classifyByEvidenceOnly(text);
+  const evidenceFamily = evidence?.family ?? null;
+  const evidenceConfidence = evidence?.confidence ?? null;
+
   const byCwe = classifyByCwe(claimedCwes);
-  if (byCwe) return { ...byCwe, technology };
+  if (byCwe) return { ...byCwe, technology, evidenceFamily, evidenceConfidence };
   const byType = classifyByVulnType(text);
-  if (byType) return { ...byType, technology, cweId: cited.cweId, citedFamily: cited.family };
+  if (byType) return { ...byType, technology, cweId: cited.cweId, citedFamily: cited.family, evidenceFamily, evidenceConfidence };
   const byKw = classifyByKeywords(text);
-  if (byKw) return { ...byKw, technology, cweId: cited.cweId, citedFamily: cited.family };
+  if (byKw) return { ...byKw, technology, cweId: cited.cweId, citedFamily: cited.family, evidenceFamily, evidenceConfidence };
   return {
     family: FLAT_FAMILY,
     confidence: "LOW",
@@ -293,5 +326,7 @@ export function classifyReport(
     technology,
     cweId: cited.cweId,
     citedFamily: cited.family,
+    evidenceFamily,
+    evidenceConfidence,
   };
 }
