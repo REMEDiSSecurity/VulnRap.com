@@ -451,6 +451,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/CalibrationReport"
 
+  /feedback/calibration/avri-drift:
+    get:
+      operationId: getAvriDriftReport
+      tags: [feedback]
+      summary: Get rolling AVRI calibration drift report
+      description: |
+        Rolling weekly view of the AVRI composite for production reports,
+        bucketed by triage outcome (T1-equivalent vs T3-equivalent). Surfaces
+        per-family means and drift flags (rubric collapse and per-family
+        weight drift) so reviewers can spot when the AVRI rubric needs
+        re-tuning.
+      parameters:
+        - in: query
+          name: weeks
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 26
+          description: How many weeks of history to scan (default 8, capped at 26).
+      responses:
+        "200":
+          description: AVRI drift report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvriDriftReport"
+
   /feedback/calibration/config:
     get:
       operationId: getScoringConfig
@@ -2556,6 +2584,112 @@ components:
         basedOnCount:
           type: integer
       required: [parameter, currentValue, suggestedValue, reason, confidence, basedOnCount]
+
+    AvriDriftFamilyMean:
+      type: object
+      properties:
+        family:
+          type: string
+        count:
+          type: integer
+        mean:
+          type: number
+      required: [family, count, mean]
+
+    AvriDriftWeekBucketStats:
+      type: object
+      properties:
+        count:
+          type: integer
+        mean:
+          type: number
+          nullable: true
+      required: [count, mean]
+
+    AvriDriftWeekBucketPerFamily:
+      type: object
+      properties:
+        t1:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftFamilyMean"
+        t3:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftFamilyMean"
+      required: [t1, t3]
+
+    AvriDriftWeekBucket:
+      type: object
+      properties:
+        weekStart:
+          type: string
+          description: ISO date (YYYY-MM-DD) of the UTC Monday that starts the week.
+        reportCount:
+          type: integer
+        t1:
+          $ref: "#/components/schemas/AvriDriftWeekBucketStats"
+        t3:
+          $ref: "#/components/schemas/AvriDriftWeekBucketStats"
+        gap:
+          type: number
+          nullable: true
+        perFamily:
+          $ref: "#/components/schemas/AvriDriftWeekBucketPerFamily"
+        gapEligible:
+          type: boolean
+      required: [weekStart, reportCount, t1, t3, gap, perFamily, gapEligible]
+
+    AvriDriftFlag:
+      type: object
+      properties:
+        weekStart:
+          type: string
+        kind:
+          type: string
+          enum: [GAP_BELOW_45, FAMILY_MEAN_SHIFT]
+        detail:
+          type: string
+      required: [weekStart, kind, detail]
+
+    AvriDriftThresholds:
+      type: object
+      properties:
+        gapWarn:
+          type: number
+        familyShiftWarn:
+          type: number
+        minBucketSize:
+          type: integer
+      required: [gapWarn, familyShiftWarn, minBucketSize]
+
+    AvriDriftReport:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+        weeksRequested:
+          type: integer
+        totalReportsScanned:
+          type: integer
+        cohort:
+          type: string
+          enum: [avri_on_only]
+        bucketingNote:
+          type: string
+        thresholds:
+          $ref: "#/components/schemas/AvriDriftThresholds"
+        weeks:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftWeekBucket"
+        flags:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftFlag"
+        runbookPath:
+          type: string
+      required: [generatedAt, weeksRequested, totalReportsScanned, cohort, bucketingNote, thresholds, weeks, flags, runbookPath]
 
     CalibrationReport:
       type: object

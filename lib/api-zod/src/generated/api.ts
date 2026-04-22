@@ -2262,6 +2262,83 @@ export const GetCalibrationReportResponse = zod.object({
 });
 
 /**
+ * Rolling weekly view of the AVRI composite for production reports,
+bucketed by triage outcome (T1-equivalent vs T3-equivalent). Surfaces
+per-family means and drift flags (rubric collapse and per-family
+weight drift) so reviewers can spot when the AVRI rubric needs
+re-tuning.
+
+ * @summary Get rolling AVRI calibration drift report
+ */
+export const getAvriDriftReportQueryWeeksMax = 26;
+
+export const GetAvriDriftReportQueryParams = zod.object({
+  weeks: zod.coerce
+    .number()
+    .min(1)
+    .max(getAvriDriftReportQueryWeeksMax)
+    .optional()
+    .describe("How many weeks of history to scan (default 8, capped at 26)."),
+});
+
+export const GetAvriDriftReportResponse = zod.object({
+  generatedAt: zod.string(),
+  weeksRequested: zod.number(),
+  totalReportsScanned: zod.number(),
+  cohort: zod.enum(["avri_on_only"]),
+  bucketingNote: zod.string(),
+  thresholds: zod.object({
+    gapWarn: zod.number(),
+    familyShiftWarn: zod.number(),
+    minBucketSize: zod.number(),
+  }),
+  weeks: zod.array(
+    zod.object({
+      weekStart: zod
+        .string()
+        .describe(
+          "ISO date (YYYY-MM-DD) of the UTC Monday that starts the week.",
+        ),
+      reportCount: zod.number(),
+      t1: zod.object({
+        count: zod.number(),
+        mean: zod.number().nullable(),
+      }),
+      t3: zod.object({
+        count: zod.number(),
+        mean: zod.number().nullable(),
+      }),
+      gap: zod.number().nullable(),
+      perFamily: zod.object({
+        t1: zod.array(
+          zod.object({
+            family: zod.string(),
+            count: zod.number(),
+            mean: zod.number(),
+          }),
+        ),
+        t3: zod.array(
+          zod.object({
+            family: zod.string(),
+            count: zod.number(),
+            mean: zod.number(),
+          }),
+        ),
+      }),
+      gapEligible: zod.boolean(),
+    }),
+  ),
+  flags: zod.array(
+    zod.object({
+      weekStart: zod.string(),
+      kind: zod.enum(["GAP_BELOW_45", "FAMILY_MEAN_SHIFT"]),
+      detail: zod.string(),
+    }),
+  ),
+  runbookPath: zod.string(),
+});
+
+/**
  * Returns the active scoring config version and full version history.
  * @summary Get current and historical scoring configurations
  */

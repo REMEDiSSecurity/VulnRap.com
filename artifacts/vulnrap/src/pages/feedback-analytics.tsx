@@ -3,6 +3,7 @@ import {
   useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey,
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
   useGetScoringConfig, getGetScoringConfigQueryKey,
+  useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   applyCalibration,
   type FeedbackAnalyticsDailyTrendItem,
   type FeedbackAnalyticsScoreCorrelationItem,
@@ -10,6 +11,10 @@ import {
   type FeedbackAnalyticsRecentFeedbackItem,
   type CalibrationSuggestion,
   type BucketAnalysis,
+  type AvriDriftReport,
+  type AvriDriftWeekBucket,
+  type AvriDriftFlag,
+  type AvriDriftFamilyMean,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +26,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquare, Star, ThumbsUp, ThumbsDown, TrendingUp, AlertTriangle,
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
-  CheckCircle2, XCircle, Info, Play, Layers,
+  CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -391,6 +396,7 @@ function CalibrationSection() {
 
   return (
     <div className="space-y-6">
+      <AvriDriftSection />
       <Card className="glass-card rounded-xl border-primary/10">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
@@ -728,6 +734,105 @@ function ArchetypeRowView({
 
 const ARCHETYPE_HISTORY_QUERY_KEY = ["test-run-archetype-history"] as const;
 
+const AVRI_DRIFT_RUNBOOK_REPO_BASE =
+  "https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/";
+
+function runbookUrl(runbookPath: string): string {
+  if (/^https?:\/\//i.test(runbookPath)) return runbookPath;
+  const cleaned = runbookPath.replace(/^\.?\/+/, "");
+  return AVRI_DRIFT_RUNBOOK_REPO_BASE + cleaned;
+}
+
+function DriftFlagBadge({ kind, gapWarn, familyShiftWarn }: {
+  kind: AvriDriftFlag["kind"];
+  gapWarn: number;
+  familyShiftWarn: number;
+}) {
+  const cfg = kind === "GAP_BELOW_45"
+    ? { label: `Gap < ${gapWarn}pt`, color: "text-red-400 bg-red-400/10 border-red-400/30" }
+    : { label: `Family shift ≥ ${familyShiftWarn}pt`, color: "text-orange-400 bg-orange-400/10 border-orange-400/30" };
+  return (
+    <Badge variant="outline" className={cn("text-[10px] gap-1 font-mono", cfg.color)}>
+      <AlertTriangle className="w-3 h-3" /> {cfg.label}
+    </Badge>
+  );
+}
+
+function GapSparkline({ weeks, gapWarn }: { weeks: AvriDriftWeekBucket[]; gapWarn: number }) {
+  const eligible = weeks.filter(w => w.gapEligible && w.gap != null);
+  if (eligible.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground/50 py-4 text-center">
+        Not enough reports per bucket yet to chart the T1−T3 gap.
+      </p>
+    );
+  }
+  const W = 480;
+  const H = 120;
+  const PAD = { top: 12, right: 12, bottom: 22, left: 36 };
+  const pw = W - PAD.left - PAD.right;
+  const ph = H - PAD.top - PAD.bottom;
+  const gaps = eligible.map(w => w.gap as number);
+  const minY = Math.min(...gaps, gapWarn) - 5;
+  const maxY = Math.max(...gaps, gapWarn) + 5;
+  const span = Math.max(1, maxY - minY);
+  const xFor = (i: number) => PAD.left + (eligible.length === 1 ? pw / 2 : (i / (eligible.length - 1)) * pw);
+  const yFor = (g: number) => PAD.top + ph - ((g - minY) / span) * ph;
+  const path = eligible.map((w, i) => `${i === 0 ? "M" : "L"} ${xFor(i)} ${yFor(w.gap as number)}`).join(" ");
+  const warnY = yFor(gapWarn);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: "140px" }}>
+      <line x1={PAD.left} y1={warnY} x2={W - PAD.right} y2={warnY} stroke="#ef4444" strokeWidth={1} strokeDasharray="3,3" />
+      <text x={PAD.left - 4} y={warnY + 3} textAnchor="end" fill="#ef4444" fontSize={8} fontFamily="monospace">{gapWarn}</text>
+      <path d={path} fill="none" stroke="#06b6d4" strokeWidth={1.5} />
+      {eligible.map((w, i) => {
+        const flagged = (w.gap as number) < gapWarn;
+        return (
+          <g key={w.weekStart}>
+            <circle cx={xFor(i)} cy={yFor(w.gap as number)} r={3} fill={flagged ? "#ef4444" : "#06b6d4"} />
+            <text
+              x={xFor(i)}
+              y={H - 6}
+              textAnchor="middle"
+              fill="rgba(255,255,255,0.4)"
+              fontSize={7}
+              fontFamily="monospace"
+            >
+              {w.weekStart.slice(5)}
+            </text>
+          </g>
+        );
+      })}
+      <text x={PAD.left - 4} y={PAD.top + 4} textAnchor="end" fill="rgba(255,255,255,0.3)" fontSize={8} fontFamily="monospace">
+        {Math.round(maxY)}
+      </text>
+      <text x={PAD.left - 4} y={H - PAD.bottom + 2} textAnchor="end" fill="rgba(255,255,255,0.3)" fontSize={8} fontFamily="monospace">
+        {Math.round(minY)}
+      </text>
+    </svg>
+  );
+}
+
+function FamilyMeansTable({ rows, bucket }: { rows: AvriDriftFamilyMean[]; bucket: "T1" | "T3" }) {
+  if (rows.length === 0) {
+    return <p className="text-[10px] text-muted-foreground/40 italic">No {bucket} reports this week</p>;
+  }
+  return (
+    <div className="space-y-1">
+      {rows.map(r => (
+        <div key={`${bucket}-${r.family}`} className="flex items-center justify-between gap-2 text-[11px]">
+          <span className="font-mono text-muted-foreground truncate">{r.family}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="tabular-nums text-foreground/80">{r.mean.toFixed(1)}</span>
+            <span className="text-muted-foreground/40 tabular-nums">n={r.count}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function EmergingArchetypesSection() {
   const [threshold, setThreshold] = useState(5);
   const [declineThreshold, setDeclineThreshold] = useState(5);
@@ -864,6 +969,204 @@ function EmergingArchetypesSection() {
             history={historyByArchetype.get(r.archetype) ?? []}
           />
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AvriDriftSection() {
+  const { data, isLoading, error } = useGetAvriDriftReport(undefined, {
+    query: {
+      queryKey: getGetAvriDriftReportQueryKey(),
+      refetchInterval: 300_000,
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-64 rounded-xl" />;
+  if (error || !data) {
+    return (
+      <Card className="glass-card rounded-xl border-red-500/10">
+        <CardContent className="p-6 text-center text-xs text-muted-foreground">
+          Could not load the AVRI drift report.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const report: AvriDriftReport = data;
+  const flagsByWeek = new Map<string, AvriDriftFlag[]>();
+  for (const f of report.flags) {
+    if (!flagsByWeek.has(f.weekStart)) flagsByWeek.set(f.weekStart, []);
+    flagsByWeek.get(f.weekStart)!.push(f);
+  }
+  const recentWeeks = [...report.weeks].slice(-6).reverse();
+  const flaggedCount = report.flags.length;
+  const headerColor = flaggedCount === 0
+    ? "text-green-400 bg-green-400/10"
+    : "text-orange-400 bg-orange-400/10";
+
+  return (
+    <Card className="glass-card rounded-xl border-primary/10">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Activity className="w-4 h-4 text-primary" />
+            AVRI Drift Dashboard
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className={cn("text-[10px] gap-1", headerColor)}>
+              <Shield className="w-3 h-3" />
+              {flaggedCount === 0 ? "No drift flags" : `${flaggedCount} flag${flaggedCount === 1 ? "" : "s"}`}
+            </Badge>
+            <Badge variant="secondary" className="text-[10px]">
+              {report.totalReportsScanned} reports · {report.weeksRequested}w
+            </Badge>
+          </div>
+        </div>
+        <CardDescription className="space-y-1">
+          <span className="block">
+            Rolling weekly view of the AVRI composite, bucketed by triage outcome
+            (T1-equivalent vs T3-equivalent). Flags fire when the T1−T3 gap drops
+            below {report.thresholds.gapWarn}pt or any family mean shifts by ≥{report.thresholds.familyShiftWarn}pt
+            week-over-week (min {report.thresholds.minBucketSize} reports per bucket).
+          </span>
+          <a
+            href={runbookUrl(report.runbookPath)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+          >
+            <BookOpen className="w-3 h-3" />
+            Open the AVRI drift runbook
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+            Weekly T1−T3 composite gap (warn line at {report.thresholds.gapWarn}pt)
+          </div>
+          <GapSparkline weeks={report.weeks} gapWarn={report.thresholds.gapWarn} />
+        </div>
+
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+            Drift flags
+          </div>
+          {report.flags.length === 0 ? (
+            <p className="text-xs text-muted-foreground/60 py-2 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+              No drift flags fired in the last {report.weeksRequested} weeks.
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {report.flags.map((f, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs">
+                  <DriftFlagBadge
+                    kind={f.kind}
+                    gapWarn={report.thresholds.gapWarn}
+                    familyShiftWarn={report.thresholds.familyShiftWarn}
+                  />
+                  <span className="text-muted-foreground/80 font-mono text-[10px] shrink-0 pt-0.5">
+                    {f.weekStart}
+                  </span>
+                  <span className="text-foreground/80 leading-relaxed">{f.detail}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+            Recent weeks (T1/T3 means and per-family breakdown)
+          </div>
+          {recentWeeks.length === 0 ? (
+            <p className="text-xs text-muted-foreground/50 py-4 text-center">
+              No AVRI-scored reports in the lookback window yet.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {recentWeeks.map(week => {
+                const weekFlags = flagsByWeek.get(week.weekStart) ?? [];
+                return (
+                  <div
+                    key={week.weekStart}
+                    className={cn(
+                      "p-3 rounded-lg border space-y-3",
+                      weekFlags.length > 0
+                        ? "border-orange-400/30 bg-orange-400/[0.03]"
+                        : "border-border/40 bg-muted/[0.03]",
+                    )}
+                  >
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-foreground">{week.weekStart}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {week.reportCount} report{week.reportCount === 1 ? "" : "s"}
+                        </span>
+                        {weekFlags.map((f, i) => (
+                          <DriftFlagBadge
+                            key={i}
+                            kind={f.kind}
+                            gapWarn={report.thresholds.gapWarn}
+                            familyShiftWarn={report.thresholds.familyShiftWarn}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px]">
+                        <span className="tabular-nums">
+                          <span className="text-muted-foreground">T1 </span>
+                          <span className="text-foreground font-medium">
+                            {week.t1.mean != null ? week.t1.mean.toFixed(1) : "—"}
+                          </span>
+                          <span className="text-muted-foreground/50"> (n={week.t1.count})</span>
+                        </span>
+                        <span className="tabular-nums">
+                          <span className="text-muted-foreground">T3 </span>
+                          <span className="text-foreground font-medium">
+                            {week.t3.mean != null ? week.t3.mean.toFixed(1) : "—"}
+                          </span>
+                          <span className="text-muted-foreground/50"> (n={week.t3.count})</span>
+                        </span>
+                        <span className={cn(
+                          "tabular-nums font-mono px-1.5 py-0.5 rounded",
+                          week.gapEligible && week.gap != null && week.gap < report.thresholds.gapWarn
+                            ? "bg-red-400/10 text-red-400"
+                            : "bg-primary/10 text-primary",
+                        )}>
+                          gap {week.gap != null ? week.gap.toFixed(1) : "—"}
+                          {!week.gapEligible && (
+                            <span className="text-muted-foreground/50 ml-1">·n/a</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">
+                          T1 families
+                        </div>
+                        <FamilyMeansTable rows={week.perFamily.t1} bucket="T1" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">
+                          T3 families
+                        </div>
+                        <FamilyMeansTable rows={week.perFamily.t3} bucket="T3" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed border-t border-border/30 pt-3">
+          {report.bucketingNote}
+        </p>
       </CardContent>
     </Card>
   );

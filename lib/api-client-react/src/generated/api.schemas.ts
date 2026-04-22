@@ -1482,6 +1482,72 @@ export interface CalibrationSuggestion {
   basedOnCount: number;
 }
 
+export interface AvriDriftFamilyMean {
+  family: string;
+  count: number;
+  mean: number;
+}
+
+export interface AvriDriftWeekBucketStats {
+  count: number;
+  mean: number | null;
+}
+
+export interface AvriDriftWeekBucketPerFamily {
+  t1: AvriDriftFamilyMean[];
+  t3: AvriDriftFamilyMean[];
+}
+
+export interface AvriDriftWeekBucket {
+  /** ISO date (YYYY-MM-DD) of the UTC Monday that starts the week. */
+  weekStart: string;
+  reportCount: number;
+  t1: AvriDriftWeekBucketStats;
+  t3: AvriDriftWeekBucketStats;
+  gap: number | null;
+  perFamily: AvriDriftWeekBucketPerFamily;
+  gapEligible: boolean;
+}
+
+export type AvriDriftFlagKind =
+  (typeof AvriDriftFlagKind)[keyof typeof AvriDriftFlagKind];
+
+export const AvriDriftFlagKind = {
+  GAP_BELOW_45: "GAP_BELOW_45",
+  FAMILY_MEAN_SHIFT: "FAMILY_MEAN_SHIFT",
+} as const;
+
+export interface AvriDriftFlag {
+  weekStart: string;
+  kind: AvriDriftFlagKind;
+  detail: string;
+}
+
+export interface AvriDriftThresholds {
+  gapWarn: number;
+  familyShiftWarn: number;
+  minBucketSize: number;
+}
+
+export type AvriDriftReportCohort =
+  (typeof AvriDriftReportCohort)[keyof typeof AvriDriftReportCohort];
+
+export const AvriDriftReportCohort = {
+  avri_on_only: "avri_on_only",
+} as const;
+
+export interface AvriDriftReport {
+  generatedAt: string;
+  weeksRequested: number;
+  totalReportsScanned: number;
+  cohort: AvriDriftReportCohort;
+  bucketingNote: string;
+  thresholds: AvriDriftThresholds;
+  weeks: AvriDriftWeekBucket[];
+  flags: AvriDriftFlag[];
+  runbookPath: string;
+}
+
 export type CalibrationReportOverallHealth =
   (typeof CalibrationReportOverallHealth)[keyof typeof CalibrationReportOverallHealth];
 
@@ -1697,6 +1763,15 @@ export const GetReportFeedSort = {
   score_asc: "score_asc",
   score_desc: "score_desc",
 } as const;
+
+export type GetAvriDriftReportParams = {
+  /**
+   * How many weeks of history to scan (default 8, capped at 26).
+   * @minimum 1
+   * @maximum 26
+   */
+  weeks?: number;
+};
 
 export type GetTrendsParams = {
   /**

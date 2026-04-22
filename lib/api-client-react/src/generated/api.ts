@@ -19,6 +19,7 @@ import type {
 import type {
   ApplyCalibrationBody,
   ApplyCalibrationResponse,
+  AvriDriftReport,
   CalibrationReport,
   CheckReportBody,
   CheckResult,
@@ -28,6 +29,7 @@ import type {
   FeedbackAnalytics,
   FeedbackChallenge,
   FeedbackResponse,
+  GetAvriDriftReportParams,
   GetReportFeedParams,
   GetTrendsParams,
   HashLookupResult,
@@ -1274,6 +1276,112 @@ export function useGetCalibrationReport<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetCalibrationReportQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Rolling weekly view of the AVRI composite for production reports,
+bucketed by triage outcome (T1-equivalent vs T3-equivalent). Surfaces
+per-family means and drift flags (rubric collapse and per-family
+weight drift) so reviewers can spot when the AVRI rubric needs
+re-tuning.
+
+ * @summary Get rolling AVRI calibration drift report
+ */
+export const getGetAvriDriftReportUrl = (params?: GetAvriDriftReportParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/feedback/calibration/avri-drift?${stringifiedParams}`
+    : `/api/feedback/calibration/avri-drift`;
+};
+
+export const getAvriDriftReport = async (
+  params?: GetAvriDriftReportParams,
+  options?: RequestInit,
+): Promise<AvriDriftReport> => {
+  return customFetch<AvriDriftReport>(getGetAvriDriftReportUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAvriDriftReportQueryKey = (
+  params?: GetAvriDriftReportParams,
+) => {
+  return [
+    `/api/feedback/calibration/avri-drift`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetAvriDriftReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAvriDriftReport>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetAvriDriftReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAvriDriftReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAvriDriftReportQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAvriDriftReport>>
+  > = ({ signal }) => getAvriDriftReport(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAvriDriftReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAvriDriftReport>>
+>;
+export type GetAvriDriftReportQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get rolling AVRI calibration drift report
+ */
+
+export function useGetAvriDriftReport<
+  TData = Awaited<ReturnType<typeof getAvriDriftReport>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetAvriDriftReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAvriDriftReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAvriDriftReportQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
