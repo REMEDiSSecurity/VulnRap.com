@@ -36,6 +36,7 @@ import type {
   HandwavyPhraseEditBody,
   HandwavyPhraseMutationResponse,
   HandwavyPhraseReinstateBody,
+  HandwavyPhraseUndoBody,
   HandwavyPhrasesList,
   HashLookupResult,
   HealthStatus,
@@ -1915,6 +1916,102 @@ export const useRemoveHandwavyPhrase = <
   TContext
 > => {
   return useMutation(getRemoveHandwavyPhraseMutationOptions(options));
+};
+
+/**
+ * Task #130 — mirror of /reinstate. A reviewer who just added a phrase
+can press Undo within a short server-side window (default 5 minutes)
+and the marker is removed. The resulting history row is tagged
+`undone: true` so the audit trail clearly records "added then undone"
+rather than producing an unrelated manual-removal entry. The active
+marker is matched by `phrase` + `addedAt`.
+
+ * @summary Undo a brand-new add of a FLAT hand-wavy marker phrase
+ */
+export const getUndoHandwavyPhraseUrl = () => {
+  return `/api/feedback/calibration/handwavy-phrases/undo`;
+};
+
+export const undoHandwavyPhrase = async (
+  handwavyPhraseUndoBody: HandwavyPhraseUndoBody,
+  options?: RequestInit,
+): Promise<HandwavyPhraseMutationResponse> => {
+  return customFetch<HandwavyPhraseMutationResponse>(
+    getUndoHandwavyPhraseUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(handwavyPhraseUndoBody),
+    },
+  );
+};
+
+export const getUndoHandwavyPhraseMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof undoHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseUndoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof undoHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseUndoBody> },
+  TContext
+> => {
+  const mutationKey = ["undoHandwavyPhrase"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof undoHandwavyPhrase>>,
+    { data: BodyType<HandwavyPhraseUndoBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return undoHandwavyPhrase(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UndoHandwavyPhraseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof undoHandwavyPhrase>>
+>;
+export type UndoHandwavyPhraseMutationBody = BodyType<HandwavyPhraseUndoBody>;
+export type UndoHandwavyPhraseMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Undo a brand-new add of a FLAT hand-wavy marker phrase
+ */
+export const useUndoHandwavyPhrase = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof undoHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseUndoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof undoHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseUndoBody> },
+  TContext
+> => {
+  return useMutation(getUndoHandwavyPhraseMutationOptions(options));
 };
 
 /**

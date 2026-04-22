@@ -11,6 +11,8 @@ import {
   removeHandwavyPhrase,
   reinstateHandwavyPhrase,
   editHandwavyPhrase,
+
+  undoHandwavyPhrase,
   type HandwavyCategory,
   type HandwavyMarker,
 } from "../lib/engines/avri/handwavy-phrases";
@@ -694,6 +696,78 @@ router.patch("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (
     res.status(500).json({ error: "Failed to edit hand-wavy phrase." });
   }
 });
+
+// Task #130 — undo a brand-new add inside a short window. Mirror of the
+// /reinstate flow: takes the phrase + addedAt of the live marker, removes
+// the marker, and tags the resulting history row `undone: true` so the
+// audit trail clearly records "added then undone" rather than producing an
+// unrelated manual-removal entry.
+router.post(
+  "/feedback/calibration/handwavy-phrases/undo",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { phrase, addedAt, reviewer } = (req.body ?? {}) as {
+        phrase?: unknown;
+        addedAt?: unknown;
+        reviewer?: unknown;
+      };
+      if (typeof phrase !== "string" || phrase.trim().length === 0) {
+        res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+        return;
+      }
+      if (typeof addedAt !== "string" || addedAt.trim().length === 0) {
+        res.status(400).json({
+          error: "Body must include the 'addedAt' ISO timestamp of the marker to undo.",
+        });
+        return;
+      }
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res.status(400).json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      const result = undoHandwavyPhrase(phrase, addedAt, {
+        reviewer: typeof reviewer === "string" ? reviewer : undefined,
+      });
+      if (!result.ok) {
+        if (result.reason === "not-found" || result.reason === "no-addedAt") {
+          res.status(404).json({
+            error:
+              result.reason === "no-addedAt"
+                ? "That phrase has no addedAt timestamp (curated default) and cannot be undone."
+                : "No active phrase matches the given phrase + addedAt.",
+            reason: result.reason,
+          });
+          return;
+        }
+        if (result.reason === "addedAt-mismatch") {
+          res.status(409).json({
+            error: "The active phrase's addedAt no longer matches — refresh and try again.",
+            reason: result.reason,
+          });
+          return;
+        }
+        // window-expired
+        res.status(409).json({
+          error: "The undo window has elapsed. Use the regular Trash flow instead.",
+          reason: result.reason,
+        });
+        return;
+      }
+      res.status(200).json({
+        undone: true,
+        phrase: result.phrase,
+        total: result.total,
+        historyEntry: result.historyEntry,
+        phrases: getHandwavyPhrases(),
+        history: getHandwavyPhraseHistory(),
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to undo hand-wavy phrase");
+      res.status(500).json({ error: "Failed to undo hand-wavy phrase." });
+    }
+  },
+);
 
 router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
   try {

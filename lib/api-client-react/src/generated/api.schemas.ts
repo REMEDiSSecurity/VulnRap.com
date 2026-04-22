@@ -1667,6 +1667,15 @@ new history row is appended.
   reinstatedBy?: string;
   /** ISO 8601 timestamp the phrase was reinstated from this history entry. */
   reinstatedAt?: string;
+  /** Task #130 — true when this history row was produced by a reviewer
+undoing a brand-new add via POST
+/feedback/calibration/handwavy-phrases/undo. The UI renders these
+rows distinctly from manual removals so the audit trail clearly
+reads "added then undone" rather than "added then removed".
+ */
+  undone?: boolean;
+  /** Reviewer name or email that pressed Undo on this entry. */
+  undoneBy?: string;
 }
 
 export interface HandwavyPhrasesList {
@@ -1708,6 +1717,22 @@ before they confirm the add. Defaults to false (write-through behavior).
   reviewer?: string;
   /** Free-text justification recorded with the phrase. Only consulted on POST. */
   rationale?: string;
+}
+
+/**
+ * Task #130 — body for POST /feedback/calibration/handwavy-phrases/undo.
+The active marker is matched by `phrase` + `addedAt`; the request is
+rejected with 409 if the marker is older than the server-side undo
+window (default 5 minutes).
+
+ */
+export interface HandwavyPhraseUndoBody {
+  /** The (already-normalized) phrase of the live marker to undo. */
+  phrase: string;
+  /** ISO 8601 timestamp from the live marker's `addedAt` field. */
+  addedAt: string;
+  /** Reviewer name or email recorded as `removedBy`/`undoneBy` on the resulting history row. Optional. */
+  reviewer?: string;
 }
 
 /**
@@ -1789,6 +1814,11 @@ export interface HandwavyPhraseMutationResponse {
 POST/DELETE responses.
  */
   reinstated?: boolean;
+  /** Task #130 — true when the response is from POST
+/feedback/calibration/handwavy-phrases/undo. Omitted on plain
+POST/DELETE/reinstate responses.
+ */
+  undone?: boolean;
   /** The normalized phrase that was added/removed. */
   phrase: string;
   category?: HandwavyCategory;

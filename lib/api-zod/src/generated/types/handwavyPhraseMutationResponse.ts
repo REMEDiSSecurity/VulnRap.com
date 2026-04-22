@@ -24,6 +24,11 @@ export interface HandwavyPhraseMutationResponse {
 POST/DELETE responses.
  */
   reinstated?: boolean;
+  /** Task #130 — true when the response is from POST
+/feedback/calibration/handwavy-phrases/undo. Omitted on plain
+POST/DELETE/reinstate responses.
+ */
+  undone?: boolean;
   /** The normalized phrase that was added/removed. */
   phrase: string;
   category?: HandwavyCategory;

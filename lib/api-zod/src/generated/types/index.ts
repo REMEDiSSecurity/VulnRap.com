@@ -80,6 +80,7 @@ export * from "./handwavyPhraseEditBody";
 export * from "./handwavyPhraseMutationResponse";
 export * from "./handwavyPhraseReinstateBody";
 export * from "./handwavyPhrasesList";
+export * from "./handwavyPhraseUndoBody";
 export * from "./hardwareComponent";
 export * from "./hardwareComponentType";
 export * from "./hashLookupResult";

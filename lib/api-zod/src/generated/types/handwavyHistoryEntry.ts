@@ -34,4 +34,13 @@ new history row is appended.
   reinstatedBy?: string;
   /** ISO 8601 timestamp the phrase was reinstated from this history entry. */
   reinstatedAt?: Date;
+  /** Task #130 — true when this history row was produced by a reviewer
+undoing a brand-new add via POST
+/feedback/calibration/handwavy-phrases/undo. The UI renders these
+rows distinctly from manual removals so the audit trail clearly
+reads "added then undone" rather than "added then removed".
+ */
+  undone?: boolean;
+  /** Reviewer name or email that pressed Undo on this entry. */
+  undoneBy?: string;
 }

@@ -197,6 +197,25 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
     expect(r.status).not.toBe(401);
   });
 
+  it("POST /feedback/calibration/handwavy-phrases/undo without a token is rejected with 401", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/handwavy-phrases/undo",
+      { phrase: "anything", addedAt: "2026-01-01T00:00:00.000Z" },
+    );
+    expect(r.status).toBe(401);
+  });
+
+  it("POST /feedback/calibration/handwavy-phrases/undo with the token bypasses the gate (404 because no marker)", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/handwavy-phrases/undo",
+      { phrase: "no such phrase", addedAt: "2026-01-01T00:00:00.000Z" },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).not.toBe(401);
+  });
+
   it("POST /feedback/calibration/apply without a token is rejected with 401", async () => {
     const r = await request<{ error: string }>(
       "POST",

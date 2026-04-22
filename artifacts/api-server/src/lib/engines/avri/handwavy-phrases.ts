@@ -87,6 +87,15 @@ export interface HandwavyHistoryEntry {
   reinstatedBy?: string;
   /** ISO 8601 timestamp the phrase was reinstated from history. */
   reinstatedAt?: string;
+  /**
+   * Task #130 — set to true when this history row was produced by a reviewer
+   * undoing a brand-new add (the mirror of #121's Reinstate). The UI renders
+   * undone rows distinctly from manual removals so the audit trail clearly
+   * reads "added then undone" rather than "added then removed".
+   */
+  undone?: boolean;
+  /** Reviewer name or email that pressed Undo. */
+  undoneBy?: string;
 }
 
 interface PhrasesFile {
@@ -264,6 +273,9 @@ function coerceHistory(entry: unknown): HandwavyHistoryEntry | null {
   if (isIsoTimestamp(obj.reinstatedAt)) out.reinstatedAt = obj.reinstatedAt;
   const edits = coerceEdits(obj.edits);
   if (edits) out.edits = edits;
+  if (obj.undone === true) out.undone = true;
+  const undoneBy = trimOrUndefined(obj.undoneBy, 200);
+  if (undoneBy) out.undoneBy = undoneBy;
   return out;
 }
 
@@ -632,6 +644,100 @@ export function editHandwavyPhrase(
     total: next.length,
     editEntry: { ...editEntry },
   };
+}
+
+/**
+ * Task #130 — default time window during which a brand-new add can be
+ * undone. After this elapses the Undo button disappears and the reviewer
+ * has to fall back to the regular Trash flow (which produces a normal
+ * removal-history row, not an `undone: true` one).
+ */
+export const UNDO_WINDOW_MS = 5 * 60 * 1000;
+
+export interface UndoPhraseOptions {
+  reviewer?: string;
+  /** Override "now" for tests. Defaults to `new Date().toISOString()`. */
+  now?: string;
+  /** Override the undo window (ms). Defaults to UNDO_WINDOW_MS. */
+  windowMs?: number;
+}
+
+export type UndoPhraseResult =
+  | {
+      ok: true;
+      phrase: string;
+      total: number;
+      historyEntry: HandwavyHistoryEntry;
+    }
+  | {
+      ok: false;
+      reason:
+        | "not-found"
+        | "addedAt-mismatch"
+        | "no-addedAt"
+        | "window-expired";
+      phrase: string;
+    };
+
+/**
+ * Task #130 — mirror of `reinstateHandwavyPhrase`. A reviewer who just
+ * added a phrase by accident can press Undo within `UNDO_WINDOW_MS` and the
+ * phrase is removed. The resulting history row is tagged `undone: true` so
+ * the audit trail clearly shows "added then undone" rather than producing
+ * an unrelated manual-removal entry.
+ *
+ * Match by `phrase` + `addedAt` so an Undo can't accidentally roll back a
+ * different (older) re-add of the same phrase that happens to live in the
+ * active list.
+ */
+export function undoHandwavyPhrase(
+  rawPhrase: string,
+  addedAt: string,
+  options: UndoPhraseOptions = {},
+): UndoPhraseResult {
+  const phrase = normalizePhrase(rawPhrase);
+  const { markers: current, history } = load();
+  const idx = current.findIndex((m) => m.phrase === phrase);
+  if (idx < 0) {
+    return { ok: false, reason: "not-found", phrase };
+  }
+  const marker = current[idx];
+  if (!marker.addedAt) {
+    // Curated defaults have no addedAt — they were never "added" by a
+    // reviewer in the first place, so there is nothing to undo.
+    return { ok: false, reason: "no-addedAt", phrase };
+  }
+  if (marker.addedAt !== addedAt) {
+    return { ok: false, reason: "addedAt-mismatch", phrase };
+  }
+  const windowMs = typeof options.windowMs === "number" && options.windowMs >= 0
+    ? options.windowMs
+    : UNDO_WINDOW_MS;
+  const nowIso = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const elapsed = Date.parse(nowIso) - Date.parse(marker.addedAt);
+  if (!Number.isFinite(elapsed) || elapsed > windowMs) {
+    return { ok: false, reason: "window-expired", phrase };
+  }
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  const next = current.slice(0, idx).concat(current.slice(idx + 1));
+  const historyEntry: HandwavyHistoryEntry = {
+    phrase: marker.phrase,
+    category: marker.category,
+    removedAt: nowIso,
+    undone: true,
+  };
+  if (reviewer) {
+    historyEntry.removedBy = reviewer;
+    historyEntry.undoneBy = reviewer;
+  }
+  if (marker.addedBy) historyEntry.addedBy = marker.addedBy;
+  if (marker.addedAt) historyEntry.addedAt = marker.addedAt;
+  if (marker.rationale) historyEntry.rationale = marker.rationale;
+  const nextHistory = [...history, historyEntry];
+  const trimmed = persist(next, nextHistory);
+  CACHED_MARKERS = next;
+  CACHED_HISTORY = trimmed;
+  return { ok: true, phrase, total: next.length, historyEntry: { ...historyEntry } };
 }
 
 /** Test helper: drop the in-memory cache so the next read re-parses the file. */

@@ -13,6 +13,7 @@ let addHandwavyPhrase: typeof import("./handwavy-phrases").addHandwavyPhrase;
 let removeHandwavyPhrase: typeof import("./handwavy-phrases").removeHandwavyPhrase;
 let reinstateHandwavyPhrase: typeof import("./handwavy-phrases").reinstateHandwavyPhrase;
 let editHandwavyPhrase: typeof import("./handwavy-phrases").editHandwavyPhrase;
+let undoHandwavyPhrase: typeof import("./handwavy-phrases").undoHandwavyPhrase;
 let __resetHandwavyPhrasesForTests: typeof import("./handwavy-phrases").__resetHandwavyPhrasesForTests;
 let __restoreHandwavyPhraseDefaultsForTests: typeof import("./handwavy-phrases").__restoreHandwavyPhraseDefaultsForTests;
 
@@ -27,6 +28,7 @@ beforeAll(async () => {
   removeHandwavyPhrase = mod.removeHandwavyPhrase;
   reinstateHandwavyPhrase = mod.reinstateHandwavyPhrase;
   editHandwavyPhrase = mod.editHandwavyPhrase;
+  undoHandwavyPhrase = mod.undoHandwavyPhrase;
   __resetHandwavyPhrasesForTests = mod.__resetHandwavyPhrasesForTests;
   __restoreHandwavyPhraseDefaultsForTests = mod.__restoreHandwavyPhraseDefaultsForTests;
 });
@@ -398,6 +400,120 @@ describe("handwavy-phrases loader", () => {
       // edit is the 11th one we wrote (index 10 → reviewer-10).
       expect(marker?.edits?.[0].editedBy).toBe("reviewer-10@team.com");
       expect(marker?.edits?.[49].editedBy).toBe("reviewer-59@team.com");
+    });
+  });
+
+  // --- Task #130: undo a brand-new add ---
+
+  describe("undoHandwavyPhrase", () => {
+    it("removes the marker and tags the resulting history row undone:true", () => {
+      addHandwavyPhrase("undo me phrase", "buzzword", {
+        reviewer: "alice@team.com",
+        rationale: "Initial whim, not vetted.",
+        now: "2026-04-22T12:00:00.000Z",
+      });
+      const result = undoHandwavyPhrase(
+        "undo me phrase",
+        "2026-04-22T12:00:00.000Z",
+        { reviewer: "alice@team.com", now: "2026-04-22T12:01:30.000Z" },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.historyEntry.undone).toBe(true);
+      expect(result.historyEntry.undoneBy).toBe("alice@team.com");
+      expect(result.historyEntry.removedBy).toBe("alice@team.com");
+      expect(result.historyEntry.removedAt).toBe("2026-04-22T12:01:30.000Z");
+      expect(result.historyEntry.addedAt).toBe("2026-04-22T12:00:00.000Z");
+      expect(result.historyEntry.rationale).toMatch(/Initial whim/);
+
+      // Phrase is gone from the active list.
+      expect(getHandwavyPhrases().some((m) => m.phrase === "undo me phrase")).toBe(false);
+      // History row is flagged AND survives a cache reset.
+      __resetHandwavyPhrasesForTests();
+      const reloaded = getHandwavyPhraseHistory();
+      const row = reloaded.find(
+        (h) => h.phrase === "undo me phrase" && h.removedAt === "2026-04-22T12:01:30.000Z",
+      );
+      expect(row?.undone).toBe(true);
+      expect(row?.undoneBy).toBe("alice@team.com");
+    });
+
+    it("returns window-expired when more than UNDO_WINDOW_MS has elapsed", () => {
+      addHandwavyPhrase("stale undo phrase", "absence", {
+        now: "2026-04-22T12:00:00.000Z",
+      });
+      const result = undoHandwavyPhrase(
+        "stale undo phrase",
+        "2026-04-22T12:00:00.000Z",
+        // 6 minutes later — outside the default 5 minute window.
+        { now: "2026-04-22T12:06:00.000Z" },
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("window-expired");
+      }
+      // Active list is unchanged.
+      expect(getHandwavyPhrases().some((m) => m.phrase === "stale undo phrase")).toBe(true);
+      // No history row was added.
+      expect(getHandwavyPhraseHistory().some((h) => h.phrase === "stale undo phrase")).toBe(false);
+    });
+
+    it("returns addedAt-mismatch when the addedAt does not match the live marker", () => {
+      addHandwavyPhrase("mismatched undo phrase", "absence", {
+        now: "2026-04-22T12:00:00.000Z",
+      });
+      const result = undoHandwavyPhrase(
+        "mismatched undo phrase",
+        "2020-01-01T00:00:00.000Z",
+        { now: "2026-04-22T12:01:00.000Z" },
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("addedAt-mismatch");
+      }
+    });
+
+    it("returns not-found when the phrase is not on the active list", () => {
+      const result = undoHandwavyPhrase("never added phrase", "2026-04-22T12:00:00.000Z");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("not-found");
+      }
+    });
+
+    it("refuses to undo a curated default (no addedAt)", () => {
+      // Curated defaults seeded by __restoreHandwavyPhraseDefaultsForTests
+      // have no addedAt — they were never added by a reviewer in the first
+      // place, so the undo path must reject with no-addedAt.
+      const curated = getHandwavyPhrases().find((m) => !m.addedAt);
+      expect(curated).toBeDefined();
+      if (!curated) return;
+      const result = undoHandwavyPhrase(curated.phrase, "2026-04-22T12:00:00.000Z");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("no-addedAt");
+      }
+    });
+
+    it("respects a custom windowMs option", () => {
+      addHandwavyPhrase("custom-window undo phrase", "absence", {
+        now: "2026-04-22T12:00:00.000Z",
+      });
+      // 30s after add, but with windowMs = 10s → expired.
+      const expired = undoHandwavyPhrase(
+        "custom-window undo phrase",
+        "2026-04-22T12:00:00.000Z",
+        { now: "2026-04-22T12:00:30.000Z", windowMs: 10_000 },
+      );
+      expect(expired.ok).toBe(false);
+      if (!expired.ok) expect(expired.reason).toBe("window-expired");
+      // 30s with windowMs = 60s → succeeds.
+      const ok = undoHandwavyPhrase(
+        "custom-window undo phrase",
+        "2026-04-22T12:00:00.000Z",
+        { now: "2026-04-22T12:00:30.000Z", windowMs: 60_000 },
+      );
+      expect(ok.ok).toBe(true);
     });
   });
 

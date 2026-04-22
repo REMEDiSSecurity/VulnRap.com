@@ -636,6 +636,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /feedback/calibration/handwavy-phrases/undo:
+    post:
+      operationId: undoHandwavyPhrase
+      tags: [feedback]
+      summary: Undo a brand-new add of a FLAT hand-wavy marker phrase
+      description: |
+        Task #130 — mirror of /reinstate. A reviewer who just added a phrase
+        can press Undo within a short server-side window (default 5 minutes)
+        and the marker is removed. The resulting history row is tagged
+        `undone: true` so the audit trail clearly records "added then undone"
+        rather than producing an unrelated manual-removal entry. The active
+        marker is matched by `phrase` + `addedAt`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HandwavyPhraseUndoBody"
+      responses:
+        "200":
+          description: Phrase undone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No matching active marker (or curated default)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: addedAt mismatch or undo window expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /feedback/calibration/handwavy-phrases/reinstate:
     post:
       operationId: reinstateHandwavyPhrase
@@ -3003,6 +3047,17 @@ components:
           type: string
           format: date-time
           description: ISO 8601 timestamp the phrase was reinstated from this history entry.
+        undone:
+          type: boolean
+          description: |
+            Task #130 — true when this history row was produced by a reviewer
+            undoing a brand-new add via POST
+            /feedback/calibration/handwavy-phrases/undo. The UI renders these
+            rows distinctly from manual removals so the audit trail clearly
+            reads "added then undone" rather than "added then removed".
+        undoneBy:
+          type: string
+          description: Reviewer name or email that pressed Undo on this entry.
       required: [phrase, category, removedAt]
 
     HandwavyPhrasesList:
@@ -3065,6 +3120,26 @@ components:
           type: string
           description: Free-text justification recorded with the phrase. Only consulted on POST.
       required: [phrase]
+
+    HandwavyPhraseUndoBody:
+      type: object
+      description: |
+        Task #130 — body for POST /feedback/calibration/handwavy-phrases/undo.
+        The active marker is matched by `phrase` + `addedAt`; the request is
+        rejected with 409 if the marker is older than the server-side undo
+        window (default 5 minutes).
+      properties:
+        phrase:
+          type: string
+          description: The (already-normalized) phrase of the live marker to undo.
+        addedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp from the live marker's `addedAt` field.
+        reviewer:
+          type: string
+          description: Reviewer name or email recorded as `removedBy`/`undoneBy` on the resulting history row. Optional.
+      required: [phrase, addedAt]
 
     HandwavyPhraseReinstateBody:
       type: object
@@ -3158,6 +3233,12 @@ components:
             Task #121 — true when the response is from POST
             /feedback/calibration/handwavy-phrases/reinstate. Omitted on plain
             POST/DELETE responses.
+        undone:
+          type: boolean
+          description: |
+            Task #130 — true when the response is from POST
+            /feedback/calibration/handwavy-phrases/undo. Omitted on plain
+            POST/DELETE/reinstate responses.
         phrase:
           type: string
           description: The normalized phrase that was added/removed.

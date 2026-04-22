@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey,
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
   useGetScoringConfig, getGetScoringConfigQueryKey,
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
-  addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, editHandwavyPhrase,
+  addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, editHandwavyPhrase, undoHandwavyPhrase,
   type HandwavyPhraseDryRunMatches,
   type HandwavyHistoryEntry,
   type HandwavyEditEntry,
@@ -971,6 +971,66 @@ function HandwavyPhrasesAdmin() {
     }
   };
 
+  // Task #130 — mirror of #121's reinstate. After adding a phrase by mistake
+  // a reviewer can press Undo within UNDO_WINDOW_MS to remove it; the
+  // resulting history row is tagged `undone: true` so the audit trail reads
+  // "added then undone" rather than producing an unrelated manual-removal
+  // entry. The Undo button only appears on the SINGLE most-recently-added
+  // marker (and only while still inside the window) — older entries fall
+  // back to the regular Trash flow.
+  const UNDO_WINDOW_MS = 5 * 60 * 1000;
+  // Re-render every ~15s while a fresh add exists so the Undo button
+  // visibly disappears once its window elapses (rather than waiting for
+  // the next click somewhere on the panel).
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((n) => n + 1), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+  // Find the most recently-added marker that's still inside the undo
+  // window. Curated defaults (no `addedAt`) are skipped — they were never
+  // "added" by a reviewer in the first place, so there's nothing to undo.
+  const undoCandidate = useMemo(() => {
+    let best: { phrase: string; addedAtIso: string; addedAtMs: number } | null = null;
+    const now = Date.now();
+    for (const m of phrases) {
+      if (!m.addedAt) continue;
+      const iso = String(m.addedAt);
+      const ms = Date.parse(iso);
+      if (!Number.isFinite(ms)) continue;
+      if (now - ms > UNDO_WINDOW_MS) continue;
+      if (!best || ms > best.addedAtMs) {
+        best = { phrase: m.phrase, addedAtIso: iso, addedAtMs: ms };
+      }
+    }
+    return best;
+    // The tick state forces this to re-evaluate periodically so the window
+    // expires visually; phrases.length covers add/remove/refresh changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phrases]);
+
+  const handleUndo = async (phrase: string, addedAtIso: string) => {
+    const key = `undo:${phrase}:${addedAtIso}`;
+    setBusy(key);
+    try {
+      await undoHandwavyPhrase({
+        phrase,
+        addedAt: addedAtIso,
+        reviewer: reviewer.trim() || undefined,
+      });
+      toast({
+        title: "Add undone",
+        description: `"${phrase}" was rolled back. The audit trail now records this as an undo, not a manual removal.`,
+      });
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to undo phrase.";
+      toast({ title: "Undo failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Most recent removals first, capped to keep the panel tidy.
   const sortedHistory = [...history].sort((a, b) => {
     const ta = Date.parse(a.removedAt ?? "") || 0;
@@ -1330,6 +1390,11 @@ function HandwavyPhrasesAdmin() {
               // disable rules below keep both flows visible side-by-side
               // without letting them step on each other.
               const bulkBusy = busy === "bulk-remove" || bulkConfirm !== null;
+              const isUndoTarget =
+                undoCandidate !== null && undoCandidate.phrase === m.phrase;
+              const undoBusyKey = isUndoTarget && undoCandidate
+                ? `undo:${undoCandidate.phrase}:${undoCandidate.addedAtIso}`
+                : null;
               return (
                 <div
                   key={m.phrase}
@@ -1393,6 +1458,21 @@ function HandwavyPhrasesAdmin() {
                       </>
                     ) : (
                       <>
+                        {isUndoTarget && undoCandidate && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[10px] text-amber-300 hover:text-amber-200"
+                            disabled={editing !== null || busy === undoBusyKey}
+                            onClick={() => handleUndo(undoCandidate.phrase, undoCandidate.addedAtIso)}
+                            data-testid="handwavy-undo"
+                            aria-label={`Undo adding phrase ${m.phrase}`}
+                            title="Undo this brand-new add (within 5 minutes)"
+                          >
+                            <RotateCcw className="w-3 h-3 mr-1" />
+                            {busy === undoBusyKey ? "Undoing…" : "Undo"}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1483,7 +1563,7 @@ function HandwavyPhrasesAdmin() {
               aria-expanded={showHistory}
             >
               <Clock className="w-3 h-3" />
-              {showHistory ? "Hide" : "Show"} removal history ({sortedHistory.length})
+              {showHistory ? "Hide" : "Show"} removal &amp; undo history ({sortedHistory.length})
             </button>
             {showHistory && (
               <div
@@ -1502,15 +1582,32 @@ function HandwavyPhrasesAdmin() {
                   // removed. Hide the button so we don't show a control that
                   // would 409 server-side.
                   const isActive = phrases.some((m: { phrase: string }) => m.phrase === h.phrase);
+                  // Task #130 — render undo rows with a distinct amber-tinted
+                  // background and an "Undone" verb so the audit trail
+                  // explicitly distinguishes them from manual removals.
+                  const isUndone = h.undone === true;
                   return (
                     <div
                       key={`${h.phrase}-${removedAtKey}-${idx}`}
-                      className="px-3 py-2 text-[11px] text-muted-foreground space-y-0.5"
+                      className={cn(
+                        "px-3 py-2 text-[11px] text-muted-foreground space-y-0.5",
+                        isUndone && "bg-amber-500/5 border-l-2 border-amber-500/40",
+                      )}
                       data-testid="handwavy-history-row"
+                      data-history-kind={isUndone ? "undone" : "removed"}
                     >
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-foreground/70 break-all flex-1 line-through">{h.phrase}</span>
                         <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
+                        {isUndone && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-amber-500/40 text-amber-300"
+                            data-testid="handwavy-history-undone"
+                          >
+                            Undone
+                          </Badge>
+                        )}
                         {h.reinstated ? (
                           <Badge
                             variant="outline"
@@ -1543,8 +1640,10 @@ function HandwavyPhrasesAdmin() {
                         )}
                       </div>
                       <div>
-                        Removed by{" "}
-                        <span className="text-foreground/80">{h.removedBy || "anonymous"}</span>
+                        {isUndone ? "Undone by " : "Removed by "}
+                        <span className="text-foreground/80">
+                          {(isUndone ? h.undoneBy : h.removedBy) || "anonymous"}
+                        </span>
                         {" • "}
                         {formatAuditTimestamp(h.removedAt) ?? "unknown date"}
                       </div>

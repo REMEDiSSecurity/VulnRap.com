@@ -676,6 +676,88 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     });
   });
 
+  // --- Task #130: undo a brand-new add ---
+
+  describe("Task #130 undo-recent-add", () => {
+    it("POST /undo removes the marker and stamps the history row undone:true", async () => {
+      const add = await request<{
+        marker: { phrase: string; addedAt: string };
+      }>("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "undo me phrase",
+        category: "buzzword",
+        reviewer: "alice@team.com",
+        rationale: "Bad call.",
+      });
+      expect(add.status).toBe(201);
+      const addedAt = add.body.marker.addedAt;
+
+      const undo = await request<{
+        undone: boolean;
+        phrase: string;
+        historyEntry: { undone: boolean; undoneBy?: string; removedBy?: string };
+        phrases: Array<{ phrase: string }>;
+        history: Array<{ phrase: string; removedAt: string; undone?: boolean }>;
+      }>("POST", "/feedback/calibration/handwavy-phrases/undo", {
+        phrase: "undo me phrase",
+        addedAt,
+        reviewer: "alice@team.com",
+      });
+      expect(undo.status).toBe(200);
+      expect(undo.body.undone).toBe(true);
+      expect(undo.body.historyEntry.undone).toBe(true);
+      expect(undo.body.historyEntry.undoneBy).toBe("alice@team.com");
+      expect(undo.body.historyEntry.removedBy).toBe("alice@team.com");
+      expect(undo.body.phrases.map((m) => m.phrase)).not.toContain("undo me phrase");
+      const row = undo.body.history.find((h) => h.phrase === "undo me phrase");
+      expect(row?.undone).toBe(true);
+    });
+
+    it("POST /undo returns 404 when the phrase isn't on the active list", async () => {
+      const r = await request<{ reason: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo",
+        { phrase: "ghost phrase that was never added", addedAt: "2026-04-22T12:00:00.000Z" },
+      );
+      expect(r.status).toBe(404);
+      expect(r.body.reason).toBe("not-found");
+    });
+
+    it("POST /undo returns 409 when the addedAt no longer matches", async () => {
+      const add = await request<{ marker: { phrase: string; addedAt: string } }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "addedat mismatch undo phrase" },
+      );
+      expect(add.status).toBe(201);
+      const r = await request<{ reason: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo",
+        {
+          phrase: "addedat mismatch undo phrase",
+          addedAt: "2020-01-01T00:00:00.000Z",
+        },
+      );
+      expect(r.status).toBe(409);
+      expect(r.body.reason).toBe("addedAt-mismatch");
+    });
+
+    it("POST /undo rejects missing phrase or addedAt with 400", async () => {
+      const noPhrase = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo",
+        { addedAt: "2026-04-22T12:00:00.000Z" },
+      );
+      expect(noPhrase.status).toBe(400);
+      const noTs = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo",
+        { phrase: "whatever" },
+      );
+      expect(noTs.status).toBe(400);
+      expect(noTs.body.error).toMatch(/addedAt/);
+    });
+  });
+
   it("restoreDefaults helper rewrites the file with the curated defaults", () => {
     __restoreDefaults();
     // Sanity: the restore helper does not throw and the file now contains
