@@ -304,6 +304,149 @@ describe("runEngine2Avri — AUTHN_AUTHZ raw-HTTP integration", () => {
   });
 });
 
+// Fabricated-JWT slop fixture: every visible header carries a real
+// (looking) value — Host: shop.example.com, User-Agent: curl/8.4.0,
+// Accept: application/json — so the placeholder-ratio branch does NOT
+// fire. The Authorization line, however, carries a JWT whose payload
+// decodes to {"sub":"admin"} and whose signature is the literal run
+// "AAAAAA". The credential-value audit must catch that and revoke
+// `authorization_header_swap`.
+const FAKE_JWT_AUTHN_FIXTURE = [
+  "# IDOR via JWT swap on /api/account/invoices",
+  "",
+  "Any user can swap their bearer token for an admin token below and",
+  "read another tenant's invoices. CWE-639. Severity: Critical.",
+  "",
+  "```http",
+  "GET /api/account/invoices HTTP/1.1",
+  "Host: shop.example.com",
+  "User-Agent: curl/8.4.0",
+  "Accept: application/json",
+  "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiJ9.AAAAAA",
+  "",
+  "```",
+  "",
+  "Repro: replay the request with the bearer above; the response is",
+  "the admin user's invoices.",
+].join("\n");
+
+// Fabricated-cookie slop fixture: real Host / User-Agent / Accept,
+// LF-only line endings (so CRLF strict-mode would not apply), but the
+// Cookie header carries `sessionid=00000000000000000000` — a 20-char
+// run of zeros that is implausible as a real session id. The
+// credential-value audit must revoke the header-swap gold hit.
+const FAKE_COOKIE_AUTHN_FIXTURE = [
+  "# Session fixation: predictable sessionid grants admin access",
+  "",
+  "The session id below logs in as the admin tenant. CWE-384.",
+  "",
+  "```http",
+  "GET /admin/dashboard HTTP/1.1",
+  "Host: shop.example.com",
+  "User-Agent: Mozilla/5.0",
+  "Accept: text/html",
+  "Cookie: sessionid=00000000000000000000",
+  "",
+  "```",
+  "",
+  "Repro: send the cookie above and you are logged in as admin.",
+].join("\n");
+
+describe("evaluateRawHttpRequest — fabricated credential values", () => {
+  it("flags a JWT whose payload claims are placeholders and whose signature has no entropy", () => {
+    const r = evaluateRawHttpRequest(FAKE_JWT_AUTHN_FIXTURE);
+    // Every header value is non-placeholder, so the placeholder-ratio
+    // branch must not be the one that fires.
+    expect(r.placeholderHeaders).toBe(0);
+    expect(r.credentialHeaders).toBeGreaterThanOrEqual(1);
+    expect(r.fakeCredentialHeaders).toBeGreaterThanOrEqual(1);
+    expect(r.isFake).toBe(true);
+    expect(r.reason).toMatch(/JWT/);
+  });
+
+  it("flags a Cookie value that is a long run of zeros", () => {
+    const r = evaluateRawHttpRequest(FAKE_COOKIE_AUTHN_FIXTURE);
+    expect(r.placeholderHeaders).toBe(0);
+    expect(r.credentialHeaders).toBeGreaterThanOrEqual(1);
+    expect(r.fakeCredentialHeaders).toBeGreaterThanOrEqual(1);
+    expect(r.isFake).toBe(true);
+    expect(r.reason).toMatch(/Cookie|entropy/i);
+  });
+
+  it("does not flag a realistic JWT and cookie pair", () => {
+    const r = evaluateRawHttpRequest(LEGIT_AUTHN_FIXTURE);
+    expect(r.fakeCredentialHeaders).toBe(0);
+    expect(r.isFake).toBe(false);
+  });
+
+  it("flags a Set-Cookie whose value is fake even when surrounded by Path/HttpOnly attributes", () => {
+    // Set-Cookie carries cookie attributes (Path=, Max-Age=, HttpOnly,
+    // Secure, SameSite=) that aren't credential values themselves.
+    // Short attributes (Path=/, Max-Age=3600) are below the 8-char
+    // entropy floor and HttpOnly/Secure have no '=' at all, so the
+    // parser only counts the real cookie value — and correctly flags
+    // the fabricated all-zero sessionid.
+    const fixture = [
+      "HTTP/1.1 200 OK",
+      "Server: nginx/1.25",
+      "Content-Type: text/html",
+      "Set-Cookie: sessionid=00000000000000000000; Path=/; HttpOnly; Secure; SameSite=Strict",
+      "",
+      "",
+      // Include a request line so the validator finds a block to analyse.
+      "GET /admin HTTP/1.1",
+      "Host: shop.example.com",
+      "Cookie: sessionid=00000000000000000000",
+      "",
+      "",
+    ].join("\n");
+    const r = evaluateRawHttpRequest(fixture);
+    expect(r.fakeCredentialHeaders).toBeGreaterThanOrEqual(1);
+    expect(r.isFake).toBe(true);
+    expect(r.reason).toMatch(/Cookie|entropy/i);
+  });
+
+  it("flags a JWT with an empty payload {}", () => {
+    const fixture = [
+      "GET /api/me HTTP/1.1",
+      "Host: shop.example.com",
+      "User-Agent: curl/8.4.0",
+      "Accept: application/json",
+      // header.payload.signature where payload decodes to "{}"
+      "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.e30.kQ8sV0o7c_w2J9xqAbCdEf",
+      "",
+      "",
+    ].join("\n");
+    const r = evaluateRawHttpRequest(fixture);
+    expect(r.fakeCredentialHeaders).toBe(1);
+    expect(r.isFake).toBe(true);
+    expect(r.reason).toMatch(/empty|no claims/i);
+  });
+});
+
+describe("runEngine2Avri — AUTHN_AUTHZ fabricated-credential integration", () => {
+  it("revokes authorization_header_swap when the JWT is a placeholder/no-entropy fake", () => {
+    const sig = extractSignals(FAKE_JWT_AUTHN_FIXTURE);
+    const result = runEngine2Avri(sig, FAKE_JWT_AUTHN_FIXTURE, AUTHN);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeIndObj = result.engine.triggeredIndicators.find((i) => i.signal === "FAKE_RAW_HTTP");
+    expect(fakeIndObj?.explanation).toMatch(/AUTHN_AUTHZ/);
+    expect(fakeIndObj?.explanation).toMatch(/JWT/);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("authorization_header_swap");
+  });
+
+  it("revokes authorization_header_swap when the Cookie value is all zeros", () => {
+    const sig = extractSignals(FAKE_COOKIE_AUTHN_FIXTURE);
+    const result = runEngine2Avri(sig, FAKE_COOKIE_AUTHN_FIXTURE, AUTHN);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("authorization_header_swap");
+  });
+});
+
 describe("runEngine2Avri — INJECTION raw-HTTP integration", () => {
   it("flags fabricated POST request bytes and revokes the endpoint-param gold hit", () => {
     const r = evaluateRawHttpRequest(SLOP_INJECTION_FIXTURE);

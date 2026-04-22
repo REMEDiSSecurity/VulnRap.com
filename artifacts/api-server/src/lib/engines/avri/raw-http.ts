@@ -16,10 +16,16 @@
 //   - a TE/CL conflict is claimed but the Content-Length value is not a
 //     plain integer or the Transfer-Encoding value does not actually
 //     contain "chunked",
-//   - or the request bytes have no CRLF line endings at all even though
+//   - the request bytes have no CRLF line endings at all even though
 //     they span multiple header lines (smuggling depends on byte-precise
 //     framing, so an LF-only paste with placeholder bodies is implausible
-//     coming from a reporter who actually reproduced the desync).
+//     coming from a reporter who actually reproduced the desync),
+//   - or a credential-bearing header (Authorization / Cookie /
+//     Set-Cookie / X-Auth-Token / X-Api-Key) carries a token that is
+//     syntactically real-looking but semantically fabricated: a JWT
+//     with an empty or placeholder-claim payload and/or a no-entropy
+//     signature, or a cookie/raw-token value that is just a long run
+//     of zeros, X's, or a single repeated character.
 //
 // A legitimate smuggling fixture — copied from Burp or a real HTTP
 // proxy log — has real header values, an integer Content-Length, an
@@ -38,6 +44,12 @@ export interface RawHttpEvaluation {
   teClConflicts: number;
   /** Of those, how many have a non-numeric CL or non-"chunked" TE. */
   teClBroken: number;
+  /** Number of credential-bearing headers (Authorization, Cookie,
+   * Set-Cookie, X-Auth-Token, X-Api-Key) parsed across all blocks. */
+  credentialHeaders: number;
+  /** Of those, how many carry a fabricated credential value (empty /
+   * placeholder-claim JWT, no-entropy signature, all-zero cookie, etc). */
+  fakeCredentialHeaders: number;
   /** True iff the raw request bytes look fabricated. */
   isFake: boolean;
   /** Human-readable explanation, set when isFake. */
@@ -75,6 +87,185 @@ function isPlaceholderValue(value: string): boolean {
   const v = value.trim();
   if (v.length === 0) return true;
   return PLACEHOLDER_VALUE_PATTERNS.some((re) => re.test(v));
+}
+
+// Headers whose values carry the credential the slop author is claiming
+// to have swapped/replayed. AUTHN_AUTHZ's `authorization_header_swap`
+// gold signal fires on the byte-shape of these lines, so we audit the
+// values themselves to catch syntactically real-looking but fabricated
+// tokens.
+const CREDENTIAL_HEADER_NAMES = new Set([
+  "authorization",
+  "proxy-authorization",
+  "cookie",
+  "set-cookie",
+  "x-auth-token",
+  "x-api-key",
+  "x-session-token",
+]);
+
+// Standard placeholder identities slop authors paste into JWT claims.
+// We compare claim values case-insensitively.
+const PLACEHOLDER_CLAIM_VALUES = new Set([
+  "admin",
+  "administrator",
+  "root",
+  "user",
+  "username",
+  "userid",
+  "guest",
+  "test",
+  "testuser",
+  "example",
+  "placeholder",
+  "todo",
+  "tbd",
+  "fixme",
+  "null",
+  "none",
+  "string",
+]);
+
+// Decode a base64url segment to UTF-8. Returns null on any decoding
+// failure (so the caller can decide how to interpret a malformed JWT).
+function decodeBase64Url(seg: string): string | null {
+  try {
+    const cleaned = seg.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = cleaned + "=".repeat((4 - (cleaned.length % 4)) % 4);
+    return Buffer.from(padded, "base64").toString("utf-8");
+  } catch {
+    return null;
+  }
+}
+
+// Returns a human-readable reason if the JWT-looking token is
+// fabricated, or null if it survives the checks. We only run this when
+// the value already has the three-segment shape; non-JWT bearer tokens
+// are scored separately.
+function inspectJwtToken(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [headerSeg, payloadSeg, sigSeg] = parts;
+  if (!headerSeg || !payloadSeg || !sigSeg) {
+    return "JWT has an empty header/payload/signature segment";
+  }
+  const payloadJson = decodeBase64Url(payloadSeg);
+  if (payloadJson === null) {
+    return "JWT payload is not valid base64url";
+  }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(payloadJson);
+  } catch {
+    return "JWT payload is not valid JSON";
+  }
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    return "JWT payload is not a JSON object";
+  }
+  const entries = Object.entries(payload as Record<string, unknown>);
+  if (entries.length === 0) return "JWT payload is empty (no claims)";
+  for (const [k, v] of entries) {
+    if (typeof v !== "string") continue;
+    const trimmed = v.trim();
+    if (trimmed.length === 0) continue;
+    if (/^<[^>\n]{0,40}>$/.test(trimmed)) {
+      return `JWT claim "${k}" is a placeholder ("${trimmed}")`;
+    }
+    if (PLACEHOLDER_CLAIM_VALUES.has(trimmed.toLowerCase())) {
+      return `JWT claim "${k}" is a placeholder identity ("${trimmed}")`;
+    }
+    if (/^(?:X{3,}|N{3,}|Z{3,}|Y{3,}|0{3,})$/i.test(trimmed)) {
+      return `JWT claim "${k}" is a placeholder run ("${trimmed}")`;
+    }
+  }
+  // Signature entropy: a real HS256 / RS256 signature is at least 32
+  // bytes (≈43 base64url chars). Anything shorter than 16 chars is
+  // implausible; anything that decodes to ≤2 distinct characters is a
+  // hand-typed run like "AAAAAA" or "00000000".
+  const sigClean = sigSeg.replace(/=+$/, "");
+  if (sigClean.length < 16) {
+    return `JWT signature is implausibly short (${sigClean.length} chars)`;
+  }
+  if (new Set(sigClean).size <= 2) {
+    return "JWT signature has no entropy (single repeated character)";
+  }
+  return null;
+}
+
+// Returns a reason string if a raw token / cookie value is a no-entropy
+// placeholder run, or null otherwise. We only flag values that are
+// long enough (≥8 chars) to plausibly be a real token — short values
+// like "abc" are not punished.
+function inspectOpaqueToken(label: string, value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed.length < 8) return null;
+  const cleaned = trimmed.replace(/[^A-Za-z0-9]/g, "");
+  if (cleaned.length < 8) return null;
+  if (new Set(cleaned).size <= 2) {
+    return `${label} value has no entropy (single repeated character: "${trimmed.slice(0, 24)}${trimmed.length > 24 ? "…" : ""}")`;
+  }
+  return null;
+}
+
+// Inspect a Cookie / Set-Cookie header value, which may carry several
+// `name=value` pairs. We flag the header as fabricated when every
+// parsed pair fails the opaque-token entropy check (so a single real
+// session cookie alongside a fake CSRF token is not punished).
+function inspectCookieHeader(value: string): string | null {
+  const pairs = value
+    .split(/;\s*/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  if (pairs.length === 0) return null;
+  let total = 0;
+  let fake = 0;
+  let lastReason = "";
+  for (const pair of pairs) {
+    const eq = pair.indexOf("=");
+    if (eq <= 0) continue;
+    const name = pair.slice(0, eq).trim();
+    const val = pair.slice(eq + 1).trim();
+    if (val.length === 0) continue;
+    // Strip an optional surrounding quoting (Set-Cookie may quote).
+    const unquoted = val.replace(/^"(.*)"$/, "$1");
+    total++;
+    const r = inspectOpaqueToken(`Cookie pair "${name}"`, unquoted);
+    if (r !== null) {
+      fake++;
+      lastReason = r;
+    }
+  }
+  if (total > 0 && fake === total) return lastReason;
+  return null;
+}
+
+// Top-level credential-header dispatcher. Returns a fabrication reason
+// or null. The header name is passed in lower-cased.
+function inspectCredentialHeader(name: string, value: string): string | null {
+  const v = value.trim();
+  if (v.length === 0) return null;
+  if (name === "authorization" || name === "proxy-authorization") {
+    const m = /^(Bearer|Token|JWT)\s+(\S.*)$/i.exec(v);
+    if (m) {
+      const tok = m[2].trim();
+      if (tok.split(".").length === 3) return inspectJwtToken(tok);
+      return inspectOpaqueToken("Authorization token", tok);
+    }
+    // Basic <base64>: decode and look for "user:password"-style placeholders.
+    const basic = /^Basic\s+(\S+)$/i.exec(v);
+    if (basic) {
+      const decoded = decodeBase64Url(basic[1].replace(/=+$/, ""));
+      if (decoded !== null && /^(admin|user|test|root|guest):.{0,40}$/i.test(decoded)) {
+        return `Basic auth credential is a placeholder ("${decoded}")`;
+      }
+    }
+    return null;
+  }
+  if (name === "cookie" || name === "set-cookie") {
+    return inspectCookieHeader(v);
+  }
+  // X-Auth-Token / X-Api-Key / X-Session-Token: a single opaque token.
+  return inspectOpaqueToken(`${name} header`, v);
 }
 
 interface RequestBlock {
@@ -119,6 +310,8 @@ export function evaluateRawHttpRequest(
       crlfPresent: false,
       teClConflicts: 0,
       teClBroken: 0,
+      credentialHeaders: 0,
+      fakeCredentialHeaders: 0,
       isFake: false,
       reason: null,
     };
@@ -131,6 +324,9 @@ export function evaluateRawHttpRequest(
   let crlfRequired = false;
   let teClConflicts = 0;
   let teClBroken = 0;
+  let credentialHeaders = 0;
+  let fakeCredentialHeaders = 0;
+  let firstFakeCredentialReason: string | null = null;
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -173,6 +369,22 @@ export function evaluateRawHttpRequest(
       }
       if (name === "transfer-encoding") teVal = value;
       else if (name === "content-length") clVal = value;
+
+      // Credential-value audit: even when the header value is not a
+      // recognised placeholder string, the token inside it can still be
+      // a fabricated JWT/cookie that the AUTHN_AUTHZ gold-signal regex
+      // happily matches. We only inspect non-placeholder values (the
+      // placeholder branch already covers <jwt-token-here> / XXXX).
+      if (CREDENTIAL_HEADER_NAMES.has(name) && !isPlaceholderValue(value)) {
+        credentialHeaders++;
+        const credReason = inspectCredentialHeader(name, value);
+        if (credReason !== null) {
+          fakeCredentialHeaders++;
+          if (firstFakeCredentialReason === null) {
+            firstFakeCredentialReason = credReason;
+          }
+        }
+      }
     }
 
     if (teVal !== null && clVal !== null) {
@@ -211,6 +423,16 @@ export function evaluateRawHttpRequest(
   } else if (totalHeaders >= 3 && goodHeaders === 0) {
     isFake = true;
     reason = "Raw HTTP request has no header with a real value";
+  } else if (fakeCredentialHeaders > 0 && firstFakeCredentialReason !== null) {
+    // Credential-value tell: the surrounding bytes look real (no
+    // placeholder ratio, real Host/UA/etc.) but the Authorization or
+    // Cookie header carries a fabricated token. Slop reports lean on
+    // these exact headers to trigger AUTHN_AUTHZ's
+    // `authorization_header_swap` gold signal, so we revoke the
+    // raw-bytes points whenever even a single credential header fails
+    // the audit.
+    isFake = true;
+    reason = firstFakeCredentialReason;
   }
 
   return {
@@ -220,6 +442,8 @@ export function evaluateRawHttpRequest(
     crlfPresent,
     teClConflicts,
     teClBroken,
+    credentialHeaders,
+    fakeCredentialHeaders,
     isFake,
     reason,
   };
