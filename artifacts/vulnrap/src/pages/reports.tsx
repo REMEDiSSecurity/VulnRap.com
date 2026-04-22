@@ -410,15 +410,22 @@ export default function Reports() {
                 <Badge variant="outline" className={cn("text-[10px] hidden sm:inline-flex", getTierBadgeColor(report.slopTier))}>
                   {report.slopTier}
                 </Badge>
-                {report.avriFamily && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] hidden md:inline-flex border-primary/30 text-primary/80 font-mono normal-case"
-                    title={familyLabel(report.avriFamily) ?? report.avriFamily}
-                  >
-                    {report.avriFamily}
-                  </Badge>
-                )}
+                {report.avriFamily && (() => {
+                  const famCount = familyCounts[report.avriFamily] ?? 0;
+                  const label = familyLabel(report.avriFamily) ?? report.avriFamily;
+                  return (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] hidden md:inline-flex border-primary/30 text-primary/80 font-mono normal-case"
+                      title={famCount > 0 ? `${label} — ${famCount} report${famCount === 1 ? "" : "s"} in corpus` : label}
+                    >
+                      {report.avriFamily}
+                      {famCount > 0 && (
+                        <span className="ml-1 text-primary/60">· {famCount}</span>
+                      )}
+                    </Badge>
+                  );
+                })()}
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
                 <div className="flex items-center gap-2">
