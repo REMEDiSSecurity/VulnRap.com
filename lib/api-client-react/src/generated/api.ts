@@ -33,6 +33,7 @@ import type {
   GetReportFeedParams,
   GetTrendsParams,
   HandwavyPhraseBody,
+  HandwavyPhraseEditBody,
   HandwavyPhraseMutationResponse,
   HandwavyPhraseReinstateBody,
   HandwavyPhrasesList,
@@ -1727,6 +1728,103 @@ export const useAddHandwavyPhrase = <
   TContext
 > => {
   return useMutation(getAddHandwavyPhraseMutationOptions(options));
+};
+
+/**
+ * Updates the `category` and/or `rationale` of an existing curated
+phrase without losing the original add audit context. Each
+edit appends a `HandwavyEditEntry` to the marker's `edits` log
+recording who made the change, when, and the before/after for any
+field that actually changed. The phrase string itself is the row
+identity and cannot be mutated here — to rename a phrase, reviewers
+must remove + re-add (which already records both events independently).
+
+ * @summary Edit a curated FLAT hand-wavy marker phrase in place
+ */
+export const getEditHandwavyPhraseUrl = () => {
+  return `/api/feedback/calibration/handwavy-phrases`;
+};
+
+export const editHandwavyPhrase = async (
+  handwavyPhraseEditBody: HandwavyPhraseEditBody,
+  options?: RequestInit,
+): Promise<HandwavyPhraseMutationResponse> => {
+  return customFetch<HandwavyPhraseMutationResponse>(
+    getEditHandwavyPhraseUrl(),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(handwavyPhraseEditBody),
+    },
+  );
+};
+
+export const getEditHandwavyPhraseMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof editHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseEditBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof editHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseEditBody> },
+  TContext
+> => {
+  const mutationKey = ["editHandwavyPhrase"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof editHandwavyPhrase>>,
+    { data: BodyType<HandwavyPhraseEditBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return editHandwavyPhrase(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EditHandwavyPhraseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof editHandwavyPhrase>>
+>;
+export type EditHandwavyPhraseMutationBody = BodyType<HandwavyPhraseEditBody>;
+export type EditHandwavyPhraseMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Edit a curated FLAT hand-wavy marker phrase in place
+ */
+export const useEditHandwavyPhrase = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof editHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseEditBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof editHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseEditBody> },
+  TContext
+> => {
+  return useMutation(getEditHandwavyPhraseMutationOptions(options));
 };
 
 /**

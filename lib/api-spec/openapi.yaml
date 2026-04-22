@@ -568,6 +568,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: editHandwavyPhrase
+      tags: [feedback]
+      summary: Edit a curated FLAT hand-wavy marker phrase in place
+      description: |
+        Updates the `category` and/or `rationale` of an existing curated
+        phrase without losing the original add audit context. Each
+        edit appends a `HandwavyEditEntry` to the marker's `edits` log
+        recording who made the change, when, and the before/after for any
+        field that actually changed. The phrase string itself is the row
+        identity and cannot be mutated here — to rename a phrase, reviewers
+        must remove + re-add (which already records both events independently).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HandwavyPhraseEditBody"
+      responses:
+        "200":
+          description: Edit applied (or no-op if updates matched the existing values)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
+        "400":
+          description: Invalid request body or update values
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Phrase not in the list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: removeHandwavyPhrase
       tags: [feedback]
@@ -2864,6 +2901,39 @@ components:
       enum: [absence, hedging, buzzword]
       description: Theme bucket used by the diagnostics panel to group matched phrases.
 
+    HandwavyEditEntry:
+      type: object
+      description: |
+        Single in-place edit applied to a curated hand-wavy marker phrase.
+        Records who made the change, when, and the before/after for whichever
+        fields actually changed (`category` and/or `rationale`). Fields that
+        did not change are omitted to keep the audit log compact.
+      properties:
+        editedBy:
+          type: string
+          description: Reviewer name or email that performed the edit. Absent when no reviewer was supplied.
+        editedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of the edit.
+        category:
+          type: object
+          properties:
+            from:
+              $ref: "#/components/schemas/HandwavyCategory"
+            to:
+              $ref: "#/components/schemas/HandwavyCategory"
+          required: [from, to]
+        rationale:
+          type: object
+          description: Before/after values for the rationale text. Empty string indicates the rationale was set or cleared.
+          properties:
+            from:
+              type: string
+            to:
+              type: string
+      required: [editedAt]
+
     HandwavyMarker:
       type: object
       properties:
@@ -2881,6 +2951,14 @@ components:
         rationale:
           type: string
           description: Free-text justification supplied by the reviewer at add time.
+        edits:
+          type: array
+          description: |
+            Chronological log of in-place edits to this marker (most recent
+            last). Each entry records who changed what, when. Bounded
+            server-side per marker.
+          items:
+            $ref: "#/components/schemas/HandwavyEditEntry"
       required: [phrase, category]
 
     HandwavyHistoryEntry:
@@ -2898,6 +2976,11 @@ components:
           format: date-time
         rationale:
           type: string
+        edits:
+          type: array
+          description: Preserved on remove so reinstating still shows the edit history.
+          items:
+            $ref: "#/components/schemas/HandwavyEditEntry"
         removedBy:
           type: string
           description: Reviewer name or email that removed the phrase.
@@ -2937,6 +3020,27 @@ components:
           items:
             $ref: "#/components/schemas/HandwavyHistoryEntry"
       required: [phrases, total, history]
+
+    HandwavyPhraseEditBody:
+      type: object
+      description: |
+        Request body for the in-place edit endpoint. The phrase string
+        identifies which curated marker to update; provide at least one of
+        `category` or `rationale` to actually change something. Send an empty
+        `rationale` string to clear an existing rationale.
+      properties:
+        phrase:
+          type: string
+          description: Existing curated phrase to edit (matched after lowercase + whitespace normalization).
+        category:
+          $ref: "#/components/schemas/HandwavyCategory"
+        rationale:
+          type: string
+          description: New rationale text. Empty string clears the existing rationale.
+        reviewer:
+          type: string
+          description: Reviewer name or email recorded in the edit audit entry. Optional.
+      required: [phrase]
 
     HandwavyPhraseBody:
       type: object
@@ -3039,7 +3143,12 @@ components:
       properties:
         added:
           type: boolean
-          description: True when POST appended the phrase. Omitted on DELETE responses.
+          description: True when POST appended the phrase. Omitted on PATCH/DELETE responses.
+        edited:
+          type: boolean
+          description: True when PATCH actually changed the marker; false when the supplied updates matched the existing values. Omitted on POST/DELETE responses.
+        editEntry:
+          $ref: "#/components/schemas/HandwavyEditEntry"
         removed:
           type: boolean
           description: True when DELETE removed the phrase. Omitted on POST responses.

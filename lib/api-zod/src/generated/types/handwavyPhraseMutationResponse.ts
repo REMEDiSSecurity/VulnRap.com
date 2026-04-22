@@ -6,13 +6,17 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { HandwavyCategory } from "./handwavyCategory";
+import type { HandwavyEditEntry } from "./handwavyEditEntry";
 import type { HandwavyHistoryEntry } from "./handwavyHistoryEntry";
 import type { HandwavyMarker } from "./handwavyMarker";
 import type { HandwavyPhraseDryRunMatches } from "./handwavyPhraseDryRunMatches";
 
 export interface HandwavyPhraseMutationResponse {
-  /** True when POST appended the phrase. Omitted on DELETE responses. */
+  /** True when POST appended the phrase. Omitted on PATCH/DELETE responses. */
   added?: boolean;
+  /** True when PATCH actually changed the marker; false when the supplied updates matched the existing values. Omitted on POST/DELETE responses. */
+  edited?: boolean;
+  editEntry?: HandwavyEditEntry;
   /** True when DELETE removed the phrase. Omitted on POST responses. */
   removed?: boolean;
   /** Task #121 — true when the response is from POST

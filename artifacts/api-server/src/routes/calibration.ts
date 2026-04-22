@@ -10,6 +10,7 @@ import {
   addHandwavyPhrase,
   removeHandwavyPhrase,
   reinstateHandwavyPhrase,
+  editHandwavyPhrase,
   type HandwavyCategory,
   type HandwavyMarker,
 } from "../lib/engines/avri/handwavy-phrases";
@@ -626,6 +627,73 @@ router.post(
     }
   },
 );
+
+// Task #120 — In-place edit of a curated phrase. Supports updating `category`
+// and/or `rationale` while preserving the original add audit context. The
+// phrase string itself is the row identity and is NOT mutable here — to
+// rename, reviewers must remove + re-add (which already records both events).
+router.patch("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
+  try {
+    const { phrase, category, rationale, reviewer } = (req.body ?? {}) as {
+      phrase?: unknown;
+      category?: unknown;
+      rationale?: unknown;
+      reviewer?: unknown;
+    };
+    if (typeof phrase !== "string" || phrase.trim().length === 0) {
+      res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+      return;
+    }
+    if (
+      category !== undefined &&
+      category !== "absence" &&
+      category !== "hedging" &&
+      category !== "buzzword"
+    ) {
+      res.status(400).json({ error: "category must be one of 'absence', 'hedging', 'buzzword'." });
+      return;
+    }
+    if (rationale !== undefined && typeof rationale !== "string") {
+      res.status(400).json({ error: "rationale must be a string when provided." });
+      return;
+    }
+    if (reviewer !== undefined && typeof reviewer !== "string") {
+      res.status(400).json({ error: "reviewer must be a string when provided." });
+      return;
+    }
+    if (category === undefined && rationale === undefined) {
+      res.status(400).json({ error: "Provide at least one of 'category' or 'rationale' to edit." });
+      return;
+    }
+    const result = editHandwavyPhrase(
+      phrase,
+      {
+        category: category as "absence" | "hedging" | "buzzword" | undefined,
+        rationale: typeof rationale === "string" ? rationale : undefined,
+      },
+      { reviewer: typeof reviewer === "string" ? reviewer : undefined },
+    );
+    res.status(200).json({
+      edited: result.edited,
+      phrase: result.phrase,
+      total: result.total,
+      marker: result.marker,
+      editEntry: result.editEntry,
+      phrases: getHandwavyPhrases(),
+    });
+  } catch (err) {
+    if (err instanceof Error && /not found/i.test(err.message)) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Error && /(must be|category)/i.test(err.message)) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    req.log?.error(err, "Failed to edit hand-wavy phrase");
+    res.status(500).json({ error: "Failed to edit hand-wavy phrase." });
+  }
+});
 
 router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
   try {

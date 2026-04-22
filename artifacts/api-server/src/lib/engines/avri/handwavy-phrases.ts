@@ -16,6 +16,12 @@
 // JSON file so a reviewer can see what was pulled, by whom, and when, and
 // reinstate it with the original context if needed. Older entries (pre-#112)
 // have no audit metadata; the UI renders them as "Curated default".
+//
+// Task #120 — In-place edits. Reviewers can update an existing phrase's
+// category and/or rationale without losing the original add context. Each
+// edit appends an entry to a per-marker `edits` log (who, when, and the
+// before/after for whatever fields actually changed). The `edits` log is
+// bounded so a single phrase cannot grow the JSON file unboundedly.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import path from "path";
@@ -29,6 +35,23 @@ export const HANDWAVY_CATEGORIES: readonly HandwavyCategory[] = [
   "buzzword",
 ] as const;
 
+/**
+ * Task #120 — One entry in a marker's edit history. Each edit records the
+ * reviewer (name/email) that made the change, the ISO timestamp, and the
+ * before/after value for whichever fields actually changed (category and/or
+ * rationale). Fields that did not change are omitted so the log stays compact.
+ */
+export interface HandwavyEditEntry {
+  /** Reviewer name or email that performed the edit. */
+  editedBy?: string;
+  /** ISO 8601 timestamp of the edit. */
+  editedAt: string;
+  /** Category change, present only when the category was actually altered. */
+  category?: { from: HandwavyCategory; to: HandwavyCategory };
+  /** Rationale change, present only when the rationale was actually altered. `from`/`to` may be empty strings to indicate the rationale was set or cleared. */
+  rationale?: { from?: string; to?: string };
+}
+
 export interface HandwavyMarker {
   phrase: string;
   category: HandwavyCategory;
@@ -38,6 +61,8 @@ export interface HandwavyMarker {
   addedAt?: string;
   /** Free-text justification supplied by the reviewer at add time. */
   rationale?: string;
+  /** Task #120 — chronological list of edits applied since the phrase was added. Most recent last. */
+  edits?: HandwavyEditEntry[];
 }
 
 export interface HandwavyHistoryEntry {
@@ -46,6 +71,8 @@ export interface HandwavyHistoryEntry {
   addedBy?: string;
   addedAt?: string;
   rationale?: string;
+  /** Task #120 — preserved on remove so reinstating still shows the edit history. */
+  edits?: HandwavyEditEntry[];
   /** Reviewer name or email that removed the phrase. */
   removedBy?: string;
   /** ISO 8601 timestamp the phrase was removed. */
@@ -64,8 +91,8 @@ export interface HandwavyHistoryEntry {
 
 interface PhrasesFile {
   _meta?: unknown;
-  phrases: Array<string | Record<string, unknown>>;
-  history?: Array<Record<string, unknown>>;
+  phrases: Array<string | HandwavyMarker | Record<string, unknown>>;
+  history?: HandwavyHistoryEntry[] | Array<Record<string, unknown>>;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -152,6 +179,43 @@ function isIsoTimestamp(x: unknown): x is string {
   return typeof x === "string" && !Number.isNaN(Date.parse(x));
 }
 
+function coerceEditEntry(entry: unknown): HandwavyEditEntry | null {
+  if (!entry || typeof entry !== "object") return null;
+  const obj = entry as Record<string, unknown>;
+  const editedAt = isIsoTimestamp(obj.editedAt) ? obj.editedAt : undefined;
+  if (!editedAt) return null;
+  const out: HandwavyEditEntry = { editedAt };
+  const editedBy = trimOrUndefined(obj.editedBy, 200);
+  if (editedBy) out.editedBy = editedBy;
+  if (obj.category && typeof obj.category === "object") {
+    const c = obj.category as Record<string, unknown>;
+    if (isCategory(c.from) && isCategory(c.to) && c.from !== c.to) {
+      out.category = { from: c.from, to: c.to };
+    }
+  }
+  if (obj.rationale && typeof obj.rationale === "object") {
+    const r = obj.rationale as Record<string, unknown>;
+    const from = typeof r.from === "string" ? r.from : undefined;
+    const to = typeof r.to === "string" ? r.to : undefined;
+    if (from !== undefined || to !== undefined) {
+      out.rationale = {};
+      if (from !== undefined) out.rationale.from = from;
+      if (to !== undefined) out.rationale.to = to;
+    }
+  }
+  // An edit entry with neither category nor rationale change carries no info.
+  if (!out.category && !out.rationale) return null;
+  return out;
+}
+
+function coerceEdits(value: unknown): HandwavyEditEntry[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const cleaned = value
+    .map(coerceEditEntry)
+    .filter((e): e is HandwavyEditEntry => e !== null);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
 function coerceMarker(entry: unknown): HandwavyMarker | null {
   if (typeof entry === "string") {
     const phrase = normalizePhrase(entry);
@@ -170,6 +234,8 @@ function coerceMarker(entry: unknown): HandwavyMarker | null {
     if (isIsoTimestamp(obj.addedAt)) marker.addedAt = obj.addedAt;
     const rationale = trimOrUndefined(obj.rationale, 500);
     if (rationale) marker.rationale = rationale;
+    const edits = coerceEdits(obj.edits);
+    if (edits) marker.edits = edits;
     return marker;
   }
   return null;
@@ -196,6 +262,8 @@ function coerceHistory(entry: unknown): HandwavyHistoryEntry | null {
   const reinstatedBy = trimOrUndefined(obj.reinstatedBy, 200);
   if (reinstatedBy) out.reinstatedBy = reinstatedBy;
   if (isIsoTimestamp(obj.reinstatedAt)) out.reinstatedAt = obj.reinstatedAt;
+  const edits = coerceEdits(obj.edits);
+  if (edits) out.edits = edits;
   return out;
 }
 
@@ -254,7 +322,7 @@ function persist(markers: HandwavyMarker[], history: HandwavyHistoryEntry[]): Ha
   const body: PhrasesFile = {
     _meta: {
       description:
-        "Curated list of FLAT-family hand-wavy marker phrases. Loaded by lib/engines/avri/handwavy-phrases.ts. Phrases are matched as case-insensitive substrings against a whitespace-collapsed copy of the report text. Each entry is themed into one of three categories ('absence', 'hedging', 'buzzword') so the diagnostics panel can group matches into themed buckets. Reviewers can add or remove phrases through POST/DELETE /feedback/calibration/handwavy-phrases without a redeploy. Each entry optionally tracks the reviewer (`addedBy`), ISO timestamp (`addedAt`), and free-text `rationale`. Removed phrases are appended to `history` so reviewers can see what was pulled and reinstate it with context.",
+        "Curated list of FLAT-family hand-wavy marker phrases. Loaded by lib/engines/avri/handwavy-phrases.ts. Phrases are matched as case-insensitive substrings against a whitespace-collapsed copy of the report text. Each entry is themed into one of three categories ('absence', 'hedging', 'buzzword') so the diagnostics panel can group matches into themed buckets. Reviewers can add, edit, or remove phrases through POST/PATCH/DELETE /feedback/calibration/handwavy-phrases without a redeploy. Each entry optionally tracks the reviewer (`addedBy`), ISO timestamp (`addedAt`), and free-text `rationale`, plus an `edits` log of subsequent in-place changes (who, when, before/after for category and rationale). Removed phrases are appended to `history` so reviewers can see what was pulled and reinstate it with context.",
     },
     phrases: markers,
     history: trimmedHistory,
@@ -356,6 +424,9 @@ export function removeHandwavyPhrase(
   if (removed.addedBy) historyEntry.addedBy = removed.addedBy;
   if (removed.addedAt) historyEntry.addedAt = removed.addedAt;
   if (removed.rationale) historyEntry.rationale = removed.rationale;
+  if (removed.edits && removed.edits.length > 0) {
+    historyEntry.edits = removed.edits.map((e) => ({ ...e }));
+  }
   const nextHistory = [...history, historyEntry];
   const trimmed = persist(next, nextHistory);
   CACHED_MARKERS = next;
@@ -364,6 +435,15 @@ export function removeHandwavyPhrase(
 }
 
 export interface ReinstatePhraseOptions {
+  reviewer?: string;
+  /** Override the timestamp (tests). Defaults to `new Date().toISOString()`. */
+  now?: string;
+}
+
+/** Maximum number of edit-history entries kept on a single marker. */
+const EDITS_PER_PHRASE_LIMIT = 50;
+
+export interface EditPhraseOptions {
   reviewer?: string;
   /** Override the timestamp (tests). Defaults to `new Date().toISOString()`. */
   now?: string;
@@ -440,6 +520,117 @@ export function reinstateHandwavyPhrase(
     total: nextMarkers.length,
     marker: { ...marker },
     historyEntry: { ...updatedEntry },
+  };
+}
+
+export interface EditPhraseUpdates {
+  category?: HandwavyCategory;
+  /**
+   * New rationale. `undefined` means "leave unchanged"; an empty string
+   * means "clear the existing rationale". Otherwise the value is trimmed
+   * and length-validated like the original add path.
+   */
+  rationale?: string;
+}
+
+export interface EditPhraseResult {
+  edited: boolean;
+  phrase: string;
+  marker: HandwavyMarker;
+  total: number;
+  /** The single edit entry that was just appended, if any. */
+  editEntry?: HandwavyEditEntry;
+}
+
+/**
+ * Task #120 — In-place edit of an existing curated phrase. Only category
+ * and rationale can change; the phrase string itself is the row's identity
+ * and must be modified via remove + add. Returns `edited: false` when the
+ * supplied updates are no-ops, so the UI can short-circuit without writing
+ * a no-op audit entry.
+ */
+export function editHandwavyPhrase(
+  rawPhrase: string,
+  updates: EditPhraseUpdates,
+  options: EditPhraseOptions = {},
+): EditPhraseResult {
+  const phrase = normalizePhrase(rawPhrase);
+  const { markers: current, history } = load();
+  const idx = current.findIndex((m) => m.phrase === phrase);
+  if (idx < 0) {
+    throw new Error("Phrase not found.");
+  }
+  const target = current[idx];
+
+  const editEntry: HandwavyEditEntry = {
+    editedAt: isIsoTimestamp(options.now) ? options.now : new Date().toISOString(),
+  };
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  if (reviewer) editEntry.editedBy = reviewer;
+
+  const updated: HandwavyMarker = { ...target };
+
+  if (updates.category !== undefined) {
+    if (!isCategory(updates.category)) {
+      throw new Error("category must be one of 'absence', 'hedging', 'buzzword'.");
+    }
+    if (updates.category !== target.category) {
+      editEntry.category = { from: target.category, to: updates.category };
+      updated.category = updates.category;
+    }
+  }
+
+  if (updates.rationale !== undefined) {
+    // Empty string means "clear", any other string is trimmed + validated.
+    let nextRationale: string | undefined;
+    if (updates.rationale.trim().length === 0) {
+      nextRationale = undefined;
+    } else {
+      const trimmed = updates.rationale.trim();
+      if (trimmed.length < 3) {
+        throw new Error("Rationale must be at least 3 characters when provided.");
+      }
+      if (trimmed.length > 500) {
+        throw new Error("Rationale must be at most 500 characters.");
+      }
+      nextRationale = trimmed;
+    }
+    const prev = target.rationale ?? "";
+    const next = nextRationale ?? "";
+    if (prev !== next) {
+      editEntry.rationale = { from: prev, to: next };
+      if (nextRationale === undefined) {
+        delete updated.rationale;
+      } else {
+        updated.rationale = nextRationale;
+      }
+    }
+  }
+
+  // No effective change — short-circuit without persisting an audit entry.
+  if (!editEntry.category && !editEntry.rationale) {
+    return { edited: false, phrase, marker: { ...target }, total: current.length };
+  }
+
+  const existingEdits = target.edits ?? [];
+  const nextEdits = [...existingEdits, editEntry];
+  // Bound the per-marker edit log so a noisy phrase cannot bloat the JSON file.
+  updated.edits =
+    nextEdits.length > EDITS_PER_PHRASE_LIMIT
+      ? nextEdits.slice(nextEdits.length - EDITS_PER_PHRASE_LIMIT)
+      : nextEdits;
+
+  const next = current.slice();
+  next[idx] = updated;
+  const trimmed = persist(next, history);
+  CACHED_MARKERS = next;
+  CACHED_HISTORY = trimmed;
+  return {
+    edited: true,
+    phrase,
+    marker: { ...updated, edits: updated.edits ? updated.edits.map((e) => ({ ...e })) : undefined },
+    total: next.length,
+    editEntry: { ...editEntry },
   };
 }
 

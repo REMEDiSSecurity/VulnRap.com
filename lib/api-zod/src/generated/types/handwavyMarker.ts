@@ -6,6 +6,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { HandwavyCategory } from "./handwavyCategory";
+import type { HandwavyEditEntry } from "./handwavyEditEntry";
 
 export interface HandwavyMarker {
   phrase: string;
@@ -16,4 +17,9 @@ export interface HandwavyMarker {
   addedAt?: Date;
   /** Free-text justification supplied by the reviewer at add time. */
   rationale?: string;
+  /** Chronological log of in-place edits to this marker (most recent
+last). Each entry records who changed what, when. Bounded
+server-side per marker.
+ */
+  edits?: HandwavyEditEntry[];
 }

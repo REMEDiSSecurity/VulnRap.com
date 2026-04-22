@@ -6,6 +6,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { HandwavyCategory } from "./handwavyCategory";
+import type { HandwavyEditEntry } from "./handwavyEditEntry";
 
 /**
  * Removed-phrase audit record used so reviewers can reinstate a phrase with original context.
@@ -16,6 +17,8 @@ export interface HandwavyHistoryEntry {
   addedBy?: string;
   addedAt?: Date;
   rationale?: string;
+  /** Preserved on remove so reinstating still shows the edit history. */
+  edits?: HandwavyEditEntry[];
   /** Reviewer name or email that removed the phrase. */
   removedBy?: string;
   /** ISO 8601 timestamp the phrase was removed. */

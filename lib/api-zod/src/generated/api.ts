@@ -2425,6 +2425,51 @@ export const GetHandwavyPhrasesResponse = zod.object({
         .describe(
           "Free-text justification supplied by the reviewer at add time.",
         ),
+      edits: zod
+        .array(
+          zod
+            .object({
+              editedBy: zod
+                .string()
+                .optional()
+                .describe(
+                  "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                ),
+              editedAt: zod.coerce
+                .date()
+                .describe("ISO 8601 timestamp of the edit."),
+              category: zod
+                .object({
+                  from: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                  to: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                })
+                .optional(),
+              rationale: zod
+                .object({
+                  from: zod.string().optional(),
+                  to: zod.string().optional(),
+                })
+                .optional()
+                .describe(
+                  "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                ),
+            })
+            .describe(
+              "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+            ),
+        )
+        .optional()
+        .describe(
+          "Chronological log of in-place edits to this marker (most recent\nlast). Each entry records who changed what, when. Bounded\nserver-side per marker.\n",
+        ),
     }),
   ),
   total: zod.number(),
@@ -2441,6 +2486,51 @@ export const GetHandwavyPhrasesResponse = zod.object({
           addedBy: zod.string().optional(),
           addedAt: zod.coerce.date().optional(),
           rationale: zod.string().optional(),
+          edits: zod
+            .array(
+              zod
+                .object({
+                  editedBy: zod
+                    .string()
+                    .optional()
+                    .describe(
+                      "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                    ),
+                  editedAt: zod.coerce
+                    .date()
+                    .describe("ISO 8601 timestamp of the edit."),
+                  category: zod
+                    .object({
+                      from: zod
+                        .enum(["absence", "hedging", "buzzword"])
+                        .describe(
+                          "Theme bucket used by the diagnostics panel to group matched phrases.",
+                        ),
+                      to: zod
+                        .enum(["absence", "hedging", "buzzword"])
+                        .describe(
+                          "Theme bucket used by the diagnostics panel to group matched phrases.",
+                        ),
+                    })
+                    .optional(),
+                  rationale: zod
+                    .object({
+                      from: zod.string().optional(),
+                      to: zod.string().optional(),
+                    })
+                    .optional()
+                    .describe(
+                      "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                    ),
+                })
+                .describe(
+                  "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                ),
+            )
+            .optional()
+            .describe(
+              "Preserved on remove so reinstating still shows the edit history.",
+            ),
           removedBy: zod
             .string()
             .optional()
@@ -2520,7 +2610,50 @@ export const AddHandwavyPhraseResponse = zod.object({
     .boolean()
     .optional()
     .describe(
-      "True when POST appended the phrase. Omitted on DELETE responses.",
+      "True when POST appended the phrase. Omitted on PATCH\/DELETE responses.",
+    ),
+  edited: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when PATCH actually changed the marker; false when the supplied updates matched the existing values. Omitted on POST\/DELETE responses.",
+    ),
+  editEntry: zod
+    .object({
+      editedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+        ),
+      editedAt: zod.coerce.date().describe("ISO 8601 timestamp of the edit."),
+      category: zod
+        .object({
+          from: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          to: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+        })
+        .optional(),
+      rationale: zod
+        .object({
+          from: zod.string().optional(),
+          to: zod.string().optional(),
+        })
+        .optional()
+        .describe(
+          "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
     ),
   removed: zod
     .boolean()
@@ -2570,6 +2703,51 @@ export const AddHandwavyPhraseResponse = zod.object({
         .describe(
           "Free-text justification supplied by the reviewer at add time.",
         ),
+      edits: zod
+        .array(
+          zod
+            .object({
+              editedBy: zod
+                .string()
+                .optional()
+                .describe(
+                  "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                ),
+              editedAt: zod.coerce
+                .date()
+                .describe("ISO 8601 timestamp of the edit."),
+              category: zod
+                .object({
+                  from: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                  to: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                })
+                .optional(),
+              rationale: zod
+                .object({
+                  from: zod.string().optional(),
+                  to: zod.string().optional(),
+                })
+                .optional()
+                .describe(
+                  "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                ),
+            })
+            .describe(
+              "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+            ),
+        )
+        .optional()
+        .describe(
+          "Chronological log of in-place edits to this marker (most recent\nlast). Each entry records who changed what, when. Bounded\nserver-side per marker.\n",
+        ),
     })
     .optional(),
   historyEntry: zod
@@ -2583,6 +2761,51 @@ export const AddHandwavyPhraseResponse = zod.object({
       addedBy: zod.string().optional(),
       addedAt: zod.coerce.date().optional(),
       rationale: zod.string().optional(),
+      edits: zod
+        .array(
+          zod
+            .object({
+              editedBy: zod
+                .string()
+                .optional()
+                .describe(
+                  "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                ),
+              editedAt: zod.coerce
+                .date()
+                .describe("ISO 8601 timestamp of the edit."),
+              category: zod
+                .object({
+                  from: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                  to: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                })
+                .optional(),
+              rationale: zod
+                .object({
+                  from: zod.string().optional(),
+                  to: zod.string().optional(),
+                })
+                .optional()
+                .describe(
+                  "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                ),
+            })
+            .describe(
+              "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+            ),
+        )
+        .optional()
+        .describe(
+          "Preserved on remove so reinstating still shows the edit history.",
+        ),
       removedBy: zod
         .string()
         .optional()
@@ -2639,6 +2862,51 @@ export const AddHandwavyPhraseResponse = zod.object({
           .optional()
           .describe(
             "Free-text justification supplied by the reviewer at add time.",
+          ),
+        edits: zod
+          .array(
+            zod
+              .object({
+                editedBy: zod
+                  .string()
+                  .optional()
+                  .describe(
+                    "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                  ),
+                editedAt: zod.coerce
+                  .date()
+                  .describe("ISO 8601 timestamp of the edit."),
+                category: zod
+                  .object({
+                    from: zod
+                      .enum(["absence", "hedging", "buzzword"])
+                      .describe(
+                        "Theme bucket used by the diagnostics panel to group matched phrases.",
+                      ),
+                    to: zod
+                      .enum(["absence", "hedging", "buzzword"])
+                      .describe(
+                        "Theme bucket used by the diagnostics panel to group matched phrases.",
+                      ),
+                  })
+                  .optional(),
+                rationale: zod
+                  .object({
+                    from: zod.string().optional(),
+                    to: zod.string().optional(),
+                  })
+                  .optional()
+                  .describe(
+                    "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                  ),
+              })
+              .describe(
+                "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+              ),
+          )
+          .optional()
+          .describe(
+            "Chronological log of in-place edits to this marker (most recent\nlast). Each entry records who changed what, when. Bounded\nserver-side per marker.\n",
           ),
       }),
     )
@@ -2726,6 +2994,51 @@ export const AddHandwavyPhraseResponse = zod.object({
           addedBy: zod.string().optional(),
           addedAt: zod.coerce.date().optional(),
           rationale: zod.string().optional(),
+          edits: zod
+            .array(
+              zod
+                .object({
+                  editedBy: zod
+                    .string()
+                    .optional()
+                    .describe(
+                      "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                    ),
+                  editedAt: zod.coerce
+                    .date()
+                    .describe("ISO 8601 timestamp of the edit."),
+                  category: zod
+                    .object({
+                      from: zod
+                        .enum(["absence", "hedging", "buzzword"])
+                        .describe(
+                          "Theme bucket used by the diagnostics panel to group matched phrases.",
+                        ),
+                      to: zod
+                        .enum(["absence", "hedging", "buzzword"])
+                        .describe(
+                          "Theme bucket used by the diagnostics panel to group matched phrases.",
+                        ),
+                    })
+                    .optional(),
+                  rationale: zod
+                    .object({
+                      from: zod.string().optional(),
+                      to: zod.string().optional(),
+                    })
+                    .optional()
+                    .describe(
+                      "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                    ),
+                })
+                .describe(
+                  "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                ),
+            )
+            .optional()
+            .describe(
+              "Preserved on remove so reinstating still shows the edit history.",
+            ),
           removedBy: zod
             .string()
             .optional()
@@ -2844,49 +3157,99 @@ export const AddHandwavyPhraseResponse = zod.object({
 });
 
 /**
- * Removes a phrase (matched after lowercase + whitespace normalization) from the curated FLAT hand-wavy marker list.
- * @summary Remove a FLAT hand-wavy marker phrase
+ * Updates the `category` and/or `rationale` of an existing curated
+phrase without losing the original add audit context. Each
+edit appends a `HandwavyEditEntry` to the marker's `edits` log
+recording who made the change, when, and the before/after for any
+field that actually changed. The phrase string itself is the row
+identity and cannot be mutated here — to rename a phrase, reviewers
+must remove + re-add (which already records both events independently).
+
+ * @summary Edit a curated FLAT hand-wavy marker phrase in place
  */
-export const RemoveHandwavyPhraseBody = zod.object({
-  phrase: zod
-    .string()
-    .describe(
-      "Marker phrase (case-insensitive substring match against report text after whitespace collapsing).",
-    ),
-  category: zod
-    .enum(["absence", "hedging", "buzzword"])
-    .optional()
-    .describe(
-      "Theme bucket used by the diagnostics panel to group matched phrases.",
-    ),
-  dryRun: zod
-    .boolean()
-    .optional()
-    .describe(
-      "Task #114 — when true, the server does NOT persist the phrase. It runs the\ncandidate phrase against the curated benchmark corpus (T1 LEGIT \/ T2 BORDERLINE\n\/ T3 SLOP \/ T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so\nreviewers can see how many GREEN \/ YELLOW reports the phrase would have hit\nbefore they confirm the add. Defaults to false (write-through behavior).\n",
-    ),
-  reviewer: zod
-    .string()
-    .optional()
-    .describe("Reviewer name or email recorded in the audit trail. Optional."),
-  rationale: zod
-    .string()
-    .optional()
-    .describe(
-      "Free-text justification recorded with the phrase. Only consulted on POST.",
-    ),
-});
+export const EditHandwavyPhraseBody = zod
+  .object({
+    phrase: zod
+      .string()
+      .describe(
+        "Existing curated phrase to edit (matched after lowercase + whitespace normalization).",
+      ),
+    category: zod
+      .enum(["absence", "hedging", "buzzword"])
+      .optional()
+      .describe(
+        "Theme bucket used by the diagnostics panel to group matched phrases.",
+      ),
+    rationale: zod
+      .string()
+      .optional()
+      .describe(
+        "New rationale text. Empty string clears the existing rationale.",
+      ),
+    reviewer: zod
+      .string()
+      .optional()
+      .describe(
+        "Reviewer name or email recorded in the edit audit entry. Optional.",
+      ),
+  })
+  .describe(
+    "Request body for the in-place edit endpoint. The phrase string\nidentifies which curated marker to update; provide at least one of\n`category` or `rationale` to actually change something. Send an empty\n`rationale` string to clear an existing rationale.\n",
+  );
 
-export const removeHandwavyPhraseResponseDryRunMatchesSampleMatchesMax = 12;
+export const editHandwavyPhraseResponseDryRunMatchesSampleMatchesMax = 12;
 
-export const removeHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax = 12;
+export const editHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax = 12;
 
-export const RemoveHandwavyPhraseResponse = zod.object({
+export const EditHandwavyPhraseResponse = zod.object({
   added: zod
     .boolean()
     .optional()
     .describe(
-      "True when POST appended the phrase. Omitted on DELETE responses.",
+      "True when POST appended the phrase. Omitted on PATCH\/DELETE responses.",
+    ),
+  edited: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when PATCH actually changed the marker; false when the supplied updates matched the existing values. Omitted on POST\/DELETE responses.",
+    ),
+  editEntry: zod
+    .object({
+      editedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+        ),
+      editedAt: zod.coerce.date().describe("ISO 8601 timestamp of the edit."),
+      category: zod
+        .object({
+          from: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          to: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+        })
+        .optional(),
+      rationale: zod
+        .object({
+          from: zod.string().optional(),
+          to: zod.string().optional(),
+        })
+        .optional()
+        .describe(
+          "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
     ),
   removed: zod
     .boolean()
@@ -2936,6 +3299,51 @@ export const RemoveHandwavyPhraseResponse = zod.object({
         .describe(
           "Free-text justification supplied by the reviewer at add time.",
         ),
+      edits: zod
+        .array(
+          zod
+            .object({
+              editedBy: zod
+                .string()
+                .optional()
+                .describe(
+                  "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                ),
+              editedAt: zod.coerce
+                .date()
+                .describe("ISO 8601 timestamp of the edit."),
+              category: zod
+                .object({
+                  from: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                  to: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                })
+                .optional(),
+              rationale: zod
+                .object({
+                  from: zod.string().optional(),
+                  to: zod.string().optional(),
+                })
+                .optional()
+                .describe(
+                  "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                ),
+            })
+            .describe(
+              "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+            ),
+        )
+        .optional()
+        .describe(
+          "Chronological log of in-place edits to this marker (most recent\nlast). Each entry records who changed what, when. Bounded\nserver-side per marker.\n",
+        ),
     })
     .optional(),
   historyEntry: zod
@@ -2949,6 +3357,51 @@ export const RemoveHandwavyPhraseResponse = zod.object({
       addedBy: zod.string().optional(),
       addedAt: zod.coerce.date().optional(),
       rationale: zod.string().optional(),
+      edits: zod
+        .array(
+          zod
+            .object({
+              editedBy: zod
+                .string()
+                .optional()
+                .describe(
+                  "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                ),
+              editedAt: zod.coerce
+                .date()
+                .describe("ISO 8601 timestamp of the edit."),
+              category: zod
+                .object({
+                  from: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                  to: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                })
+                .optional(),
+              rationale: zod
+                .object({
+                  from: zod.string().optional(),
+                  to: zod.string().optional(),
+                })
+                .optional()
+                .describe(
+                  "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                ),
+            })
+            .describe(
+              "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+            ),
+        )
+        .optional()
+        .describe(
+          "Preserved on remove so reinstating still shows the edit history.",
+        ),
       removedBy: zod
         .string()
         .optional()
@@ -3005,6 +3458,640 @@ export const RemoveHandwavyPhraseResponse = zod.object({
           .optional()
           .describe(
             "Free-text justification supplied by the reviewer at add time.",
+          ),
+        edits: zod
+          .array(
+            zod
+              .object({
+                editedBy: zod
+                  .string()
+                  .optional()
+                  .describe(
+                    "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                  ),
+                editedAt: zod.coerce
+                  .date()
+                  .describe("ISO 8601 timestamp of the edit."),
+                category: zod
+                  .object({
+                    from: zod
+                      .enum(["absence", "hedging", "buzzword"])
+                      .describe(
+                        "Theme bucket used by the diagnostics panel to group matched phrases.",
+                      ),
+                    to: zod
+                      .enum(["absence", "hedging", "buzzword"])
+                      .describe(
+                        "Theme bucket used by the diagnostics panel to group matched phrases.",
+                      ),
+                  })
+                  .optional(),
+                rationale: zod
+                  .object({
+                    from: zod.string().optional(),
+                    to: zod.string().optional(),
+                  })
+                  .optional()
+                  .describe(
+                    "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                  ),
+              })
+              .describe(
+                "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+              ),
+          )
+          .optional()
+          .describe(
+            "Chronological log of in-place edits to this marker (most recent\nlast). Each entry records who changed what, when. Bounded\nserver-side per marker.\n",
+          ),
+      }),
+    )
+    .describe("Full active list after the mutation."),
+  dryRun: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #114 — true when the response is a preview only and the phrase was NOT\npersisted. When dryRun is true, `dryRunMatches` is populated and the existing\nactive phrase list (unchanged) is returned in `phrases`.\n",
+    ),
+  dryRunMatches: zod
+    .object({
+      total: zod
+        .number()
+        .describe(
+          "Total number of corpus fixtures the candidate phrase matched.",
+        ),
+      byTier: zod.object({
+        t1Legit: zod
+          .number()
+          .describe(
+            "Matches in T1 LEGIT fixtures (GREEN — legitimate, well-evidenced).",
+          ),
+        t2Borderline: zod
+          .number()
+          .describe(
+            "Matches in T2 BORDERLINE fixtures (YELLOW — debatable signal).",
+          ),
+        t3Slop: zod
+          .number()
+          .describe(
+            "Matches in T3 SLOP fixtures (RED — known slop archetypes).",
+          ),
+        t4Hallucinated: zod
+          .number()
+          .describe(
+            "Matches in T4 HALLUCINATED fixtures (RED — fabricated\/hallucinated).",
+          ),
+      }),
+      falsePositives: zod
+        .number()
+        .describe(
+          "T1 + T2 hits — the count of GREEN\/YELLOW corpus reports that would have been flagged.",
+        ),
+      corpusSize: zod
+        .number()
+        .describe("Total number of corpus fixtures evaluated."),
+      sampleMatches: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            tier: zod.enum([
+              "T1_LEGIT",
+              "T2_BORDERLINE",
+              "T3_SLOP",
+              "T4_HALLUCINATED",
+            ]),
+          }),
+        )
+        .max(editHandwavyPhraseResponseDryRunMatchesSampleMatchesMax)
+        .describe(
+          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+        ),
+      warning: zod
+        .string()
+        .nullish()
+        .describe(
+          "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+    })
+    .optional()
+    .describe(
+      "Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged\nthe curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)\nand T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high\nvalue is a strong signal that the phrase will crater AVRI for legitimate reports.\n",
+    ),
+  history: zod
+    .array(
+      zod
+        .object({
+          phrase: zod.string(),
+          category: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          addedBy: zod.string().optional(),
+          addedAt: zod.coerce.date().optional(),
+          rationale: zod.string().optional(),
+          edits: zod
+            .array(
+              zod
+                .object({
+                  editedBy: zod
+                    .string()
+                    .optional()
+                    .describe(
+                      "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                    ),
+                  editedAt: zod.coerce
+                    .date()
+                    .describe("ISO 8601 timestamp of the edit."),
+                  category: zod
+                    .object({
+                      from: zod
+                        .enum(["absence", "hedging", "buzzword"])
+                        .describe(
+                          "Theme bucket used by the diagnostics panel to group matched phrases.",
+                        ),
+                      to: zod
+                        .enum(["absence", "hedging", "buzzword"])
+                        .describe(
+                          "Theme bucket used by the diagnostics panel to group matched phrases.",
+                        ),
+                    })
+                    .optional(),
+                  rationale: zod
+                    .object({
+                      from: zod.string().optional(),
+                      to: zod.string().optional(),
+                    })
+                    .optional()
+                    .describe(
+                      "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                    ),
+                })
+                .describe(
+                  "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                ),
+            )
+            .optional()
+            .describe(
+              "Preserved on remove so reinstating still shows the edit history.",
+            ),
+          removedBy: zod
+            .string()
+            .optional()
+            .describe("Reviewer name or email that removed the phrase."),
+          removedAt: zod.coerce
+            .date()
+            .describe("ISO 8601 timestamp the phrase was removed."),
+          reinstated: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Task #121 — true once a reviewer has reinstated this phrase\nstraight from the history log via POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. The same row\ncannot be reinstated twice — if the phrase is removed again, a\nnew history row is appended.\n",
+            ),
+          reinstatedBy: zod
+            .string()
+            .optional()
+            .describe(
+              "Reviewer name or email that reinstated the phrase from this history entry.",
+            ),
+          reinstatedAt: zod.coerce
+            .date()
+            .optional()
+            .describe(
+              "ISO 8601 timestamp the phrase was reinstated from this history entry.",
+            ),
+        })
+        .describe(
+          "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
+        ),
+    )
+    .optional()
+    .describe(
+      "Full removal audit log after the mutation (only included on DELETE).",
+    ),
+  dryRunMatchesProduction: zod
+    .object({
+      total: zod
+        .number()
+        .describe(
+          "Total number of corpus fixtures the candidate phrase matched.",
+        ),
+      byTier: zod.object({
+        t1Legit: zod
+          .number()
+          .describe(
+            "Matches in T1 LEGIT fixtures (GREEN — legitimate, well-evidenced).",
+          ),
+        t2Borderline: zod
+          .number()
+          .describe(
+            "Matches in T2 BORDERLINE fixtures (YELLOW — debatable signal).",
+          ),
+        t3Slop: zod
+          .number()
+          .describe(
+            "Matches in T3 SLOP fixtures (RED — known slop archetypes).",
+          ),
+        t4Hallucinated: zod
+          .number()
+          .describe(
+            "Matches in T4 HALLUCINATED fixtures (RED — fabricated\/hallucinated).",
+          ),
+      }),
+      falsePositives: zod
+        .number()
+        .describe(
+          "T1 + T2 hits — the count of GREEN\/YELLOW corpus reports that would have been flagged.",
+        ),
+      corpusSize: zod
+        .number()
+        .describe("Total number of corpus fixtures evaluated."),
+      sampleMatches: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            tier: zod.enum([
+              "T1_LEGIT",
+              "T2_BORDERLINE",
+              "T3_SLOP",
+              "T4_HALLUCINATED",
+            ]),
+          }),
+        )
+        .max(
+          editHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax,
+        )
+        .describe(
+          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+        ),
+      warning: zod
+        .string()
+        .nullish()
+        .describe(
+          "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+    })
+    .describe(
+      "Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged\nthe curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)\nand T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high\nvalue is a strong signal that the phrase will crater AVRI for legitimate reports.\n",
+    )
+    .nullish()
+    .describe(
+      "Task #119 — Same shape as `dryRunMatches`, but scored against the most\nrecent N production reports (capped by `dryRunMatchesProductionLimit`)\ninstead of the curated benchmark cohorts. Production rows are bucketed\ninto the same T1\/T2\/T3\/T4 tiers as the curated corpus by mapping the\npersisted vulnrap composite label (STRONG\/PROMISING -> T1, REASONABLE\/\nNEEDS REVIEW -> T2, LIKELY INVALID -> T3, HIGH RISK -> T4). `corpusSize`\non this block is the number of production reports actually scanned\nafter dropping rows with no usable label \/ content. `null` when the\nproduction scan failed (see `dryRunMatchesProductionError`).\n",
+    ),
+  dryRunMatchesProductionError: zod
+    .string()
+    .nullish()
+    .describe(
+      "Task #119 — Reviewer-facing notice when the production-archive scan\ncould not run (e.g. DB unavailable). Null on success. The curated\n`dryRunMatches` block is still returned regardless.\n",
+    ),
+  dryRunMatchesProductionLimit: zod
+    .number()
+    .optional()
+    .describe(
+      'Task #119 — Upper bound on the number of most-recent production reports\nthe dry-run scan considered. Reported so reviewers know the depth of\nthe second signal (e.g. \"scanned the last 2000 reports\").\n',
+    ),
+});
+
+/**
+ * Removes a phrase (matched after lowercase + whitespace normalization) from the curated FLAT hand-wavy marker list.
+ * @summary Remove a FLAT hand-wavy marker phrase
+ */
+export const RemoveHandwavyPhraseBody = zod.object({
+  phrase: zod
+    .string()
+    .describe(
+      "Marker phrase (case-insensitive substring match against report text after whitespace collapsing).",
+    ),
+  category: zod
+    .enum(["absence", "hedging", "buzzword"])
+    .optional()
+    .describe(
+      "Theme bucket used by the diagnostics panel to group matched phrases.",
+    ),
+  dryRun: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #114 — when true, the server does NOT persist the phrase. It runs the\ncandidate phrase against the curated benchmark corpus (T1 LEGIT \/ T2 BORDERLINE\n\/ T3 SLOP \/ T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so\nreviewers can see how many GREEN \/ YELLOW reports the phrase would have hit\nbefore they confirm the add. Defaults to false (write-through behavior).\n",
+    ),
+  reviewer: zod
+    .string()
+    .optional()
+    .describe("Reviewer name or email recorded in the audit trail. Optional."),
+  rationale: zod
+    .string()
+    .optional()
+    .describe(
+      "Free-text justification recorded with the phrase. Only consulted on POST.",
+    ),
+});
+
+export const removeHandwavyPhraseResponseDryRunMatchesSampleMatchesMax = 12;
+
+export const removeHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax = 12;
+
+export const RemoveHandwavyPhraseResponse = zod.object({
+  added: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when POST appended the phrase. Omitted on PATCH\/DELETE responses.",
+    ),
+  edited: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when PATCH actually changed the marker; false when the supplied updates matched the existing values. Omitted on POST\/DELETE responses.",
+    ),
+  editEntry: zod
+    .object({
+      editedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+        ),
+      editedAt: zod.coerce.date().describe("ISO 8601 timestamp of the edit."),
+      category: zod
+        .object({
+          from: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          to: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+        })
+        .optional(),
+      rationale: zod
+        .object({
+          from: zod.string().optional(),
+          to: zod.string().optional(),
+        })
+        .optional()
+        .describe(
+          "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+    ),
+  removed: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when DELETE removed the phrase. Omitted on POST responses.",
+    ),
+  reinstated: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #121 — true when the response is from POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. Omitted on plain\nPOST\/DELETE responses.\n",
+    ),
+  phrase: zod
+    .string()
+    .describe("The normalized phrase that was added\/removed."),
+  category: zod
+    .enum(["absence", "hedging", "buzzword"])
+    .optional()
+    .describe(
+      "Theme bucket used by the diagnostics panel to group matched phrases.",
+    ),
+  total: zod.number().describe("Number of active phrases after the mutation."),
+  marker: zod
+    .object({
+      phrase: zod.string(),
+      category: zod
+        .enum(["absence", "hedging", "buzzword"])
+        .describe(
+          "Theme bucket used by the diagnostics panel to group matched phrases.",
+        ),
+      addedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that added the phrase. Absent for curated defaults.",
+        ),
+      addedAt: zod.coerce
+        .date()
+        .optional()
+        .describe(
+          "ISO 8601 timestamp the phrase was added. Absent for curated defaults.",
+        ),
+      rationale: zod
+        .string()
+        .optional()
+        .describe(
+          "Free-text justification supplied by the reviewer at add time.",
+        ),
+      edits: zod
+        .array(
+          zod
+            .object({
+              editedBy: zod
+                .string()
+                .optional()
+                .describe(
+                  "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                ),
+              editedAt: zod.coerce
+                .date()
+                .describe("ISO 8601 timestamp of the edit."),
+              category: zod
+                .object({
+                  from: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                  to: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                })
+                .optional(),
+              rationale: zod
+                .object({
+                  from: zod.string().optional(),
+                  to: zod.string().optional(),
+                })
+                .optional()
+                .describe(
+                  "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                ),
+            })
+            .describe(
+              "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+            ),
+        )
+        .optional()
+        .describe(
+          "Chronological log of in-place edits to this marker (most recent\nlast). Each entry records who changed what, when. Bounded\nserver-side per marker.\n",
+        ),
+    })
+    .optional(),
+  historyEntry: zod
+    .object({
+      phrase: zod.string(),
+      category: zod
+        .enum(["absence", "hedging", "buzzword"])
+        .describe(
+          "Theme bucket used by the diagnostics panel to group matched phrases.",
+        ),
+      addedBy: zod.string().optional(),
+      addedAt: zod.coerce.date().optional(),
+      rationale: zod.string().optional(),
+      edits: zod
+        .array(
+          zod
+            .object({
+              editedBy: zod
+                .string()
+                .optional()
+                .describe(
+                  "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                ),
+              editedAt: zod.coerce
+                .date()
+                .describe("ISO 8601 timestamp of the edit."),
+              category: zod
+                .object({
+                  from: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                  to: zod
+                    .enum(["absence", "hedging", "buzzword"])
+                    .describe(
+                      "Theme bucket used by the diagnostics panel to group matched phrases.",
+                    ),
+                })
+                .optional(),
+              rationale: zod
+                .object({
+                  from: zod.string().optional(),
+                  to: zod.string().optional(),
+                })
+                .optional()
+                .describe(
+                  "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                ),
+            })
+            .describe(
+              "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+            ),
+        )
+        .optional()
+        .describe(
+          "Preserved on remove so reinstating still shows the edit history.",
+        ),
+      removedBy: zod
+        .string()
+        .optional()
+        .describe("Reviewer name or email that removed the phrase."),
+      removedAt: zod.coerce
+        .date()
+        .describe("ISO 8601 timestamp the phrase was removed."),
+      reinstated: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #121 — true once a reviewer has reinstated this phrase\nstraight from the history log via POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. The same row\ncannot be reinstated twice — if the phrase is removed again, a\nnew history row is appended.\n",
+        ),
+      reinstatedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that reinstated the phrase from this history entry.",
+        ),
+      reinstatedAt: zod.coerce
+        .date()
+        .optional()
+        .describe(
+          "ISO 8601 timestamp the phrase was reinstated from this history entry.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
+    ),
+  phrases: zod
+    .array(
+      zod.object({
+        phrase: zod.string(),
+        category: zod
+          .enum(["absence", "hedging", "buzzword"])
+          .describe(
+            "Theme bucket used by the diagnostics panel to group matched phrases.",
+          ),
+        addedBy: zod
+          .string()
+          .optional()
+          .describe(
+            "Reviewer name or email that added the phrase. Absent for curated defaults.",
+          ),
+        addedAt: zod.coerce
+          .date()
+          .optional()
+          .describe(
+            "ISO 8601 timestamp the phrase was added. Absent for curated defaults.",
+          ),
+        rationale: zod
+          .string()
+          .optional()
+          .describe(
+            "Free-text justification supplied by the reviewer at add time.",
+          ),
+        edits: zod
+          .array(
+            zod
+              .object({
+                editedBy: zod
+                  .string()
+                  .optional()
+                  .describe(
+                    "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                  ),
+                editedAt: zod.coerce
+                  .date()
+                  .describe("ISO 8601 timestamp of the edit."),
+                category: zod
+                  .object({
+                    from: zod
+                      .enum(["absence", "hedging", "buzzword"])
+                      .describe(
+                        "Theme bucket used by the diagnostics panel to group matched phrases.",
+                      ),
+                    to: zod
+                      .enum(["absence", "hedging", "buzzword"])
+                      .describe(
+                        "Theme bucket used by the diagnostics panel to group matched phrases.",
+                      ),
+                  })
+                  .optional(),
+                rationale: zod
+                  .object({
+                    from: zod.string().optional(),
+                    to: zod.string().optional(),
+                  })
+                  .optional()
+                  .describe(
+                    "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                  ),
+              })
+              .describe(
+                "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+              ),
+          )
+          .optional()
+          .describe(
+            "Chronological log of in-place edits to this marker (most recent\nlast). Each entry records who changed what, when. Bounded\nserver-side per marker.\n",
           ),
       }),
     )
@@ -3092,6 +4179,51 @@ export const RemoveHandwavyPhraseResponse = zod.object({
           addedBy: zod.string().optional(),
           addedAt: zod.coerce.date().optional(),
           rationale: zod.string().optional(),
+          edits: zod
+            .array(
+              zod
+                .object({
+                  editedBy: zod
+                    .string()
+                    .optional()
+                    .describe(
+                      "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                    ),
+                  editedAt: zod.coerce
+                    .date()
+                    .describe("ISO 8601 timestamp of the edit."),
+                  category: zod
+                    .object({
+                      from: zod
+                        .enum(["absence", "hedging", "buzzword"])
+                        .describe(
+                          "Theme bucket used by the diagnostics panel to group matched phrases.",
+                        ),
+                      to: zod
+                        .enum(["absence", "hedging", "buzzword"])
+                        .describe(
+                          "Theme bucket used by the diagnostics panel to group matched phrases.",
+                        ),
+                    })
+                    .optional(),
+                  rationale: zod
+                    .object({
+                      from: zod.string().optional(),
+                      to: zod.string().optional(),
+                    })
+                    .optional()
+                    .describe(
+                      "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                    ),
+                })
+                .describe(
+                  "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                ),
+            )
+            .optional()
+            .describe(
+              "Preserved on remove so reinstating still shows the edit history.",
+            ),
           removedBy: zod
             .string()
             .optional()

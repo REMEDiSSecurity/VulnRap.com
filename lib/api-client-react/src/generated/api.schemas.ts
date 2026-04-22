@@ -1595,6 +1595,36 @@ export const HandwavyCategory = {
   buzzword: "buzzword",
 } as const;
 
+export type HandwavyEditEntryCategory = {
+  from: HandwavyCategory;
+  to: HandwavyCategory;
+};
+
+/**
+ * Before/after values for the rationale text. Empty string indicates the rationale was set or cleared.
+ */
+export type HandwavyEditEntryRationale = {
+  from?: string;
+  to?: string;
+};
+
+/**
+ * Single in-place edit applied to a curated hand-wavy marker phrase.
+Records who made the change, when, and the before/after for whichever
+fields actually changed (`category` and/or `rationale`). Fields that
+did not change are omitted to keep the audit log compact.
+
+ */
+export interface HandwavyEditEntry {
+  /** Reviewer name or email that performed the edit. Absent when no reviewer was supplied. */
+  editedBy?: string;
+  /** ISO 8601 timestamp of the edit. */
+  editedAt: string;
+  category?: HandwavyEditEntryCategory;
+  /** Before/after values for the rationale text. Empty string indicates the rationale was set or cleared. */
+  rationale?: HandwavyEditEntryRationale;
+}
+
 export interface HandwavyMarker {
   phrase: string;
   category: HandwavyCategory;
@@ -1604,6 +1634,11 @@ export interface HandwavyMarker {
   addedAt?: string;
   /** Free-text justification supplied by the reviewer at add time. */
   rationale?: string;
+  /** Chronological log of in-place edits to this marker (most recent
+last). Each entry records who changed what, when. Bounded
+server-side per marker.
+ */
+  edits?: HandwavyEditEntry[];
 }
 
 /**
@@ -1615,6 +1650,8 @@ export interface HandwavyHistoryEntry {
   addedBy?: string;
   addedAt?: string;
   rationale?: string;
+  /** Preserved on remove so reinstating still shows the edit history. */
+  edits?: HandwavyEditEntry[];
   /** Reviewer name or email that removed the phrase. */
   removedBy?: string;
   /** ISO 8601 timestamp the phrase was removed. */
@@ -1637,6 +1674,23 @@ export interface HandwavyPhrasesList {
   total: number;
   /** Removal audit log (most recent last). Bounded server-side. */
   history: HandwavyHistoryEntry[];
+}
+
+/**
+ * Request body for the in-place edit endpoint. The phrase string
+identifies which curated marker to update; provide at least one of
+`category` or `rationale` to actually change something. Send an empty
+`rationale` string to clear an existing rationale.
+
+ */
+export interface HandwavyPhraseEditBody {
+  /** Existing curated phrase to edit (matched after lowercase + whitespace normalization). */
+  phrase: string;
+  category?: HandwavyCategory;
+  /** New rationale text. Empty string clears the existing rationale. */
+  rationale?: string;
+  /** Reviewer name or email recorded in the edit audit entry. Optional. */
+  reviewer?: string;
 }
 
 export interface HandwavyPhraseBody {
@@ -1723,8 +1777,11 @@ export interface HandwavyPhraseDryRunMatches {
 }
 
 export interface HandwavyPhraseMutationResponse {
-  /** True when POST appended the phrase. Omitted on DELETE responses. */
+  /** True when POST appended the phrase. Omitted on PATCH/DELETE responses. */
   added?: boolean;
+  /** True when PATCH actually changed the marker; false when the supplied updates matched the existing values. Omitted on POST/DELETE responses. */
+  edited?: boolean;
+  editEntry?: HandwavyEditEntry;
   /** True when DELETE removed the phrase. Omitted on POST responses. */
   removed?: boolean;
   /** Task #121 — true when the response is from POST

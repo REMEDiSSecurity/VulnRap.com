@@ -556,6 +556,126 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     });
   });
 
+  // --- Task #120: in-place edits ---
+
+  describe("PATCH /feedback/calibration/handwavy-phrases", () => {
+    it("PATCH updates the category and returns the edit audit entry", async () => {
+      // Seed the row with reviewer + rationale so we can confirm the PATCH
+      // preserves the original add metadata and only appends a new edit entry.
+      await request("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "patchable marker",
+        category: "absence",
+        reviewer: "alice@team.com",
+        rationale: "initial reason",
+      });
+      const r = await request<{
+        edited: boolean;
+        marker: {
+          phrase: string;
+          category: string;
+          addedBy?: string;
+          rationale?: string;
+          edits?: Array<{ editedBy?: string; category?: { from: string; to: string } }>;
+        };
+        editEntry?: { editedBy?: string; category?: { from: string; to: string } };
+      }>("PATCH", "/feedback/calibration/handwavy-phrases", {
+        phrase: "patchable marker",
+        category: "buzzword",
+        reviewer: "bob@team.com",
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.edited).toBe(true);
+      expect(r.body.editEntry?.category).toEqual({ from: "absence", to: "buzzword" });
+      expect(r.body.editEntry?.editedBy).toBe("bob@team.com");
+      expect(r.body.marker.category).toBe("buzzword");
+      expect(r.body.marker.addedBy).toBe("alice@team.com");
+      expect(r.body.marker.rationale).toBe("initial reason");
+      expect(r.body.marker.edits).toHaveLength(1);
+
+      const list = await request<{
+        phrases: Array<{
+          phrase: string;
+          category: string;
+          edits?: Array<{ editedBy?: string }>;
+        }>;
+      }>("GET", "/feedback/calibration/handwavy-phrases");
+      const found = list.body.phrases.find((m) => m.phrase === "patchable marker");
+      expect(found?.category).toBe("buzzword");
+      expect(found?.edits?.[0].editedBy).toBe("bob@team.com");
+    });
+
+    it("PATCH updates the rationale and clears it when empty", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "rationale-edit marker",
+        category: "hedging",
+        rationale: "first reason",
+      });
+      const r1 = await request<{ edited: boolean; marker: { rationale?: string } }>(
+        "PATCH",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "rationale-edit marker", rationale: "fixed reason" },
+      );
+      expect(r1.status).toBe(200);
+      expect(r1.body.edited).toBe(true);
+      expect(r1.body.marker.rationale).toBe("fixed reason");
+
+      const r2 = await request<{ edited: boolean; marker: { rationale?: string } }>(
+        "PATCH",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "rationale-edit marker", rationale: "" },
+      );
+      expect(r2.status).toBe(200);
+      expect(r2.body.edited).toBe(true);
+      expect(r2.body.marker.rationale).toBeUndefined();
+    });
+
+    it("PATCH returns edited=false on a no-op update", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "noop marker",
+        category: "absence",
+        rationale: "stable reason",
+      });
+      const r = await request<{ edited: boolean }>("PATCH", "/feedback/calibration/handwavy-phrases", {
+        phrase: "noop marker",
+        category: "absence",
+        rationale: "stable reason",
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.edited).toBe(false);
+    });
+
+    it("PATCH returns 404 when the phrase is not in the active list", async () => {
+      const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
+        phrase: "phrase that was never added",
+        category: "absence",
+      });
+      expect(r.status).toBe(404);
+    });
+
+    it("PATCH rejects an invalid category with 400", async () => {
+      const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
+        phrase: "seed phrase one",
+        category: "nonsense",
+      });
+      expect(r.status).toBe(400);
+      expect(r.body.error).toMatch(/category/);
+    });
+
+    it("PATCH rejects a body with no updates", async () => {
+      const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
+        phrase: "seed phrase one",
+      });
+      expect(r.status).toBe(400);
+    });
+
+    it("PATCH rejects a missing phrase with 400", async () => {
+      const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
+        category: "absence",
+      });
+      expect(r.status).toBe(400);
+    });
+  });
+
   it("restoreDefaults helper rewrites the file with the curated defaults", () => {
     __restoreDefaults();
     // Sanity: the restore helper does not throw and the file now contains

@@ -5,9 +5,10 @@ import {
   useGetScoringConfig, getGetScoringConfigQueryKey,
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
-  addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase,
+  addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, editHandwavyPhrase,
   type HandwavyPhraseDryRunMatches,
   type HandwavyHistoryEntry,
+  type HandwavyEditEntry,
   applyCalibration,
   type FeedbackAnalyticsDailyTrendItem,
   type FeedbackAnalyticsScoreCorrelationItem,
@@ -31,7 +32,7 @@ import {
   MessageSquare, Star, ThumbsUp, ThumbsDown, TrendingUp, AlertTriangle,
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
-  Plus, Trash2, MessageCircleQuestion, RotateCcw,
+  Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -641,6 +642,13 @@ function HandwavyPhrasesAdmin() {
     productionLimit: number | null;
   } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  // Task #120 — in-place edit state. Only one row can be in edit mode at a
+  // time so the audit-trail save button doesn't get visually ambiguous.
+  const [editing, setEditing] = useState<{
+    phrase: string;
+    category: "absence" | "hedging" | "buzzword";
+    rationale: string;
+  } | null>(null);
 
   const { data, isLoading } = useGetHandwavyPhrases({
     query: { queryKey: getGetHandwavyPhrasesQueryKey() },
@@ -744,6 +752,39 @@ function HandwavyPhrasesAdmin() {
 
   const handleCancelPreview = () => {
     setPreview(null);
+  };
+
+  const handleStartEdit = (phrase: string, category: "absence" | "hedging" | "buzzword", rationale: string | undefined) => {
+    setEditing({ phrase, category, rationale: rationale ?? "" });
+  };
+
+  const handleCancelEdit = () => {
+    setEditing(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editing) return;
+    setBusy(`edit:${editing.phrase}`);
+    try {
+      const result = await editHandwavyPhrase({
+        phrase: editing.phrase,
+        category: editing.category,
+        rationale: editing.rationale,
+        reviewer: reviewer.trim() || undefined,
+      });
+      if (result.edited === false) {
+        toast({ title: "No changes", description: `"${editing.phrase}" already matched the supplied values.` });
+      } else {
+        toast({ title: "Phrase updated", description: `"${editing.phrase}" was updated. Edit recorded in the audit trail.` });
+      }
+      setEditing(null);
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to edit phrase.";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
   };
 
   const handleRemove = async (phrase: string) => {
@@ -991,6 +1032,11 @@ function HandwavyPhrasesAdmin() {
             {phrases.map((m) => {
               const addedAt = formatAuditTimestamp(m.addedAt);
               const isCurated = !m.addedBy && !m.addedAt;
+              const isEditing = editing?.phrase === m.phrase;
+              const editsList: HandwavyEditEntry[] = m.edits ?? [];
+              const lastEdit: HandwavyEditEntry | undefined =
+                editsList.length > 0 ? editsList[editsList.length - 1] : undefined;
+              const lastEditAt = formatAuditTimestamp(lastEdit?.editedAt);
               return (
                 <div
                   key={m.phrase}
@@ -999,18 +1045,76 @@ function HandwavyPhrasesAdmin() {
                 >
                   <div className="flex items-center gap-3">
                     <span className="flex-1 font-mono text-foreground/80 break-all">{m.phrase}</span>
-                    <Badge variant="outline" className="text-[10px] capitalize">{m.category}</Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-muted-foreground hover:text-red-400"
-                      disabled={busy === `rm:${m.phrase}`}
-                      onClick={() => handleRemove(m.phrase)}
-                      data-testid="handwavy-remove"
-                      aria-label={`Remove phrase ${m.phrase}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                    {isEditing ? (
+                      <select
+                        value={editing!.category}
+                        onChange={(e) =>
+                          setEditing((prev) =>
+                            prev ? { ...prev, category: e.target.value as "absence" | "hedging" | "buzzword" } : prev,
+                          )
+                        }
+                        className="h-7 px-1.5 rounded border border-border/40 bg-background/40 text-[10px]"
+                        data-testid="handwavy-edit-category"
+                        aria-label={`Edit category for ${m.phrase}`}
+                      >
+                        <option value="absence">absence</option>
+                        <option value="hedging">hedging</option>
+                        <option value="buzzword">buzzword</option>
+                      </select>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] capitalize">{m.category}</Badge>
+                    )}
+                    {isEditing ? (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-emerald-300 hover:text-emerald-200"
+                          disabled={busy === `edit:${m.phrase}`}
+                          onClick={handleSaveEdit}
+                          data-testid="handwavy-edit-save"
+                          aria-label={`Save edit for ${m.phrase}`}
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-muted-foreground"
+                          disabled={busy === `edit:${m.phrase}`}
+                          onClick={handleCancelEdit}
+                          data-testid="handwavy-edit-cancel"
+                          aria-label={`Cancel edit for ${m.phrase}`}
+                        >
+                          <XIcon className="w-3.5 h-3.5" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-muted-foreground hover:text-primary"
+                          disabled={editing !== null || busy === `rm:${m.phrase}`}
+                          onClick={() => handleStartEdit(m.phrase, m.category, m.rationale)}
+                          data-testid="handwavy-edit"
+                          aria-label={`Edit phrase ${m.phrase}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-muted-foreground hover:text-red-400"
+                          disabled={editing !== null || busy === `rm:${m.phrase}`}
+                          onClick={() => handleRemove(m.phrase)}
+                          data-testid="handwavy-remove"
+                          aria-label={`Remove phrase ${m.phrase}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                   <div
                     className="text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5"
@@ -1029,14 +1133,37 @@ function HandwavyPhrasesAdmin() {
                         )}
                       </>
                     )}
+                    {lastEdit && (
+                      <span data-testid="handwavy-last-edit">
+                        Last edit by{" "}
+                        <span className="text-foreground/80">{lastEdit.editedBy || "anonymous"}</span>
+                        {lastEditAt && <> • {lastEditAt}</>}
+                        {editsList.length > 1 && <> ({editsList.length} edits)</>}
+                      </span>
+                    )}
                   </div>
-                  {m.rationale && (
-                    <div
-                      className="text-[11px] text-foreground/70 italic pl-1 border-l border-primary/30"
-                      data-testid="handwavy-rationale-display"
-                    >
-                      “{m.rationale}”
-                    </div>
+                  {isEditing ? (
+                    <textarea
+                      value={editing!.rationale}
+                      onChange={(e) =>
+                        setEditing((prev) => (prev ? { ...prev, rationale: e.target.value } : prev))
+                      }
+                      placeholder="Rationale (leave empty to clear)"
+                      maxLength={500}
+                      rows={2}
+                      className="w-full mt-1 px-2 py-1.5 rounded border border-border/40 bg-background/40 text-[11px] resize-y"
+                      data-testid="handwavy-edit-rationale"
+                      aria-label={`Edit rationale for ${m.phrase}`}
+                    />
+                  ) : (
+                    m.rationale && (
+                      <div
+                        className="text-[11px] text-foreground/70 italic pl-1 border-l border-primary/30"
+                        data-testid="handwavy-rationale-display"
+                      >
+                        “{m.rationale}”
+                      </div>
+                    )
                   )}
                 </div>
               );
