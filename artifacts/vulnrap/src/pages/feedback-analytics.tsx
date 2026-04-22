@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1039,6 +1040,43 @@ function HandwavyPhrasesAdmin() {
   });
   const visibleHistory = sortedHistory.slice(0, 25);
 
+  // Task #131 — per-phrase "thrash" counter. A cycle is a remove+reinstate
+  // round-trip on the same phrase, which we read straight off the existing
+  // history log (each reinstated row = one completed cycle). Surfacing the
+  // count next to active phrases lets reviewers spot contentious markers
+  // that flip back and forth before the next flip happens.
+  const thrashByPhrase = new Map<
+    string,
+    Array<{
+      removedAt: string;
+      removedBy?: string;
+      reinstatedAt?: string;
+      reinstatedBy?: string;
+    }>
+  >();
+  for (const h of history) {
+    if (!h.reinstated) continue;
+    const removedAt = h.removedAt ? String(h.removedAt) : "";
+    const reinstatedAt = h.reinstatedAt ? String(h.reinstatedAt) : undefined;
+    const list = thrashByPhrase.get(h.phrase) ?? [];
+    list.push({
+      removedAt,
+      removedBy: h.removedBy,
+      reinstatedAt,
+      reinstatedBy: h.reinstatedBy,
+    });
+    thrashByPhrase.set(h.phrase, list);
+  }
+  // Sort each phrase's cycles oldest → newest so the tooltip reads
+  // chronologically.
+  for (const list of thrashByPhrase.values()) {
+    list.sort((a, b) => {
+      const ta = Date.parse(a.removedAt) || 0;
+      const tb = Date.parse(b.removedAt) || 0;
+      return ta - tb;
+    });
+  }
+
   return (
     <Card className="glass-card rounded-xl border-primary/10" data-testid="handwavy-admin">
       <CardHeader className="pb-2">
@@ -1395,6 +1433,11 @@ function HandwavyPhrasesAdmin() {
               const undoBusyKey = isUndoTarget && undoCandidate
                 ? `undo:${undoCandidate.phrase}:${undoCandidate.addedAtIso}`
                 : null;
+              // Task #131 — count of completed remove+reinstate cycles for
+              // this phrase, derived from the existing history log. Surfaced
+              // as a hover-able badge so reviewers can spot contentious
+              // markers at a glance.
+              const cycles = thrashByPhrase.get(m.phrase) ?? [];
               return (
                 <div
                   key={m.phrase}
@@ -1412,6 +1455,59 @@ function HandwavyPhrasesAdmin() {
                       data-testid="handwavy-select"
                     />
                     <span className="flex-1 font-mono text-foreground/80 break-all">{m.phrase}</span>
+                    {/* Task #131 — thrash counter badge appears before the
+                       category/edit affordances so reviewers see the
+                       contentious-marker signal alongside the existing
+                       bulk-select + inline-edit controls. */}
+                    {cycles.length > 0 && (
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger
+                            type="button"
+                            className="cursor-help inline-flex"
+                            data-testid="handwavy-thrash-badge"
+                            aria-label={`Removed and reinstated ${cycles.length} time${cycles.length === 1 ? "" : "s"}`}
+                          >
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] border-amber-500/40 text-amber-300"
+                            >
+                              <RotateCcw className="w-3 h-3 mr-1" />
+                              Removed and reinstated {cycles.length}×
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="top"
+                            align="end"
+                            collisionPadding={12}
+                            className="max-w-xs glass-card glow-border text-popover-foreground text-left font-normal normal-case px-3 py-2 whitespace-normal"
+                            data-testid="handwavy-thrash-tooltip"
+                          >
+                            <div className="text-[11px] font-semibold mb-1">
+                              {cycles.length} remove + reinstate {cycles.length === 1 ? "cycle" : "cycles"}
+                            </div>
+                            <ol className="space-y-1.5 text-[10px] leading-snug">
+                              {cycles.map((c, i) => (
+                                <li key={`${c.removedAt}-${i}`} className="space-y-0.5">
+                                  <div>
+                                    <span className="text-muted-foreground">#{i + 1} removed:</span>{" "}
+                                    {formatAuditTimestamp(c.removedAt) ?? "unknown date"}
+                                    {" by "}
+                                    <span className="text-foreground/90">{c.removedBy || "anonymous"}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">reinstated:</span>{" "}
+                                    {formatAuditTimestamp(c.reinstatedAt) ?? "unknown date"}
+                                    {" by "}
+                                    <span className="text-foreground/90">{c.reinstatedBy || "anonymous"}</span>
+                                  </div>
+                                </li>
+                              ))}
+                            </ol>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     {isEditing ? (
                       <select
                         value={editing!.category}
