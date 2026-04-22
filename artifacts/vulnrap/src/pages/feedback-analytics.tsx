@@ -790,6 +790,13 @@ function HandwavyPhrasesAdmin() {
   // expanded. Multiple rows can be open at once so reviewers can compare
   // how different phrases evolved side-by-side.
   const [openEditHistory, setOpenEditHistory] = useState<Set<string>>(() => new Set());
+  // Task #138 — optional sort that floats the most-thrashed phrases to the
+  // top of the active list. Default is OFF so the curated insertion order is
+  // preserved (reviewers who haven't opted in still see the familiar list);
+  // when ON we sort by descending remove+reinstate cycle count, with the
+  // original index as a stable tie-breaker so phrases with the same count
+  // don't shuffle around between renders.
+  const [sortByThrash, setSortByThrash] = useState(false);
   // Task #120 — in-place edit state. Only one row can be in edit mode at a
   // time so the audit-trail save button doesn't get visually ambiguous.
   const [editing, setEditing] = useState<{
@@ -1318,6 +1325,36 @@ function HandwavyPhrasesAdmin() {
     });
   }
 
+  // Task #138 — when the "Most contentious first" toggle is on, reorder the
+  // active list by descending thrash count. Original index is the tie-breaker
+  // so phrases with equal counts (and the long tail of zero-thrash phrases)
+  // keep their curated insertion order — flipping the toggle off therefore
+  // restores the exact default ordering.
+  const originalPhraseIndex = new Map<string, number>();
+  phrases.forEach((p, i) => {
+    originalPhraseIndex.set(p.phrase, i);
+  });
+  const displayPhrases = sortByThrash
+    ? [...phrases].sort((a, b) => {
+        const ca = thrashByPhrase.get(a.phrase)?.length ?? 0;
+        const cb = thrashByPhrase.get(b.phrase)?.length ?? 0;
+        if (cb !== ca) return cb - ca;
+        return (
+          (originalPhraseIndex.get(a.phrase) ?? 0) -
+          (originalPhraseIndex.get(b.phrase) ?? 0)
+        );
+      })
+    : phrases;
+  // Count only ACTIVE phrases that have a thrash history — a previously
+  // thrashed phrase that's currently inactive wouldn't actually move when
+  // the toggle is flipped, so including it here would overstate the effect
+  // in the toggle's tooltip.
+  let contentiousCount = 0;
+  for (const p of phrases) {
+    const cycles = thrashByPhrase.get(p.phrase);
+    if (cycles && cycles.length > 0) contentiousCount++;
+  }
+
   return (
     <>
     <Card className="glass-card rounded-xl border-primary/10" data-testid="handwavy-admin">
@@ -1702,10 +1739,41 @@ function HandwavyPhrasesAdmin() {
                   ? `${selectedInList.length} selected`
                   : "Select phrases to remove in bulk"}
               </span>
+              {/* Task #138 — "Most contentious first" toggle. Sits inside
+                  the sticky toolbar so reviewers can flip the ordering at
+                  any scroll depth. Disabled when there are no thrashed
+                  phrases at all so the affordance doesn't promise an order
+                  change that wouldn't visibly happen. */}
+              <label
+                className={cn(
+                  "ml-auto inline-flex items-center gap-1.5 text-[11px] select-none",
+                  contentiousCount === 0
+                    ? "text-muted-foreground/60 cursor-not-allowed"
+                    : "text-muted-foreground cursor-pointer",
+                )}
+                title={
+                  contentiousCount === 0
+                    ? "No phrases have been removed and reinstated yet"
+                    : `Sort the ${contentiousCount} thrashed phrase${contentiousCount === 1 ? "" : "s"} to the top`
+                }
+                data-testid="handwavy-sort-thrash-label"
+              >
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                  checked={sortByThrash && contentiousCount > 0}
+                  disabled={contentiousCount === 0}
+                  onChange={(e) => setSortByThrash(e.target.checked)}
+                  aria-label="Show most contentious phrases first"
+                  data-testid="handwavy-sort-thrash"
+                />
+                <RotateCcw className="w-3 h-3" />
+                <span>Most contentious first</span>
+              </label>
               <Button
                 variant="destructive"
                 size="sm"
-                className="ml-auto h-7 px-2 text-xs gap-1"
+                className="h-7 px-2 text-xs gap-1"
                 disabled={
                   selectedInList.length === 0 ||
                   busy === "bulk-remove" ||
@@ -1719,7 +1787,7 @@ function HandwavyPhrasesAdmin() {
               </Button>
             </div>
             <div className="divide-y divide-border/20">
-            {phrases.map((m) => {
+            {displayPhrases.map((m) => {
               const addedAt = formatAuditTimestamp(m.addedAt);
               const isCurated = !m.addedBy && !m.addedAt;
               const isEditing = editing?.phrase === m.phrase;
