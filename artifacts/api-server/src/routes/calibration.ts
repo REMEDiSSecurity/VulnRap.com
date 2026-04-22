@@ -12,6 +12,7 @@ import {
   removeHandwavyPhrasesBatch,
   previewRemoveHandwavyPhrasesBatch,
   reinstateHandwavyPhrase,
+  reinstateHandwavyPhrasesBatch,
   editHandwavyPhrase,
   undoHandwavyPhrase,
   revertHandwavyPhraseEdit,
@@ -753,6 +754,68 @@ router.post(
     } catch (err) {
       req.log?.error(err, "Failed to reinstate hand-wavy phrase");
       res.status(500).json({ error: "Failed to reinstate hand-wavy phrase." });
+    }
+  },
+);
+
+// Task #144 — reinstate every not-yet-reinstated inner phrase from a single
+// batch removal entry in one round-trip. The reviewer supplies the parent
+// entry's `removedAt`; the server reinstates each remaining inner phrase,
+// records the current reviewer on each one, and flips the aggregate
+// `reinstated` flag once everything is back. Per-phrase reinstate via the
+// existing /reinstate endpoint still works for partial undos.
+router.post(
+  "/feedback/calibration/handwavy-phrases/reinstate-batch",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { removedAt, reviewer } = (req.body ?? {}) as {
+        removedAt?: unknown;
+        reviewer?: unknown;
+      };
+      if (typeof removedAt !== "string" || removedAt.trim().length === 0) {
+        res.status(400).json({
+          error: "Body must include the 'removedAt' ISO timestamp of the batch entry to reinstate.",
+        });
+        return;
+      }
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res.status(400).json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      const result = reinstateHandwavyPhrasesBatch(removedAt, {
+        reviewer: typeof reviewer === "string" ? reviewer : undefined,
+      });
+      if (!result.ok) {
+        if (result.reason === "history-not-found") {
+          res.status(404).json({
+            error: "No matching removal-history entry found for that removedAt.",
+            reason: result.reason,
+          });
+          return;
+        }
+        // not-a-batch
+        res.status(409).json({
+          error: "That history entry is not a batch removal — use /reinstate for single-phrase entries.",
+          reason: result.reason,
+        });
+        return;
+      }
+      res.status(201).json({
+        reinstated: true,
+        batch: true,
+        removedAt: result.removedAt,
+        reinstatedCount: result.reinstated,
+        skipped: result.skipped,
+        total: result.total,
+        results: result.results,
+        historyEntry: result.historyEntry,
+        phrases: getHandwavyPhrases(),
+        history: getHandwavyPhraseHistory(),
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to reinstate hand-wavy phrase batch");
+      res.status(500).json({ error: "Failed to reinstate hand-wavy phrase batch." });
     }
   },
 );

@@ -1105,6 +1105,107 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     });
   });
 
+  // Task #144 — single-call batch reinstate so reviewers can undo a whole
+  // bulk CLI removal without clicking reinstate N times.
+  describe("Task #144 batch reinstate", () => {
+    it("POST /reinstate-batch reinstates every inner phrase in one call and flips the aggregate flag", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb a", category: "absence" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb b", category: "hedging" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb c", category: "buzzword" });
+      const removed = await request<{
+        historyEntry: { removedAt: string; phrases: Array<{ phrase: string }> };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["rb a", "rb b", "rb c"],
+        reviewer: "alice@team.com",
+      });
+      const removedAt = removed.body.historyEntry.removedAt;
+
+      const r = await request<{
+        reinstatedCount: number;
+        skipped: number;
+        results: Array<{ phrase: string; reinstated: boolean; reason?: string }>;
+        historyEntry: { reinstated: boolean; phrases: Array<{ phrase: string; reinstated?: boolean }> };
+        phrases: Marker[];
+        history: Array<{ removedAt: string; reinstated?: boolean }>;
+      }>("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
+        removedAt,
+        reviewer: "carol@team.com",
+      });
+      expect(r.status).toBe(201);
+      expect(r.body.reinstatedCount).toBe(3);
+      expect(r.body.skipped).toBe(0);
+      expect(r.body.results.every((x) => x.reinstated)).toBe(true);
+      expect(r.body.historyEntry.reinstated).toBe(true);
+      expect(r.body.historyEntry.phrases.every((p) => p.reinstated === true)).toBe(true);
+      const active = r.body.phrases.map((m) => m.phrase);
+      expect(active).toContain("rb a");
+      expect(active).toContain("rb b");
+      expect(active).toContain("rb c");
+    });
+
+    it("POST /reinstate-batch returns 200 + skip reasons when some inner phrases are already reinstated/active", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb skip a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb skip b" });
+      const removed = await request<{
+        historyEntry: { removedAt: string };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["rb skip a", "rb skip b"],
+      });
+      const removedAt = removed.body.historyEntry.removedAt;
+      // Reinstate one ahead of time.
+      await request("POST", "/feedback/calibration/handwavy-phrases/reinstate", {
+        phrase: "rb skip a",
+        removedAt,
+      });
+      const r = await request<{
+        reinstatedCount: number;
+        skipped: number;
+        results: Array<{ phrase: string; reinstated: boolean; reason?: string }>;
+      }>("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
+        removedAt,
+      });
+      expect(r.status).toBe(201);
+      expect(r.body.reinstatedCount).toBe(1);
+      expect(r.body.skipped).toBe(1);
+      const skipA = r.body.results.find((x) => x.phrase === "rb skip a");
+      expect(skipA?.reinstated).toBe(false);
+      expect(skipA?.reason).toBe("already-reinstated");
+    });
+
+    it("POST /reinstate-batch returns 404 when removedAt does not match any history entry", async () => {
+      const r = await request<{ reason?: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate-batch",
+        { removedAt: "2099-01-01T00:00:00.000Z" },
+      );
+      expect(r.status).toBe(404);
+      expect(r.body.reason).toBe("history-not-found");
+    });
+
+    it("POST /reinstate-batch returns 409 when the matched entry is not a batch", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb single" });
+      const removed = await request<{
+        historyEntry: { removedAt: string };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", { phrase: "rb single" });
+      const r = await request<{ reason?: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate-batch",
+        { removedAt: removed.body.historyEntry.removedAt },
+      );
+      expect(r.status).toBe(409);
+      expect(r.body.reason).toBe("not-a-batch");
+    });
+
+    it("POST /reinstate-batch rejects missing removedAt with 400", async () => {
+      const r = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate-batch",
+        {},
+      );
+      expect(r.status).toBe(400);
+    });
+  });
+
   it("restoreDefaults helper rewrites the file with the curated defaults", () => {
     __restoreDefaults();
     // Sanity: the restore helper does not throw and the file now contains

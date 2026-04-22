@@ -5,7 +5,8 @@ import {
   useGetScoringConfig, getGetScoringConfigQueryKey,
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
-  addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, editHandwavyPhrase, undoHandwavyPhrase,
+  addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, reinstateHandwavyPhrasesBatch,
+  editHandwavyPhrase, undoHandwavyPhrase,
   revertHandwavyPhraseEdit,
   type HandwavyPhraseDryRunMatches,
   type HandwavyHistoryEntry,
@@ -1302,6 +1303,40 @@ function HandwavyPhrasesAdmin() {
     }
   };
 
+  // Task #144 — single-round-trip "Reinstate all" for a batch removal entry.
+  // The reviewer hits one button on the batch header row and the server
+  // reinstates every inner phrase that hasn't already been reinstated (and
+  // isn't currently active). Per-phrase reinstate buttons still work for
+  // partial undos.
+  const handleReinstateBatch = async (removedAtIso: string, batchSize: number) => {
+    const key = `reinstate-batch:${removedAtIso}`;
+    setBusy(key);
+    try {
+      const resp = await reinstateHandwavyPhrasesBatch({
+        removedAt: removedAtIso,
+        reviewer: reviewer.trim() || undefined,
+      });
+      const reinstatedCount =
+        typeof resp.reinstatedCount === "number" ? resp.reinstatedCount : 0;
+      const skipped = typeof resp.skipped === "number" ? resp.skipped : 0;
+      const noun = reinstatedCount === 1 ? "phrase" : "phrases";
+      const skipNote = skipped > 0 ? ` (${skipped} already active or already reinstated)` : "";
+      toast({
+        title: reinstatedCount > 0 ? "Batch reinstated" : "Nothing to reinstate",
+        description:
+          reinstatedCount > 0
+            ? `${reinstatedCount} of ${batchSize} ${noun} from this batch are back on the active list${skipNote}.`
+            : `Every phrase in this batch was already accounted for${skipNote}.`,
+      });
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to reinstate batch.";
+      toast({ title: "Batch reinstate failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Task #130 — mirror of #121's reinstate. After adding a phrase by mistake
   // a reviewer can press Undo within UNDO_WINDOW_MS to remove it; the
   // resulting history row is tagged `undone: true` so the audit trail reads
@@ -1364,10 +1399,12 @@ function HandwavyPhrasesAdmin() {
 
   // Most recent removals first, capped to keep the panel tidy.
   // Task #135 — batch entries (one reviewer action that removed multiple
-  // phrases at once) are flattened into one display row per inner phrase
-  // for the audit panel. Each flattened row carries the parent batch's
-  // removedAt + a `batchSize` label so reviewers can still see "this came
-  // out of a batch of N".
+  // phrases at once) carry a `phrases[]` list of inner removals. Each inner
+  // phrase becomes a per-phrase row, but we ALSO emit a parent "batch"
+  // group so Task #144's audit panel can render a single header row with
+  // "Batch removal of N phrases by <reviewer> on <date>" + a single
+  // "Reinstate all" button. Per-phrase reinstate buttons still work for
+  // partial undos on the inner rows beneath the header.
   type DisplayHistoryRow = {
     phrase: string;
     category: HandwavyHistoryEntry["category"];
@@ -1379,47 +1416,91 @@ function HandwavyPhrasesAdmin() {
     reinstated?: boolean;
     reinstatedBy?: string;
     reinstatedAt?: HandwavyHistoryEntry["reinstatedAt"];
+    undone?: boolean;
+    undoneBy?: string;
     batchSize?: number;
   };
-  const flattenedHistory: DisplayHistoryRow[] = [];
+  type DisplayHistoryGroup =
+    | { kind: "single"; sortKey: number; row: DisplayHistoryRow }
+    | {
+        kind: "batch";
+        sortKey: number;
+        removedAtIso: string;
+        removedBy?: string;
+        batchSize: number;
+        reinstatedCount: number;
+        allReinstated: boolean;
+        rows: DisplayHistoryRow[];
+      };
+  const historyGroups: DisplayHistoryGroup[] = [];
   for (const h of history) {
+    const sortKey = Date.parse(String(h.removedAt ?? "")) || 0;
     if (Array.isArray(h.phrases) && h.phrases.length > 0) {
-      for (const inner of h.phrases) {
-        flattenedHistory.push({
-          phrase: inner.phrase,
-          category: inner.category,
-          addedBy: inner.addedBy,
-          addedAt: inner.addedAt,
-          rationale: inner.rationale,
-          removedBy: h.removedBy,
-          removedAt: h.removedAt,
-          reinstated: inner.reinstated,
-          reinstatedBy: inner.reinstatedBy,
-          reinstatedAt: inner.reinstatedAt,
-          batchSize: h.phrases.length,
-        });
-      }
-    } else if (typeof h.phrase === "string" && h.phrase.length > 0) {
-      flattenedHistory.push({
-        phrase: h.phrase,
-        category: h.category,
-        addedBy: h.addedBy,
-        addedAt: h.addedAt,
-        rationale: h.rationale,
+      const rows: DisplayHistoryRow[] = h.phrases.map((inner) => ({
+        phrase: inner.phrase,
+        category: inner.category,
+        addedBy: inner.addedBy,
+        addedAt: inner.addedAt,
+        rationale: inner.rationale,
         removedBy: h.removedBy,
         removedAt: h.removedAt,
-        reinstated: h.reinstated,
-        reinstatedBy: h.reinstatedBy,
-        reinstatedAt: h.reinstatedAt,
+        reinstated: inner.reinstated,
+        reinstatedBy: inner.reinstatedBy,
+        reinstatedAt: inner.reinstatedAt,
+        batchSize: h.phrases!.length,
+      }));
+      const removedAtIso =
+        h.removedAt instanceof Date ? h.removedAt.toISOString() : String(h.removedAt);
+      const reinstatedCount = rows.filter((r) => r.reinstated).length;
+      historyGroups.push({
+        kind: "batch",
+        sortKey,
+        removedAtIso,
+        removedBy: h.removedBy,
+        batchSize: rows.length,
+        reinstatedCount,
+        allReinstated: h.reinstated === true || (rows.length > 0 && reinstatedCount === rows.length),
+        rows,
+      });
+    } else if (typeof h.phrase === "string" && h.phrase.length > 0) {
+      historyGroups.push({
+        kind: "single",
+        sortKey,
+        row: {
+          phrase: h.phrase,
+          category: h.category,
+          addedBy: h.addedBy,
+          addedAt: h.addedAt,
+          rationale: h.rationale,
+          removedBy: h.removedBy,
+          removedAt: h.removedAt,
+          reinstated: h.reinstated,
+          reinstatedBy: h.reinstatedBy,
+          reinstatedAt: h.reinstatedAt,
+          undone: h.undone,
+          undoneBy: h.undoneBy,
+        },
       });
     }
   }
-  const sortedHistory = flattenedHistory.sort((a, b) => {
-    const ta = Date.parse(String(a.removedAt ?? "")) || 0;
-    const tb = Date.parse(String(b.removedAt ?? "")) || 0;
-    return tb - ta;
-  });
-  const visibleHistory = sortedHistory.slice(0, 25);
+  const sortedHistoryGroups = historyGroups.sort((a, b) => b.sortKey - a.sortKey);
+  const totalHistoryRowCount = historyGroups.reduce(
+    (sum, g) => sum + (g.kind === "single" ? 1 : g.rows.length),
+    0,
+  );
+  // Preserve the original row-count cap (25) introduced before grouping —
+  // accumulate groups until we'd cross the cap, but always include each
+  // group whole so a batch never renders with a partial inner row list.
+  const HISTORY_ROW_CAP = 25;
+  const visibleHistoryGroups: DisplayHistoryGroup[] = [];
+  let runningRowCount = 0;
+  for (const g of sortedHistoryGroups) {
+    const rowsInGroup = g.kind === "single" ? 1 : g.rows.length;
+    if (visibleHistoryGroups.length > 0 && runningRowCount + rowsInGroup > HISTORY_ROW_CAP) break;
+    visibleHistoryGroups.push(g);
+    runningRowCount += rowsInGroup;
+  }
+  const visibleHistoryRowCount = runningRowCount;
 
   // Task #131 — per-phrase "thrash" counter. A cycle is a remove+reinstate
   // round-trip on the same phrase, which we read straight off the existing
@@ -2229,7 +2310,7 @@ function HandwavyPhrasesAdmin() {
             </div>
           </div>
         )}
-        {sortedHistory.length > 0 && (
+        {sortedHistoryGroups.length > 0 && (
           <div className="pt-2 border-t border-border/20">
             <button
               type="button"
@@ -2239,122 +2320,200 @@ function HandwavyPhrasesAdmin() {
               aria-expanded={showHistory}
             >
               <Clock className="w-3 h-3" />
-              {showHistory ? "Hide" : "Show"} removal &amp; undo history ({sortedHistory.length})
+              {showHistory ? "Hide" : "Show"} removal &amp; undo history ({totalHistoryRowCount})
             </button>
             {showHistory && (
               <div
                 className="mt-2 border border-border/20 rounded-md divide-y divide-border/10 max-h-64 overflow-y-auto"
                 data-testid="handwavy-history-list"
               >
-                {visibleHistory.map((h, idx) => {
-                  const removedAtKey =
-                    h.removedAt instanceof Date
-                      ? h.removedAt.toISOString()
-                      : String(h.removedAt);
-                  const reinstateKey = `reinstate:${h.phrase}:${removedAtKey}`;
-                  // The phrase is also "active" if it lives in the current
-                  // markers list — for example, someone manually re-added it
-                  // (without using the reinstate button) after it was
-                  // removed. Hide the button so we don't show a control that
-                  // would 409 server-side.
-                  const isActive = phrases.some((m: { phrase: string }) => m.phrase === h.phrase);
-                  // Task #130 — render undo rows with a distinct amber-tinted
-                  // background and an "Undone" verb so the audit trail
-                  // explicitly distinguishes them from manual removals.
-                  const isUndone = h.undone === true;
+                {visibleHistoryGroups.map((group, gIdx) => {
+                  const renderRow = (
+                    h: DisplayHistoryRow,
+                    rowIdx: number,
+                    opts: { insideBatch?: boolean } = {},
+                  ) => {
+                    const removedAtKey =
+                      h.removedAt instanceof Date
+                        ? h.removedAt.toISOString()
+                        : String(h.removedAt);
+                    const reinstateKey = `reinstate:${h.phrase}:${removedAtKey}`;
+                    const isActive = phrases.some(
+                      (m: { phrase: string }) => m.phrase === h.phrase,
+                    );
+                    const isUndone = h.undone === true;
+                    return (
+                      <div
+                        key={`${h.phrase}-${removedAtKey}-${rowIdx}`}
+                        className={cn(
+                          "px-3 py-2 text-[11px] text-muted-foreground space-y-0.5",
+                          isUndone && "bg-amber-500/5 border-l-2 border-amber-500/40",
+                          opts.insideBatch && "pl-6 bg-background/20",
+                        )}
+                        data-testid="handwavy-history-row"
+                        data-history-kind={isUndone ? "undone" : "removed"}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-foreground/70 break-all flex-1 line-through">{h.phrase}</span>
+                          <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
+                          {isUndone && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] border-amber-500/40 text-amber-300"
+                              data-testid="handwavy-history-undone"
+                            >
+                              Undone
+                            </Badge>
+                          )}
+                          {h.reinstated ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] border-emerald-500/40 text-emerald-300"
+                              data-testid="handwavy-history-reinstated"
+                            >
+                              Reinstated
+                            </Badge>
+                          ) : isActive ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-muted-foreground"
+                              data-testid="handwavy-history-active"
+                            >
+                              Already active
+                            </Badge>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                              disabled={busy === reinstateKey}
+                              onClick={() => handleReinstate(h)}
+                              data-testid="handwavy-reinstate"
+                              aria-label={`Reinstate phrase ${h.phrase}`}
+                            >
+                              <RotateCcw className="w-3 h-3 mr-1" />
+                              {busy === reinstateKey ? "Reinstating…" : "Reinstate"}
+                            </Button>
+                          )}
+                        </div>
+                        <div>
+                          {isUndone ? "Undone by " : "Removed by "}
+                          <span className="text-foreground/80">
+                            {(isUndone ? h.undoneBy : h.removedBy) || "anonymous"}
+                          </span>
+                          {" • "}
+                          {formatAuditTimestamp(h.removedAt) ?? "unknown date"}
+                          {!opts.insideBatch && h.batchSize && h.batchSize > 1 && (
+                            <span
+                              className="ml-2 text-foreground/60"
+                              data-testid="handwavy-history-batch-label"
+                            >
+                              (part of a batch removal of {h.batchSize})
+                            </span>
+                          )}
+                        </div>
+                        {(h.addedBy || h.rationale) && (
+                          <div className="text-foreground/60">
+                            Originally added by{" "}
+                            <span className="text-foreground/80">{h.addedBy || "anonymous"}</span>
+                            {h.rationale && <> — “{h.rationale}”</>}
+                          </div>
+                        )}
+                        {h.reinstated && (
+                          <div
+                            className="text-emerald-300/80"
+                            data-testid="handwavy-history-reinstated-meta"
+                          >
+                            Reinstated by{" "}
+                            <span className="text-foreground/80">{h.reinstatedBy || "anonymous"}</span>
+                            {" • "}
+                            {formatAuditTimestamp(h.reinstatedAt) ?? "unknown date"}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
+
+                  if (group.kind === "single") {
+                    return renderRow(group.row, gIdx);
+                  }
+
+                  // Task #144 — batch group: a single header row with one
+                  // "Reinstate all" button, then the inner per-phrase rows
+                  // beneath it (still independently reinstateable).
+                  const batchKey = `reinstate-batch:${group.removedAtIso}`;
+                  // Number of inner phrases that aren't already reinstated
+                  // AND aren't already in the active list — i.e. what the
+                  // batch button would actually re-add.
+                  const remainingCount = group.rows.filter(
+                    (r) => !r.reinstated && !phrases.some((m: { phrase: string }) => m.phrase === r.phrase),
+                  ).length;
                   return (
                     <div
-                      key={`${h.phrase}-${removedAtKey}-${idx}`}
-                      className={cn(
-                        "px-3 py-2 text-[11px] text-muted-foreground space-y-0.5",
-                        isUndone && "bg-amber-500/5 border-l-2 border-amber-500/40",
-                      )}
-                      data-testid="handwavy-history-row"
-                      data-history-kind={isUndone ? "undone" : "removed"}
+                      key={`batch-${group.removedAtIso}-${gIdx}`}
+                      data-testid="handwavy-history-batch-group"
+                      data-batch-removed-at={group.removedAtIso}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-foreground/70 break-all flex-1 line-through">{h.phrase}</span>
-                        <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
-                        {isUndone && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] border-amber-500/40 text-amber-300"
-                            data-testid="handwavy-history-undone"
-                          >
-                            Undone
-                          </Badge>
-                        )}
-                        {h.reinstated ? (
+                      <div
+                        className="px-3 py-2 text-[11px] bg-primary/5 border-l-2 border-primary/40 flex items-center gap-2 flex-wrap"
+                        data-testid="handwavy-history-batch-header"
+                      >
+                        <Layers className="w-3 h-3 text-primary/80 shrink-0" />
+                        <span className="text-foreground/80 flex-1 min-w-0">
+                          Batch removal of <strong>{group.batchSize}</strong> phrase{group.batchSize === 1 ? "" : "s"} by{" "}
+                          <span className="text-foreground/90">{group.removedBy || "anonymous"}</span>
+                          {" on "}
+                          {formatAuditTimestamp(group.removedAtIso) ?? "unknown date"}
+                          {group.reinstatedCount > 0 && !group.allReinstated && (
+                            <span className="ml-2 text-muted-foreground">
+                              ({group.reinstatedCount} of {group.batchSize} reinstated)
+                            </span>
+                          )}
+                        </span>
+                        {group.allReinstated ? (
                           <Badge
                             variant="outline"
                             className="text-[10px] border-emerald-500/40 text-emerald-300"
-                            data-testid="handwavy-history-reinstated"
+                            data-testid="handwavy-history-batch-reinstated"
                           >
-                            Reinstated
+                            All reinstated
                           </Badge>
-                        ) : isActive ? (
+                        ) : remainingCount === 0 ? (
                           <Badge
                             variant="outline"
                             className="text-[10px] text-muted-foreground"
-                            data-testid="handwavy-history-active"
+                            data-testid="handwavy-history-batch-nothing-to-do"
                           >
-                            Already active
+                            Nothing to reinstate
                           </Badge>
                         ) : (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                            disabled={busy === reinstateKey}
-                            onClick={() => handleReinstate(h)}
-                            data-testid="handwavy-reinstate"
-                            aria-label={`Reinstate phrase ${h.phrase}`}
+                            disabled={busy === batchKey}
+                            onClick={() => handleReinstateBatch(group.removedAtIso, group.batchSize)}
+                            data-testid="handwavy-reinstate-batch"
+                            aria-label={`Reinstate all ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
                           >
                             <RotateCcw className="w-3 h-3 mr-1" />
-                            {busy === reinstateKey ? "Reinstating…" : "Reinstate"}
+                            {busy === batchKey
+                              ? "Reinstating…"
+                              : `Reinstate all ${remainingCount}`}
                           </Button>
                         )}
                       </div>
-                      <div>
-                        {isUndone ? "Undone by " : "Removed by "}
-                        <span className="text-foreground/80">
-                          {(isUndone ? h.undoneBy : h.removedBy) || "anonymous"}
-                        </span>
-                        {" • "}
-                        {formatAuditTimestamp(h.removedAt) ?? "unknown date"}
-                        {h.batchSize && h.batchSize > 1 && (
-                          <span
-                            className="ml-2 text-foreground/60"
-                            data-testid="handwavy-history-batch-label"
-                          >
-                            (part of a batch removal of {h.batchSize})
-                          </span>
+                      <div className="divide-y divide-border/10">
+                        {group.rows.map((row, rIdx) =>
+                          renderRow(row, rIdx, { insideBatch: true }),
                         )}
                       </div>
-                      {(h.addedBy || h.rationale) && (
-                        <div className="text-foreground/60">
-                          Originally added by{" "}
-                          <span className="text-foreground/80">{h.addedBy || "anonymous"}</span>
-                          {h.rationale && <> — “{h.rationale}”</>}
-                        </div>
-                      )}
-                      {h.reinstated && (
-                        <div
-                          className="text-emerald-300/80"
-                          data-testid="handwavy-history-reinstated-meta"
-                        >
-                          Reinstated by{" "}
-                          <span className="text-foreground/80">{h.reinstatedBy || "anonymous"}</span>
-                          {" • "}
-                          {formatAuditTimestamp(h.reinstatedAt) ?? "unknown date"}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
-                {sortedHistory.length > visibleHistory.length && (
+                {totalHistoryRowCount > visibleHistoryRowCount && (
                   <div className="px-3 py-2 text-[10px] italic text-muted-foreground/70">
-                    Showing the {visibleHistory.length} most recent of {sortedHistory.length} removals.
+                    Showing the {visibleHistoryRowCount} most recent of {totalHistoryRowCount} removals.
                   </div>
                 )}
               </div>

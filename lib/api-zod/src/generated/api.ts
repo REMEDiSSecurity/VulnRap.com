@@ -6574,6 +6574,37 @@ export const UndoHandwavyPhraseResponse = zod.object({
 });
 
 /**
+ * Task #144 — single-round-trip reinstate of every inner phrase from one
+Task #135 batch removal entry. The reviewer supplies the parent
+entry's `removedAt`; the server reinstates each remaining inner
+phrase, records the current reviewer on each one, and flips the
+aggregate `reinstated` flag once everything is back. Inner phrases
+that have already been reinstated (partial undo earlier) or that
+have been re-added to the active list separately are skipped with a
+reason instead of failing the whole call. Per-phrase reinstate via
+the existing /reinstate endpoint still works for partial undos.
+
+ * @summary Reinstate every not-yet-reinstated phrase from a single batch removal entry
+ */
+export const ReinstateHandwavyPhrasesBatchBody = zod
+  .object({
+    removedAt: zod.coerce
+      .date()
+      .describe(
+        "ISO 8601 timestamp of the matching batch removal entry's `removedAt` field.",
+      ),
+    reviewer: zod
+      .string()
+      .optional()
+      .describe(
+        "Reviewer name or email recorded as `addedBy`\/`reinstatedBy` on every reinstated phrase. Optional.",
+      ),
+  })
+  .describe(
+    "Task #144 — body for POST \/feedback\/calibration\/handwavy-phrases\/reinstate-batch.\nThe batch history entry is matched by `removedAt`; every inner phrase\nthat has not already been reinstated and is not currently active is\nre-added in one round-trip.\n",
+  );
+
+/**
  * Task #121 — re-adds a phrase straight from the removal-history log so a
 reviewer doesn't have to retype it (and its rationale) into the add
 form. The history entry is matched by `phrase` + `removedAt`. The

@@ -1944,6 +1944,65 @@ export interface HandwavyPhraseReinstateBody {
   reviewer?: string;
 }
 
+/**
+ * Task #144 — body for POST /feedback/calibration/handwavy-phrases/reinstate-batch.
+The batch history entry is matched by `removedAt`; every inner phrase
+that has not already been reinstated and is not currently active is
+re-added in one round-trip.
+
+ */
+export interface HandwavyPhraseReinstateBatchBody {
+  /** ISO 8601 timestamp of the matching batch removal entry's `removedAt` field. */
+  removedAt: string;
+  /** Reviewer name or email recorded as `addedBy`/`reinstatedBy` on every reinstated phrase. Optional. */
+  reviewer?: string;
+}
+
+/**
+ * Present only when `reinstated` is false.
+ */
+export type HandwavyPhraseReinstateBatchEntryResultReason =
+  (typeof HandwavyPhraseReinstateBatchEntryResultReason)[keyof typeof HandwavyPhraseReinstateBatchEntryResultReason];
+
+export const HandwavyPhraseReinstateBatchEntryResultReason = {
+  "already-reinstated": "already-reinstated",
+  "already-active": "already-active",
+} as const;
+
+/**
+ * Task #144 — outcome of attempting to reinstate one inner phrase as
+part of a /reinstate-batch round-trip.
+
+ */
+export interface HandwavyPhraseReinstateBatchEntryResult {
+  phrase: string;
+  reinstated: boolean;
+  /** Present only when `reinstated` is false. */
+  reason?: HandwavyPhraseReinstateBatchEntryResultReason;
+}
+
+/**
+ * Task #144 — response from POST /feedback/calibration/handwavy-phrases/reinstate-batch.
+
+ */
+export interface HandwavyPhraseReinstateBatchResponse {
+  /** Always true on a successful 201 response (the batch was processed). */
+  reinstated: boolean;
+  /** Always true — distinguishes this response from a single-phrase /reinstate. */
+  batch: boolean;
+  removedAt: string;
+  /** Number of inner phrases actually re-added in this round-trip. */
+  reinstatedCount: number;
+  /** Number of inner phrases skipped (already reinstated or already active). */
+  skipped: number;
+  /** Number of active phrases after the batch reinstate. */
+  total: number;
+  results: HandwavyPhraseReinstateBatchEntryResult[];
+  historyEntry: HandwavyHistoryEntry;
+  phrases: HandwavyMarker[];
+  history: HandwavyHistoryEntry[];
+}
+
 export type HandwavyPhraseDryRunMatchesByTier = {
   /** Matches in T1 LEGIT fixtures (GREEN — legitimate, well-evidenced). */
   t1Legit: number;

@@ -38,6 +38,8 @@ import type {
   HandwavyPhraseBody,
   HandwavyPhraseEditBody,
   HandwavyPhraseMutationResponse,
+  HandwavyPhraseReinstateBatchBody,
+  HandwavyPhraseReinstateBatchResponse,
   HandwavyPhraseReinstateBody,
   HandwavyPhraseRevertEditBody,
   HandwavyPhraseUndoBody,
@@ -2036,6 +2038,107 @@ export const useUndoHandwavyPhrase = <
   TContext
 > => {
   return useMutation(getUndoHandwavyPhraseMutationOptions(options));
+};
+
+/**
+ * Task #144 — single-round-trip reinstate of every inner phrase from one
+Task #135 batch removal entry. The reviewer supplies the parent
+entry's `removedAt`; the server reinstates each remaining inner
+phrase, records the current reviewer on each one, and flips the
+aggregate `reinstated` flag once everything is back. Inner phrases
+that have already been reinstated (partial undo earlier) or that
+have been re-added to the active list separately are skipped with a
+reason instead of failing the whole call. Per-phrase reinstate via
+the existing /reinstate endpoint still works for partial undos.
+
+ * @summary Reinstate every not-yet-reinstated phrase from a single batch removal entry
+ */
+export const getReinstateHandwavyPhrasesBatchUrl = () => {
+  return `/api/feedback/calibration/handwavy-phrases/reinstate-batch`;
+};
+
+export const reinstateHandwavyPhrasesBatch = async (
+  handwavyPhraseReinstateBatchBody: HandwavyPhraseReinstateBatchBody,
+  options?: RequestInit,
+): Promise<HandwavyPhraseReinstateBatchResponse> => {
+  return customFetch<HandwavyPhraseReinstateBatchResponse>(
+    getReinstateHandwavyPhrasesBatchUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(handwavyPhraseReinstateBatchBody),
+    },
+  );
+};
+
+export const getReinstateHandwavyPhrasesBatchMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reinstateHandwavyPhrasesBatch>>,
+    TError,
+    { data: BodyType<HandwavyPhraseReinstateBatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reinstateHandwavyPhrasesBatch>>,
+  TError,
+  { data: BodyType<HandwavyPhraseReinstateBatchBody> },
+  TContext
+> => {
+  const mutationKey = ["reinstateHandwavyPhrasesBatch"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reinstateHandwavyPhrasesBatch>>,
+    { data: BodyType<HandwavyPhraseReinstateBatchBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return reinstateHandwavyPhrasesBatch(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReinstateHandwavyPhrasesBatchMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reinstateHandwavyPhrasesBatch>>
+>;
+export type ReinstateHandwavyPhrasesBatchMutationBody =
+  BodyType<HandwavyPhraseReinstateBatchBody>;
+export type ReinstateHandwavyPhrasesBatchMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Reinstate every not-yet-reinstated phrase from a single batch removal entry
+ */
+export const useReinstateHandwavyPhrasesBatch = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reinstateHandwavyPhrasesBatch>>,
+    TError,
+    { data: BodyType<HandwavyPhraseReinstateBatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reinstateHandwavyPhrasesBatch>>,
+  TError,
+  { data: BodyType<HandwavyPhraseReinstateBatchBody> },
+  TContext
+> => {
+  return useMutation(getReinstateHandwavyPhrasesBatchMutationOptions(options));
 };
 
 /**

@@ -831,6 +831,127 @@ export function reinstateHandwavyPhrase(
   };
 }
 
+/**
+ * Task #144 — outcome of attempting to reinstate one inner phrase as part of
+ * a "Reinstate all from this batch" round-trip. Phrases that were already
+ * reinstated (partial undo earlier) or are already in the active list (a
+ * reviewer manually re-added them) are SKIPPED with a reason rather than
+ * failing the whole batch.
+ */
+export interface ReinstateBatchEntryResult {
+  phrase: string;
+  reinstated: boolean;
+  reason?: "already-reinstated" | "already-active";
+}
+
+export type ReinstateBatchResult =
+  | {
+      ok: true;
+      removedAt: string;
+      reinstated: number;
+      skipped: number;
+      total: number;
+      historyEntry: HandwavyHistoryEntry;
+      results: ReinstateBatchEntryResult[];
+    }
+  | {
+      ok: false;
+      reason: "history-not-found" | "not-a-batch";
+      removedAt: string;
+    };
+
+/**
+ * Task #144 — reinstate every not-yet-reinstated inner phrase from a batch
+ * removal entry in a single round-trip and a single persist. Mirrors the
+ * single-phrase `reinstateHandwavyPhrase` flow but operates on the whole
+ * batch the reviewer originally removed in one CLI action. Inner phrases
+ * that have already been reinstated (partial undo earlier) or that have
+ * been re-added to the active list separately are skipped with a reason
+ * instead of failing the whole call. The aggregate `reinstated` flag on
+ * the parent entry is set true once every inner phrase is reinstated.
+ */
+export function reinstateHandwavyPhrasesBatch(
+  removedAt: string,
+  options: ReinstatePhraseOptions = {},
+): ReinstateBatchResult {
+  const { markers: current, history } = load();
+  const idx = history.findIndex((h) => h.removedAt === removedAt);
+  if (idx < 0) {
+    return { ok: false, reason: "history-not-found", removedAt };
+  }
+  const entry = history[idx];
+  if (!Array.isArray(entry.phrases) || entry.phrases.length === 0) {
+    return { ok: false, reason: "not-a-batch", removedAt };
+  }
+
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  const at = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+
+  const nextMarkers = current.slice();
+  const activePhrases = new Set(current.map((m) => m.phrase));
+  const nextInnerPhrases = entry.phrases.map((p) => ({ ...p }));
+  const results: ReinstateBatchEntryResult[] = [];
+  let reinstatedCount = 0;
+
+  for (let i = 0; i < nextInnerPhrases.length; i++) {
+    const inner = nextInnerPhrases[i];
+    if (inner.reinstated) {
+      results.push({ phrase: inner.phrase, reinstated: false, reason: "already-reinstated" });
+      continue;
+    }
+    if (activePhrases.has(inner.phrase)) {
+      results.push({ phrase: inner.phrase, reinstated: false, reason: "already-active" });
+      continue;
+    }
+    const marker: HandwavyMarker = { phrase: inner.phrase, category: inner.category };
+    if (reviewer) marker.addedBy = reviewer;
+    marker.addedAt = at;
+    if (inner.rationale) marker.rationale = inner.rationale;
+    nextMarkers.push(marker);
+    activePhrases.add(inner.phrase);
+    const updatedInner: HandwavyBatchHistoryPhrase = {
+      ...inner,
+      reinstated: true,
+      reinstatedAt: at,
+    };
+    if (reviewer) updatedInner.reinstatedBy = reviewer;
+    nextInnerPhrases[i] = updatedInner;
+    results.push({ phrase: inner.phrase, reinstated: true });
+    reinstatedCount += 1;
+  }
+
+  const updatedEntry: HandwavyHistoryEntry = {
+    ...entry,
+    phrases: nextInnerPhrases,
+  };
+  if (nextInnerPhrases.every((p) => p.reinstated)) {
+    updatedEntry.reinstated = true;
+  } else {
+    delete updatedEntry.reinstated;
+  }
+  const nextHistory = history.slice();
+  nextHistory[idx] = updatedEntry;
+
+  // Only persist when something actually changed; otherwise just report the
+  // skip reasons so a reviewer who clicks "Reinstate all" on an already
+  // fully-reinstated batch sees a clean no-op result.
+  if (reinstatedCount > 0) {
+    const trimmed = persist(nextMarkers, nextHistory);
+    CACHED_MARKERS = nextMarkers;
+    CACHED_HISTORY = trimmed;
+  }
+
+  return {
+    ok: true,
+    removedAt,
+    reinstated: reinstatedCount,
+    skipped: results.length - reinstatedCount,
+    total: nextMarkers.length,
+    historyEntry: { ...updatedEntry, phrases: nextInnerPhrases.map((p) => ({ ...p })) },
+    results,
+  };
+}
+
 export interface EditPhraseUpdates {
   category?: HandwavyCategory;
   /**
