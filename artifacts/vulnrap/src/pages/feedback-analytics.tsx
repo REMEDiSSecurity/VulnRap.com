@@ -27,6 +27,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -617,14 +627,17 @@ function renderHandwavyEditEntries({
   phrase,
   editing,
   busy,
-  handleRevertEdit,
+  onRevertClick,
   showHistoryTestIds,
 }: {
   editsList: HandwavyEditEntry[];
   phrase: string;
   editing: { phrase: string } | null;
   busy: string | null;
-  handleRevertEdit: (phrase: string, entry: HandwavyEditEntry) => void;
+  // Task #146 — the click handler now opens a confirmation dialog rather
+  // than calling the API directly, so the helper just forwards the entry
+  // and lets the caller decide what to do with it.
+  onRevertClick: (entry: HandwavyEditEntry) => void;
   showHistoryTestIds?: boolean;
 }): ReactNode[] {
   return editsList
@@ -688,7 +701,7 @@ function renderHandwavyEditEntries({
             size="sm"
             className="h-6 px-1.5 text-[10px] text-amber-300 hover:text-amber-200 shrink-0"
             disabled={editing !== null || busy === revertKey || busy === `rm:${phrase}`}
-            onClick={() => handleRevertEdit(phrase, entry)}
+            onClick={() => onRevertClick(entry)}
             data-testid="handwavy-revert-edit"
             aria-label={`Revert edit on ${phrase} from ${editedAtLabel ?? entry.editedAt}`}
             title="Restore the values from before this edit (recorded as a new audit entry)."
@@ -715,6 +728,13 @@ function HandwavyPhrasesAdmin() {
     }
   });
   const [busy, setBusy] = useState<string | null>(null);
+  // Task #146 — confirmation prompt for the per-edit Revert button. We hold
+  // the (phrase, entry) pair the reviewer clicked so the dialog can summarize
+  // exactly which fields will change and to what values before we actually
+  // call the server. `null` = closed.
+  const [revertConfirm, setRevertConfirm] = useState<
+    { phrase: string; entry: HandwavyEditEntry } | null
+  >(null);
   // Task #134 — bulk-remove state. `selected` is the set of currently-checked
   // phrases (keyed by the normalized `phrase` string the server stores), and
   // mirrors the CLI's batch removal flow: we collect a list, show ONE
@@ -1264,6 +1284,7 @@ function HandwavyPhrasesAdmin() {
   }
 
   return (
+    <>
     <Card className="glass-card rounded-xl border-primary/10" data-testid="handwavy-admin">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -1845,7 +1866,8 @@ function HandwavyPhrasesAdmin() {
                           phrase: m.phrase,
                           editing,
                           busy,
-                          handleRevertEdit,
+                          onRevertClick: (entry) =>
+                            setRevertConfirm({ phrase: m.phrase, entry }),
                         })}
                       </ul>
                     </details>
@@ -1869,7 +1891,8 @@ function HandwavyPhrasesAdmin() {
                           phrase: m.phrase,
                           editing,
                           busy,
-                          handleRevertEdit,
+                          onRevertClick: (entry) =>
+                            setRevertConfirm({ phrase: m.phrase, entry }),
                           showHistoryTestIds: true,
                         })}
                       </ul>
@@ -2038,6 +2061,98 @@ function HandwavyPhrasesAdmin() {
         )}
       </CardContent>
     </Card>
+
+    {/* Task #146 — confirmation prompt before reverting an edit. The dialog
+        summarizes which fields will change and to what values so reviewers
+        can spot a misclick before any audit-log mutation happens. */}
+    <AlertDialog
+      open={revertConfirm !== null}
+      onOpenChange={(open) => {
+        if (!open) setRevertConfirm(null);
+      }}
+    >
+      <AlertDialogContent data-testid="handwavy-revert-confirm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Revert this edit?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              {revertConfirm && (
+                <>
+                  <div>
+                    Restore <span className="font-mono text-foreground/80">“{revertConfirm.phrase}”</span>{" "}
+                    to the values from before the edit by{" "}
+                    <span className="text-foreground/80">
+                      {revertConfirm.entry.editedBy || "anonymous"}
+                    </span>
+                    {(() => {
+                      const lbl = formatAuditTimestamp(revertConfirm.entry.editedAt);
+                      return lbl ? <> on {lbl}</> : null;
+                    })()}
+                    .
+                  </div>
+                  {(revertConfirm.entry.category || revertConfirm.entry.rationale) ? (
+                    <ul
+                      className="list-disc pl-5 space-y-1 text-foreground/80"
+                      data-testid="handwavy-revert-confirm-changes"
+                    >
+                      {revertConfirm.entry.category && (
+                        <li>
+                          category{" "}
+                          <span className="text-foreground">{revertConfirm.entry.category.to}</span>
+                          {" → "}
+                          <span className="text-foreground">{revertConfirm.entry.category.from}</span>
+                        </li>
+                      )}
+                      {revertConfirm.entry.rationale && (
+                        <li>
+                          rationale{" "}
+                          <span className="text-foreground">
+                            {revertConfirm.entry.rationale.to && revertConfirm.entry.rationale.to.length > 0
+                              ? `“${revertConfirm.entry.rationale.to}”`
+                              : "(empty)"}
+                          </span>
+                          {" → "}
+                          <span className="text-foreground">
+                            {revertConfirm.entry.rationale.from && revertConfirm.entry.rationale.from.length > 0
+                              ? `“${revertConfirm.entry.rationale.from}”`
+                              : "(empty)"}
+                          </span>
+                        </li>
+                      )}
+                    </ul>
+                  ) : (
+                    <div className="italic">
+                      This edit didn't record any field changes — reverting will be a no-op.
+                    </div>
+                  )}
+                  <div className="text-xs italic">
+                    The original entry stays in place; the revert is recorded as a new audit entry.
+                  </div>
+                </>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="handwavy-revert-confirm-cancel">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="handwavy-revert-confirm-confirm"
+            onClick={() => {
+              if (revertConfirm) {
+                const { phrase, entry } = revertConfirm;
+                setRevertConfirm(null);
+                void handleRevertEdit(phrase, entry);
+              }
+            }}
+          >
+            Revert edit
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
