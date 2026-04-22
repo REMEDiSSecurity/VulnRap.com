@@ -1,6 +1,25 @@
 import { Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import heroImg from "@/assets/blog-avri-hero.png";
+import familiesImg from "@/assets/blog-avri-families.png";
+import velocityImg from "@/assets/blog-avri-velocity.png";
+
+function BlogImage({ src, alt, caption }: { src: string; alt: string; caption: string }) {
+  return (
+    <figure className="my-6">
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        className="w-full rounded-lg border border-border/50 shadow-lg shadow-black/30"
+      />
+      <figcaption className="mt-2 text-xs text-muted-foreground/80 italic text-center">
+        {caption}
+      </figcaption>
+    </figure>
+  );
+}
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return <h3 className="text-foreground font-bold text-lg mt-8 mb-3">{children}</h3>;
@@ -35,6 +54,11 @@ export function BlogAvriSprint11() {
       <Separator className="bg-border/50" />
 
       <div className="prose-invert space-y-2 text-sm leading-relaxed text-muted-foreground">
+        <BlogImage
+          src={heroImg}
+          alt="Adaptive Vulnerability Report Intelligence: a central scoring core radiating to eight per-family rubric panels"
+          caption="AVRI: one classifier picks the right rubric, then eight family-specific rubrics do the scoring."
+        />
         <P>
           v3.6.0 cleaned up the calibration mess from the v3.5.0 launch. The triage matrix stopped recommending CHALLENGE_REPORTER on reports with three confirmed sanitizer crashes. The slop-vs-legit composite gap moved from 18 points to 26. Good progress &mdash; but still half the gap we needed.
         </P>
@@ -52,6 +76,11 @@ export function BlogAvriSprint11() {
         <P>
           v3.7.0 introduces <Bold>Adaptive Vulnerability Report Intelligence (AVRI)</Bold>: classify the report into a CWE rubric family <em>first</em>, then score it against family-specific evidence expectations.
         </P>
+        <BlogImage
+          src={familiesImg}
+          alt="Eight CWE rubric families shown as a grid of glowing hexagonal tiles"
+          caption="The eight rubric families. Each one ships its own gold signals, absence penalties, and contradiction phrases."
+        />
         <P>
           Eight families: memory corruption, injection, auth/access, crypto/protocol, DoS/resource, info exposure, request forgery, hardware. A flat fallback for the long tail. Each family has its own <Bold>gold-standard signals</Bold> (regex + point value), its own <Bold>absence penalties</Bold> (subtracted when an expected signal class is missing), and its own <Bold>contradiction phrases</Bold> (XSS payloads in a buffer-overflow report subtract points instead of adding them).
         </P>
@@ -88,6 +117,11 @@ export function BlogAvriSprint11() {
 
         <SectionHeading>Submission Velocity, Without Persistent Identity</SectionHeading>
 
+        <BlogImage
+          src={velocityImg}
+          alt="Time-axis visualization of clustered submission bursts and stacked template fingerprints"
+          caption="Velocity + template fingerprinting catch carpet-bomb campaigns without storing any persistent submitter identity."
+        />
         <P>
           AVRI also detects same-day submission velocity and template campaigns &mdash; two of the strongest signals for the bulk-AI carpet-bomb pattern we saw in the 460K-report dataset. We deliberately did this <em>without</em> introducing persistent submitter tracking.
         </P>
