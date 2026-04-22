@@ -9,6 +9,13 @@
 // diagnostics panel can group matched entries into themed buckets rather than
 // rendering one long flat list. The category travels with each absence-penalty
 // entry into the diagnostics payload via `flatHandwavyCategory`.
+//
+// Task #112 — Audit trail. Each entry optionally records who added it
+// (reviewer name/email), an ISO timestamp (`addedAt`), and a free-text
+// `rationale`. Removed phrases are appended to a small `history` log on the
+// JSON file so a reviewer can see what was pulled, by whom, and when, and
+// reinstate it with the original context if needed. Older entries (pre-#112)
+// have no audit metadata; the UI renders them as "Curated default".
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import path from "path";
@@ -25,11 +32,30 @@ export const HANDWAVY_CATEGORIES: readonly HandwavyCategory[] = [
 export interface HandwavyMarker {
   phrase: string;
   category: HandwavyCategory;
+  /** Reviewer name or email that added this phrase. Undefined for curated defaults. */
+  addedBy?: string;
+  /** ISO 8601 timestamp the phrase was added. Undefined for curated defaults. */
+  addedAt?: string;
+  /** Free-text justification supplied by the reviewer at add time. */
+  rationale?: string;
+}
+
+export interface HandwavyHistoryEntry {
+  phrase: string;
+  category: HandwavyCategory;
+  addedBy?: string;
+  addedAt?: string;
+  rationale?: string;
+  /** Reviewer name or email that removed the phrase. */
+  removedBy?: string;
+  /** ISO 8601 timestamp the phrase was removed. */
+  removedAt: string;
 }
 
 interface PhrasesFile {
   _meta?: unknown;
-  phrases: Array<string | { phrase?: unknown; category?: unknown }>;
+  phrases: Array<string | Record<string, unknown>>;
+  history?: Array<Record<string, unknown>>;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -71,7 +97,10 @@ const DEFAULT_MARKERS: HandwavyMarker[] = [
   { phrase: "weak security culture", category: "buzzword" },
 ];
 
-let CACHED: HandwavyMarker[] | null = null;
+const HISTORY_LIMIT = 200;
+
+let CACHED_MARKERS: HandwavyMarker[] | null = null;
+let CACHED_HISTORY: HandwavyHistoryEntry[] | null = null;
 let RESOLVED_PATH: string | null = null;
 
 function resolvePath(): string {
@@ -102,6 +131,17 @@ function isCategory(x: unknown): x is HandwavyCategory {
   return x === "absence" || x === "hedging" || x === "buzzword";
 }
 
+function trimOrUndefined(x: unknown, max: number): string | undefined {
+  if (typeof x !== "string") return undefined;
+  const v = x.trim();
+  if (!v) return undefined;
+  return v.length > max ? v.slice(0, max) : v;
+}
+
+function isIsoTimestamp(x: unknown): x is string {
+  return typeof x === "string" && !Number.isNaN(Date.parse(x));
+}
+
 function coerceMarker(entry: unknown): HandwavyMarker | null {
   if (typeof entry === "string") {
     const phrase = normalizePhrase(entry);
@@ -109,20 +149,49 @@ function coerceMarker(entry: unknown): HandwavyMarker | null {
     return { phrase, category: "absence" };
   }
   if (entry && typeof entry === "object") {
-    const obj = entry as { phrase?: unknown; category?: unknown };
+    const obj = entry as Record<string, unknown>;
     if (typeof obj.phrase !== "string") return null;
     const phrase = normalizePhrase(obj.phrase);
     if (!phrase) return null;
     const category: HandwavyCategory = isCategory(obj.category) ? obj.category : "absence";
-    return { phrase, category };
+    const marker: HandwavyMarker = { phrase, category };
+    const addedBy = trimOrUndefined(obj.addedBy, 200);
+    if (addedBy) marker.addedBy = addedBy;
+    if (isIsoTimestamp(obj.addedAt)) marker.addedAt = obj.addedAt;
+    const rationale = trimOrUndefined(obj.rationale, 500);
+    if (rationale) marker.rationale = rationale;
+    return marker;
   }
   return null;
 }
 
-function loadMarkers(): HandwavyMarker[] {
-  if (CACHED) return CACHED;
+function coerceHistory(entry: unknown): HandwavyHistoryEntry | null {
+  if (!entry || typeof entry !== "object") return null;
+  const obj = entry as Record<string, unknown>;
+  if (typeof obj.phrase !== "string") return null;
+  const phrase = normalizePhrase(obj.phrase);
+  if (!phrase) return null;
+  const removedAt = isIsoTimestamp(obj.removedAt) ? obj.removedAt : undefined;
+  if (!removedAt) return null;
+  const category: HandwavyCategory = isCategory(obj.category) ? obj.category : "absence";
+  const out: HandwavyHistoryEntry = { phrase, category, removedAt };
+  const removedBy = trimOrUndefined(obj.removedBy, 200);
+  if (removedBy) out.removedBy = removedBy;
+  const addedBy = trimOrUndefined(obj.addedBy, 200);
+  if (addedBy) out.addedBy = addedBy;
+  if (isIsoTimestamp(obj.addedAt)) out.addedAt = obj.addedAt;
+  const rationale = trimOrUndefined(obj.rationale, 500);
+  if (rationale) out.rationale = rationale;
+  return out;
+}
+
+function load(): { markers: HandwavyMarker[]; history: HandwavyHistoryEntry[] } {
+  if (CACHED_MARKERS && CACHED_HISTORY) {
+    return { markers: CACHED_MARKERS, history: CACHED_HISTORY };
+  }
   const p = resolvePath();
   let markers: HandwavyMarker[] | null = null;
+  let history: HandwavyHistoryEntry[] = [];
   if (existsSync(p)) {
     try {
       const raw = JSON.parse(readFileSync(p, "utf8")) as PhrasesFile;
@@ -131,6 +200,11 @@ function loadMarkers(): HandwavyMarker[] {
           .map(coerceMarker)
           .filter((m): m is HandwavyMarker => m !== null);
       }
+      if (Array.isArray(raw.history)) {
+        history = raw.history
+          .map(coerceHistory)
+          .filter((h): h is HandwavyHistoryEntry => h !== null);
+      }
     } catch {
       // Fall through to defaults.
     }
@@ -138,8 +212,7 @@ function loadMarkers(): HandwavyMarker[] {
   if (!markers || markers.length === 0) {
     markers = DEFAULT_MARKERS.map((m) => ({ phrase: normalizePhrase(m.phrase), category: m.category }));
   }
-  // Dedupe by phrase while preserving order; first occurrence wins (so the
-  // first category seen for a phrase sticks, matching loader-edit semantics).
+  // Dedupe by phrase while preserving order; first occurrence wins.
   const seen = new Set<string>();
   const deduped: HandwavyMarker[] = [];
   for (const m of markers) {
@@ -148,26 +221,47 @@ function loadMarkers(): HandwavyMarker[] {
       deduped.push(m);
     }
   }
-  CACHED = deduped;
-  return CACHED;
+  CACHED_MARKERS = deduped;
+  CACHED_HISTORY = history;
+  return { markers: deduped, history };
 }
 
-function persist(markers: HandwavyMarker[]): void {
+function trimHistory(history: HandwavyHistoryEntry[]): HandwavyHistoryEntry[] {
+  return history.length > HISTORY_LIMIT
+    ? history.slice(history.length - HISTORY_LIMIT)
+    : history;
+}
+
+function persist(markers: HandwavyMarker[], history: HandwavyHistoryEntry[]): HandwavyHistoryEntry[] {
   const p = resolvePath();
   const dir = path.dirname(p);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const trimmedHistory = trimHistory(history);
   const body: PhrasesFile = {
     _meta: {
       description:
-        "Curated list of FLAT-family hand-wavy marker phrases. Loaded by lib/engines/avri/handwavy-phrases.ts. Phrases are matched as case-insensitive substrings against a whitespace-collapsed copy of the report text. Each entry is themed into one of three categories ('absence', 'hedging', 'buzzword') so the diagnostics panel can group matches into themed buckets. Reviewers can add or remove phrases through POST/DELETE /feedback/calibration/handwavy-phrases without a redeploy.",
+        "Curated list of FLAT-family hand-wavy marker phrases. Loaded by lib/engines/avri/handwavy-phrases.ts. Phrases are matched as case-insensitive substrings against a whitespace-collapsed copy of the report text. Each entry is themed into one of three categories ('absence', 'hedging', 'buzzword') so the diagnostics panel can group matches into themed buckets. Reviewers can add or remove phrases through POST/DELETE /feedback/calibration/handwavy-phrases without a redeploy. Each entry optionally tracks the reviewer (`addedBy`), ISO timestamp (`addedAt`), and free-text `rationale`. Removed phrases are appended to `history` so reviewers can see what was pulled and reinstate it with context.",
     },
     phrases: markers,
+    history: trimmedHistory,
   };
   writeFileSync(p, JSON.stringify(body, null, 2) + "\n", "utf8");
+  return trimmedHistory;
 }
 
 export function getHandwavyPhrases(): HandwavyMarker[] {
-  return loadMarkers().map((m) => ({ ...m }));
+  return load().markers.map((m) => ({ ...m }));
+}
+
+export function getHandwavyPhraseHistory(): HandwavyHistoryEntry[] {
+  return load().history.map((h) => ({ ...h }));
+}
+
+export interface AddPhraseOptions {
+  reviewer?: string;
+  rationale?: string;
+  /** Override the timestamp (tests). Defaults to `new Date().toISOString()`. */
+  now?: string;
 }
 
 export interface AddPhraseResult {
@@ -175,11 +269,13 @@ export interface AddPhraseResult {
   phrase: string;
   category: HandwavyCategory;
   total: number;
+  marker: HandwavyMarker;
 }
 
 export function addHandwavyPhrase(
   rawPhrase: string,
   rawCategory?: unknown,
+  options: AddPhraseOptions = {},
 ): AddPhraseResult {
   const phrase = normalizePhrase(rawPhrase);
   if (phrase.length < 3) {
@@ -189,39 +285,74 @@ export function addHandwavyPhrase(
     throw new Error("Phrase must be at most 200 characters.");
   }
   const category: HandwavyCategory = isCategory(rawCategory) ? rawCategory : "absence";
-  const current = loadMarkers();
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  const rationale = trimOrUndefined(options.rationale, 500);
+  if (rationale && rationale.length < 3) {
+    throw new Error("Rationale must be at least 3 characters when provided.");
+  }
+  const { markers: current, history } = load();
   const existing = current.find((m) => m.phrase === phrase);
   if (existing) {
-    return { added: false, phrase, category: existing.category, total: current.length };
+    return { added: false, phrase, category: existing.category, total: current.length, marker: { ...existing } };
   }
-  const next = [...current, { phrase, category }];
-  persist(next);
-  CACHED = next;
-  return { added: true, phrase, category, total: next.length };
+  const addedAt = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const marker: HandwavyMarker = { phrase, category };
+  if (reviewer) marker.addedBy = reviewer;
+  marker.addedAt = addedAt;
+  if (rationale) marker.rationale = rationale;
+  const next = [...current, marker];
+  const trimmed = persist(next, history);
+  CACHED_MARKERS = next;
+  CACHED_HISTORY = trimmed;
+  return { added: true, phrase, category, total: next.length, marker: { ...marker } };
+}
+
+export interface RemovePhraseOptions {
+  reviewer?: string;
+  now?: string;
 }
 
 export interface RemovePhraseResult {
   removed: boolean;
   phrase: string;
   total: number;
+  historyEntry?: HandwavyHistoryEntry;
 }
 
-export function removeHandwavyPhrase(rawPhrase: string): RemovePhraseResult {
+export function removeHandwavyPhrase(
+  rawPhrase: string,
+  options: RemovePhraseOptions = {},
+): RemovePhraseResult {
   const phrase = normalizePhrase(rawPhrase);
-  const current = loadMarkers();
+  const { markers: current, history } = load();
   const idx = current.findIndex((m) => m.phrase === phrase);
   if (idx < 0) {
     return { removed: false, phrase, total: current.length };
   }
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  const removedAt = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const removed = current[idx];
   const next = current.slice(0, idx).concat(current.slice(idx + 1));
-  persist(next);
-  CACHED = next;
-  return { removed: true, phrase, total: next.length };
+  const historyEntry: HandwavyHistoryEntry = {
+    phrase: removed.phrase,
+    category: removed.category,
+    removedAt,
+  };
+  if (reviewer) historyEntry.removedBy = reviewer;
+  if (removed.addedBy) historyEntry.addedBy = removed.addedBy;
+  if (removed.addedAt) historyEntry.addedAt = removed.addedAt;
+  if (removed.rationale) historyEntry.rationale = removed.rationale;
+  const nextHistory = [...history, historyEntry];
+  const trimmed = persist(next, nextHistory);
+  CACHED_MARKERS = next;
+  CACHED_HISTORY = trimmed;
+  return { removed: true, phrase, total: next.length, historyEntry: { ...historyEntry } };
 }
 
 /** Test helper: drop the in-memory cache so the next read re-parses the file. */
 export function __resetHandwavyPhrasesForTests(): void {
-  CACHED = null;
+  CACHED_MARKERS = null;
+  CACHED_HISTORY = null;
   RESOLVED_PATH = null;
 }
 
@@ -231,6 +362,7 @@ export function __restoreHandwavyPhraseDefaultsForTests(): void {
     phrase: normalizePhrase(m.phrase),
     category: m.category,
   }));
-  persist(defaults);
-  CACHED = defaults;
+  persist(defaults, []);
+  CACHED_MARKERS = defaults;
+  CACHED_HISTORY = [];
 }

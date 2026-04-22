@@ -7,13 +7,17 @@
  */
 import type { HandwavyCategory } from "./handwavyCategory";
 
-export interface HandwavyMarker {
+/**
+ * Removed-phrase audit record used so reviewers can reinstate a phrase with original context.
+ */
+export interface HandwavyHistoryEntry {
   phrase: string;
   category: HandwavyCategory;
-  /** Reviewer name or email that added the phrase. Absent for curated defaults. */
   addedBy?: string;
-  /** ISO 8601 timestamp the phrase was added. Absent for curated defaults. */
   addedAt?: Date;
-  /** Free-text justification supplied by the reviewer at add time. */
   rationale?: string;
+  /** Reviewer name or email that removed the phrase. */
+  removedBy?: string;
+  /** ISO 8601 timestamp the phrase was removed. */
+  removedAt: Date;
 }

@@ -66,6 +66,7 @@ export * from "./getReportFeedParams";
 export * from "./getReportFeedSort";
 export * from "./getTrendsParams";
 export * from "./handwavyCategory";
+export * from "./handwavyHistoryEntry";
 export * from "./handwavyMarker";
 export * from "./handwavyPhraseBody";
 export * from "./handwavyPhraseDryRunMatches";

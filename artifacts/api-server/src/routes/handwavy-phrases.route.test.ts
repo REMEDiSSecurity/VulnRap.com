@@ -294,6 +294,68 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     });
   });
 
+  // --- Task #112: audit trail ---
+
+  it("POST records reviewer + rationale on the marker", async () => {
+    const add = await request<{
+      added: boolean;
+      marker: Marker & { addedBy?: string; addedAt?: string; rationale?: string };
+    }>("POST", "/feedback/calibration/handwavy-phrases", {
+      phrase: "audit-tracked marker",
+      category: "absence",
+      reviewer: "alice@team.com",
+      rationale: "Caught two duplicate reports last sprint.",
+    });
+    expect(add.status).toBe(201);
+    expect(add.body.marker.addedBy).toBe("alice@team.com");
+    expect(add.body.marker.rationale).toMatch(/duplicate reports/);
+    expect(add.body.marker.addedAt).toBeTypeOf("string");
+
+    const list = await request<{
+      phrases: Array<Marker & { addedBy?: string; rationale?: string }>;
+    }>("GET", "/feedback/calibration/handwavy-phrases");
+    const found = list.body.phrases.find((m) => m.phrase === "audit-tracked marker");
+    expect(found?.addedBy).toBe("alice@team.com");
+    expect(found?.rationale).toMatch(/duplicate reports/);
+  });
+
+  it("POST rejects non-string reviewer/rationale with 400", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { phrase: "phrase with bad reviewer", reviewer: 42 },
+    );
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/reviewer/);
+  });
+
+  it("DELETE appends a history entry that records who removed and original add metadata", async () => {
+    await request("POST", "/feedback/calibration/handwavy-phrases", {
+      phrase: "doomed marker",
+      category: "hedging",
+      reviewer: "alice@team.com",
+      rationale: "noisy on internal triage drills",
+    });
+    const del = await request<{
+      removed: boolean;
+      historyEntry: { phrase: string; removedBy?: string; removedAt: string; addedBy?: string; rationale?: string };
+      history: Array<{ phrase: string; removedBy?: string }>;
+    }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+      phrase: "doomed marker",
+      reviewer: "bob@team.com",
+    });
+    expect(del.status).toBe(200);
+    expect(del.body.historyEntry.removedBy).toBe("bob@team.com");
+    expect(del.body.historyEntry.addedBy).toBe("alice@team.com");
+    expect(del.body.historyEntry.rationale).toMatch(/noisy/);
+    expect(del.body.history.some((h) => h.phrase === "doomed marker" && h.removedBy === "bob@team.com")).toBe(true);
+
+    const list = await request<{
+      history: Array<{ phrase: string; removedBy?: string }>;
+    }>("GET", "/feedback/calibration/handwavy-phrases");
+    expect(list.body.history.some((h) => h.phrase === "doomed marker" && h.removedBy === "bob@team.com")).toBe(true);
+  });
+
   it("restoreDefaults helper rewrites the file with the curated defaults", () => {
     __restoreDefaults();
     // Sanity: the restore helper does not throw and the file now contains

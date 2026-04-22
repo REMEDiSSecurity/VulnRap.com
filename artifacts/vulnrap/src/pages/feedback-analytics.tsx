@@ -511,32 +511,80 @@ function PreviewTierBadge({ label, count, negative }: { label: string; count: nu
   );
 }
 
+// Local-storage key for remembering the reviewer name/email between sessions
+// so the audit trail captures who is curating without forcing a re-entry on
+// every add/remove.
+const HANDWAVY_REVIEWER_KEY = "vulnrap.handwavy.reviewer";
+
+function formatAuditTimestamp(iso: string | undefined | null): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  const d = new Date(t);
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function HandwavyPhrasesAdmin() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
+  const [draftRationale, setDraftRationale] = useState("");
+  const [reviewer, setReviewer] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return window.localStorage.getItem(HANDWAVY_REVIEWER_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [busy, setBusy] = useState<string | null>(null);
   // Task #114 — corpus-impact preview state. After the reviewer presses
   // "Add phrase" we first issue a dry-run POST and surface the GREEN/YELLOW
   // false-positive count. The actual add only persists after the reviewer
   // confirms the preview, so a poorly-chosen phrase can't crater AVRI for
-  // legitimate reports without an explicit second click.
+  // legitimate reports without an explicit second click. Pending reviewer
+  // and rationale (Task #112) are carried alongside so the eventual real
+  // add still records the audit trail.
   const [preview, setPreview] = useState<{
     phrase: string;
     category: "absence" | "hedging" | "buzzword";
     matches: HandwavyPhraseDryRunMatches;
+    reviewer?: string;
+    rationale?: string;
   } | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const { data, isLoading } = useGetHandwavyPhrases({
     query: { queryKey: getGetHandwavyPhrasesQueryKey() },
   });
 
   const phrases = data?.phrases ?? [];
+  const history = data?.history ?? [];
   const [draftCategory, setDraftCategory] = useState<"absence" | "hedging" | "buzzword">("absence");
   const CATEGORY_LABELS: Record<"absence" | "hedging" | "buzzword", string> = {
     absence: "Self-admitted absence of evidence",
     hedging: "Generic hedging",
     buzzword: "Buzzword-soup framing",
+  };
+
+  const persistReviewer = (value: string) => {
+    setReviewer(value);
+    if (typeof window === "undefined") return;
+    try {
+      if (value.trim()) {
+        window.localStorage.setItem(HANDWAVY_REVIEWER_KEY, value.trim());
+      } else {
+        window.localStorage.removeItem(HANDWAVY_REVIEWER_KEY);
+      }
+    } catch {
+      // ignore storage failures (private mode, quota)
+    }
   };
 
   const refresh = () => {
@@ -551,7 +599,9 @@ function HandwavyPhrasesAdmin() {
     try {
       // Task #114: ask the API to score the candidate against the corpus
       // BEFORE we persist anything. The server returns the identical phrase
-      // (normalized) plus a per-tier match summary.
+      // (normalized) plus a per-tier match summary. Reviewer/rationale
+      // (Task #112) are deferred to the confirm step so the audit trail
+      // only records phrases the reviewer actually committed to.
       const dry = await addHandwavyPhrase({ phrase, category: draftCategory, dryRun: true });
       if (!dry.dryRunMatches) {
         // Fail closed: if the server's response is missing the preview block
@@ -569,6 +619,8 @@ function HandwavyPhrasesAdmin() {
         phrase: dry.phrase,
         category: (dry.category ?? draftCategory) as "absence" | "hedging" | "buzzword",
         matches: dry.dryRunMatches,
+        reviewer: reviewer.trim() || undefined,
+        rationale: draftRationale.trim() || undefined,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to preview phrase.";
@@ -582,13 +634,19 @@ function HandwavyPhrasesAdmin() {
     if (!preview) return;
     setBusy("confirm");
     try {
-      const result = await addHandwavyPhrase({ phrase: preview.phrase, category: preview.category });
+      const result = await addHandwavyPhrase({
+        phrase: preview.phrase,
+        category: preview.category,
+        reviewer: preview.reviewer,
+        rationale: preview.rationale,
+      });
       if (result.added === false) {
         toast({ title: "Already in the list", description: `"${result.phrase}" was already a hand-wavy marker.` });
       } else {
         toast({ title: "Phrase added", description: `New triages will flag "${result.phrase}" (${CATEGORY_LABELS[preview.category]}) immediately.` });
       }
       setDraft("");
+      setDraftRationale("");
       setPreview(null);
       refresh();
     } catch (err) {
@@ -606,7 +664,7 @@ function HandwavyPhrasesAdmin() {
   const handleRemove = async (phrase: string) => {
     setBusy(`rm:${phrase}`);
     try {
-      await removeHandwavyPhrase({ phrase });
+      await removeHandwavyPhrase({ phrase, reviewer: reviewer.trim() || undefined });
       toast({ title: "Phrase removed", description: `"${phrase}" will no longer trigger the FLAT haircut.` });
       refresh();
     } catch (err) {
@@ -616,6 +674,14 @@ function HandwavyPhrasesAdmin() {
       setBusy(null);
     }
   };
+
+  // Most recent removals first, capped to keep the panel tidy.
+  const sortedHistory = [...history].sort((a, b) => {
+    const ta = Date.parse(a.removedAt ?? "") || 0;
+    const tb = Date.parse(b.removedAt ?? "") || 0;
+    return tb - ta;
+  });
+  const visibleHistory = sortedHistory.slice(0, 25);
 
   return (
     <Card className="glass-card rounded-xl border-primary/10" data-testid="handwavy-admin">
@@ -631,42 +697,76 @@ function HandwavyPhrasesAdmin() {
           Curated list of buzzword-soup framings the FLAT haircut looks for. Add a new
           phrase here and it takes effect on the very next triage — no engineer or
           redeploy needed. Phrases are matched as case-insensitive substrings against a
-          whitespace-collapsed copy of the report text.
+          whitespace-collapsed copy of the report text. Each entry records who added it,
+          when, and (optionally) why, so reviewers can spot accidental over-reach later.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch">
           <input
             type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="e.g. comprehensive zero-trust assessment"
+            value={reviewer}
+            onChange={(e) => persistReviewer(e.target.value)}
+            placeholder="Your name or email (recorded in the audit trail)"
             maxLength={200}
             className="flex-1 h-9 px-3 rounded-md border border-border/40 bg-background/40 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
-            data-testid="handwavy-input"
+            data-testid="handwavy-reviewer"
+            aria-label="Reviewer name or email"
+          />
+          {reviewer.trim() ? (
+            <Badge variant="outline" className="text-[10px] self-center px-2 py-1">
+              Audited as {reviewer.trim()}
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] self-center px-2 py-1 text-muted-foreground">
+              No reviewer set — entries will be marked anonymous
+            </Badge>
+          )}
+        </div>
+        <form onSubmit={handleAdd} className="space-y-2">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="e.g. comprehensive zero-trust assessment"
+              maxLength={200}
+              className="flex-1 h-9 px-3 rounded-md border border-border/40 bg-background/40 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
+              data-testid="handwavy-input"
+              disabled={busy === "preview" || busy === "confirm" || preview !== null}
+            />
+            <select
+              value={draftCategory}
+              onChange={(e) => setDraftCategory(e.target.value as "absence" | "hedging" | "buzzword")}
+              className="h-9 px-2 rounded-md border border-border/40 bg-background/40 text-xs"
+              data-testid="handwavy-category"
+              disabled={busy === "preview" || busy === "confirm" || preview !== null}
+              aria-label="Theme category"
+            >
+              <option value="absence">Absence of evidence</option>
+              <option value="hedging">Generic hedging</option>
+              <option value="buzzword">Buzzword soup</option>
+            </select>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={busy === "preview" || busy === "confirm" || preview !== null || draft.trim().length < 3}
+              data-testid="handwavy-add"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              {busy === "preview" ? "Checking corpus…" : "Preview impact"}
+            </Button>
+          </div>
+          <textarea
+            value={draftRationale}
+            onChange={(e) => setDraftRationale(e.target.value)}
+            placeholder="Optional rationale — why is this phrase a hand-wavy marker? (recorded in the audit trail)"
+            maxLength={500}
+            rows={2}
+            className="w-full px-3 py-2 rounded-md border border-border/40 bg-background/40 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
+            data-testid="handwavy-rationale"
             disabled={busy === "preview" || busy === "confirm" || preview !== null}
           />
-          <select
-            value={draftCategory}
-            onChange={(e) => setDraftCategory(e.target.value as "absence" | "hedging" | "buzzword")}
-            className="h-9 px-2 rounded-md border border-border/40 bg-background/40 text-xs"
-            data-testid="handwavy-category"
-            disabled={busy === "preview" || busy === "confirm" || preview !== null}
-            aria-label="Theme category"
-          >
-            <option value="absence">Absence of evidence</option>
-            <option value="hedging">Generic hedging</option>
-            <option value="buzzword">Buzzword soup</option>
-          </select>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={busy === "preview" || busy === "confirm" || preview !== null || draft.trim().length < 3}
-            data-testid="handwavy-add"
-          >
-            <Plus className="w-3.5 h-3.5 mr-1" />
-            {busy === "preview" ? "Checking corpus…" : "Preview impact"}
-          </Button>
         </form>
         {preview && (
           <div
@@ -756,28 +856,111 @@ function HandwavyPhrasesAdmin() {
         ) : phrases.length === 0 ? (
           <div className="text-xs text-muted-foreground italic">No phrases configured.</div>
         ) : (
-          <div className="border border-border/30 rounded-md divide-y divide-border/20 max-h-80 overflow-y-auto">
-            {phrases.map((m) => (
-              <div
-                key={m.phrase}
-                className="flex items-center gap-3 px-3 py-2 text-xs"
-                data-testid="handwavy-row"
-              >
-                <span className="flex-1 font-mono text-foreground/80 break-all">{m.phrase}</span>
-                <Badge variant="outline" className="text-[10px] capitalize">{m.category}</Badge>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-muted-foreground hover:text-red-400"
-                  disabled={busy === `rm:${m.phrase}`}
-                  onClick={() => handleRemove(m.phrase)}
-                  data-testid="handwavy-remove"
-                  aria-label={`Remove phrase ${m.phrase}`}
+          <div className="border border-border/30 rounded-md divide-y divide-border/20 max-h-96 overflow-y-auto">
+            {phrases.map((m) => {
+              const addedAt = formatAuditTimestamp(m.addedAt);
+              const isCurated = !m.addedBy && !m.addedAt;
+              return (
+                <div
+                  key={m.phrase}
+                  className="flex flex-col gap-1 px-3 py-2 text-xs"
+                  data-testid="handwavy-row"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
+                  <div className="flex items-center gap-3">
+                    <span className="flex-1 font-mono text-foreground/80 break-all">{m.phrase}</span>
+                    <Badge variant="outline" className="text-[10px] capitalize">{m.category}</Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-muted-foreground hover:text-red-400"
+                      disabled={busy === `rm:${m.phrase}`}
+                      onClick={() => handleRemove(m.phrase)}
+                      data-testid="handwavy-remove"
+                      aria-label={`Remove phrase ${m.phrase}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <div
+                    className="text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5"
+                    data-testid="handwavy-audit"
+                  >
+                    {isCurated ? (
+                      <span className="italic">Curated default</span>
+                    ) : (
+                      <>
+                        <span>
+                          Added by{" "}
+                          <span className="text-foreground/80">{m.addedBy || "anonymous"}</span>
+                        </span>
+                        {addedAt && (
+                          <span data-testid="handwavy-added-at">{addedAt}</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {m.rationale && (
+                    <div
+                      className="text-[11px] text-foreground/70 italic pl-1 border-l border-primary/30"
+                      data-testid="handwavy-rationale-display"
+                    >
+                      “{m.rationale}”
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {sortedHistory.length > 0 && (
+          <div className="pt-2 border-t border-border/20">
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className="text-[11px] text-muted-foreground hover:text-foreground/80 flex items-center gap-1"
+              data-testid="handwavy-history-toggle"
+              aria-expanded={showHistory}
+            >
+              <Clock className="w-3 h-3" />
+              {showHistory ? "Hide" : "Show"} removal history ({sortedHistory.length})
+            </button>
+            {showHistory && (
+              <div
+                className="mt-2 border border-border/20 rounded-md divide-y divide-border/10 max-h-64 overflow-y-auto"
+                data-testid="handwavy-history-list"
+              >
+                {visibleHistory.map((h, idx) => (
+                  <div
+                    key={`${h.phrase}-${h.removedAt}-${idx}`}
+                    className="px-3 py-2 text-[11px] text-muted-foreground space-y-0.5"
+                    data-testid="handwavy-history-row"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-foreground/70 break-all flex-1 line-through">{h.phrase}</span>
+                      <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
+                    </div>
+                    <div>
+                      Removed by{" "}
+                      <span className="text-foreground/80">{h.removedBy || "anonymous"}</span>
+                      {" • "}
+                      {formatAuditTimestamp(h.removedAt) ?? "unknown date"}
+                    </div>
+                    {(h.addedBy || h.rationale) && (
+                      <div className="text-foreground/60">
+                        Originally added by{" "}
+                        <span className="text-foreground/80">{h.addedBy || "anonymous"}</span>
+                        {h.rationale && <> — “{h.rationale}”</>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {sortedHistory.length > visibleHistory.length && (
+                  <div className="px-3 py-2 text-[10px] italic text-muted-foreground/70">
+                    Showing the {visibleHistory.length} most recent of {sortedHistory.length} removals.
+                  </div>
+                )}
               </div>
-            ))}
+            )}
           </div>
         )}
       </CardContent>

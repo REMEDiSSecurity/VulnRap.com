@@ -1598,11 +1598,34 @@ export const HandwavyCategory = {
 export interface HandwavyMarker {
   phrase: string;
   category: HandwavyCategory;
+  /** Reviewer name or email that added the phrase. Absent for curated defaults. */
+  addedBy?: string;
+  /** ISO 8601 timestamp the phrase was added. Absent for curated defaults. */
+  addedAt?: string;
+  /** Free-text justification supplied by the reviewer at add time. */
+  rationale?: string;
+}
+
+/**
+ * Removed-phrase audit record used so reviewers can reinstate a phrase with original context.
+ */
+export interface HandwavyHistoryEntry {
+  phrase: string;
+  category: HandwavyCategory;
+  addedBy?: string;
+  addedAt?: string;
+  rationale?: string;
+  /** Reviewer name or email that removed the phrase. */
+  removedBy?: string;
+  /** ISO 8601 timestamp the phrase was removed. */
+  removedAt: string;
 }
 
 export interface HandwavyPhrasesList {
   phrases: HandwavyMarker[];
   total: number;
+  /** Removal audit log (most recent last). Bounded server-side. */
+  history: HandwavyHistoryEntry[];
 }
 
 export interface HandwavyPhraseBody {
@@ -1616,6 +1639,10 @@ reviewers can see how many GREEN / YELLOW reports the phrase would have hit
 before they confirm the add. Defaults to false (write-through behavior).
  */
   dryRun?: boolean;
+  /** Reviewer name or email recorded in the audit trail. Optional. */
+  reviewer?: string;
+  /** Free-text justification recorded with the phrase. Only consulted on POST. */
+  rationale?: string;
 }
 
 export type HandwavyPhraseDryRunMatchesByTier = {
@@ -1680,6 +1707,8 @@ export interface HandwavyPhraseMutationResponse {
   category?: HandwavyCategory;
   /** Number of active phrases after the mutation. */
   total: number;
+  marker?: HandwavyMarker;
+  historyEntry?: HandwavyHistoryEntry;
   /** Full active list after the mutation. */
   phrases: HandwavyMarker[];
   /** Task #114 — true when the response is a preview only and the phrase was NOT
@@ -1688,6 +1717,8 @@ active phrase list (unchanged) is returned in `phrases`.
  */
   dryRun?: boolean;
   dryRunMatches?: HandwavyPhraseDryRunMatches;
+  /** Full removal audit log after the mutation (only included on DELETE). */
+  history?: HandwavyHistoryEntry[];
 }
 
 export interface VisitRecorded {

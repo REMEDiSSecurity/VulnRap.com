@@ -2407,9 +2407,53 @@ export const GetHandwavyPhrasesResponse = zod.object({
         .describe(
           "Theme bucket used by the diagnostics panel to group matched phrases.",
         ),
+      addedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that added the phrase. Absent for curated defaults.",
+        ),
+      addedAt: zod.coerce
+        .date()
+        .optional()
+        .describe(
+          "ISO 8601 timestamp the phrase was added. Absent for curated defaults.",
+        ),
+      rationale: zod
+        .string()
+        .optional()
+        .describe(
+          "Free-text justification supplied by the reviewer at add time.",
+        ),
     }),
   ),
   total: zod.number(),
+  history: zod
+    .array(
+      zod
+        .object({
+          phrase: zod.string(),
+          category: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          addedBy: zod.string().optional(),
+          addedAt: zod.coerce.date().optional(),
+          rationale: zod.string().optional(),
+          removedBy: zod
+            .string()
+            .optional()
+            .describe("Reviewer name or email that removed the phrase."),
+          removedAt: zod.coerce
+            .date()
+            .describe("ISO 8601 timestamp the phrase was removed."),
+        })
+        .describe(
+          "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
+        ),
+    )
+    .describe("Removal audit log (most recent last). Bounded server-side."),
 });
 
 /**
@@ -2436,6 +2480,16 @@ export const AddHandwavyPhraseBody = zod.object({
     .optional()
     .describe(
       "Task #114 — when true, the server does NOT persist the phrase. It runs the\ncandidate phrase against the curated benchmark corpus (T1 LEGIT \/ T2 BORDERLINE\n\/ T3 SLOP \/ T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so\nreviewers can see how many GREEN \/ YELLOW reports the phrase would have hit\nbefore they confirm the add. Defaults to false (write-through behavior).\n",
+    ),
+  reviewer: zod
+    .string()
+    .optional()
+    .describe("Reviewer name or email recorded in the audit trail. Optional."),
+  rationale: zod
+    .string()
+    .optional()
+    .describe(
+      "Free-text justification recorded with the phrase. Only consulted on POST.",
     ),
 });
 
@@ -2464,6 +2518,57 @@ export const AddHandwavyPhraseResponse = zod.object({
       "Theme bucket used by the diagnostics panel to group matched phrases.",
     ),
   total: zod.number().describe("Number of active phrases after the mutation."),
+  marker: zod
+    .object({
+      phrase: zod.string(),
+      category: zod
+        .enum(["absence", "hedging", "buzzword"])
+        .describe(
+          "Theme bucket used by the diagnostics panel to group matched phrases.",
+        ),
+      addedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that added the phrase. Absent for curated defaults.",
+        ),
+      addedAt: zod.coerce
+        .date()
+        .optional()
+        .describe(
+          "ISO 8601 timestamp the phrase was added. Absent for curated defaults.",
+        ),
+      rationale: zod
+        .string()
+        .optional()
+        .describe(
+          "Free-text justification supplied by the reviewer at add time.",
+        ),
+    })
+    .optional(),
+  historyEntry: zod
+    .object({
+      phrase: zod.string(),
+      category: zod
+        .enum(["absence", "hedging", "buzzword"])
+        .describe(
+          "Theme bucket used by the diagnostics panel to group matched phrases.",
+        ),
+      addedBy: zod.string().optional(),
+      addedAt: zod.coerce.date().optional(),
+      rationale: zod.string().optional(),
+      removedBy: zod
+        .string()
+        .optional()
+        .describe("Reviewer name or email that removed the phrase."),
+      removedAt: zod.coerce
+        .date()
+        .describe("ISO 8601 timestamp the phrase was removed."),
+    })
+    .optional()
+    .describe(
+      "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
+    ),
   phrases: zod
     .array(
       zod.object({
@@ -2472,6 +2577,24 @@ export const AddHandwavyPhraseResponse = zod.object({
           .enum(["absence", "hedging", "buzzword"])
           .describe(
             "Theme bucket used by the diagnostics panel to group matched phrases.",
+          ),
+        addedBy: zod
+          .string()
+          .optional()
+          .describe(
+            "Reviewer name or email that added the phrase. Absent for curated defaults.",
+          ),
+        addedAt: zod.coerce
+          .date()
+          .optional()
+          .describe(
+            "ISO 8601 timestamp the phrase was added. Absent for curated defaults.",
+          ),
+        rationale: zod
+          .string()
+          .optional()
+          .describe(
+            "Free-text justification supplied by the reviewer at add time.",
           ),
       }),
     )
@@ -2546,6 +2669,35 @@ export const AddHandwavyPhraseResponse = zod.object({
     .describe(
       "Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged\nthe curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)\nand T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high\nvalue is a strong signal that the phrase will crater AVRI for legitimate reports.\n",
     ),
+  history: zod
+    .array(
+      zod
+        .object({
+          phrase: zod.string(),
+          category: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          addedBy: zod.string().optional(),
+          addedAt: zod.coerce.date().optional(),
+          rationale: zod.string().optional(),
+          removedBy: zod
+            .string()
+            .optional()
+            .describe("Reviewer name or email that removed the phrase."),
+          removedAt: zod.coerce
+            .date()
+            .describe("ISO 8601 timestamp the phrase was removed."),
+        })
+        .describe(
+          "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
+        ),
+    )
+    .optional()
+    .describe(
+      "Full removal audit log after the mutation (only included on DELETE).",
+    ),
 });
 
 /**
@@ -2569,6 +2721,16 @@ export const RemoveHandwavyPhraseBody = zod.object({
     .optional()
     .describe(
       "Task #114 — when true, the server does NOT persist the phrase. It runs the\ncandidate phrase against the curated benchmark corpus (T1 LEGIT \/ T2 BORDERLINE\n\/ T3 SLOP \/ T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so\nreviewers can see how many GREEN \/ YELLOW reports the phrase would have hit\nbefore they confirm the add. Defaults to false (write-through behavior).\n",
+    ),
+  reviewer: zod
+    .string()
+    .optional()
+    .describe("Reviewer name or email recorded in the audit trail. Optional."),
+  rationale: zod
+    .string()
+    .optional()
+    .describe(
+      "Free-text justification recorded with the phrase. Only consulted on POST.",
     ),
 });
 
@@ -2597,6 +2759,57 @@ export const RemoveHandwavyPhraseResponse = zod.object({
       "Theme bucket used by the diagnostics panel to group matched phrases.",
     ),
   total: zod.number().describe("Number of active phrases after the mutation."),
+  marker: zod
+    .object({
+      phrase: zod.string(),
+      category: zod
+        .enum(["absence", "hedging", "buzzword"])
+        .describe(
+          "Theme bucket used by the diagnostics panel to group matched phrases.",
+        ),
+      addedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that added the phrase. Absent for curated defaults.",
+        ),
+      addedAt: zod.coerce
+        .date()
+        .optional()
+        .describe(
+          "ISO 8601 timestamp the phrase was added. Absent for curated defaults.",
+        ),
+      rationale: zod
+        .string()
+        .optional()
+        .describe(
+          "Free-text justification supplied by the reviewer at add time.",
+        ),
+    })
+    .optional(),
+  historyEntry: zod
+    .object({
+      phrase: zod.string(),
+      category: zod
+        .enum(["absence", "hedging", "buzzword"])
+        .describe(
+          "Theme bucket used by the diagnostics panel to group matched phrases.",
+        ),
+      addedBy: zod.string().optional(),
+      addedAt: zod.coerce.date().optional(),
+      rationale: zod.string().optional(),
+      removedBy: zod
+        .string()
+        .optional()
+        .describe("Reviewer name or email that removed the phrase."),
+      removedAt: zod.coerce
+        .date()
+        .describe("ISO 8601 timestamp the phrase was removed."),
+    })
+    .optional()
+    .describe(
+      "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
+    ),
   phrases: zod
     .array(
       zod.object({
@@ -2605,6 +2818,24 @@ export const RemoveHandwavyPhraseResponse = zod.object({
           .enum(["absence", "hedging", "buzzword"])
           .describe(
             "Theme bucket used by the diagnostics panel to group matched phrases.",
+          ),
+        addedBy: zod
+          .string()
+          .optional()
+          .describe(
+            "Reviewer name or email that added the phrase. Absent for curated defaults.",
+          ),
+        addedAt: zod.coerce
+          .date()
+          .optional()
+          .describe(
+            "ISO 8601 timestamp the phrase was added. Absent for curated defaults.",
+          ),
+        rationale: zod
+          .string()
+          .optional()
+          .describe(
+            "Free-text justification supplied by the reviewer at add time.",
           ),
       }),
     )
@@ -2678,6 +2909,35 @@ export const RemoveHandwavyPhraseResponse = zod.object({
     .optional()
     .describe(
       "Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged\nthe curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)\nand T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high\nvalue is a strong signal that the phrase will crater AVRI for legitimate reports.\n",
+    ),
+  history: zod
+    .array(
+      zod
+        .object({
+          phrase: zod.string(),
+          category: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          addedBy: zod.string().optional(),
+          addedAt: zod.coerce.date().optional(),
+          rationale: zod.string().optional(),
+          removedBy: zod
+            .string()
+            .optional()
+            .describe("Reviewer name or email that removed the phrase."),
+          removedAt: zod.coerce
+            .date()
+            .describe("ISO 8601 timestamp the phrase was removed."),
+        })
+        .describe(
+          "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
+        ),
+    )
+    .optional()
+    .describe(
+      "Full removal audit log after the mutation (only included on DELETE).",
     ),
 });
 

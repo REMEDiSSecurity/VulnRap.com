@@ -6,6 +6,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { HandwavyCategory } from "./handwavyCategory";
+import type { HandwavyHistoryEntry } from "./handwavyHistoryEntry";
 import type { HandwavyMarker } from "./handwavyMarker";
 import type { HandwavyPhraseDryRunMatches } from "./handwavyPhraseDryRunMatches";
 
@@ -19,6 +20,8 @@ export interface HandwavyPhraseMutationResponse {
   category?: HandwavyCategory;
   /** Number of active phrases after the mutation. */
   total: number;
+  marker?: HandwavyMarker;
+  historyEntry?: HandwavyHistoryEntry;
   /** Full active list after the mutation. */
   phrases: HandwavyMarker[];
   /** Task #114 — true when the response is a preview only and the phrase was NOT
@@ -27,4 +30,6 @@ active phrase list (unchanged) is returned in `phrases`.
  */
   dryRun?: boolean;
   dryRunMatches?: HandwavyPhraseDryRunMatches;
+  /** Full removal audit log after the mutation (only included on DELETE). */
+  history?: HandwavyHistoryEntry[];
 }

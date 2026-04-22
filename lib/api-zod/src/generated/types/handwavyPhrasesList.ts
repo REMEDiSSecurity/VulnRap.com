@@ -5,9 +5,12 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { HandwavyHistoryEntry } from "./handwavyHistoryEntry";
 import type { HandwavyMarker } from "./handwavyMarker";
 
 export interface HandwavyPhrasesList {
   phrases: HandwavyMarker[];
   total: number;
+  /** Removal audit log (most recent last). Bounded server-side. */
+  history: HandwavyHistoryEntry[];
 }

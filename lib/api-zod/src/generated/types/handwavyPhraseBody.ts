@@ -18,4 +18,8 @@ reviewers can see how many GREEN / YELLOW reports the phrase would have hit
 before they confirm the add. Defaults to false (write-through behavior).
  */
   dryRun?: boolean;
+  /** Reviewer name or email recorded in the audit trail. Optional. */
+  reviewer?: string;
+  /** Free-text justification recorded with the phrase. Only consulted on POST. */
+  rationale?: string;
 }

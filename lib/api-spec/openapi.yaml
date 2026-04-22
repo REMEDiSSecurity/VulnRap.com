@@ -2825,7 +2825,41 @@ components:
           type: string
         category:
           $ref: "#/components/schemas/HandwavyCategory"
+        addedBy:
+          type: string
+          description: Reviewer name or email that added the phrase. Absent for curated defaults.
+        addedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp the phrase was added. Absent for curated defaults.
+        rationale:
+          type: string
+          description: Free-text justification supplied by the reviewer at add time.
       required: [phrase, category]
+
+    HandwavyHistoryEntry:
+      type: object
+      description: Removed-phrase audit record used so reviewers can reinstate a phrase with original context.
+      properties:
+        phrase:
+          type: string
+        category:
+          $ref: "#/components/schemas/HandwavyCategory"
+        addedBy:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+        rationale:
+          type: string
+        removedBy:
+          type: string
+          description: Reviewer name or email that removed the phrase.
+        removedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp the phrase was removed.
+      required: [phrase, category, removedAt]
 
     HandwavyPhrasesList:
       type: object
@@ -2836,7 +2870,12 @@ components:
             $ref: "#/components/schemas/HandwavyMarker"
         total:
           type: integer
-      required: [phrases, total]
+        history:
+          type: array
+          description: Removal audit log (most recent last). Bounded server-side.
+          items:
+            $ref: "#/components/schemas/HandwavyHistoryEntry"
+      required: [phrases, total, history]
 
     HandwavyPhraseBody:
       type: object
@@ -2854,6 +2893,12 @@ components:
             / T3 SLOP / T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so
             reviewers can see how many GREEN / YELLOW reports the phrase would have hit
             before they confirm the add. Defaults to false (write-through behavior).
+        reviewer:
+          type: string
+          description: Reviewer name or email recorded in the audit trail. Optional.
+        rationale:
+          type: string
+          description: Free-text justification recorded with the phrase. Only consulted on POST.
       required: [phrase]
 
     HandwavyPhraseDryRunMatches:
@@ -2927,6 +2972,10 @@ components:
         total:
           type: integer
           description: Number of active phrases after the mutation.
+        marker:
+          $ref: "#/components/schemas/HandwavyMarker"
+        historyEntry:
+          $ref: "#/components/schemas/HandwavyHistoryEntry"
         phrases:
           type: array
           items:
@@ -2940,6 +2989,11 @@ components:
             active phrase list (unchanged) is returned in `phrases`.
         dryRunMatches:
           $ref: "#/components/schemas/HandwavyPhraseDryRunMatches"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyHistoryEntry"
+          description: Full removal audit log after the mutation (only included on DELETE).
       required: [phrase, total, phrases]
 
     VisitRecorded:

@@ -4,6 +4,7 @@ import { getCurrentConfig, getConfigHistory, applyNewConfig } from "../lib/scori
 import { generateAvriDriftReport } from "../lib/avri-drift";
 import {
   getHandwavyPhrases,
+  getHandwavyPhraseHistory,
   addHandwavyPhrase,
   removeHandwavyPhrase,
 } from "../lib/engines/avri/handwavy-phrases";
@@ -291,7 +292,8 @@ router.post("/feedback/calibration/apply", requireCalibrationAuth, async (req, r
 router.get("/feedback/calibration/handwavy-phrases", (_req, res) => {
   try {
     const phrases = getHandwavyPhrases();
-    res.json({ phrases, total: phrases.length });
+    const history = getHandwavyPhraseHistory();
+    res.json({ phrases, total: phrases.length, history });
   } catch (err) {
     _req.log?.error(err, "Failed to read hand-wavy phrases");
     res.status(500).json({ error: "Failed to read hand-wavy phrases." });
@@ -300,10 +302,12 @@ router.get("/feedback/calibration/handwavy-phrases", (_req, res) => {
 
 router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
   try {
-    const { phrase, category, dryRun } = (req.body ?? {}) as {
+    const { phrase, category, dryRun, reviewer, rationale } = (req.body ?? {}) as {
       phrase?: unknown;
       category?: unknown;
       dryRun?: unknown;
+      reviewer?: unknown;
+      rationale?: unknown;
     };
     if (typeof phrase !== "string" || phrase.trim().length === 0) {
       res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
@@ -316,6 +320,14 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (r
       category !== "buzzword"
     ) {
       res.status(400).json({ error: "category must be one of 'absence', 'hedging', 'buzzword'." });
+      return;
+    }
+    if (reviewer !== undefined && typeof reviewer !== "string") {
+      res.status(400).json({ error: "reviewer must be a string when provided." });
+      return;
+    }
+    if (rationale !== undefined && typeof rationale !== "string") {
+      res.status(400).json({ error: "rationale must be a string when provided." });
       return;
     }
     // Task #114 — dry-run mode: validate length the same way as a real add so
@@ -345,9 +357,16 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (r
       });
       return;
     }
-    const result = addHandwavyPhrase(phrase, category);
+    const result = addHandwavyPhrase(phrase, category, {
+      reviewer: typeof reviewer === "string" ? reviewer : undefined,
+      rationale: typeof rationale === "string" ? rationale : undefined,
+    });
     res.status(result.added ? 201 : 200).json({
-      ...result,
+      added: result.added,
+      phrase: result.phrase,
+      category: result.category,
+      total: result.total,
+      marker: result.marker,
       phrases: getHandwavyPhrases(),
     });
   } catch (err) {
@@ -362,17 +381,30 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (r
 
 router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
   try {
-    const { phrase } = (req.body ?? {}) as { phrase?: unknown };
+    const { phrase, reviewer } = (req.body ?? {}) as { phrase?: unknown; reviewer?: unknown };
     if (typeof phrase !== "string" || phrase.trim().length === 0) {
       res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
       return;
     }
-    const result = removeHandwavyPhrase(phrase);
+    if (reviewer !== undefined && typeof reviewer !== "string") {
+      res.status(400).json({ error: "reviewer must be a string when provided." });
+      return;
+    }
+    const result = removeHandwavyPhrase(phrase, {
+      reviewer: typeof reviewer === "string" ? reviewer : undefined,
+    });
     if (!result.removed) {
       res.status(404).json({ ...result, error: "Phrase not found." });
       return;
     }
-    res.json({ ...result, phrases: getHandwavyPhrases() });
+    res.json({
+      removed: result.removed,
+      phrase: result.phrase,
+      total: result.total,
+      historyEntry: result.historyEntry,
+      phrases: getHandwavyPhrases(),
+      history: getHandwavyPhraseHistory(),
+    });
   } catch (err) {
     req.log?.error(err, "Failed to remove hand-wavy phrase");
     res.status(500).json({ error: "Failed to remove hand-wavy phrase." });
