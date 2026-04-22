@@ -2100,6 +2100,11 @@ export const GetReportFeedResponse = zod.object({
     totalPublic: zod.number(),
     avgScore: zod.number(),
     tierCounts: zod.record(zod.string(), zod.number()),
+    familyCounts: zod
+      .record(zod.string(), zod.number())
+      .describe(
+        'Per-AVRI-family counts of public reports (mirrors tierCounts). Keys are AVRI family ids (e.g. INJECTION, MEMORY_CORRUPTION); rows with null avri_family are bucketed under \"FLAT\".',
+      ),
   }),
 });
 

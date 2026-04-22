@@ -153,6 +153,11 @@ export default function Reports() {
   const tierEntries = Object.entries(tierCounts).sort((a, b) => b[1] - a[1]);
   const availableTiers = ["All", ...TIER_ORDER.filter((t) => t in tierCounts)];
 
+  // Sprint 12 — per-family counts mirror tierCounts. Hide families with zero
+  // reports (other than the "All" sentinel and whatever is currently selected,
+  // which we keep visible so the user can always see/clear their own filter).
+  const familyCounts = summary?.familyCounts ?? {};
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="pb-4">
@@ -270,19 +275,32 @@ export default function Reports() {
             </button>
             {showFamilyMenu && (
               <div className="absolute top-full mt-1 left-0 z-50 glass-card rounded-lg border border-border/50 shadow-xl py-1 min-w-[260px] max-h-[320px] overflow-y-auto">
-                {AVRI_FAMILY_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => { setFamilyFilter(opt.value); setOffset(0); setShowFamilyMenu(false); }}
-                    className={cn(
-                      "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
-                      familyFilter === opt.value && "text-primary font-medium"
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                {AVRI_FAMILY_OPTIONS
+                  .filter((opt) =>
+                    opt.value === "All" ||
+                    opt.value === familyFilter ||
+                    (familyCounts[opt.value] ?? 0) > 0,
+                  )
+                  .map((opt) => {
+                    const count = familyCounts[opt.value] ?? 0;
+                    const isZero = opt.value !== "All" && count === 0;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => { setFamilyFilter(opt.value); setOffset(0); setShowFamilyMenu(false); }}
+                        className={cn(
+                          "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
+                          familyFilter === opt.value && "text-primary font-medium",
+                          isZero && "opacity-50",
+                        )}
+                      >
+                        {opt.value === "All"
+                          ? opt.label
+                          : `${opt.label} (${count})`}
+                      </button>
+                    );
+                  })}
               </div>
             )}
           </div>

@@ -1315,7 +1315,17 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   }
   if (avriFamilyFilter) {
     // Uses idx_reports_avri_family from the reports schema.
-    conditions.push(eq(reportsTable.avriFamily, avriFamilyFilter));
+    // FLAT must also match legacy rows where avri_family is NULL — those are
+    // bucketed into FLAT in summary.familyCounts (see coalesce below), so the
+    // filter has to mirror that semantic or the count and the listed rows
+    // would disagree.
+    if (avriFamilyFilter === "FLAT") {
+      conditions.push(
+        sql`coalesce(${reportsTable.avriFamily}, 'FLAT') = 'FLAT'`,
+      );
+    } else {
+      conditions.push(eq(reportsTable.avriFamily, avriFamilyFilter));
+    }
   }
   const whereClause = and(...conditions)!;
 
@@ -1362,6 +1372,24 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
     tierCounts[row.tier] = row.count;
   }
 
+  // Sprint 12 — per-AVRI-family counts so the family filter dropdown can show
+  // "(N)" next to each option, mirroring tierCounts. We coalesce NULL rows
+  // (legacy reports submitted before the column was persisted) into the FLAT
+  // bucket since that's what the classifier would assign them today.
+  const familyRows = await db
+    .select({
+      family: sql<string>`coalesce(${reportsTable.avriFamily}, 'FLAT')`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(reportsTable)
+    .where(eq(reportsTable.showInFeed, true))
+    .groupBy(sql`coalesce(${reportsTable.avriFamily}, 'FLAT')`);
+
+  const familyCounts: Record<string, number> = {};
+  for (const row of familyRows) {
+    familyCounts[row.family] = row.count;
+  }
+
   const feedReports = await db
     .select({
       id: reportsTable.id,
@@ -1400,6 +1428,7 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       totalPublic: summaryResult?.totalPublic ?? 0,
       avgScore: Math.round((summaryResult?.avgScore ?? 0) * 10) / 10,
       tierCounts,
+      familyCounts,
     },
   });
   res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");

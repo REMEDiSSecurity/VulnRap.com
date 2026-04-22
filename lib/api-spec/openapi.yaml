@@ -1437,10 +1437,16 @@ components:
               type: object
               additionalProperties:
                 type: integer
+            familyCounts:
+              type: object
+              additionalProperties:
+                type: integer
+              description: Per-AVRI-family counts of public reports (mirrors tierCounts). Keys are AVRI family ids (e.g. INJECTION, MEMORY_CORRUPTION); rows with null avri_family are bucketed under "FLAT".
           required:
             - totalPublic
             - avgScore
             - tierCounts
+            - familyCounts
       required:
         - reports
         - total

@@ -5,10 +5,13 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { ReportFeedSummaryFamilyCounts } from "./reportFeedSummaryFamilyCounts";
 import type { ReportFeedSummaryTierCounts } from "./reportFeedSummaryTierCounts";
 
 export type ReportFeedSummary = {
   totalPublic: number;
   avgScore: number;
   tierCounts: ReportFeedSummaryTierCounts;
+  /** Per-AVRI-family counts of public reports (mirrors tierCounts). Keys are AVRI family ids (e.g. INJECTION, MEMORY_CORRUPTION); rows with null avri_family are bucketed under "FLAT". */
+  familyCounts: ReportFeedSummaryFamilyCounts;
 };

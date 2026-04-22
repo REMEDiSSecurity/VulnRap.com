@@ -1215,10 +1215,17 @@ export type ReportFeedReportsItem = {
 
 export type ReportFeedSummaryTierCounts = { [key: string]: number };
 
+/**
+ * Per-AVRI-family counts of public reports (mirrors tierCounts). Keys are AVRI family ids (e.g. INJECTION, MEMORY_CORRUPTION); rows with null avri_family are bucketed under "FLAT".
+ */
+export type ReportFeedSummaryFamilyCounts = { [key: string]: number };
+
 export type ReportFeedSummary = {
   totalPublic: number;
   avgScore: number;
   tierCounts: ReportFeedSummaryTierCounts;
+  /** Per-AVRI-family counts of public reports (mirrors tierCounts). Keys are AVRI family ids (e.g. INJECTION, MEMORY_CORRUPTION); rows with null avri_family are bucketed under "FLAT". */
+  familyCounts: ReportFeedSummaryFamilyCounts;
 };
 
 export interface ReportFeed {

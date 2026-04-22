@@ -91,6 +91,7 @@ export * from "./reportFeed";
 export * from "./reportFeedReportsItem";
 export * from "./reportFeedReportsItemContentMode";
 export * from "./reportFeedSummary";
+export * from "./reportFeedSummaryFamilyCounts";
 export * from "./reportFeedSummaryTierCounts";
 export * from "./reproGuidance";
 export * from "./reproRecipe";
