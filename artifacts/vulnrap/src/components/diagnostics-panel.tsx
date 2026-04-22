@@ -80,6 +80,12 @@ export interface DiagnosticsResponse {
   } | null;
   /** AVRI composite block; present when VULNRAP_USE_AVRI=true at analysis time. */
   avri?: AvriDiagnosticsBlock | null;
+  /**
+   * Sprint 12 — Cached AVRI rubric family id from the reports row. Populated for
+   * any report (legacy or fresh) that has the column set, so the panel can show
+   * the family even when the in-memory `avri` block above is missing.
+   */
+  cachedAvriFamily?: string | null;
   legacyMapping: {
     slopScore: number;
     displayMode: string;
@@ -302,6 +308,7 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
                 avri={data.avri ?? null}
                 engines={data.engines?.engines ?? []}
                 overrides={overrides}
+                cachedFamily={data.cachedAvriFamily ?? null}
               />
 
               {signalsSummary && (
@@ -513,16 +520,53 @@ function AvriFamilySection({
   avri,
   engines,
   overrides,
+  cachedFamily,
 }: {
   avri: AvriDiagnosticsBlock | null;
   engines: EngineResult[];
   overrides: string[];
+  /**
+   * Sprint 12 — Cached AVRI rubric family from the reports row. When the live
+   * `avri` block is missing (legacy report or AVRI disabled at write time) we
+   * still render a minimal banner so reviewers see which family the report-feed
+   * filter is grouping it under.
+   */
+  cachedFamily?: string | null;
 }) {
   const e2 = engines.find((e) => /Technical Substance/i.test(e.engine));
   const e2Avri = (e2?.signalBreakdown?.avri ?? null) as AvriEngine2Breakdown | null;
 
-  // Nothing to show if AVRI didn't run.
-  if (!avri && !e2Avri) return null;
+  // Nothing to show if AVRI didn't run *and* we don't have a cached family on
+  // the row. Keep the cached-family-only branch lightweight rather than going
+  // through the full rubric layout that needs gold-signal data.
+  if (!avri && !e2Avri) {
+    if (cachedFamily) {
+      return (
+        <>
+          <Separator className="bg-border/30" />
+          <section className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                AVRI Family Rubric
+              </div>
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 h-5 font-mono normal-case border-primary/40 text-primary"
+              >
+                {cachedFamily}
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Cached family from <code className="text-primary/80">reports.avri_family</code>.
+              The full AVRI rubric breakdown isn&apos;t available for this report
+              (analyzed before AVRI scoring was enabled).
+            </p>
+          </section>
+        </>
+      );
+    }
+    return null;
+  }
 
   const familyName = avri?.familyName ?? e2Avri?.familyName ?? avri?.family ?? e2Avri?.family ?? "—";
   const familyId = avri?.family ?? e2Avri?.family ?? "—";

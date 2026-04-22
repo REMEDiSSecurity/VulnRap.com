@@ -5,6 +5,7 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { GetReportFeedAvriFamily } from "./getReportFeedAvriFamily";
 import type { GetReportFeedSort } from "./getReportFeedSort";
 
 export type GetReportFeedParams = {
@@ -21,5 +22,9 @@ export type GetReportFeedParams = {
    * Filter by slop tier name (exact match)
    */
   tier?: string;
+  /**
+   * Filter by cached AVRI rubric family id (exact match against reports.avri_family).
+   */
+  avriFamily?: GetReportFeedAvriFamily;
   sort?: GetReportFeedSort;
 };

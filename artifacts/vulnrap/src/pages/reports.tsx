@@ -50,6 +50,27 @@ const TIER_ORDER = [
   "Slop",
 ];
 
+// AVRI rubric family options for the family filter chip. Order roughly tracks
+// how often we expect each class to appear so the most-useful filters surface
+// first. Values must match the openapi enum + reports.avri_family column.
+const AVRI_FAMILY_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "All", label: "All families" },
+  { value: "INJECTION", label: "Injection (SQL / cmd / LDAP)" },
+  { value: "WEB_CLIENT", label: "Web client (XSS / CSRF / open redirect)" },
+  { value: "MEMORY_CORRUPTION", label: "Memory corruption / unsafe C" },
+  { value: "AUTHN_AUTHZ", label: "Authn / authz" },
+  { value: "CRYPTO", label: "Cryptography" },
+  { value: "DESERIALIZATION", label: "Deserialization" },
+  { value: "RACE_CONCURRENCY", label: "Race / concurrency" },
+  { value: "REQUEST_SMUGGLING", label: "Request smuggling" },
+  { value: "FLAT", label: "Generic / unclassified" },
+];
+
+function familyLabel(familyId: string | null | undefined): string | null {
+  if (!familyId) return null;
+  return AVRI_FAMILY_OPTIONS.find((o) => o.value === familyId)?.label ?? familyId;
+}
+
 function getTierBadgeColor(tier: string) {
   switch (tier) {
     case "Clean":
@@ -86,14 +107,32 @@ export default function Reports() {
   const [offset, setOffset] = useState(0);
   const [sort, setSort] = useState<string>("newest");
   const [tierFilter, setTierFilter] = useState<string>("All");
+  const [familyFilter, setFamilyFilter] = useState<string>("All");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showTierMenu, setShowTierMenu] = useState(false);
+  const [showFamilyMenu, setShowFamilyMenu] = useState(false);
 
   const feedParams = {
     limit: PAGE_SIZE,
     offset,
     sort: sort as "newest" | "oldest" | "score_asc" | "score_desc",
     ...(tierFilter !== "All" ? { tier: tierFilter } : {}),
+    // The avriFamily query param is validated server-side against the cached
+    // reports.avri_family column; "All" sentinel just skips the param.
+    ...(familyFilter !== "All"
+      ? {
+          avriFamily: familyFilter as
+            | "MEMORY_CORRUPTION"
+            | "INJECTION"
+            | "WEB_CLIENT"
+            | "AUTHN_AUTHZ"
+            | "CRYPTO"
+            | "DESERIALIZATION"
+            | "RACE_CONCURRENCY"
+            | "REQUEST_SMUGGLING"
+            | "FLAT",
+        }
+      : {}),
   };
 
   const { data: feedData, isLoading: feedLoading, isError: feedError } = useGetReportFeed(feedParams, {
@@ -211,6 +250,43 @@ export default function Reports() {
             )}
           </div>
 
+          {/* Sprint 12 — AVRI rubric family filter. Mirrors the tier menu so
+              reviewers can slice by class (INJECTION, MEMORY_CORRUPTION, …)
+              without re-classifying anything. Selecting a family resets paging
+              like the tier filter does. */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => { setShowFamilyMenu(!showFamilyMenu); setShowTierMenu(false); setShowSortMenu(false); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
+            >
+              <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>
+                {familyFilter === "All"
+                  ? "All families"
+                  : (familyLabel(familyFilter) ?? familyFilter)}
+              </span>
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            </button>
+            {showFamilyMenu && (
+              <div className="absolute top-full mt-1 left-0 z-50 glass-card rounded-lg border border-border/50 shadow-xl py-1 min-w-[260px] max-h-[320px] overflow-y-auto">
+                {AVRI_FAMILY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => { setFamilyFilter(opt.value); setOffset(0); setShowFamilyMenu(false); }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
+                      familyFilter === opt.value && "text-primary font-medium"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="relative">
             <button
               type="button"
@@ -271,6 +347,15 @@ export default function Reports() {
                 <Badge variant="outline" className={cn("text-[10px] hidden sm:inline-flex", getTierBadgeColor(report.slopTier))}>
                   {report.slopTier}
                 </Badge>
+                {report.avriFamily && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] hidden md:inline-flex border-primary/30 text-primary/80 font-mono normal-case"
+                    title={familyLabel(report.avriFamily) ?? report.avriFamily}
+                  >
+                    {report.avriFamily}
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
                 <div className="flex items-center gap-2">

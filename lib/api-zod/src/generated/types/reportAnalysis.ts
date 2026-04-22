@@ -126,6 +126,11 @@ export interface ReportAnalysis {
   substance?: LLMSubstanceScores | null;
   /** Sprint 9 multi-engine consensus score (3 engines). Null when not computed (e.g., legacy reports). */
   vulnrap?: VulnrapComposite | null;
+  /**
+   * Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Sourced from the persisted reports.avri_family column; null for legacy rows submitted before the family was persisted.
+   * @nullable
+   */
+  avriFamily?: string | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;

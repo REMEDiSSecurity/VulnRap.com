@@ -920,6 +920,11 @@ export interface ReportAnalysis {
   substance?: LLMSubstanceScores | null;
   /** Sprint 9 multi-engine consensus score (3 engines). Null when not computed (e.g., legacy reports). */
   vulnrap?: VulnrapComposite | null;
+  /**
+   * Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Sourced from the persisted reports.avri_family column; null for legacy rows submitted before the family was persisted.
+   * @nullable
+   */
+  avriFamily?: string | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;
@@ -1201,6 +1206,11 @@ export type ReportFeedReportsItem = {
   matchCount: number;
   contentMode: ReportFeedReportsItemContentMode;
   createdAt: string;
+  /**
+   * Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Null for legacy rows submitted before the family was persisted.
+   * @nullable
+   */
+  avriFamily?: string | null;
 };
 
 export type ReportFeedSummaryTierCounts = { [key: string]: number };
@@ -1649,8 +1659,27 @@ export type GetReportFeedParams = {
    * Filter by slop tier name (exact match)
    */
   tier?: string;
+  /**
+   * Filter by cached AVRI rubric family id (exact match against reports.avri_family).
+   */
+  avriFamily?: GetReportFeedAvriFamily;
   sort?: GetReportFeedSort;
 };
+
+export type GetReportFeedAvriFamily =
+  (typeof GetReportFeedAvriFamily)[keyof typeof GetReportFeedAvriFamily];
+
+export const GetReportFeedAvriFamily = {
+  MEMORY_CORRUPTION: "MEMORY_CORRUPTION",
+  INJECTION: "INJECTION",
+  WEB_CLIENT: "WEB_CLIENT",
+  AUTHN_AUTHZ: "AUTHN_AUTHZ",
+  CRYPTO: "CRYPTO",
+  DESERIALIZATION: "DESERIALIZATION",
+  RACE_CONCURRENCY: "RACE_CONCURRENCY",
+  REQUEST_SMUGGLING: "REQUEST_SMUGGLING",
+  FLAT: "FLAT",
+} as const;
 
 export type GetReportFeedSort =
   (typeof GetReportFeedSort)[keyof typeof GetReportFeedSort];

@@ -346,6 +346,22 @@ paths:
           schema:
             type: string
           description: Filter by slop tier name (exact match)
+        - name: avriFamily
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - MEMORY_CORRUPTION
+              - INJECTION
+              - WEB_CLIENT
+              - AUTHN_AUTHZ
+              - CRYPTO
+              - DESERIALIZATION
+              - RACE_CONCURRENCY
+              - REQUEST_SMUGGLING
+              - FLAT
+          description: Filter by cached AVRI rubric family id (exact match against reports.avri_family).
         - name: sort
           in: query
           required: false
@@ -904,6 +920,9 @@ components:
             - $ref: "#/components/schemas/VulnrapComposite"
             - type: "null"
           description: Sprint 9 multi-engine consensus score (3 engines). Null when not computed (e.g., legacy reports).
+        avriFamily:
+          type: ["string", "null"]
+          description: Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Sourced from the persisted reports.avri_family column; null for legacy rows submitted before the family was persisted.
         fileName:
           type: ["string", "null"]
         fileSize:
@@ -1392,6 +1411,9 @@ components:
               createdAt:
                 type: string
                 format: date-time
+              avriFamily:
+                type: ["string", "null"]
+                description: Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Null for legacy rows submitted before the family was persisted.
             required:
               - id
               - reportCode

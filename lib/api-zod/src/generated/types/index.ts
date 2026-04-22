@@ -51,6 +51,7 @@ export * from "./feedbackResponse";
 export * from "./gapItem";
 export * from "./gapItemAudience";
 export * from "./gapItemSeverity";
+export * from "./getReportFeedAvriFamily";
 export * from "./getReportFeedParams";
 export * from "./getReportFeedSort";
 export * from "./getTrendsParams";

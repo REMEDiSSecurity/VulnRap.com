@@ -15,4 +15,9 @@ export type ReportFeedReportsItem = {
   matchCount: number;
   contentMode: ReportFeedReportsItemContentMode;
   createdAt: Date;
+  /**
+   * Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Null for legacy rows submitted before the family was persisted.
+   * @nullable
+   */
+  avriFamily?: string | null;
 };

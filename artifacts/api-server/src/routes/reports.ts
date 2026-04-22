@@ -1297,10 +1297,25 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   const offset = Math.max(0, isNaN(offsetParam) ? 0 : offsetParam);
   const tierFilter = req.query.tier ? String(req.query.tier) : null;
   const sortParam = String(req.query.sort || "newest");
+  // Sprint 12 — optional AVRI rubric family filter. We trust only known
+  // family ids so a malformed query string can't slip through to the SQL
+  // exact-match. Unknown values short-circuit to no-op (treated as "no
+  // filter") rather than 400, since the openapi schema already constrains
+  // generated clients.
+  const AVRI_FAMILY_IDS = new Set<string>([
+    "MEMORY_CORRUPTION", "INJECTION", "WEB_CLIENT", "AUTHN_AUTHZ",
+    "CRYPTO", "DESERIALIZATION", "RACE_CONCURRENCY", "REQUEST_SMUGGLING", "FLAT",
+  ]);
+  const rawAvriFamily = req.query.avriFamily ? String(req.query.avriFamily) : null;
+  const avriFamilyFilter = rawAvriFamily && AVRI_FAMILY_IDS.has(rawAvriFamily) ? rawAvriFamily : null;
 
   const conditions = [eq(reportsTable.showInFeed, true)];
   if (tierFilter) {
     conditions.push(eq(reportsTable.slopTier, tierFilter));
+  }
+  if (avriFamilyFilter) {
+    // Uses idx_reports_avri_family from the reports schema.
+    conditions.push(eq(reportsTable.avriFamily, avriFamilyFilter));
   }
   const whereClause = and(...conditions)!;
 
@@ -1355,6 +1370,7 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       similarityMatches: reportsTable.similarityMatches,
       contentMode: reportsTable.contentMode,
       createdAt: reportsTable.createdAt,
+      avriFamily: reportsTable.avriFamily,
     })
     .from(reportsTable)
     .where(whereClause)
@@ -1372,6 +1388,7 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       matchCount: matches.length,
       contentMode: r.contentMode,
       createdAt: r.createdAt,
+      avriFamily: r.avriFamily ?? null,
     };
   });
 
@@ -1732,6 +1749,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
         reconstructed,
       };
     })(),
+    avriFamily: report.avriFamily ?? null,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
@@ -1795,6 +1813,12 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
       overridesApplied: report.vulnrapOverridesApplied ?? [],
     },
     avri: avriBlock,
+    // Sprint 12 — Cached AVRI rubric family from the reports row. Surfaced here
+    // so the diagnostics panel can show the family even when the engines blob
+    // doesn't include an avri sub-block (e.g. legacy reports re-classified by
+    // the backfill script). Falls back to the family inside `avriBlock` when
+    // both are present and identical.
+    cachedAvriFamily: report.avriFamily ?? null,
     legacyMapping: report.vulnrapCompositeScore == null ? null : {
       slopScore: compositeToLegacySlopScore(report.vulnrapCompositeScore),
       displayMode: isNewCompositeEnabled() ? "vulnrap-composite" : "legacy-slop",

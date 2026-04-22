@@ -1040,6 +1040,12 @@ export const GetReportResponse = zod.object({
     .describe(
       "Sprint 9 multi-engine consensus score (3 engines). Null when not computed (e.g., legacy reports).",
     ),
+  avriFamily: zod
+    .string()
+    .nullish()
+    .describe(
+      "Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Sourced from the persisted reports.avri_family column; null for legacy rows submitted before the family was persisted.",
+    ),
   fileName: zod.string().nullish(),
   fileSize: zod.number(),
   createdAt: zod.coerce.date(),
@@ -2049,6 +2055,22 @@ export const GetReportFeedQueryParams = zod.object({
     .string()
     .optional()
     .describe("Filter by slop tier name (exact match)"),
+  avriFamily: zod
+    .enum([
+      "MEMORY_CORRUPTION",
+      "INJECTION",
+      "WEB_CLIENT",
+      "AUTHN_AUTHZ",
+      "CRYPTO",
+      "DESERIALIZATION",
+      "RACE_CONCURRENCY",
+      "REQUEST_SMUGGLING",
+      "FLAT",
+    ])
+    .optional()
+    .describe(
+      "Filter by cached AVRI rubric family id (exact match against reports.avri_family).",
+    ),
   sort: zod
     .enum(["newest", "oldest", "score_asc", "score_desc"])
     .default(getReportFeedQuerySortDefault),
@@ -2064,6 +2086,12 @@ export const GetReportFeedResponse = zod.object({
       matchCount: zod.number(),
       contentMode: zod.enum(["full", "similarity_only"]),
       createdAt: zod.coerce.date(),
+      avriFamily: zod
+        .string()
+        .nullish()
+        .describe(
+          "Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Null for legacy rows submitted before the family was persisted.",
+        ),
     }),
   ),
   total: zod.number(),
