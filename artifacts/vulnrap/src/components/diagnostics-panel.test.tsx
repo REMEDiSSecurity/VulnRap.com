@@ -247,6 +247,90 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/Submission-velocity penalty/i)).toBeInTheDocument();
   });
 
+  it("renders the STRIPPED_CRASH_TRACE block with reason, frame counts, and revoked trace gold signals", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "MEMORY_CORRUPTION",
+          familyName: "Memory corruption / unsafe C",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-787",
+            evidence: ["CWE-787"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 22,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "MEMORY_CORRUPTION",
+                  familyName: "Memory corruption / unsafe C",
+                  baseScore: 18,
+                  goldHitCount: 0,
+                  goldTotalCount: 8,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  crashTrace: {
+                    framesAnalyzed: 6,
+                    goodFrames: 1,
+                    placeholderFrames: 4,
+                    isStripped: true,
+                    reason: "Crash trace has 4/6 frames with placeholder symbols/offsets",
+                    revokedGoldHits: [
+                      { id: "asan_or_sanitizer", points: 22 },
+                      { id: "stack_trace_with_offset", points: 14 },
+                    ],
+                    penalty: -18,
+                  },
+                  rawAvriScore: 0,
+                  legacyScore: 30,
+                  blendedScore: 22,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("STRIPPED_CRASH_TRACE")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/crash trace downgraded \(-18\)/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Crash trace has 4\/6 frames with placeholder symbols\/offsets/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/frames:\s*6/i)).toBeInTheDocument();
+    expect(screen.getByText(/good:\s*1/i)).toBeInTheDocument();
+    expect(screen.getByText(/placeholder:\s*4/i)).toBeInTheDocument();
+
+    expect(screen.getByText(/Trace Gold Signals Revoked/i)).toBeInTheDocument();
+    expect(screen.getByText(/asan_or_sanitizer/)).toBeInTheDocument();
+    expect(screen.getByText(/stack_trace_with_offset/)).toBeInTheDocument();
+  });
+
   it("surfaces an error message when the diagnostics endpoint fails", async () => {
     fetchSpy.mockImplementationOnce(async () => new Response("boom", { status: 500 }));
     const user = userEvent.setup();

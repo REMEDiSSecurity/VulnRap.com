@@ -483,6 +483,20 @@ interface AvriEngine2Breakdown {
   absencePenalties?: Array<{ id: string; description: string; points: number }>;
   contradictions?: string[];
   contradictionPenalty?: number;
+  // Sprint 11 / Task 78: stripped-crash-trace block written by Engine 2
+  // when a MEMORY_CORRUPTION report's stack trace had no resolvable
+  // symbols / contained placeholder offsets. The presence of this block
+  // (with isStripped=true) is what triggers the STRIPPED_CRASH_TRACE
+  // indicator and the trace-gold revocation surfaced in the panel.
+  crashTrace?: {
+    framesAnalyzed: number;
+    goodFrames: number;
+    placeholderFrames: number;
+    isStripped: boolean;
+    reason: string | null;
+    revokedGoldHits: Array<{ id: string; points: number }>;
+    penalty: number;
+  } | null;
   rawAvriScore?: number;
   legacyScore?: number;
   blendedScore?: number;
@@ -519,6 +533,7 @@ function AvriFamilySection({
   const contradictions = e2Avri?.contradictions ?? [];
   const goldHitCount = e2Avri?.goldHitCount ?? avri?.goldHitCount ?? 0;
   const goldTotalCount = e2Avri?.goldTotalCount ?? goldHits.length + goldMisses.length;
+  const crashTrace = e2Avri?.crashTrace ?? null;
   const matchingOverrides = overrides
     .map((rule) => {
       const meta = AVRI_OVERRIDE_LABELS.find((m) => rule.startsWith(m.token));
@@ -647,6 +662,50 @@ function AvriFamilySection({
                     </Badge>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {crashTrace?.isStripped && (
+              <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-5 font-mono text-red-400 border-red-500/40"
+                  >
+                    STRIPPED_CRASH_TRACE
+                  </Badge>
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    crash trace downgraded ({crashTrace.penalty})
+                  </span>
+                </div>
+                {crashTrace.reason && (
+                  <p className="text-[11px] text-red-300/90 leading-relaxed">
+                    {crashTrace.reason}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-3 text-[11px] font-mono text-muted-foreground">
+                  <span>frames: {crashTrace.framesAnalyzed}</span>
+                  <span className="text-green-400/80">good: {crashTrace.goodFrames}</span>
+                  <span className="text-red-400/80">placeholder: {crashTrace.placeholderFrames}</span>
+                </div>
+                {crashTrace.revokedGoldHits.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                      Trace Gold Signals Revoked
+                    </div>
+                    <ul className="space-y-0.5">
+                      {crashTrace.revokedGoldHits.map((r) => (
+                        <li
+                          key={r.id}
+                          className="text-[11px] font-mono text-red-400/90 flex items-baseline gap-1"
+                        >
+                          <span>−{r.points}</span>
+                          <span className="text-foreground/80">{r.id}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -842,6 +901,17 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     }
     if (e2Avri?.contradictions && e2Avri.contradictions.length > 0) {
       lines.push(`- Contradiction phrases: ${e2Avri.contradictions.map((c) => `"${c}"`).join(", ")}`);
+    }
+    if (e2Avri?.crashTrace?.isStripped) {
+      const ct = e2Avri.crashTrace;
+      lines.push(
+        `- Stripped crash trace (penalty ${ct.penalty}): ${ct.reason ?? "stripped trace"} — frames ${ct.framesAnalyzed}, good ${ct.goodFrames}, placeholder ${ct.placeholderFrames}`,
+      );
+      if (ct.revokedGoldHits.length > 0) {
+        lines.push(
+          `  - Trace gold signals revoked: ${ct.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
+        );
+      }
     }
     if (data.avri && (data.avri.velocityPenalty < 0 || data.avri.templatePenalty < 0)) {
       lines.push(`- Behavioural penalties: velocity ${data.avri.velocityPenalty}, template ${data.avri.templatePenalty}`);
