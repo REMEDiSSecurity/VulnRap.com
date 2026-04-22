@@ -608,6 +608,99 @@ function PreviewMatchBlock({
   );
 }
 
+// Shared renderer for the per-edit list. Both the single-edit
+// <details> affordance (Task #132) and the full chronological history
+// panel (Task #133) call this so they stay structurally aligned and
+// every entry keeps the Revert button.
+function renderHandwavyEditEntries({
+  editsList,
+  phrase,
+  editing,
+  busy,
+  handleRevertEdit,
+  showHistoryTestIds,
+}: {
+  editsList: HandwavyEditEntry[];
+  phrase: string;
+  editing: { phrase: string } | null;
+  busy: string | null;
+  handleRevertEdit: (phrase: string, entry: HandwavyEditEntry) => void;
+  showHistoryTestIds?: boolean;
+}): ReactNode[] {
+  return editsList
+    .map((entry, idx) => ({ entry, idx }))
+    .reverse()
+    .map(({ entry, idx }) => {
+      const editedAtKey =
+        entry.editedAt instanceof Date
+          ? entry.editedAt.toISOString()
+          : String(entry.editedAt);
+      const revertKey = `revert:${phrase}:${editedAtKey}`;
+      const editedAtLabel = formatAuditTimestamp(entry.editedAt);
+      return (
+        <li
+          key={`${editedAtKey}-${idx}`}
+          className="flex items-start gap-2 text-[10px] text-muted-foreground"
+          data-testid={showHistoryTestIds ? "handwavy-edit-history-row" : "handwavy-edit-entry"}
+        >
+          <div className="flex-1 space-y-0.5">
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+              <span>
+                {showHistoryTestIds ? "By " : ""}
+                <span className="text-foreground/80">
+                  {entry.editedBy || "anonymous"}
+                </span>
+              </span>
+              {editedAtLabel && <span>{showHistoryTestIds ? editedAtLabel : `• ${editedAtLabel}`}</span>}
+            </div>
+            {entry.category && (
+              <div data-testid={showHistoryTestIds ? "handwavy-edit-history-category" : undefined}>
+                {showHistoryTestIds ? "Category: " : "category "}
+                <span className="text-foreground/70 capitalize">{entry.category.from}</span>
+                {" → "}
+                <span className={cn(showHistoryTestIds ? "text-foreground/90" : "text-foreground/70", "capitalize")}>
+                  {entry.category.to}
+                </span>
+              </div>
+            )}
+            {entry.rationale && (
+              <div data-testid={showHistoryTestIds ? "handwavy-edit-history-rationale" : undefined}>
+                {showHistoryTestIds ? "Rationale: " : "rationale "}
+                <span className="text-foreground/70 italic">
+                  {entry.rationale.from && entry.rationale.from.length > 0
+                    ? `“${entry.rationale.from}”`
+                    : "(empty)"}
+                </span>
+                {" → "}
+                <span className={cn(showHistoryTestIds ? "text-foreground/90" : "text-foreground/70", "italic")}>
+                  {entry.rationale.to && entry.rationale.to.length > 0
+                    ? `“${entry.rationale.to}”`
+                    : showHistoryTestIds ? "(empty)" : "(cleared)"}
+                </span>
+              </div>
+            )}
+            {showHistoryTestIds && !entry.category && !entry.rationale && (
+              <div className="italic">No tracked field changes recorded.</div>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-[10px] text-amber-300 hover:text-amber-200 shrink-0"
+            disabled={editing !== null || busy === revertKey || busy === `rm:${phrase}`}
+            onClick={() => handleRevertEdit(phrase, entry)}
+            data-testid="handwavy-revert-edit"
+            aria-label={`Revert edit on ${phrase} from ${editedAtLabel ?? entry.editedAt}`}
+            title="Restore the values from before this edit (recorded as a new audit entry)."
+          >
+            <Undo2 className="w-3 h-3 mr-1" />
+            {busy === revertKey ? "Reverting…" : "Revert"}
+          </Button>
+        </li>
+      );
+    });
+}
+
 function HandwavyPhrasesAdmin() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -658,6 +751,10 @@ function HandwavyPhrasesAdmin() {
     productionLimit: number | null;
   } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  // Task #133 — track which phrase rows have their full edit history
+  // expanded. Multiple rows can be open at once so reviewers can compare
+  // how different phrases evolved side-by-side.
+  const [openEditHistory, setOpenEditHistory] = useState<Set<string>>(() => new Set());
   // Task #120 — in-place edit state. Only one row can be in edit mode at a
   // time so the audit-trail save button doesn't get visually ambiguous.
   const [editing, setEditing] = useState<{
@@ -1654,103 +1751,78 @@ function HandwavyPhrasesAdmin() {
                         Last edit by{" "}
                         <span className="text-foreground/80">{lastEdit.editedBy || "anonymous"}</span>
                         {lastEditAt && <> • {lastEditAt}</>}
-                        {editsList.length > 1 && <> ({editsList.length} edits)</>}
                       </span>
                     )}
+                    {editsList.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenEditHistory((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(m.phrase)) next.delete(m.phrase);
+                            else next.add(m.phrase);
+                            return next;
+                          })
+                        }
+                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground/80 underline-offset-2 hover:underline"
+                        data-testid="handwavy-edit-history-toggle"
+                        aria-expanded={openEditHistory.has(m.phrase)}
+                        aria-controls={`handwavy-edit-history-${m.phrase}`}
+                        aria-label={`${openEditHistory.has(m.phrase) ? "Hide" : "Show"} full edit history for ${m.phrase} (${editsList.length} edits)`}
+                      >
+                        <Clock className="w-3 h-3" />
+                        {openEditHistory.has(m.phrase) ? "Hide" : "Show"} history ({editsList.length} edits)
+                      </button>
+                    )}
                   </div>
-                  {!isEditing && editsList.length > 0 && (
-                    // Task #132 — expandable per-edit log with one-click revert
-                    // buttons. Most-recent edit at the top so the typical
-                    // "undo what I just did" lands on the first row. Reverting
-                    // an edit appends a fresh inverse entry; the original
-                    // entry stays in place so the audit trail is append-only.
+                  {!isEditing && editsList.length === 1 && (
+                    // Task #132 — single-edit case keeps the lightweight
+                    // <details> affordance so reviewers can still revert
+                    // the one recorded edit. The Task #133 toggle only
+                    // renders for >1 edits, so this stays the entry
+                    // point for one-edit rows.
                     <details className="text-[10px]" data-testid="handwavy-edits-details">
                       <summary className="cursor-pointer text-muted-foreground/80 hover:text-foreground/80 select-none">
-                        {editsList.length === 1 ? "Show edit" : `Show all ${editsList.length} edits`}
+                        Show edit
                       </summary>
                       <ul
                         className="mt-1 space-y-1 border-l border-primary/20 pl-2"
                         data-testid="handwavy-edits-list"
                       >
-                        {editsList
-                          .map((entry, idx) => ({ entry, idx }))
-                          .reverse()
-                          .map(({ entry, idx }) => {
-                            const editedAtKey =
-                              entry.editedAt instanceof Date
-                                ? entry.editedAt.toISOString()
-                                : String(entry.editedAt);
-                            const revertKey = `revert:${m.phrase}:${editedAtKey}`;
-                            const editedAtLabel = formatAuditTimestamp(entry.editedAt);
-                            const parts: ReactNode[] = [];
-                            if (entry.category) {
-                              parts.push(
-                                <span key="cat">
-                                  category{" "}
-                                  <span className="text-foreground/70">{entry.category.from}</span>
-                                  {" → "}
-                                  <span className="text-foreground/70">{entry.category.to}</span>
-                                </span>,
-                              );
-                            }
-                            if (entry.rationale) {
-                              const fromLbl = entry.rationale.from && entry.rationale.from.length > 0
-                                ? `“${entry.rationale.from}”`
-                                : "(empty)";
-                              const toLbl = entry.rationale.to && entry.rationale.to.length > 0
-                                ? `“${entry.rationale.to}”`
-                                : "(cleared)";
-                              parts.push(
-                                <span key="rat">
-                                  rationale{" "}
-                                  <span className="text-foreground/70">{fromLbl}</span>
-                                  {" → "}
-                                  <span className="text-foreground/70">{toLbl}</span>
-                                </span>,
-                              );
-                            }
-                            return (
-                              <li
-                                key={`${editedAtKey}-${idx}`}
-                                className="flex items-start gap-2"
-                                data-testid="handwavy-edit-entry"
-                              >
-                                <div className="flex-1 text-muted-foreground space-y-0.5">
-                                  <div>
-                                    <span className="text-foreground/70">
-                                      {entry.editedBy || "anonymous"}
-                                    </span>
-                                    {editedAtLabel && <> • {editedAtLabel}</>}
-                                  </div>
-                                  {parts.length > 0 && (
-                                    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                                      {parts.map((p, i) => (
-                                        <span key={i}>
-                                          {i > 0 && <span className="text-muted-foreground/50">; </span>}
-                                          {p}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-1.5 text-[10px] text-amber-300 hover:text-amber-200 shrink-0"
-                                  disabled={editing !== null || busy === revertKey || busy === `rm:${m.phrase}`}
-                                  onClick={() => handleRevertEdit(m.phrase, entry)}
-                                  data-testid="handwavy-revert-edit"
-                                  aria-label={`Revert edit on ${m.phrase} from ${editedAtLabel ?? entry.editedAt}`}
-                                  title="Restore the values from before this edit (recorded as a new audit entry)."
-                                >
-                                  <Undo2 className="w-3 h-3 mr-1" />
-                                  {busy === revertKey ? "Reverting…" : "Revert"}
-                                </Button>
-                              </li>
-                            );
-                          })}
+                        {renderHandwavyEditEntries({
+                          editsList,
+                          phrase: m.phrase,
+                          editing,
+                          busy,
+                          handleRevertEdit,
+                        })}
                       </ul>
                     </details>
+                  )}
+                  {!isEditing && editsList.length > 1 && openEditHistory.has(m.phrase) && (
+                    // Task #133 — full chronological history panel,
+                    // toggled per row via openEditHistory. Each entry
+                    // also carries Task #132's Revert button so the
+                    // expanded view doubles as the restore surface.
+                    <div
+                      id={`handwavy-edit-history-${m.phrase}`}
+                      className="mt-1 ml-1 border-l-2 border-primary/20 pl-2 flex flex-col gap-1.5"
+                      data-testid="handwavy-edit-history-list"
+                    >
+                      <ul
+                        className="space-y-1.5"
+                        data-testid="handwavy-edits-list"
+                      >
+                        {renderHandwavyEditEntries({
+                          editsList,
+                          phrase: m.phrase,
+                          editing,
+                          busy,
+                          handleRevertEdit,
+                          showHistoryTestIds: true,
+                        })}
+                      </ul>
+                    </div>
                   )}
                   {isEditing ? (
                     <textarea
