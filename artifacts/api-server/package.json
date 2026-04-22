@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "seed": "node --enable-source-maps ./dist/seed.mjs",
     "backfill:vulnrap": "node --enable-source-maps ./dist/backfill-vulnrap.mjs",
+    "backfill:avri-family": "node --enable-source-maps ./dist/backfill-avri-family.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

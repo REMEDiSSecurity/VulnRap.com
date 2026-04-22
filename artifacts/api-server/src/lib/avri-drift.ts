@@ -112,15 +112,26 @@ function bucketForLabel(label: string | null): Bucket {
 }
 
 /**
- * Prefer the AVRI family persisted on the report's engine-results blob
- * so per-family means use the same family attribution that scored the
- * report. Falls back to re-classifying the content text only when the
- * stored block is missing or malformed.
+ * Resolve the report's AVRI family with three tiers, in order of preference:
+ *   1. The dedicated `reports.avri_family` column (Sprint 12 cache — set at
+ *      write time from the AVRI composite, populated for new rows and
+ *      historical rows by `backfill-avri-family.ts`).
+ *   2. The `avri.family` field inside `vulnrap_engine_results` for any row
+ *      whose backfill hasn't run yet but whose composite did persist an
+ *      AVRI block.
+ *   3. Re-running `classifyReport` over `contentText` as a last resort so
+ *      the dashboard never silently degrades for a row missing both caches.
+ * The last tier should be effectively dead once the backfill has run; it
+ * exists to keep this function correct even on a partially-populated table.
  */
-function familyFromStoredOrClassify(
+function resolveFamily(
+  cachedFamily: string | null,
   vulnrapEngineResults: unknown,
   contentText: string,
 ): string {
+  if (cachedFamily && cachedFamily.length > 0) {
+    return cachedFamily;
+  }
   const blob = (vulnrapEngineResults ?? {}) as { avri?: { family?: unknown } };
   const stored = blob.avri?.family;
   if (typeof stored === "string" && stored.length > 0) {
@@ -163,6 +174,7 @@ export async function generateAvriDriftReport(
       label: reportsTable.vulnrapCompositeLabel,
       contentText: reportsTable.contentText,
       vulnrapEngineResults: reportsTable.vulnrapEngineResults,
+      avriFamily: reportsTable.avriFamily,
       createdAt: reportsTable.createdAt,
     })
     .from(reportsTable)
@@ -186,7 +198,7 @@ export async function generateAvriDriftReport(
   for (const r of rows) {
     if (r.composite == null || r.contentText == null) continue;
     const bucket = bucketForLabel(r.label);
-    const family = familyFromStoredOrClassify(r.vulnrapEngineResults, r.contentText);
+    const family = resolveFamily(r.avriFamily, r.vulnrapEngineResults, r.contentText);
     enriched.push({
       weekStart: isoWeekStart(new Date(r.createdAt)),
       bucket,

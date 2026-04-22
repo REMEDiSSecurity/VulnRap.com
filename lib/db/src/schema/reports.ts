@@ -84,6 +84,11 @@ export const reportsTable = pgTable("reports", {
   vulnrapOverridesApplied: jsonb("vulnrap_overrides_applied").$type<string[]>(),
   vulnrapCorrelationId: varchar("vulnrap_correlation_id", { length: 64 }),
   vulnrapDurationMs: real("vulnrap_duration_ms"),
+  // Sprint 12 — Cached AVRI rubric family for the report. Persisted at write
+  // time from the AVRI composite (`vulnrapEngineResults.avri.family`) so the
+  // drift dashboard and any per-family filters can read it without
+  // re-running classifyReport over contentText for every row.
+  avriFamily: varchar("avri_family", { length: 32 }),
   showInFeed: boolean("show_in_feed").notNull().default(false),
   fileName: varchar("file_name", { length: 255 }),
   fileSize: integer("file_size").notNull(),
@@ -95,6 +100,7 @@ export const reportsTable = pgTable("reports", {
   index("idx_reports_show_in_feed").on(table.showInFeed, table.createdAt),
   index("idx_reports_slop_score").on(table.slopScore),
   index("idx_reports_template_hash").on(table.templateHash),
+  index("idx_reports_avri_family").on(table.avriFamily),
 ]);
 
 export interface SimilarityMatch {

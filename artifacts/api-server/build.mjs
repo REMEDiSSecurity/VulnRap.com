@@ -19,6 +19,7 @@ async function buildAll() {
       path.resolve(artifactDir, "src/index.ts"),
       path.resolve(artifactDir, "src/seed.ts"),
       path.resolve(artifactDir, "src/backfill-vulnrap.ts"),
+      path.resolve(artifactDir, "src/backfill-avri-family.ts"),
     ],
     platform: "node",
     bundle: true,

@@ -857,6 +857,13 @@ router.post("/reports", async (req, res): Promise<void> => {
         vulnrapOverridesApplied: vulnrapComposite?.overridesApplied ?? null,
         vulnrapCorrelationId: vulnrapTrace?.correlationId ?? null,
         vulnrapDurationMs: vulnrapTrace?.totalDurationMs ?? null,
+        // Cache the AVRI rubric family on the row so generateAvriDriftReport
+        // (and any future per-family filters) can read it without
+        // re-classifying contentText. Sourced from the composite that just
+        // ran; null when AVRI is disabled or the composite didn't include
+        // an AVRI block.
+        avriFamily:
+          (vulnrapComposite as (VulnrapComposite & { avri?: { family?: string } }) | null)?.avri?.family ?? null,
       })
       .returning();
 
