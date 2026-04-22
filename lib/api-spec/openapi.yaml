@@ -615,6 +615,10 @@ paths:
         either a single phrase (`{phrase}`) or a batch (`{phrases: [...]}`)
         in one round-trip; the batch path appends one history entry that
         lists every removed phrase instead of N separate entries.
+
+        Task #145 — when the batch body has `dryRun: true`, the server
+        returns a preview (corpus impact + per-phrase outcomes) and does
+        NOT mutate the active list, history, or cache.
       requestBody:
         required: true
         content:
@@ -626,14 +630,16 @@ paths:
       responses:
         "200":
           description: |
-            Phrase removed (single path) OR batch processed and at least one
-            phrase was removed (batch path; see `batch: true` and `results`).
+            Phrase removed (single path), batch processed and at least one
+            phrase was removed (batch path; see `batch: true` and `results`),
+            OR batch dry-run preview (`dryRun: true`).
           content:
             application/json:
               schema:
                 oneOf:
                   - $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
                   - $ref: "#/components/schemas/HandwavyPhraseBatchRemoveResponse"
+                  - $ref: "#/components/schemas/HandwavyPhraseBatchRemoveDryRunResponse"
         "400":
           description: Invalid phrase / batch body
           content:
@@ -3275,6 +3281,11 @@ components:
         one round-trip; the server runs a single in-memory pass, a single
         file rewrite, and appends ONE history entry that lists every removed
         phrase. Mutually exclusive with the single-phrase `phrase` field.
+
+        Task #145 — when `dryRun: true` the server returns a preview
+        (`HandwavyPhraseBatchRemoveDryRunResponse`) that mirrors the
+        post-mutation per-phrase results plus a corpus impact summary, but
+        does NOT mutate the active list, the history log, or the cache.
       properties:
         phrases:
           type: array
@@ -3286,7 +3297,108 @@ components:
         reviewer:
           type: string
           description: Reviewer name or email recorded on the batch history entry. Optional.
+        dryRun:
+          type: boolean
+          description: When true, return a removal preview (corpus impact + per-phrase outcomes) without mutating the active list.
       required: [phrases]
+
+    HandwavyPhraseBatchRemoveDryRunImpact:
+      type: object
+      description: |
+        Task #145 — projected impact of a bulk removal against a single
+        corpus (curated benchmark fixtures or recent production reports).
+        `total` counts fixtures that are flagged today but would NOT be
+        flagged after the removal, broken down by tier. `validDetectionsLost`
+        is `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).
+        `falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`
+        (informational good news). `warning` is set when valid detections
+        would be lost; null otherwise.
+      properties:
+        total:
+          type: integer
+        byTier:
+          type: object
+          properties:
+            t1Legit: { type: integer }
+            t2Borderline: { type: integer }
+            t3Slop: { type: integer }
+            t4Hallucinated: { type: integer }
+          required: [t1Legit, t2Borderline, t3Slop, t4Hallucinated]
+        validDetectionsLost:
+          type: integer
+        falsePositivesDropped:
+          type: integer
+        corpusSize:
+          type: integer
+        sampleMatches:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              tier:
+                type: string
+                enum: [T1_LEGIT, T2_BORDERLINE, T3_SLOP, T4_HALLUCINATED]
+            required: [id, tier]
+        warning:
+          oneOf:
+            - type: string
+            - type: "null"
+      required: [total, byTier, validDetectionsLost, falsePositivesDropped, corpusSize, sampleMatches, warning]
+
+    HandwavyPhraseBatchRemoveDryRunResponse:
+      type: object
+      description: |
+        Task #145 — preview response returned when DELETE
+        /feedback/calibration/handwavy-phrases is called with `dryRun: true`
+        on the batch path. Mirrors the post-mutation per-phrase result
+        shape but does NOT mutate the active list, history, or cache.
+      properties:
+        dryRun:
+          type: boolean
+          enum: [true]
+        batch:
+          type: boolean
+          enum: [true]
+        wouldRemove:
+          type: integer
+          description: Count of phrases that WOULD be removed if the batch were applied.
+        notFound:
+          type: integer
+        duplicateInBatch:
+          type: integer
+        total:
+          type: integer
+          description: Active list size BEFORE the batch (no mutation occurred).
+        projectedTotal:
+          type: integer
+          description: Projected active list size AFTER the batch would be applied.
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyPhraseBatchRemoveResultEntry"
+        dryRunImpact:
+          type: object
+          properties:
+            corpus:
+              $ref: "#/components/schemas/HandwavyPhraseBatchRemoveDryRunImpact"
+            production:
+              oneOf:
+                - $ref: "#/components/schemas/HandwavyPhraseBatchRemoveDryRunImpact"
+                - type: "null"
+            productionError:
+              oneOf:
+                - type: string
+                - type: "null"
+            productionLimit:
+              type: integer
+          required: [corpus, productionError, productionLimit]
+        phrases:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyMarker"
+          description: Active list (unchanged because this is a dry run).
+      required: [dryRun, batch, wouldRemove, notFound, duplicateInBatch, total, projectedTotal, results, dryRunImpact, phrases]
 
     HandwavyPhraseBatchRemoveResultEntry:
       type: object

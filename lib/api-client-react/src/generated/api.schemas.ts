@@ -1791,6 +1791,11 @@ one round-trip; the server runs a single in-memory pass, a single
 file rewrite, and appends ONE history entry that lists every removed
 phrase. Mutually exclusive with the single-phrase `phrase` field.
 
+Task #145 — when `dryRun: true` the server returns a preview
+(`HandwavyPhraseBatchRemoveDryRunResponse`) that mirrors the
+post-mutation per-phrase results plus a corpus impact summary, but
+does NOT mutate the active list, the history log, or the cache.
+
  */
 export interface HandwavyPhraseBatchRemoveBody {
   /**
@@ -1801,7 +1806,59 @@ export interface HandwavyPhraseBatchRemoveBody {
   phrases: string[];
   /** Reviewer name or email recorded on the batch history entry. Optional. */
   reviewer?: string;
+  /** When true, return a removal preview (corpus impact + per-phrase outcomes) without mutating the active list. */
+  dryRun?: boolean;
 }
+
+export type HandwavyPhraseBatchRemoveDryRunImpactByTier = {
+  t1Legit: number;
+  t2Borderline: number;
+  t3Slop: number;
+  t4Hallucinated: number;
+};
+
+export type HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier =
+  (typeof HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier)[keyof typeof HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier];
+
+export const HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier = {
+  T1_LEGIT: "T1_LEGIT",
+  T2_BORDERLINE: "T2_BORDERLINE",
+  T3_SLOP: "T3_SLOP",
+  T4_HALLUCINATED: "T4_HALLUCINATED",
+} as const;
+
+export type HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItem = {
+  id: string;
+  tier: HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier;
+};
+
+/**
+ * Task #145 — projected impact of a bulk removal against a single
+corpus (curated benchmark fixtures or recent production reports).
+`total` counts fixtures that are flagged today but would NOT be
+flagged after the removal, broken down by tier. `validDetectionsLost`
+is `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).
+`falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`
+(informational good news). `warning` is set when valid detections
+would be lost; null otherwise.
+
+ */
+export interface HandwavyPhraseBatchRemoveDryRunImpact {
+  total: number;
+  byTier: HandwavyPhraseBatchRemoveDryRunImpactByTier;
+  validDetectionsLost: number;
+  falsePositivesDropped: number;
+  corpusSize: number;
+  sampleMatches: HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItem[];
+  warning: string | null;
+}
+
+export type HandwavyPhraseBatchRemoveDryRunResponseDryRunImpact = {
+  corpus: HandwavyPhraseBatchRemoveDryRunImpact;
+  production?: HandwavyPhraseBatchRemoveDryRunImpact | null;
+  productionError: string | null;
+  productionLimit: number;
+};
 
 export type HandwavyPhraseBatchRemoveResultEntryReason =
   (typeof HandwavyPhraseBatchRemoveResultEntryReason)[keyof typeof HandwavyPhraseBatchRemoveResultEntryReason];
@@ -1824,6 +1881,30 @@ export interface HandwavyPhraseBatchRemoveResultEntry {
   phrase: string;
   removed: boolean;
   reason?: HandwavyPhraseBatchRemoveResultEntryReason;
+}
+
+/**
+ * Task #145 — preview response returned when DELETE
+/feedback/calibration/handwavy-phrases is called with `dryRun: true`
+on the batch path. Mirrors the post-mutation per-phrase result
+shape but does NOT mutate the active list, history, or cache.
+
+ */
+export interface HandwavyPhraseBatchRemoveDryRunResponse {
+  dryRun: boolean;
+  batch: boolean;
+  /** Count of phrases that WOULD be removed if the batch were applied. */
+  wouldRemove: number;
+  notFound: number;
+  duplicateInBatch: number;
+  /** Active list size BEFORE the batch (no mutation occurred). */
+  total: number;
+  /** Projected active list size AFTER the batch would be applied. */
+  projectedTotal: number;
+  results: HandwavyPhraseBatchRemoveResultEntry[];
+  dryRunImpact: HandwavyPhraseBatchRemoveDryRunResponseDryRunImpact;
+  /** Active list (unchanged because this is a dry run). */
+  phrases: HandwavyMarker[];
 }
 
 /**

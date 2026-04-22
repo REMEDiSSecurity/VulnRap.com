@@ -62,6 +62,7 @@ function parseArgs(argv) {
     token: null,
     reviewer: null,
     yes: false,
+    dryRun: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -71,6 +72,7 @@ function parseArgs(argv) {
     else if (a === "--token") args.token = argv[++i];
     else if (a === "--reviewer") args.reviewer = argv[++i];
     else if (a === "--yes" || a === "-y") args.yes = true;
+    else if (a === "--dry-run" || a === "--dryrun") args.dryRun = true;
     else if (a === "--help" || a === "-h") args.help = true;
     else {
       console.error(`Unknown argument: ${a}`);
@@ -99,6 +101,10 @@ Options:
       --token          Reviewer token for X-Calibration-Token (default: $CALIBRATION_TOKEN)
       --reviewer       Reviewer name/email recorded on every removal history entry
   -y, --yes            Skip the interactive confirmation prompt
+      --dry-run        Send the batch with dryRun=true, print the corpus
+                       impact preview, and exit WITHOUT touching the active
+                       list. Exits 0 when the server returned a preview, 1
+                       on transport / auth failure.
   -h, --help           Show this help
 `);
 }
@@ -252,6 +258,94 @@ async function main() {
   console.log(color("bold", `Phrases to remove (${requests.length} requested, ${presentItems.length} found, ${missingItems.length} not in active list):`));
   for (const it of items) console.log(renderEntry(it));
   console.log("");
+
+  // Task #145 — dry-run path: send the batch with dryRun=true, print the
+  // server's per-phrase + corpus-impact preview, and exit without touching
+  // the active list. This includes the case where ALL phrases were missing
+  // at lookup time so the reviewer still sees a "0 of N would be removed"
+  // confirmation rather than a generic "nothing to do" error.
+  if (args.dryRun) {
+    // Send the FULL submitted list (validRaw) — duplicates and original
+    // order preserved — so the server's preview accurately reflects the
+    // reviewer's actual input, including the per-phrase
+    // `duplicate-in-batch` outcomes that the dedupe step above would
+    // otherwise hide. Real (mutating) DELETEs still go through the deduped
+    // `requests` list further down.
+    const dryBody = { phrases: validRaw, dryRun: true };
+    if (args.reviewer) dryBody.reviewer = args.reviewer;
+    console.log(color("dim", `→ Sending dry-run DELETE for ${validRaw.length} phrase${validRaw.length === 1 ? "" : "s"} (${requests.length} unique) ...`));
+    let dry;
+    try {
+      dry = await request("DELETE", endpoint, dryBody, token);
+    } catch (err) {
+      console.error(color("red", `Dry-run failed: ${err.message}`));
+      process.exit(1);
+    }
+    if (dry.status === 401 || dry.status === 403) {
+      console.error(color("red", `Dry-run rejected as unauthorized (HTTP ${dry.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`));
+      process.exit(1);
+    }
+    if (!dry.ok || !dry.payload || dry.payload.dryRun !== true) {
+      const msg = dry.payload && typeof dry.payload === "object" && "error" in dry.payload
+        ? dry.payload.error
+        : `HTTP ${dry.status}`;
+      console.error(color("red", `Dry-run failed: ${msg}`));
+      process.exit(1);
+    }
+    const p = dry.payload;
+    console.log("");
+    console.log(color("bold", "Dry-run preview (no changes were made):"));
+    console.log(`  Requested:           ${validRaw.length}`);
+    console.log(`  Would remove:        ${color("green", p.wouldRemove)}`);
+    console.log(`  Not on active list:  ${color("yellow", p.notFound)}`);
+    if (p.duplicateInBatch > 0) {
+      console.log(`  Duplicate-in-batch:  ${color("yellow", p.duplicateInBatch)}`);
+    }
+    console.log(`  Active list before:  ${p.total}`);
+    console.log(`  Active list after:   ${p.projectedTotal}`);
+    if (Array.isArray(p.results)) {
+      console.log("");
+      console.log(color("bold", "Per-phrase outcome:"));
+      for (const r of p.results) {
+        if (r.removed) {
+          console.log(color("green", `  ✓ would remove   "${r.phrase}"`));
+        } else if (r.reason === "duplicate-in-batch") {
+          console.log(color("yellow", `  ! duplicate      "${r.phrase}" — repeated earlier in batch`));
+        } else {
+          console.log(color("yellow", `  ! not-found      "${r.phrase}"`));
+        }
+      }
+    }
+    const impact = p.dryRunImpact ?? {};
+    const corpus = impact.corpus;
+    if (corpus) {
+      console.log("");
+      console.log(color("bold", `Curated corpus impact (${corpus.corpusSize} fixtures scanned):`));
+      console.log(`  Reports that would lose their flag: ${corpus.total}`);
+      console.log(`    T1 LEGIT (false-positive flags dropped):  ${corpus.byTier.t1Legit}`);
+      console.log(`    T2 BORDERLINE (false-positive flags dropped): ${corpus.byTier.t2Borderline}`);
+      console.log(`    T3 SLOP (real detections lost):           ${corpus.byTier.t3Slop}`);
+      console.log(`    T4 HALLUCINATED (real detections lost):   ${corpus.byTier.t4Hallucinated}`);
+      if (corpus.warning) console.log(color("red", `  ⚠ ${corpus.warning}`));
+    }
+    const prod = impact.production;
+    if (prod) {
+      console.log("");
+      console.log(color("bold", `Production archive impact (${prod.corpusSize} reports scanned, cap ${impact.productionLimit}):`));
+      console.log(`  Reports that would lose their flag: ${prod.total}`);
+      console.log(`    GREEN (T1) flags dropped: ${prod.byTier.t1Legit}`);
+      console.log(`    YELLOW (T2) flags dropped: ${prod.byTier.t2Borderline}`);
+      console.log(`    SLOP (T3) detections lost: ${prod.byTier.t3Slop}`);
+      console.log(`    HIGH-RISK (T4) detections lost: ${prod.byTier.t4Hallucinated}`);
+      if (prod.warning) console.log(color("red", `  ⚠ ${prod.warning}`));
+    } else if (impact.productionError) {
+      console.log("");
+      console.log(color("yellow", `Production archive impact unavailable: ${impact.productionError}`));
+    }
+    console.log("");
+    console.log(color("dim", "(dry-run — no changes were made)"));
+    process.exit(0);
+  }
 
   if (presentItems.length === 0) {
     console.error(color("red", `None of the requested phrases are in the active list (${phrases.length} entr${phrases.length === 1 ? "y" : "ies"}). Nothing to remove.`));

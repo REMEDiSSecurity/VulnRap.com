@@ -4283,6 +4283,10 @@ either a single phrase (`{phrase}`) or a batch (`{phrases: [...]}`)
 in one round-trip; the batch path appends one history entry that
 lists every removed phrase instead of N separate entries.
 
+Task #145 — when the batch body has `dryRun: true`, the server
+returns a preview (corpus impact + per-phrase outcomes) and does
+NOT mutate the active list, history, or cache.
+
  * @summary Remove one or many FLAT hand-wavy marker phrases
  */
 export const removeHandwavyPhraseBodyTwoPhrasesMax = 200;
@@ -4332,9 +4336,15 @@ export const RemoveHandwavyPhraseBody = zod.union([
         .describe(
           "Reviewer name or email recorded on the batch history entry. Optional.",
         ),
+      dryRun: zod
+        .boolean()
+        .optional()
+        .describe(
+          "When true, return a removal preview (corpus impact + per-phrase outcomes) without mutating the active list.",
+        ),
     })
     .describe(
-      "Task #135 — batch removal request body for DELETE\n\/feedback\/calibration\/handwavy-phrases. Sends up to 200 phrases in\none round-trip; the server runs a single in-memory pass, a single\nfile rewrite, and appends ONE history entry that lists every removed\nphrase. Mutually exclusive with the single-phrase `phrase` field.\n",
+      "Task #135 — batch removal request body for DELETE\n\/feedback\/calibration\/handwavy-phrases. Sends up to 200 phrases in\none round-trip; the server runs a single in-memory pass, a single\nfile rewrite, and appends ONE history entry that lists every removed\nphrase. Mutually exclusive with the single-phrase `phrase` field.\n\nTask #145 — when `dryRun: true` the server returns a preview\n(`HandwavyPhraseBatchRemoveDryRunResponse`) that mirrors the\npost-mutation per-phrase results plus a corpus impact summary, but\ndoes NOT mutate the active list, the history log, or the cache.\n",
     ),
 ]);
 
@@ -5576,6 +5586,187 @@ export const RemoveHandwavyPhraseResponse = zod.union([
     })
     .describe(
       "Task #135 — response from a batch DELETE call. The shape is\nintentionally distinct from `HandwavyPhraseMutationResponse` so\nclients can disambiguate by checking `batch === true`.\n",
+    ),
+  zod
+    .object({
+      dryRun: zod.literal(true),
+      batch: zod.literal(true),
+      wouldRemove: zod
+        .number()
+        .describe(
+          "Count of phrases that WOULD be removed if the batch were applied.",
+        ),
+      notFound: zod.number(),
+      duplicateInBatch: zod.number(),
+      total: zod
+        .number()
+        .describe("Active list size BEFORE the batch (no mutation occurred)."),
+      projectedTotal: zod
+        .number()
+        .describe(
+          "Projected active list size AFTER the batch would be applied.",
+        ),
+      results: zod.array(
+        zod
+          .object({
+            raw: zod
+              .string()
+              .describe("Original (raw) phrase as supplied by the client."),
+            phrase: zod
+              .string()
+              .describe(
+                "Normalized form actually compared against the active list.",
+              ),
+            removed: zod.boolean(),
+            reason: zod.enum(["not-found", "duplicate-in-batch"]).optional(),
+          })
+          .describe(
+            "Per-phrase outcome from a Task #135 batch removal. `phrase` is the\nnormalized form actually compared against the active list. `reason`\nis omitted on successful removals.\n",
+          ),
+      ),
+      dryRunImpact: zod.object({
+        corpus: zod
+          .object({
+            total: zod.number(),
+            byTier: zod.object({
+              t1Legit: zod.number(),
+              t2Borderline: zod.number(),
+              t3Slop: zod.number(),
+              t4Hallucinated: zod.number(),
+            }),
+            validDetectionsLost: zod.number(),
+            falsePositivesDropped: zod.number(),
+            corpusSize: zod.number(),
+            sampleMatches: zod.array(
+              zod.object({
+                id: zod.string(),
+                tier: zod.enum([
+                  "T1_LEGIT",
+                  "T2_BORDERLINE",
+                  "T3_SLOP",
+                  "T4_HALLUCINATED",
+                ]),
+              }),
+            ),
+            warning: zod.union([zod.string(), zod.null()]),
+          })
+          .describe(
+            "Task #145 — projected impact of a bulk removal against a single\ncorpus (curated benchmark fixtures or recent production reports).\n`total` counts fixtures that are flagged today but would NOT be\nflagged after the removal, broken down by tier. `validDetectionsLost`\nis `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).\n`falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`\n(informational good news). `warning` is set when valid detections\nwould be lost; null otherwise.\n",
+          ),
+        production: zod
+          .union([
+            zod
+              .object({
+                total: zod.number(),
+                byTier: zod.object({
+                  t1Legit: zod.number(),
+                  t2Borderline: zod.number(),
+                  t3Slop: zod.number(),
+                  t4Hallucinated: zod.number(),
+                }),
+                validDetectionsLost: zod.number(),
+                falsePositivesDropped: zod.number(),
+                corpusSize: zod.number(),
+                sampleMatches: zod.array(
+                  zod.object({
+                    id: zod.string(),
+                    tier: zod.enum([
+                      "T1_LEGIT",
+                      "T2_BORDERLINE",
+                      "T3_SLOP",
+                      "T4_HALLUCINATED",
+                    ]),
+                  }),
+                ),
+                warning: zod.union([zod.string(), zod.null()]),
+              })
+              .describe(
+                "Task #145 — projected impact of a bulk removal against a single\ncorpus (curated benchmark fixtures or recent production reports).\n`total` counts fixtures that are flagged today but would NOT be\nflagged after the removal, broken down by tier. `validDetectionsLost`\nis `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).\n`falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`\n(informational good news). `warning` is set when valid detections\nwould be lost; null otherwise.\n",
+              ),
+            zod.null(),
+          ])
+          .optional(),
+        productionError: zod.union([zod.string(), zod.null()]),
+        productionLimit: zod.number(),
+      }),
+      phrases: zod
+        .array(
+          zod.object({
+            phrase: zod.string(),
+            category: zod
+              .enum(["absence", "hedging", "buzzword"])
+              .describe(
+                "Theme bucket used by the diagnostics panel to group matched phrases.",
+              ),
+            addedBy: zod
+              .string()
+              .optional()
+              .describe(
+                "Reviewer name or email that added the phrase. Absent for curated defaults.",
+              ),
+            addedAt: zod.coerce
+              .date()
+              .optional()
+              .describe(
+                "ISO 8601 timestamp the phrase was added. Absent for curated defaults.",
+              ),
+            rationale: zod
+              .string()
+              .optional()
+              .describe(
+                "Free-text justification supplied by the reviewer at add time.",
+              ),
+            edits: zod
+              .array(
+                zod
+                  .object({
+                    editedBy: zod
+                      .string()
+                      .optional()
+                      .describe(
+                        "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                      ),
+                    editedAt: zod.coerce
+                      .date()
+                      .describe("ISO 8601 timestamp of the edit."),
+                    category: zod
+                      .object({
+                        from: zod
+                          .enum(["absence", "hedging", "buzzword"])
+                          .describe(
+                            "Theme bucket used by the diagnostics panel to group matched phrases.",
+                          ),
+                        to: zod
+                          .enum(["absence", "hedging", "buzzword"])
+                          .describe(
+                            "Theme bucket used by the diagnostics panel to group matched phrases.",
+                          ),
+                      })
+                      .optional(),
+                    rationale: zod
+                      .object({
+                        from: zod.string().optional(),
+                        to: zod.string().optional(),
+                      })
+                      .optional()
+                      .describe(
+                        "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                      ),
+                  })
+                  .describe(
+                    "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                  ),
+              )
+              .optional()
+              .describe(
+                "Chronological log of in-place edits to this marker (most recent\nlast). Each entry records who changed what, when. Bounded\nserver-side per marker.\n",
+              ),
+          }),
+        )
+        .describe("Active list (unchanged because this is a dry run)."),
+    })
+    .describe(
+      "Task #145 — preview response returned when DELETE\n\/feedback\/calibration\/handwavy-phrases is called with `dryRun: true`\non the batch path. Mirrors the post-mutation per-phrase result\nshape but does NOT mutate the active list, history, or cache.\n",
     ),
 ]);
 

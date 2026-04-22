@@ -615,6 +615,67 @@ export function removeHandwavyPhrasesBatch(
   };
 }
 
+// Task #145 — pure preview of a batch removal. Mirrors the per-phrase result
+// shape that `removeHandwavyPhrasesBatch` produces but does NOT mutate the
+// active list, the history log, or the cache. Reviewers (and the CLI
+// `--dry-run` flag) get the same "would this remove anything? are there
+// duplicates? not-founds?" breakdown they would see after a real DELETE,
+// plus the projected `next` active list so callers can score corpus impact
+// against it.
+export interface PreviewBatchRemoveResult {
+  /** Active list size BEFORE the batch (no mutation occurred). */
+  total: number;
+  /** Projected active list AFTER the batch would be applied. */
+  nextMarkers: HandwavyMarker[];
+  /** Per-phrase outcomes mirroring removeHandwavyPhrasesBatch.results. */
+  results: BatchRemovePhraseEntryResult[];
+  /** Number of phrases that WOULD have been removed. */
+  wouldRemove: number;
+  /** Number of phrases that were not in the active list. */
+  notFound: number;
+  /** Number of phrases that were duplicates of an earlier entry in the batch. */
+  duplicateInBatch: number;
+  /** Snapshot of the markers that would be removed (for callers that need
+   *  audit metadata e.g. who originally added them). */
+  removedMarkers: HandwavyMarker[];
+}
+
+export function previewRemoveHandwavyPhrasesBatch(
+  rawPhrases: string[],
+): PreviewBatchRemoveResult {
+  const { markers: current } = load();
+  const results: BatchRemovePhraseEntryResult[] = [];
+  const removedMarkers: HandwavyMarker[] = [];
+  const toRemoveIndexes = new Set<number>();
+  const seenInBatch = new Set<string>();
+  for (const raw of rawPhrases) {
+    const normalized = normalizePhrase(raw);
+    if (seenInBatch.has(normalized)) {
+      results.push({ raw, phrase: normalized, removed: false, reason: "duplicate-in-batch" });
+      continue;
+    }
+    seenInBatch.add(normalized);
+    const idx = current.findIndex((m) => m.phrase === normalized);
+    if (idx < 0) {
+      results.push({ raw, phrase: normalized, removed: false, reason: "not-found" });
+      continue;
+    }
+    toRemoveIndexes.add(idx);
+    removedMarkers.push(current[idx]);
+    results.push({ raw, phrase: normalized, removed: true });
+  }
+  const nextMarkers = current.filter((_, i) => !toRemoveIndexes.has(i));
+  return {
+    total: current.length,
+    nextMarkers: nextMarkers.map((m) => ({ ...m })),
+    results,
+    wouldRemove: removedMarkers.length,
+    notFound: results.filter((r) => r.reason === "not-found").length,
+    duplicateInBatch: results.filter((r) => r.reason === "duplicate-in-batch").length,
+    removedMarkers: removedMarkers.map((m) => ({ ...m })),
+  };
+}
+
 export interface ReinstatePhraseOptions {
   reviewer?: string;
   /** Override the timestamp (tests). Defaults to `new Date().toISOString()`. */

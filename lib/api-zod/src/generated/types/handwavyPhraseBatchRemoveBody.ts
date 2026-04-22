@@ -13,6 +13,11 @@ one round-trip; the server runs a single in-memory pass, a single
 file rewrite, and appends ONE history entry that lists every removed
 phrase. Mutually exclusive with the single-phrase `phrase` field.
 
+Task #145 — when `dryRun: true` the server returns a preview
+(`HandwavyPhraseBatchRemoveDryRunResponse`) that mirrors the
+post-mutation per-phrase results plus a corpus impact summary, but
+does NOT mutate the active list, the history log, or the cache.
+
  */
 export interface HandwavyPhraseBatchRemoveBody {
   /**
@@ -23,4 +28,6 @@ export interface HandwavyPhraseBatchRemoveBody {
   phrases: string[];
   /** Reviewer name or email recorded on the batch history entry. Optional. */
   reviewer?: string;
+  /** When true, return a removal preview (corpus impact + per-phrase outcomes) without mutating the active list. */
+  dryRun?: boolean;
 }

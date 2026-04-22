@@ -10,6 +10,7 @@ import {
   addHandwavyPhrase,
   removeHandwavyPhrase,
   removeHandwavyPhrasesBatch,
+  previewRemoveHandwavyPhrasesBatch,
   reinstateHandwavyPhrase,
   editHandwavyPhrase,
   undoHandwavyPhrase,
@@ -212,12 +213,137 @@ function detectCuratedOverlaps(
   return { total: matches.length, matches };
 }
 
+// Task #145 — corpus impact for a bulk REMOVAL preview. For each fixture in
+// the curated cohorts, decide whether it is currently flagged by any active
+// phrase, and whether it would still be flagged after the supplied phrases
+// were removed. The "lost" tally counts fixtures that were flagged before
+// but would no longer be flagged after — i.e. detections the bulk removal
+// would silently drop. We split the tally by tier so reviewers can see the
+// trade-off: T3/T4 lost = real slop detection lost (worrying); T1/T2 lost =
+// false-positives that would also disappear (informational good news).
+interface RemovalImpact {
+  total: number;
+  byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
+  /** T3 + T4 lost matches — the "real slop detection lost" metric that drives the warning. */
+  validDetectionsLost: number;
+  /** T1 + T2 lost matches — false-positive flags that would also disappear. */
+  falsePositivesDropped: number;
+  corpusSize: number;
+  sampleMatches: Array<{ id: string; tier: CorpusTier }>;
+  warning: string | null;
+}
+
+function fixtureMatchesAny(haystackNormalized: string, phrases: Iterable<string>): boolean {
+  for (const p of phrases) {
+    if (!p) continue;
+    if (haystackNormalized.includes(p)) return true;
+  }
+  return false;
+}
+
+function computeRemovalImpactOnRows(
+  removedPhrases: string[],
+  remainingPhrases: string[],
+  rows: Array<{ id: string; tier: CorpusTier; text: string }>,
+  contextLabel: string,
+): RemovalImpact {
+  const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
+  const sampleMatches: Array<{ id: string; tier: CorpusTier }> = [];
+  let total = 0;
+  // Skip work when nothing would actually be removed.
+  const removedSet = removedPhrases.filter((p) => p.length > 0);
+  for (const r of rows) {
+    if (removedSet.length === 0) break;
+    const haystack = r.text.toLowerCase().replace(/\s+/g, " ");
+    const wasFlagged = fixtureMatchesAny(haystack, removedSet) ||
+      fixtureMatchesAny(haystack, remainingPhrases);
+    if (!wasFlagged) continue;
+    const willBeFlagged = fixtureMatchesAny(haystack, remainingPhrases);
+    if (willBeFlagged) continue;
+    total += 1;
+    if (r.tier === "T1_LEGIT") byTier.t1Legit += 1;
+    else if (r.tier === "T2_BORDERLINE") byTier.t2Borderline += 1;
+    else if (r.tier === "T3_SLOP") byTier.t3Slop += 1;
+    else byTier.t4Hallucinated += 1;
+    if (sampleMatches.length < 12) sampleMatches.push({ id: r.id, tier: r.tier });
+  }
+  const validDetectionsLost = byTier.t3Slop + byTier.t4Hallucinated;
+  const falsePositivesDropped = byTier.t1Legit + byTier.t2Borderline;
+  let warning: string | null = null;
+  if (validDetectionsLost > 0) {
+    const noun = validDetectionsLost === 1 ? "report" : "reports";
+    warning = `Removing these phrases would un-flag ${validDetectionsLost} legitimately-flagged hand-wavy ${noun} (${byTier.t3Slop} T3 SLOP, ${byTier.t4Hallucinated} T4 HALLUCINATED) in ${contextLabel} — these detections will be lost.`;
+  }
+  return {
+    total,
+    byTier,
+    validDetectionsLost,
+    falsePositivesDropped,
+    corpusSize: rows.length,
+    sampleMatches,
+    warning,
+  };
+}
+
+function previewRemovalAgainstCorpus(
+  removedPhrases: string[],
+  remainingPhrases: string[],
+): RemovalImpact {
+  const cohorts: Array<{ tier: CorpusTier; fixtures: typeof TEST_FIXTURE_COHORTS.T1 }> = [
+    { tier: "T1_LEGIT", fixtures: TEST_FIXTURE_COHORTS.T1 },
+    { tier: "T2_BORDERLINE", fixtures: TEST_FIXTURE_COHORTS.T2 },
+    { tier: "T3_SLOP", fixtures: TEST_FIXTURE_COHORTS.T3 },
+    { tier: "T4_HALLUCINATED", fixtures: TEST_FIXTURE_COHORTS.T4 },
+  ];
+  const flat: Array<{ id: string; tier: CorpusTier; text: string }> = [];
+  for (const { tier, fixtures } of cohorts) {
+    for (const f of fixtures) flat.push({ id: f.id, tier, text: f.text });
+  }
+  return computeRemovalImpactOnRows(removedPhrases, remainingPhrases, flat, "the curated benchmark corpus");
+}
+
+async function previewRemovalAgainstProduction(
+  removedPhrases: string[],
+  remainingPhrases: string[],
+  limit: number = PRODUCTION_PREVIEW_LIMIT,
+): Promise<RemovalImpact> {
+  const rows = await db
+    .select({
+      id: reportsTable.id,
+      label: reportsTable.vulnrapCompositeLabel,
+      contentText: reportsTable.contentText,
+    })
+    .from(reportsTable)
+    .where(
+      and(
+        isNotNull(reportsTable.vulnrapCompositeLabel),
+        isNotNull(reportsTable.contentText),
+      ),
+    )
+    .orderBy(sql`${reportsTable.createdAt} DESC`)
+    .limit(limit);
+  const tiered: Array<{ id: string; tier: CorpusTier; text: string }> = [];
+  for (const r of rows) {
+    const tier = productionLabelToTier(r.label);
+    if (!tier || r.contentText == null) continue;
+    tiered.push({ id: String(r.id), tier, text: r.contentText });
+  }
+  return computeRemovalImpactOnRows(
+    removedPhrases,
+    remainingPhrases,
+    tiered,
+    `the most recent ${tiered.length} production reports`,
+  );
+}
+
 // Exported for unit testing the pure scoring step without DB access.
 export const __testing = {
   productionLabelToTier,
   scoreProductionRows,
   previewHandwavyPhrase,
   detectCuratedOverlaps,
+  computeRemovalImpactOnRows,
+  previewRemovalAgainstCorpus,
   PRODUCTION_PREVIEW_LIMIT,
 };
 
@@ -836,10 +962,15 @@ router.post(
 // file rewrite, and one history-log append (containing the list of removed
 // phrases) so a release-checklist cleanup of a dozen phrases stops doing a
 // dozen round-trips and a dozen history rows.
-router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
+router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, async (req, res) => {
   try {
-    const body = (req.body ?? {}) as { phrase?: unknown; phrases?: unknown; reviewer?: unknown };
-    const { phrase, phrases, reviewer } = body;
+    const body = (req.body ?? {}) as {
+      phrase?: unknown;
+      phrases?: unknown;
+      reviewer?: unknown;
+      dryRun?: unknown;
+    };
+    const { phrase, phrases, reviewer, dryRun } = body;
     if (reviewer !== undefined && typeof reviewer !== "string") {
       res.status(400).json({ error: "reviewer must be a string when provided." });
       return;
@@ -873,6 +1004,68 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
           return;
         }
         cleaned.push(p);
+      }
+      // Task #145 — preview mode: compute the same per-phrase results plus a
+      // corpus impact summary, but DO NOT mutate the active list, history, or
+      // cache. Reviewers (and the CLI `--dry-run` flag) get a "of these N,
+      // X are not on the active list, Y are duplicates, the remaining Z
+      // currently flag W legitimate hand-wavy reports between them" preview
+      // before they pull the trigger.
+      if (dryRun === true) {
+        const preview = previewRemoveHandwavyPhrasesBatch(cleaned);
+        const removedNormalized = preview.results
+          .filter((r) => r.removed)
+          .map((r) => r.phrase);
+        const remainingNormalized = preview.nextMarkers.map((m) => m.phrase);
+        const corpusImpact = previewRemovalAgainstCorpus(removedNormalized, remainingNormalized);
+        let productionImpact: RemovalImpact | null = null;
+        let productionError: string | null = null;
+        if (removedNormalized.length === 0) {
+          // Skip the DB probe entirely when nothing would be removed — there
+          // is by definition no impact and no point spending the query.
+          productionImpact = {
+            total: 0,
+            byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+            validDetectionsLost: 0,
+            falsePositivesDropped: 0,
+            corpusSize: 0,
+            sampleMatches: [],
+            warning: null,
+          };
+        } else {
+          try {
+            productionImpact = await previewRemovalAgainstProduction(
+              removedNormalized,
+              remainingNormalized,
+            );
+          } catch (err) {
+            req.log?.error(err, "Production removal dry-run scan failed");
+            productionError = "Production archive scan failed; only curated-corpus signal is shown.";
+          }
+        }
+        res.status(200).json({
+          dryRun: true,
+          batch: true,
+          // Mirror the post-mutation field names so the client can reuse the
+          // same renderer; the `wouldRemove` count is what would have been
+          // removed had this not been a dry run.
+          wouldRemove: preview.wouldRemove,
+          notFound: preview.notFound,
+          duplicateInBatch: preview.duplicateInBatch,
+          // Active list size BEFORE the batch (no mutation occurred).
+          total: preview.total,
+          // Projected size AFTER the batch would be applied.
+          projectedTotal: preview.nextMarkers.length,
+          results: preview.results,
+          dryRunImpact: {
+            corpus: corpusImpact,
+            production: productionImpact,
+            productionError,
+            productionLimit: PRODUCTION_PREVIEW_LIMIT,
+          },
+          phrases: getHandwavyPhrases(),
+        });
+        return;
       }
       const result = removeHandwavyPhrasesBatch(cleaned, { reviewer: reviewerStr });
       // Status code policy: 200 when at least one phrase was removed (even if

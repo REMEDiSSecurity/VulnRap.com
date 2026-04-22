@@ -925,6 +925,163 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       expect(r.status).toBe(400);
     });
 
+    // Task #145 — DELETE batch with `dryRun: true` returns a preview that
+    // mirrors the post-mutation per-phrase results plus a corpus-impact
+    // summary, but DOES NOT touch the active list, history, or cache.
+    it("DELETE batch with dryRun=true returns a preview and does NOT mutate the active list", async () => {
+      // Seed an extra phrase so we have a mix of present + missing in the batch.
+      await request("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "batch dryrun alpha",
+        category: "absence",
+      });
+      const r = await request<{
+        dryRun: boolean;
+        batch: boolean;
+        wouldRemove: number;
+        notFound: number;
+        duplicateInBatch: number;
+        total: number;
+        projectedTotal: number;
+        results: Array<{ raw: string; phrase: string; removed: boolean; reason?: string }>;
+        dryRunImpact: {
+          corpus: {
+            total: number;
+            byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
+            validDetectionsLost: number;
+            falsePositivesDropped: number;
+            corpusSize: number;
+            sampleMatches: Array<{ id: string; tier: string }>;
+            warning: string | null;
+          };
+          production: unknown;
+          productionError: string | null;
+          productionLimit: number;
+        };
+        phrases: Marker[];
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: [
+          "seed phrase one",
+          "batch dryrun alpha",
+          "seed phrase one", // duplicate-in-batch
+          "never registered xyzzy",
+        ],
+        dryRun: true,
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.batch).toBe(true);
+      expect(r.body.wouldRemove).toBe(2);
+      expect(r.body.notFound).toBe(1);
+      expect(r.body.duplicateInBatch).toBe(1);
+      expect(r.body.projectedTotal).toBe(r.body.total - 2);
+      // Per-phrase results in input order.
+      expect(r.body.results[0].removed).toBe(true);
+      expect(r.body.results[1].removed).toBe(true);
+      expect(r.body.results[2].reason).toBe("duplicate-in-batch");
+      expect(r.body.results[3].reason).toBe("not-found");
+      // Corpus impact is always present.
+      expect(r.body.dryRunImpact.corpus.corpusSize).toBeGreaterThan(0);
+      expect(r.body.dryRunImpact.corpus.byTier).toEqual({
+        t1Legit: expect.any(Number),
+        t2Borderline: expect.any(Number),
+        t3Slop: expect.any(Number),
+        t4Hallucinated: expect.any(Number),
+      });
+      expect(r.body.dryRunImpact.productionLimit).toBe(2000);
+      // Crucially: the active list and history were NOT mutated.
+      const list = await request<{ phrases: Marker[]; history: unknown[] }>(
+        "GET",
+        "/feedback/calibration/handwavy-phrases",
+      );
+      const active = list.body.phrases.map((m) => m.phrase);
+      expect(active).toContain("seed phrase one");
+      expect(active).toContain("batch dryrun alpha");
+    });
+
+    it("DELETE batch dryRun=true surfaces a warning when valid hand-wavy detections would be lost", async () => {
+      // Restore curated defaults so we have real slop-detecting phrases like
+      // "private fuzzing harness" available — they appear in T3/T4 corpus
+      // fixtures, so removing them would un-flag legitimate slop reports.
+      __restoreDefaults();
+      const r = await request<{
+        dryRun: boolean;
+        wouldRemove: number;
+        dryRunImpact: {
+          corpus: {
+            validDetectionsLost: number;
+            byTier: { t3Slop: number; t4Hallucinated: number };
+            warning: string | null;
+          };
+        };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        // Pull every default phrase out at once so at least some T3/T4
+        // fixtures lose their flag.
+        phrases: [
+          "do not have a runnable reproducer",
+          "do not have a reproducer",
+          "private fuzzing harness",
+          "private poc",
+          "structural rather than",
+          "structural vulnerability follows from the design",
+          "i have not enumerated",
+          "have not been able to confirm",
+          "no working proof-of-concept",
+          "no runnable proof",
+          "follows from the design as observed",
+          "deployment is no different in this respect",
+          "may not be encrypted",
+          "may be present in environment variables",
+          "do not appear to be",
+          "does not appear to be",
+          "appears to be susceptible",
+          "consider a holistic remediation",
+          "leadership-level discussion",
+          "comprehensive zero-trust assessment",
+          "modern threat landscape",
+          "advanced persistent threats",
+          "defense-in-depth posture",
+          "weak security culture",
+        ],
+        dryRun: true,
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.wouldRemove).toBeGreaterThan(0);
+      // We expect at least one slop-tier flag to be lost; if the corpus
+      // happens not to mention any default phrase the warning will be null,
+      // but the byTier tally must still be defined.
+      const c = r.body.dryRunImpact.corpus;
+      if (c.validDetectionsLost > 0) {
+        expect(c.warning).not.toBeNull();
+        expect(c.warning).toMatch(/un-flag|legitimately/);
+      } else {
+        expect(c.warning).toBeNull();
+      }
+    });
+
+    it("DELETE batch dryRun=true with no matching phrases returns wouldRemove=0 and a zero-impact preview", async () => {
+      const r = await request<{
+        dryRun: boolean;
+        wouldRemove: number;
+        notFound: number;
+        dryRunImpact: {
+          corpus: { total: number; warning: string | null };
+          production: { total: number } | null;
+          productionError: string | null;
+        };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["never one xyzzy", "never two xyzzy"],
+        dryRun: true,
+      });
+      // No mutation, so the batched 404 path does NOT apply to dry-run.
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.wouldRemove).toBe(0);
+      expect(r.body.notFound).toBe(2);
+      expect(r.body.dryRunImpact.corpus.total).toBe(0);
+      expect(r.body.dryRunImpact.corpus.warning).toBeNull();
+    });
+
     it("DELETE batch supports per-phrase reinstate via the existing /reinstate endpoint", async () => {
       await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "batch reinstate route a" });
       await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "batch reinstate route b" });

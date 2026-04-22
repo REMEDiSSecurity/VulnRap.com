@@ -33,6 +33,7 @@ import type {
   GetReportFeedParams,
   GetTrendsParams,
   HandwavyPhraseBatchRemoveBody,
+  HandwavyPhraseBatchRemoveDryRunResponse,
   HandwavyPhraseBatchRemoveResponse,
   HandwavyPhraseBody,
   HandwavyPhraseEditBody,
@@ -1838,6 +1839,10 @@ either a single phrase (`{phrase}`) or a batch (`{phrases: [...]}`)
 in one round-trip; the batch path appends one history entry that
 lists every removed phrase instead of N separate entries.
 
+Task #145 — when the batch body has `dryRun: true`, the server
+returns a preview (corpus impact + per-phrase outcomes) and does
+NOT mutate the active list, history, or cache.
+
  * @summary Remove one or many FLAT hand-wavy marker phrases
  */
 export const getRemoveHandwavyPhraseUrl = () => {
@@ -1850,10 +1855,14 @@ export const removeHandwavyPhrase = async (
     | HandwavyPhraseBatchRemoveBody,
   options?: RequestInit,
 ): Promise<
-  HandwavyPhraseMutationResponse | HandwavyPhraseBatchRemoveResponse
+  | HandwavyPhraseMutationResponse
+  | HandwavyPhraseBatchRemoveResponse
+  | HandwavyPhraseBatchRemoveDryRunResponse
 > => {
   return customFetch<
-    HandwavyPhraseMutationResponse | HandwavyPhraseBatchRemoveResponse
+    | HandwavyPhraseMutationResponse
+    | HandwavyPhraseBatchRemoveResponse
+    | HandwavyPhraseBatchRemoveDryRunResponse
   >(getRemoveHandwavyPhraseUrl(), {
     ...options,
     method: "DELETE",

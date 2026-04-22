@@ -118,7 +118,20 @@ function entry(phrase, extra = {}) {
 describe("remove-handwavy-phrase CLI", () => {
   it("removes found phrases and reports missing ones (mixed batch)", async () => {
     state.phrases = [entry("as far as i can tell"), entry("more or less")];
-    state.deleteResponses = [{ status: 200, body: { ok: true, total: 1 } }];
+    state.deleteResponses = [
+      {
+        status: 200,
+        body: {
+          ok: true,
+          batch: true,
+          total: 1,
+          results: [
+            { raw: "As Far As I Can Tell", phrase: "as far as i can tell", removed: true },
+          ],
+          phrases: [],
+        },
+      },
+    ];
 
     const res = await runScript([
       "--phrase", "As Far As I Can Tell",
@@ -129,7 +142,9 @@ describe("remove-handwavy-phrase CLI", () => {
     expect(res.code).toBe(1);
     const deletes = state.requests.filter((r) => r.method === "DELETE");
     expect(deletes).toHaveLength(1);
-    expect(deletes[0].body).toEqual({ phrase: "As Far As I Can Tell" });
+    // Found phrase goes to the server in a batch body; the not-found
+    // phrase is never sent (filtered at lookup time).
+    expect(deletes[0].body.phrases).toEqual(["As Far As I Can Tell"]);
     expect(res.stdout).toMatch(/removed.*"as far as i can tell"/);
     expect(res.stdout).toMatch(/not-found.*"never seen this"/);
   });
@@ -137,8 +152,19 @@ describe("remove-handwavy-phrase CLI", () => {
   it("reads phrases from --phrases-file, ignoring comments and dedup'ing", async () => {
     state.phrases = [entry("alpha"), entry("beta")];
     state.deleteResponses = [
-      { status: 200, body: { ok: true, total: 1 } },
-      { status: 200, body: { ok: true, total: 0 } },
+      {
+        status: 200,
+        body: {
+          ok: true,
+          batch: true,
+          total: 0,
+          results: [
+            { raw: "alpha", phrase: "alpha", removed: true },
+            { raw: "  beta  ", phrase: "beta", removed: true },
+          ],
+          phrases: [],
+        },
+      },
     ];
 
     const dir = mkdtempSync(join(tmpdir(), "rmhwp-"));
@@ -160,10 +186,13 @@ describe("remove-handwavy-phrase CLI", () => {
       const res = await runScript(["--phrases-file", filePath, "--yes"]);
       expect(res.code).toBe(0);
       const deletes = state.requests.filter((r) => r.method === "DELETE");
-      expect(deletes).toHaveLength(2);
-      const sent = deletes.map((d) => d.body.phrase);
+      // One batch DELETE for both unique phrases.
+      expect(deletes).toHaveLength(1);
+      const sent = deletes[0].body.phrases;
       expect(sent).toContain("alpha");
       expect(sent.some((p) => p.trim().toLowerCase() === "beta")).toBe(true);
+      // The duplicate-after-normalization "ALPHA" was deduped client-side.
+      expect(sent).toHaveLength(2);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -199,23 +228,107 @@ describe("remove-handwavy-phrase CLI", () => {
 
     expect(res.code).toBe(1);
     const deletes = state.requests.filter((r) => r.method === "DELETE");
+    // One batch DELETE for all three; 401 fails the whole batch at once.
     expect(deletes).toHaveLength(1);
-    expect(deletes[0].body).toEqual({ phrase: "one" });
+    expect(deletes[0].body.phrases).toEqual(["one", "two", "three"]);
     expect(res.stdout).toMatch(/auth-failed.*"one"/);
-    expect(res.stdout).toMatch(/auth-failed.*"two".*skipped after earlier auth failure/);
-    expect(res.stdout).toMatch(/auth-failed.*"three".*skipped after earlier auth failure/);
+    expect(res.stdout).toMatch(/auth-failed.*"two"/);
+    expect(res.stdout).toMatch(/auth-failed.*"three"/);
     expect(res.stderr).toMatch(/rejected as unauthorized/);
   });
 
   it("--yes skips the interactive prompt", async () => {
     state.phrases = [entry("hello world")];
-    state.deleteResponses = [{ status: 200, body: { ok: true, total: 0 } }];
+    state.deleteResponses = [
+      {
+        status: 200,
+        body: {
+          ok: true,
+          batch: true,
+          total: 0,
+          results: [
+            { raw: "hello world", phrase: "hello world", removed: true },
+          ],
+          phrases: [],
+        },
+      },
+    ];
 
     const res = await runScript(["--phrase", "hello world", "--yes"]);
     expect(res.code).toBe(0);
     expect(res.stdout).not.toMatch(/\[y\/N\]/);
     const deletes = state.requests.filter((r) => r.method === "DELETE");
     expect(deletes).toHaveLength(1);
+  });
+
+  // Task #145 — `--dry-run` must send a single DELETE with `dryRun: true`
+  // and forward the FULL submitted phrase list (duplicates and original
+  // order preserved) so the server-side preview can surface
+  // duplicate-in-batch outcomes for the reviewer.
+  it("--dry-run preserves duplicates and original order in the request payload", async () => {
+    state.phrases = [entry("alpha"), entry("beta")];
+    state.deleteResponses = [
+      {
+        status: 200,
+        body: {
+          ok: true,
+          dryRun: true,
+          batch: true,
+          wouldRemove: 2,
+          notFound: 1,
+          duplicateInBatch: 1,
+          total: 2,
+          projectedTotal: 0,
+          results: [
+            { raw: "alpha", phrase: "alpha", removed: true },
+            { raw: "beta", phrase: "beta", removed: true },
+            { raw: "Alpha", phrase: "alpha", removed: false, reason: "duplicate-in-batch" },
+            { raw: "ghost", phrase: "ghost", removed: false, reason: "not-found" },
+          ],
+          dryRunImpact: {
+            corpus: {
+              total: 0,
+              byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+              validDetectionsLost: 0,
+              falsePositivesDropped: 0,
+              corpusSize: 12,
+              sampleMatches: [],
+              warning: null,
+            },
+            production: null,
+            productionError: null,
+            productionLimit: 2000,
+          },
+          phrases: [],
+        },
+      },
+    ];
+
+    const res = await runScript([
+      "--phrase", "alpha",
+      "--phrase", "beta",
+      "--phrase", "Alpha", // duplicate after normalization
+      "--phrase", "ghost", // not on active list
+      "--dry-run",
+      "--yes",
+    ]);
+
+    expect(res.code).toBe(0);
+    const deletes = state.requests.filter((r) => r.method === "DELETE");
+    // Exactly one DELETE for the whole batch.
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0].body.dryRun).toBe(true);
+    // The full submitted list reaches the server in the original order
+    // and WITH the duplicate retained.
+    expect(deletes[0].body.phrases).toEqual(["alpha", "beta", "Alpha", "ghost"]);
+    // Reviewer-facing summary includes the requested count and the
+    // duplicate-in-batch tally.
+    expect(res.stdout).toMatch(/Requested:\s+4/);
+    expect(res.stdout).toMatch(/Duplicate-in-batch:\s+1/);
+    expect(res.stdout).toMatch(/Would remove:\s+2/);
+    expect(res.stdout).toMatch(/Not on active list:\s+1/);
+    // No mention of any mutation having taken place.
+    expect(res.stdout).toMatch(/no changes were made/i);
   });
 
   it("declining at the prompt aborts without issuing any DELETE", async () => {
