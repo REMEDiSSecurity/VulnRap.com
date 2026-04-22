@@ -3,10 +3,86 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout } from "lucide-react";
 
-export const CURRENT_VERSION = "3.6.0";
-export const RELEASE_DATE = "2026-04-20";
+export const CURRENT_VERSION = "3.7.0";
+export const RELEASE_DATE = "2026-04-22";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.7.0",
+    date: "2026-04-22",
+    label: "AVRI — CWE-Family Scoring",
+    labelColor: "border-emerald-500 text-emerald-400",
+    sections: [
+      {
+        icon: <Brain className="w-4 h-4 text-emerald-400" />,
+        title: "Engine 0 — CWE-Family Classification",
+        type: "feature",
+        items: [
+          "New classification stage runs ahead of Engines 1–3 and bins each report into one of eight rubric families (memory corruption, injection, auth/access, crypto/protocol, DoS/resource, info exposure, request forgery, hardware) plus a flat fallback",
+          "Classification walks: cited CWE → direct family lookup → parent-chain walk via a bundled MITRE CWE hierarchy (~100 entries in data/cwe-hierarchy.json) → Part 2b keyword fallback → flat fallback",
+          "Classification result (cweId, familyId, classificationMethod, classConfidence) is persisted in the pipeline trace so analysts can see why a particular rubric was selected",
+        ],
+      },
+      {
+        icon: <Target className="w-4 h-4 text-amber-400" />,
+        title: "Engine 2 — Family-Specific Rubrics + Gold Signals",
+        type: "improvement",
+        items: [
+          "Each family ships its own goldSignals list (regex + point value) — e.g. memory-corruption credits ASAN/UBSAN dumps, register state, and CVE-class binaries; injection credits exact endpoint+payload pairs; crypto credits NIST/RFC test vectors",
+          "Absence penalties fire when a family expects a signal class that's missing (e.g. injection report without an endpoint, deserialization report without a gadget) — capped at -25 absolute points after normalization so a single missing signal can't swing the score by 30+ points",
+          "Family-mismatched contradictions (XSS payload in a buffer-overflow report) trigger a contradiction penalty capped at -24",
+          "Output blends 60% AVRI / 40% legacy Engine 2 to preserve continuity; signalBreakdown.avri exposes goldHitCount, family, and the per-signal hits/misses for the diagnostics panel",
+        ],
+      },
+      {
+        icon: <Crosshair className="w-4 h-4 text-fuchsia-400" />,
+        title: "Engine 3 — Family-Aware Coherence",
+        type: "improvement",
+        items: [
+          "Replaces flat term-overlap with the Part 4 rules: cited CWE in the same family as the detected one → 78 floor; cited CWE in a different family with high detection confidence → 25 ceiling (likely fabricated); no CWE but family detected → 38; flat fallback → 42",
+          "Per-family behavioural-coherence indicators (Part 4 map) add or subtract small bonuses for things like ASAN-without-stack-trace or SQLi-without-payload",
+        ],
+      },
+      {
+        icon: <ListChecks className="w-4 h-4 text-emerald-400" />,
+        title: "Triage Matrix v2",
+        type: "improvement",
+        items: [
+          "New PRIORITIZE override: goldHits ≥ 2 AND composite ≥ 40 fires before the legacy matrix, so families with strong gold signals (sanitizer crash + minimal repro) reach the top of the queue even at moderate composites",
+          "TriageDecisionContext now carries goldHitCount and avriFamily; both are forwarded through buildV36TriageContext (cached path) and buildV36TriageContextFromComposite (live path) to keep recommendations consistent",
+          "Existing override that ≥3 strong-evidence signals can never produce CHALLENGE_REPORTER is preserved",
+        ],
+      },
+      {
+        icon: <Lock className="w-4 h-4 text-cyan-400" />,
+        title: "Privacy-Preserving Submission Velocity",
+        type: "feature",
+        items: [
+          "Same-day submission velocity is detected using the existing daily-rotating visitor hash (HMAC over IP + UA + UTC day) — no new persistent submitter identity is introduced",
+          "In-memory ring buffer per server process resets at midnight when the hash rotates; >10 submissions in 60 min triggers -15, dense bursts trigger -10, capped at -15 total",
+          "Cross-day or cross-IP carpet-bomb detection is deliberately out of scope to preserve the privacy posture shipped in v3.5.0",
+        ],
+      },
+      {
+        icon: <FileText className="w-4 h-4 text-orange-400" />,
+        title: "Template Fingerprinting",
+        type: "feature",
+        items: [
+          "Structural fingerprint per report (lower-cased section headers + paragraph-length buckets + format flags, sha256-truncated) — cosmetic edits don't break the match, but skeleton-identical campaigns do",
+          "≥3 hits within a rolling LRU window flags the submission as a template campaign and applies -20 in the AVRI composite; no persistence — same lifecycle as the velocity signal",
+        ],
+      },
+      {
+        icon: <Wrench className="w-4 h-4 text-amber-400" />,
+        title: "Composite Override Table + Feature Flag",
+        type: "improvement",
+        items: [
+          "New computeAVRIComposite combines the engine-weighted base (5/55/40) with explicit overrides: AVRI_NO_GOLD_SIGNALS, AVRI_FAMILY_CONTRADICTION, AVRI_VELOCITY, AVRI_TEMPLATE_CAMPAIGN — each surfaced as a typed entry in compositeOverrides for full audit",
+          "Entire AVRI path is gated behind VULNRAP_USE_AVRI (default off in production for the first deploy, flipped on after calibration confirms the Part 13 targets); when off, the v3.6.0 composite path runs unchanged",
+        ],
+      },
+    ],
+  },
   {
     version: "3.6.0",
     date: "2026-04-20",

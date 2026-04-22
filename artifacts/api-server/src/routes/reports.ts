@@ -31,9 +31,13 @@ import { sanitizeText, sanitizeForAnalysis, sanitizeFileName, detectBinaryConten
 import { extractTextFromPdf } from "../lib/pdf";
 import { logger } from "../lib/logger";
 import { performActiveVerification, type VerificationResult } from "../lib/active-verification";
+import { visitorHash, type VisitorAttribution } from "../lib/visitor";
+import { recordAndScore as recordVelocity } from "../lib/engines/avri/velocity";
+import { recordAndScore as recordTemplateFingerprint } from "../lib/engines/avri/template-fingerprint";
 import {
   analyzeWithEngines,
   analyzeWithEnginesTraced,
+  isAvriEnabled,
   isNewCompositeEnabled,
   compositeToLegacySlopScore,
   type CompositeResult as VulnrapComposite,
@@ -146,7 +150,11 @@ async function runStage<T>(
   }
 }
 
-async function performAnalysis(originalText: string, redactedText: string, opts?: { skipLlm?: boolean }): Promise<AnalysisResult> {
+async function performAnalysis(
+  originalText: string,
+  redactedText: string,
+  opts?: { skipLlm?: boolean; visitor?: VisitorAttribution | null },
+): Promise<AnalysisResult> {
   const pipelineStart = Date.now();
 
   const safeOriginal = sanitizeForAnalysis(originalText);
@@ -230,7 +238,38 @@ async function performAnalysis(originalText: string, redactedText: string, opts?
     let vulnrapComposite: VulnrapComposite | null = null;
     let vulnrapTrace: PipelineTrace | null = null;
     if (isNewCompositeEnabled()) {
-      const traced = await runStage("vulnrap_engines", () => analyzeWithEnginesTraced(safeRedacted), diagnostics);
+      // AVRI submission-velocity + template-fingerprint signals are evaluated
+      // here so the resulting penalties flow into the AVRI composite override
+      // table. Both are no-ops when the AVRI feature flag is off.
+      let velocityPenalty: number | undefined;
+      let templatePenalty: number | undefined;
+      if (isAvriEnabled()) {
+        try {
+          const vh = visitorHash(opts?.visitor ?? null);
+          const v = recordVelocity(vh);
+          velocityPenalty = v.penalty;
+          const t = recordTemplateFingerprint(safeRedacted);
+          templatePenalty = t.penalty;
+          if (v.penalty !== 0 || t.penalty !== 0) {
+            logger.info(
+              {
+                avriVelocityCount: v.submissionCount,
+                avriVelocityPenalty: v.penalty,
+                avriTemplateCount: t.count,
+                avriTemplatePenalty: t.penalty,
+              },
+              "[AVRI] velocity/template signals recorded",
+            );
+          }
+        } catch (avriErr) {
+          logger.warn({ err: avriErr }, "[AVRI] velocity/template scoring failed (non-fatal)");
+        }
+      }
+      const traced = await runStage(
+        "vulnrap_engines",
+        () => analyzeWithEnginesTraced(safeRedacted, { velocityPenalty, templatePenalty }),
+        diagnostics,
+      );
       if (traced) {
         vulnrapComposite = traced.composite;
         vulnrapTrace = traced.trace;
@@ -593,7 +632,10 @@ router.post("/reports", async (req, res): Promise<void> => {
   }
 
   const llmUsed = !skipLlm && isLLMAvailable();
-  const analysisResult = await performAnalysis(text, redactedText, { skipLlm });
+  const analysisResult = await performAnalysis(text, redactedText, {
+    skipLlm,
+    visitor: { ip: req.ip ?? req.socket.remoteAddress ?? null, userAgent: req.headers["user-agent"] ?? null },
+  });
   const { llmResult } = analysisResult;
 
   // v3.6.0 §4: Composite + trace are now produced inside performAnalysis so the
@@ -1125,7 +1167,10 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     logger.error({ err: simErr, inputLength: analysisText.length }, "[SIMILARITY CRASH] Check: Similarity/section analysis failed");
   }
 
-  const analysisResult = await performAnalysis(text, analysisText, { skipLlm });
+  const analysisResult = await performAnalysis(text, analysisText, {
+    skipLlm,
+    visitor: { ip: req.ip ?? req.socket.remoteAddress ?? null, userAgent: req.headers["user-agent"] ?? null },
+  });
 
   const { llmResult: checkLlmResult } = analysisResult;
   const configNotices = generateConfigImpactNotices({ skipLlm, skipRedaction });

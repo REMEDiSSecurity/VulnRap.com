@@ -72,6 +72,12 @@ export interface TriageDecisionContext {
   suspiciousAddressCount?: number;
   // Verification ratio: verified / (verified + notFound) over `referenced_in_report` checks only.
   verificationRatio?: number;     // 0..1
+  // Sprint 11 AVRI: number of family-specific gold signals (sanitizer trace,
+  // injection payload, etc.) that matched. When ≥1, the triage matrix
+  // applies a more permissive PRIORITIZE/MANUAL_REVIEW band because gold
+  // signals are extremely difficult to fabricate.
+  goldHitCount?: number;
+  avriFamily?: string;
 }
 
 export function generateTriageRecommendation(
@@ -120,7 +126,15 @@ export function generateTriageRecommendation(
     const comp = context?.compositeScore ?? 50;
     const e2 = context?.engine2Score ?? 50;
 
-    if (comp >= 70 && e2 >= 60 && (verificationRatio >= 0.5 || strongEvidence >= 2)) {
+    // Sprint 11 §8 — AVRI matrix v2. Gold signals are extremely hard to
+    // fabricate, so when ≥2 are present we only need a moderate composite to
+    // PRIORITIZE, and a single gold signal is enough to skip CHALLENGE.
+    const goldHits = context?.goldHitCount ?? 0;
+    if (goldHits >= 2 && comp >= 40) {
+      action = "PRIORITIZE";
+      reason = `Composite ${comp} with ${goldHits} AVRI gold signal(s) for ${context?.avriFamily ?? "the classified family"} — high-quality report.`;
+      note = "Strong family-specific evidence (sanitizer trace, payload, KAT, etc.). Prioritize for senior reviewer.";
+    } else if (comp >= 70 && e2 >= 60 && (verificationRatio >= 0.5 || strongEvidence >= 2)) {
       action = "PRIORITIZE";
       reason = `Composite ${comp} with substance ${e2} and ${strongEvidence} strong evidence signal(s) — high-quality report.`;
       note = "Strong evidence with coherent technical substance. Prioritize for senior reviewer.";
@@ -399,22 +413,30 @@ interface NormalizedEngineSource {
   compositeScore: number | null;
   engine2Score: number | null;
   strongEvidenceCount: number;
+  goldHitCount?: number;
+  avriFamily?: string;
 }
 
 function pickEngine2Fields(
   engines: ReadonlyArray<{
     engine: string;
     score?: number;
-    signalBreakdown?: { evidenceStrength?: { strongCount?: number } } | unknown;
+    signalBreakdown?: {
+      evidenceStrength?: { strongCount?: number };
+      avri?: { family?: string; goldHitCount?: number };
+    } | unknown;
   }>,
-): { engine2Score: number | null; strongEvidenceCount: number } {
+): { engine2Score: number | null; strongEvidenceCount: number; goldHitCount: number; avriFamily: string | undefined } {
   const e2 = engines.find(e => e.engine === "Technical Substance Analyzer");
   const breakdown = (e2?.signalBreakdown ?? {}) as {
     evidenceStrength?: { strongCount?: number };
+    avri?: { family?: string; goldHitCount?: number };
   };
   return {
     engine2Score: typeof e2?.score === "number" ? e2.score : null,
     strongEvidenceCount: breakdown.evidenceStrength?.strongCount ?? 0,
+    goldHitCount: breakdown.avri?.goldHitCount ?? 0,
+    avriFamily: breakdown.avri?.family,
   };
 }
 
@@ -440,6 +462,8 @@ function buildContext(
     engine2Score: src.engine2Score ?? 50,
     strongEvidenceCount: src.strongEvidenceCount,
     verificationRatio: computeReferencedVerificationRatio(verification),
+    goldHitCount: src.goldHitCount,
+    avriFamily: src.avriFamily,
   };
 }
 
@@ -460,12 +484,14 @@ export function buildV36TriageContext(
       signalBreakdown?: { evidenceStrength?: { strongCount?: number } };
     }>;
   };
-  const { engine2Score, strongEvidenceCount } = pickEngine2Fields(stored.engines ?? []);
+  const { engine2Score, strongEvidenceCount, goldHitCount, avriFamily } = pickEngine2Fields(stored.engines ?? []);
   return buildContext(
     {
       compositeScore: report.vulnrapCompositeScore,
       engine2Score,
       strongEvidenceCount,
+      goldHitCount,
+      avriFamily,
     },
     verification,
   );
@@ -482,12 +508,14 @@ export function buildV36TriageContextFromComposite(
   verification: VerificationResult | null,
 ): TriageDecisionContext | undefined {
   if (!composite) return undefined;
-  const { engine2Score, strongEvidenceCount } = pickEngine2Fields(composite.engineResults);
+  const { engine2Score, strongEvidenceCount, goldHitCount, avriFamily } = pickEngine2Fields(composite.engineResults);
   return buildContext(
     {
       compositeScore: composite.overallScore ?? null,
       engine2Score,
       strongEvidenceCount,
+      goldHitCount,
+      avriFamily,
     },
     verification,
   );

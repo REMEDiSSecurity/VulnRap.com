@@ -8,6 +8,7 @@ export { computeComposite } from "./engines";
 import { computePerplexity, type PerplexityResult } from "./perplexity";
 import type { PipelineTrace, PipelineStageTiming } from "@workspace/db";
 import crypto from "crypto";
+import { runAvriComposite, type AvriCompositeResult } from "./avri";
 
 export type { EngineResult, CompositeResult, Verdict, Confidence, TriggeredIndicator } from "./engines";
 export type { ExtractedSignals, CodeBlock } from "./extractors";
@@ -15,6 +16,8 @@ export type { PipelineTrace, PipelineStageTiming } from "@workspace/db";
 export type { PerplexityResult } from "./perplexity";
 export { CWE_FINGERPRINTS, HIGH_REJECTION_CWES } from "./cwe-fingerprints";
 export { computePerplexity } from "./perplexity";
+export type { AvriCompositeResult } from "./avri";
+export * as avri from "./avri";
 
 export interface AnalyzeWithEnginesOptions {
   claimedCwes?: string[];
@@ -22,19 +25,32 @@ export interface AnalyzeWithEnginesOptions {
   reportTitle?: string;
   /** When true, returns the trace alongside the composite. */
   includeTrace?: boolean;
+  /** AVRI: pre-computed velocity penalty (≤0) from the route layer. */
+  velocityPenalty?: number;
+  /** AVRI: pre-computed template-fingerprint penalty (≤0) from the route layer. */
+  templatePenalty?: number;
 }
 
 export interface AnalyzeWithEnginesTracedResult {
   composite: CompositeResult;
   trace: PipelineTrace;
   perplexity: PerplexityResult;
+  /** Present when the AVRI feature flag is enabled. */
+  avri?: AvriCompositeResult["avri"];
 }
 
 const FEATURE_USE_NEW_COMPOSITE = (): boolean =>
   (process.env.VULNRAP_USE_NEW_COMPOSITE ?? "true").toLowerCase() !== "false";
 
+const FEATURE_USE_AVRI = (): boolean =>
+  (process.env.VULNRAP_USE_AVRI ?? "false").toLowerCase() === "true";
+
 export function isNewCompositeEnabled(): boolean {
   return FEATURE_USE_NEW_COMPOSITE();
+}
+
+export function isAvriEnabled(): boolean {
+  return FEATURE_USE_AVRI();
 }
 
 /** Map composite (0..100, higher=better) to legacy slop score (0..100, higher=worse). */
@@ -64,6 +80,69 @@ export function analyzeWithEnginesTraced(
     stages.push({ stage: name, startedAt: s, endedAt: e, durationMs: e - s });
     return out;
   };
+
+  // AVRI path — gated by VULNRAP_USE_AVRI. Returns a CompositeResult-shaped
+  // object so the existing trace/persistence layer doesn't need to know about
+  // AVRI specifically; the AVRI metadata is surfaced via the optional `avri`
+  // field on the traced result.
+  if (FEATURE_USE_AVRI()) {
+    const signals = stage("extract_signals", () => extractSignals(text, opts.claimedCwes));
+    const perplexity = stage("perplexity", () => computePerplexity(text, signals.codeBlocks));
+    const avriComposite = stage("avri_composite", () =>
+      runAvriComposite(text, {
+        claimedCwes: opts.claimedCwes,
+        velocityPenalty: opts.velocityPenalty,
+        templatePenalty: opts.templatePenalty,
+      }),
+    );
+    const totalDurationMs = Date.now() - startedAt;
+    const trace: PipelineTrace = {
+      correlationId,
+      reportId: opts.reportId ?? null,
+      totalDurationMs,
+      stages,
+      enginesUsed: avriComposite.engineResults.map((r) => r.engine),
+      composite: {
+        overallScore: avriComposite.overallScore,
+        label: avriComposite.label,
+        overridesApplied: avriComposite.overridesApplied,
+        warnings: avriComposite.warnings,
+      },
+      signalsSummary: {
+        wordCount: signals.wordCount,
+        codeBlockCount: signals.codeBlockCount,
+        realUrlCount: signals.realUrlCount,
+        completenessScore: signals.completenessScore,
+        claimEvidenceRatio: Number(signals.claimEvidenceRatio.toFixed(2)),
+        claimedCwes: signals.claimedCwes,
+      },
+      featureFlags: {
+        VULNRAP_USE_NEW_COMPOSITE: FEATURE_USE_NEW_COMPOSITE(),
+        VULNRAP_USE_AVRI: true,
+      },
+      notes: [
+        `AVRI family=${avriComposite.avri.family} (${avriComposite.avri.classification.confidence})`,
+        `AVRI gold-hit-count=${avriComposite.avri.goldHitCount}`,
+      ],
+    };
+    logger.info(
+      {
+        correlationId,
+        reportId: opts.reportId,
+        durationMs: totalDurationMs,
+        composite: avriComposite.overallScore,
+        label: avriComposite.label,
+        avriFamily: avriComposite.avri.family,
+        avriClassConfidence: avriComposite.avri.classification.confidence,
+        goldHitCount: avriComposite.avri.goldHitCount,
+        velocityPenalty: avriComposite.avri.velocityPenalty,
+        templatePenalty: avriComposite.avri.templatePenalty,
+        overridesApplied: avriComposite.overridesApplied,
+      },
+      "vulnrap.engines.avri_composite",
+    );
+    return { composite: avriComposite, trace, perplexity, avri: avriComposite.avri };
+  }
 
   const signals = stage("extract_signals", () => extractSignals(text, opts.claimedCwes));
   const perplexity = stage("perplexity", () => computePerplexity(text, signals.codeBlocks));
