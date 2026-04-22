@@ -2,6 +2,11 @@ import { Router, type IRouter } from "express";
 import { generateCalibrationReport, type BucketAnalysis } from "../lib/calibration";
 import { getCurrentConfig, getConfigHistory, applyNewConfig } from "../lib/scoring-config";
 import { generateAvriDriftReport } from "../lib/avri-drift";
+import {
+  getHandwavyPhrases,
+  addHandwavyPhrase,
+  removeHandwavyPhrase,
+} from "../lib/engines/avri/handwavy-phrases";
 
 const router: IRouter = Router();
 
@@ -217,6 +222,72 @@ router.post("/feedback/calibration/apply", async (req, res) => {
   } catch (err) {
     req.log?.error(err, "Failed to apply calibration changes");
     res.status(500).json({ error: "Failed to apply calibration changes." });
+  }
+});
+
+// Task #108 — Reviewer-curated FLAT hand-wavy marker phrases. The list lives
+// in data/handwavy-phrases.json and is loaded by the AVRI Engine 2 FLAT path
+// at every triage. GET surfaces the active list; POST appends a new phrase;
+// DELETE removes one. Phrases are normalized to lowercase + collapsed
+// whitespace before storage so reviewers don't have to worry about case or
+// stray spaces matching the engine's matcher.
+router.get("/feedback/calibration/handwavy-phrases", (_req, res) => {
+  try {
+    const phrases = getHandwavyPhrases();
+    res.json({ phrases, total: phrases.length });
+  } catch (err) {
+    _req.log?.error(err, "Failed to read hand-wavy phrases");
+    res.status(500).json({ error: "Failed to read hand-wavy phrases." });
+  }
+});
+
+router.post("/feedback/calibration/handwavy-phrases", (req, res) => {
+  try {
+    const { phrase, category } = (req.body ?? {}) as { phrase?: unknown; category?: unknown };
+    if (typeof phrase !== "string" || phrase.trim().length === 0) {
+      res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+      return;
+    }
+    if (
+      category !== undefined &&
+      category !== "absence" &&
+      category !== "hedging" &&
+      category !== "buzzword"
+    ) {
+      res.status(400).json({ error: "category must be one of 'absence', 'hedging', 'buzzword'." });
+      return;
+    }
+    const result = addHandwavyPhrase(phrase, category);
+    res.status(result.added ? 201 : 200).json({
+      ...result,
+      phrases: getHandwavyPhrases(),
+    });
+  } catch (err) {
+    if (err instanceof Error && /must be at (?:least|most)/.test(err.message)) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    req.log?.error(err, "Failed to add hand-wavy phrase");
+    res.status(500).json({ error: "Failed to add hand-wavy phrase." });
+  }
+});
+
+router.delete("/feedback/calibration/handwavy-phrases", (req, res) => {
+  try {
+    const { phrase } = (req.body ?? {}) as { phrase?: unknown };
+    if (typeof phrase !== "string" || phrase.trim().length === 0) {
+      res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+      return;
+    }
+    const result = removeHandwavyPhrase(phrase);
+    if (!result.removed) {
+      res.status(404).json({ ...result, error: "Phrase not found." });
+      return;
+    }
+    res.json({ ...result, phrases: getHandwavyPhrases() });
+  } catch (err) {
+    req.log?.error(err, "Failed to remove hand-wavy phrase");
+    res.status(500).json({ error: "Failed to remove hand-wavy phrase." });
   }
 });
 

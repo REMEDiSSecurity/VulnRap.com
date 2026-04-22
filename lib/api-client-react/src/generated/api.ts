@@ -32,6 +32,9 @@ import type {
   GetAvriDriftReportParams,
   GetReportFeedParams,
   GetTrendsParams,
+  HandwavyPhraseBody,
+  HandwavyPhraseMutationResponse,
+  HandwavyPhrasesList,
   HashLookupResult,
   HealthStatus,
   PlatformStats,
@@ -1551,6 +1554,268 @@ export const useApplyCalibration = <
   TContext
 > => {
   return useMutation(getApplyCalibrationMutationOptions(options));
+};
+
+/**
+ * Returns the active list of FLAT-family hand-wavy marker phrases used by
+AVRI Engine 2 to apply the slop haircut. Reviewers can extend this list
+through POST/DELETE without an engineer redeploying the service.
+
+ * @summary List the curated FLAT hand-wavy marker phrases
+ */
+export const getGetHandwavyPhrasesUrl = () => {
+  return `/api/feedback/calibration/handwavy-phrases`;
+};
+
+export const getHandwavyPhrases = async (
+  options?: RequestInit,
+): Promise<HandwavyPhrasesList> => {
+  return customFetch<HandwavyPhrasesList>(getGetHandwavyPhrasesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHandwavyPhrasesQueryKey = () => {
+  return [`/api/feedback/calibration/handwavy-phrases`] as const;
+};
+
+export const getGetHandwavyPhrasesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHandwavyPhrases>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHandwavyPhrases>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetHandwavyPhrasesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHandwavyPhrases>>
+  > = ({ signal }) => getHandwavyPhrases({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHandwavyPhrases>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHandwavyPhrasesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHandwavyPhrases>>
+>;
+export type GetHandwavyPhrasesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List the curated FLAT hand-wavy marker phrases
+ */
+
+export function useGetHandwavyPhrases<
+  TData = Awaited<ReturnType<typeof getHandwavyPhrases>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHandwavyPhrases>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHandwavyPhrasesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Appends a phrase to the curated FLAT hand-wavy marker list. Phrases are
+normalized to lowercase + collapsed whitespace before storage. Subsequent
+triages pick the new phrase up immediately — no redeploy required.
+
+ * @summary Append a new FLAT hand-wavy marker phrase
+ */
+export const getAddHandwavyPhraseUrl = () => {
+  return `/api/feedback/calibration/handwavy-phrases`;
+};
+
+export const addHandwavyPhrase = async (
+  handwavyPhraseBody: HandwavyPhraseBody,
+  options?: RequestInit,
+): Promise<HandwavyPhraseMutationResponse> => {
+  return customFetch<HandwavyPhraseMutationResponse>(
+    getAddHandwavyPhraseUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(handwavyPhraseBody),
+    },
+  );
+};
+
+export const getAddHandwavyPhraseMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseBody> },
+  TContext
+> => {
+  const mutationKey = ["addHandwavyPhrase"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addHandwavyPhrase>>,
+    { data: BodyType<HandwavyPhraseBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return addHandwavyPhrase(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddHandwavyPhraseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addHandwavyPhrase>>
+>;
+export type AddHandwavyPhraseMutationBody = BodyType<HandwavyPhraseBody>;
+export type AddHandwavyPhraseMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Append a new FLAT hand-wavy marker phrase
+ */
+export const useAddHandwavyPhrase = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseBody> },
+  TContext
+> => {
+  return useMutation(getAddHandwavyPhraseMutationOptions(options));
+};
+
+/**
+ * Removes a phrase (matched after lowercase + whitespace normalization) from the curated FLAT hand-wavy marker list.
+ * @summary Remove a FLAT hand-wavy marker phrase
+ */
+export const getRemoveHandwavyPhraseUrl = () => {
+  return `/api/feedback/calibration/handwavy-phrases`;
+};
+
+export const removeHandwavyPhrase = async (
+  handwavyPhraseBody: HandwavyPhraseBody,
+  options?: RequestInit,
+): Promise<HandwavyPhraseMutationResponse> => {
+  return customFetch<HandwavyPhraseMutationResponse>(
+    getRemoveHandwavyPhraseUrl(),
+    {
+      ...options,
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(handwavyPhraseBody),
+    },
+  );
+};
+
+export const getRemoveHandwavyPhraseMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseBody> },
+  TContext
+> => {
+  const mutationKey = ["removeHandwavyPhrase"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeHandwavyPhrase>>,
+    { data: BodyType<HandwavyPhraseBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return removeHandwavyPhrase(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveHandwavyPhraseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeHandwavyPhrase>>
+>;
+export type RemoveHandwavyPhraseMutationBody = BodyType<HandwavyPhraseBody>;
+export type RemoveHandwavyPhraseMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Remove a FLAT hand-wavy marker phrase
+ */
+export const useRemoveHandwavyPhrase = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseBody> },
+  TContext
+> => {
+  return useMutation(getRemoveHandwavyPhraseMutationOptions(options));
 };
 
 /**

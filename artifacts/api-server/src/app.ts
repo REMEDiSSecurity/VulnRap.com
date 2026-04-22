@@ -86,7 +86,7 @@ app.use(cors({
       callback(null, false);
     }
   },
-  methods: ["GET", "POST"],
+  methods: ["GET", "POST", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],
   maxAge: 86400,
 }));

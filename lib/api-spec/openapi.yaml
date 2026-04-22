@@ -519,6 +519,86 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /feedback/calibration/handwavy-phrases:
+    get:
+      operationId: getHandwavyPhrases
+      tags: [feedback]
+      summary: List the curated FLAT hand-wavy marker phrases
+      description: |
+        Returns the active list of FLAT-family hand-wavy marker phrases used by
+        AVRI Engine 2 to apply the slop haircut. Reviewers can extend this list
+        through POST/DELETE without an engineer redeploying the service.
+      responses:
+        "200":
+          description: Active hand-wavy phrase list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhrasesList"
+    post:
+      operationId: addHandwavyPhrase
+      tags: [feedback]
+      summary: Append a new FLAT hand-wavy marker phrase
+      description: |
+        Appends a phrase to the curated FLAT hand-wavy marker list. Phrases are
+        normalized to lowercase + collapsed whitespace before storage. Subsequent
+        triages pick the new phrase up immediately — no redeploy required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HandwavyPhraseBody"
+      responses:
+        "200":
+          description: Phrase already present (no change)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
+        "201":
+          description: Phrase appended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
+        "400":
+          description: Invalid phrase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: removeHandwavyPhrase
+      tags: [feedback]
+      summary: Remove a FLAT hand-wavy marker phrase
+      description: Removes a phrase (matched after lowercase + whitespace normalization) from the curated FLAT hand-wavy marker list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HandwavyPhraseBody"
+      responses:
+        "200":
+          description: Phrase removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
+        "400":
+          description: Invalid phrase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Phrase not in the list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /stats:
     get:
       operationId: getStats
@@ -2732,6 +2812,65 @@ components:
         config:
           $ref: "#/components/schemas/ScoringConfigItem"
       required: [message, config]
+
+    HandwavyCategory:
+      type: string
+      enum: [absence, hedging, buzzword]
+      description: Theme bucket used by the diagnostics panel to group matched phrases.
+
+    HandwavyMarker:
+      type: object
+      properties:
+        phrase:
+          type: string
+        category:
+          $ref: "#/components/schemas/HandwavyCategory"
+      required: [phrase, category]
+
+    HandwavyPhrasesList:
+      type: object
+      properties:
+        phrases:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyMarker"
+        total:
+          type: integer
+      required: [phrases, total]
+
+    HandwavyPhraseBody:
+      type: object
+      properties:
+        phrase:
+          type: string
+          description: Marker phrase (case-insensitive substring match against report text after whitespace collapsing).
+        category:
+          $ref: "#/components/schemas/HandwavyCategory"
+      required: [phrase]
+
+    HandwavyPhraseMutationResponse:
+      type: object
+      properties:
+        added:
+          type: boolean
+          description: True when POST appended the phrase. Omitted on DELETE responses.
+        removed:
+          type: boolean
+          description: True when DELETE removed the phrase. Omitted on POST responses.
+        phrase:
+          type: string
+          description: The normalized phrase that was added/removed.
+        category:
+          $ref: "#/components/schemas/HandwavyCategory"
+        total:
+          type: integer
+          description: Number of active phrases after the mutation.
+        phrases:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyMarker"
+          description: Full active list after the mutation.
+      required: [phrase, total, phrases]
 
     VisitRecorded:
       type: object

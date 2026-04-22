@@ -4,6 +4,8 @@ import {
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
   useGetScoringConfig, getGetScoringConfigQueryKey,
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
+  useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
+  addHandwavyPhrase, removeHandwavyPhrase,
   applyCalibration,
   type FeedbackAnalyticsDailyTrendItem,
   type FeedbackAnalyticsScoreCorrelationItem,
@@ -27,6 +29,7 @@ import {
   MessageSquare, Star, ThumbsUp, ThumbsDown, TrendingUp, AlertTriangle,
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
+  Plus, Trash2, MessageCircleQuestion,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -450,6 +453,8 @@ function CalibrationSection() {
         </Card>
       )}
 
+      <HandwavyPhrasesAdmin />
+
       {configData && configData.history.length > 1 && (
         <Card className="glass-card rounded-xl">
           <CardHeader className="pb-2">
@@ -480,6 +485,149 @@ function CalibrationSection() {
         </Card>
       )}
     </div>
+  );
+}
+
+function HandwavyPhrasesAdmin() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const { data, isLoading } = useGetHandwavyPhrases({
+    query: { queryKey: getGetHandwavyPhrasesQueryKey() },
+  });
+
+  const phrases = data?.phrases ?? [];
+  const [draftCategory, setDraftCategory] = useState<"absence" | "hedging" | "buzzword">("absence");
+  const CATEGORY_LABELS: Record<"absence" | "hedging" | "buzzword", string> = {
+    absence: "Self-admitted absence of evidence",
+    hedging: "Generic hedging",
+    buzzword: "Buzzword-soup framing",
+  };
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: getGetHandwavyPhrasesQueryKey() });
+  };
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const phrase = draft.trim();
+    if (!phrase) return;
+    setBusy("add");
+    try {
+      const result = await addHandwavyPhrase({ phrase, category: draftCategory });
+      if (result.added === false) {
+        toast({ title: "Already in the list", description: `"${result.phrase}" was already a hand-wavy marker.` });
+      } else {
+        toast({ title: "Phrase added", description: `New triages will flag "${result.phrase}" (${CATEGORY_LABELS[draftCategory]}) immediately.` });
+      }
+      setDraft("");
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to add phrase.";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleRemove = async (phrase: string) => {
+    setBusy(`rm:${phrase}`);
+    try {
+      await removeHandwavyPhrase({ phrase });
+      toast({ title: "Phrase removed", description: `"${phrase}" will no longer trigger the FLAT haircut.` });
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to remove phrase.";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card className="glass-card rounded-xl border-primary/10" data-testid="handwavy-admin">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageCircleQuestion className="w-4 h-4 text-primary" />
+            FLAT Hand-wavy Marker Phrases
+          </CardTitle>
+          <Badge variant="secondary" className="text-[10px]">{phrases.length} active</Badge>
+        </div>
+        <CardDescription>
+          Curated list of buzzword-soup framings the FLAT haircut looks for. Add a new
+          phrase here and it takes effect on the very next triage — no engineer or
+          redeploy needed. Phrases are matched as case-insensitive substrings against a
+          whitespace-collapsed copy of the report text.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="e.g. comprehensive zero-trust assessment"
+            maxLength={200}
+            className="flex-1 h-9 px-3 rounded-md border border-border/40 bg-background/40 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
+            data-testid="handwavy-input"
+            disabled={busy === "add"}
+          />
+          <select
+            value={draftCategory}
+            onChange={(e) => setDraftCategory(e.target.value as "absence" | "hedging" | "buzzword")}
+            className="h-9 px-2 rounded-md border border-border/40 bg-background/40 text-xs"
+            data-testid="handwavy-category"
+            disabled={busy === "add"}
+            aria-label="Theme category"
+          >
+            <option value="absence">Absence of evidence</option>
+            <option value="hedging">Generic hedging</option>
+            <option value="buzzword">Buzzword soup</option>
+          </select>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={busy === "add" || draft.trim().length < 3}
+            data-testid="handwavy-add"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            Add phrase
+          </Button>
+        </form>
+        {isLoading ? (
+          <Skeleton className="h-32 rounded-md" />
+        ) : phrases.length === 0 ? (
+          <div className="text-xs text-muted-foreground italic">No phrases configured.</div>
+        ) : (
+          <div className="border border-border/30 rounded-md divide-y divide-border/20 max-h-80 overflow-y-auto">
+            {phrases.map((m) => (
+              <div
+                key={m.phrase}
+                className="flex items-center gap-3 px-3 py-2 text-xs"
+                data-testid="handwavy-row"
+              >
+                <span className="flex-1 font-mono text-foreground/80 break-all">{m.phrase}</span>
+                <Badge variant="outline" className="text-[10px] capitalize">{m.category}</Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-muted-foreground hover:text-red-400"
+                  disabled={busy === `rm:${m.phrase}`}
+                  onClick={() => handleRemove(m.phrase)}
+                  data-testid="handwavy-remove"
+                  aria-label={`Remove phrase ${m.phrase}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -1583,6 +1583,48 @@ export interface ApplyCalibrationResponse {
   config: ScoringConfigItem;
 }
 
+/**
+ * Theme bucket used by the diagnostics panel to group matched phrases.
+ */
+export type HandwavyCategory =
+  (typeof HandwavyCategory)[keyof typeof HandwavyCategory];
+
+export const HandwavyCategory = {
+  absence: "absence",
+  hedging: "hedging",
+  buzzword: "buzzword",
+} as const;
+
+export interface HandwavyMarker {
+  phrase: string;
+  category: HandwavyCategory;
+}
+
+export interface HandwavyPhrasesList {
+  phrases: HandwavyMarker[];
+  total: number;
+}
+
+export interface HandwavyPhraseBody {
+  /** Marker phrase (case-insensitive substring match against report text after whitespace collapsing). */
+  phrase: string;
+  category?: HandwavyCategory;
+}
+
+export interface HandwavyPhraseMutationResponse {
+  /** True when POST appended the phrase. Omitted on DELETE responses. */
+  added?: boolean;
+  /** True when DELETE removed the phrase. Omitted on POST responses. */
+  removed?: boolean;
+  /** The normalized phrase that was added/removed. */
+  phrase: string;
+  category?: HandwavyCategory;
+  /** Number of active phrases after the mutation. */
+  total: number;
+  /** Full active list after the mutation. */
+  phrases: HandwavyMarker[];
+}
+
 export interface VisitRecorded {
   recorded: boolean;
 }

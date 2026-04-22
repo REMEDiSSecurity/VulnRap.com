@@ -19,6 +19,7 @@ import {
   stripPlaceholderBodies,
   type RawHttpEvaluation,
 } from "./raw-http";
+import { getHandwavyPhrases } from "./handwavy-phrases";
 
 const ABSENCE_PENALTY_CAP = 12;
 /** Out-of-cap penalty applied to crash-/race-trace-bearing reports whose
@@ -92,40 +93,14 @@ export function runEngine2Avri(
   if (family.id === "FLAT") {
     // Collapse all whitespace so multi-line prose still matches phrase markers.
     const lowered = fullText.toLowerCase().replace(/\s+/g, " ");
-    // Each marker carries a `category` so the diagnostics panel can group the
-    // matched entries into themed buckets (absence-of-evidence vs. generic
-    // hedging vs. buzzword-soup framings) rather than rendering one long flat
-    // list of a dozen rows. The category travels with each absence-penalty
-    // entry into the diagnostics payload via `flatHandwavyCategory`.
-    const handwavyMarkers: Array<{ phrase: string; category: HandwavyCategory }> = [
-      // Self-admitted absence of evidence
-      { phrase: "do not have a runnable reproducer", category: "absence" },
-      { phrase: "do not have a reproducer", category: "absence" },
-      { phrase: "private fuzzing harness", category: "absence" },
-      { phrase: "private poc", category: "absence" },
-      { phrase: "structural rather than", category: "absence" },
-      { phrase: "structural vulnerability follows from the design", category: "absence" },
-      { phrase: "i have not enumerated", category: "absence" },
-      { phrase: "have not been able to confirm", category: "absence" },
-      { phrase: "no working proof-of-concept", category: "absence" },
-      { phrase: "no runnable proof", category: "absence" },
-      { phrase: "follows from the design as observed", category: "absence" },
-      { phrase: "deployment is no different in this respect", category: "absence" },
-      // Generic "may/appears/likely" hedging that signals zero observation
-      { phrase: "may not be encrypted", category: "hedging" },
-      { phrase: "may be present in environment variables", category: "hedging" },
-      { phrase: "do not appear to be", category: "hedging" },
-      { phrase: "does not appear to be", category: "hedging" },
-      { phrase: "appears to be susceptible", category: "hedging" },
-      { phrase: "consider a holistic remediation", category: "hedging" },
-      { phrase: "leadership-level discussion", category: "hedging" },
-      // Buzzword-soup framings with zero specifics
-      { phrase: "comprehensive zero-trust assessment", category: "buzzword" },
-      { phrase: "modern threat landscape", category: "buzzword" },
-      { phrase: "advanced persistent threats", category: "buzzword" },
-      { phrase: "defense-in-depth posture", category: "buzzword" },
-      { phrase: "weak security culture", category: "buzzword" },
-    ];
+    // Loaded from data/handwavy-phrases.json so reviewers can extend the list
+    // through POST /feedback/calibration/handwavy-phrases without a redeploy.
+    // Each marker carries a `category` (`absence` | `hedging` | `buzzword`) so
+    // the diagnostics panel can group matched entries into themed buckets
+    // rather than rendering one long flat list. The category travels with each
+    // absence-penalty entry into the diagnostics payload via
+    // `flatHandwavyCategory`.
+    const handwavyMarkers = getHandwavyPhrases();
     const HANDWAVY_POINTS_PER_HIT = 6;
     const HANDWAVY_HAIRCUT_CAP = 24;
     // Record every matched phrase with id + phrase + per-hit points so the

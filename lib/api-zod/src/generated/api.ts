@@ -2392,6 +2392,140 @@ export const ApplyCalibrationBody = zod.object({
 });
 
 /**
+ * Returns the active list of FLAT-family hand-wavy marker phrases used by
+AVRI Engine 2 to apply the slop haircut. Reviewers can extend this list
+through POST/DELETE without an engineer redeploying the service.
+
+ * @summary List the curated FLAT hand-wavy marker phrases
+ */
+export const GetHandwavyPhrasesResponse = zod.object({
+  phrases: zod.array(
+    zod.object({
+      phrase: zod.string(),
+      category: zod
+        .enum(["absence", "hedging", "buzzword"])
+        .describe(
+          "Theme bucket used by the diagnostics panel to group matched phrases.",
+        ),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * Appends a phrase to the curated FLAT hand-wavy marker list. Phrases are
+normalized to lowercase + collapsed whitespace before storage. Subsequent
+triages pick the new phrase up immediately — no redeploy required.
+
+ * @summary Append a new FLAT hand-wavy marker phrase
+ */
+export const AddHandwavyPhraseBody = zod.object({
+  phrase: zod
+    .string()
+    .describe(
+      "Marker phrase (case-insensitive substring match against report text after whitespace collapsing).",
+    ),
+  category: zod
+    .enum(["absence", "hedging", "buzzword"])
+    .optional()
+    .describe(
+      "Theme bucket used by the diagnostics panel to group matched phrases.",
+    ),
+});
+
+export const AddHandwavyPhraseResponse = zod.object({
+  added: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when POST appended the phrase. Omitted on DELETE responses.",
+    ),
+  removed: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when DELETE removed the phrase. Omitted on POST responses.",
+    ),
+  phrase: zod
+    .string()
+    .describe("The normalized phrase that was added\/removed."),
+  category: zod
+    .enum(["absence", "hedging", "buzzword"])
+    .optional()
+    .describe(
+      "Theme bucket used by the diagnostics panel to group matched phrases.",
+    ),
+  total: zod.number().describe("Number of active phrases after the mutation."),
+  phrases: zod
+    .array(
+      zod.object({
+        phrase: zod.string(),
+        category: zod
+          .enum(["absence", "hedging", "buzzword"])
+          .describe(
+            "Theme bucket used by the diagnostics panel to group matched phrases.",
+          ),
+      }),
+    )
+    .describe("Full active list after the mutation."),
+});
+
+/**
+ * Removes a phrase (matched after lowercase + whitespace normalization) from the curated FLAT hand-wavy marker list.
+ * @summary Remove a FLAT hand-wavy marker phrase
+ */
+export const RemoveHandwavyPhraseBody = zod.object({
+  phrase: zod
+    .string()
+    .describe(
+      "Marker phrase (case-insensitive substring match against report text after whitespace collapsing).",
+    ),
+  category: zod
+    .enum(["absence", "hedging", "buzzword"])
+    .optional()
+    .describe(
+      "Theme bucket used by the diagnostics panel to group matched phrases.",
+    ),
+});
+
+export const RemoveHandwavyPhraseResponse = zod.object({
+  added: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when POST appended the phrase. Omitted on DELETE responses.",
+    ),
+  removed: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when DELETE removed the phrase. Omitted on POST responses.",
+    ),
+  phrase: zod
+    .string()
+    .describe("The normalized phrase that was added\/removed."),
+  category: zod
+    .enum(["absence", "hedging", "buzzword"])
+    .optional()
+    .describe(
+      "Theme bucket used by the diagnostics panel to group matched phrases.",
+    ),
+  total: zod.number().describe("Number of active phrases after the mutation."),
+  phrases: zod
+    .array(
+      zod.object({
+        phrase: zod.string(),
+        category: zod
+          .enum(["absence", "hedging", "buzzword"])
+          .describe(
+            "Theme bucket used by the diagnostics panel to group matched phrases.",
+          ),
+      }),
+    )
+    .describe("Full active list after the mutation."),
+});
+
+/**
  * Returns aggregate statistics for the platform
  * @summary Get platform statistics
  */
