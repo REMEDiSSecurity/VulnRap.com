@@ -54,19 +54,14 @@ export function runEngine3Avri(
     };
   }
 
-  // 1. Score gold signal coverage as a percentage of the rubric's calibrated max.
-  let goldTotal = 0;
+  // 1. Score gold signal coverage (used for behavioural bonus only — Part 4
+  //    explicit floors/ceilings drive the base score).
   let goldHitCount = 0;
   for (const sig of family.goldSignals) {
-    if (sig.pattern.test(fullText)) { goldTotal += sig.points; goldHitCount++; }
+    if (sig.pattern.test(fullText)) goldHitCount++;
   }
-  const totalPossible = family.goldSignals.reduce((s, g) => s + g.points, 0);
-  const calibratedMax = Math.max(1, Math.round(totalPossible * 0.7));
-  const goldCoverage = clamp((goldTotal / calibratedMax) * 100);
 
-  // 2. Contradictions (prose lookup is fine here — Engine 3 is allowed to be
-  //    a little stricter than Engine 2 because contradictions in coherence
-  //    *should* hurt the family score).
+  // 2. Contradictions (prose lookup).
   const lowered = fullText.toLowerCase();
   const contradictions: string[] = [];
   for (const phrase of family.contradictionPhrases) {
@@ -78,16 +73,37 @@ export function runEngine3Avri(
   const coherenceIssues = checkCoherence(fullText, family);
   const coherencePenalty = coherenceIssues.reduce((s, i) => s + i.penalty, 0);
 
-  // 4. Classification confidence floor: HIGH starts at 60, MEDIUM at 50, LOW at 40.
-  const floor =
-    classification.confidence === "HIGH" ? 60 :
-    classification.confidence === "MEDIUM" ? 50 :
-    40;
+  // 4. Sprint 11 spec Part 4 — explicit CWE/family outcomes:
+  //    - cited CWE matches detected family                    → 78 floor
+  //    - cited CWE in a *different* family with HIGH detection → 25 ceiling (likely fabricated)
+  //    - no cited CWE but a family was detected                → 38
+  //    - flat fallback (handled at the top of the function)    → 42
+  //    On top of these, gold coverage and behavioural coherence apply
+  //    as small bonuses/penalties so the final score isn't perfectly flat.
+  const citedFamily = classification.citedFamily;
+  const isCwsCited = !!classification.cweId;
+  const sameFamily = isCwsCited && citedFamily === family.id;
+  const offFamilyHighConf = isCwsCited && citedFamily && citedFamily !== family.id && classification.confidence === "HIGH";
+  let baseScore: number;
+  let baseRule: "SAME_FAMILY_FLOOR" | "OFF_FAMILY_CEILING" | "FAMILY_DETECTED_NO_CWE" | "FALLBACK";
+  if (sameFamily) {
+    baseScore = 78;
+    baseRule = "SAME_FAMILY_FLOOR";
+  } else if (offFamilyHighConf) {
+    baseScore = 25;
+    baseRule = "OFF_FAMILY_CEILING";
+  } else if (!isCwsCited) {
+    baseScore = 38;
+    baseRule = "FAMILY_DETECTED_NO_CWE";
+  } else {
+    baseScore = 42;
+    baseRule = "FALLBACK";
+  }
 
-  let baseScore = clamp(Math.max(floor, goldCoverage) - contradictionPenalty - coherencePenalty);
-
-  // 5. Blend with legacy CWE-fingerprint Engine 3 (70% AVRI / 30% legacy).
-  const blendedScore = Math.round(baseScore * 0.7 + legacy.score * 0.3);
+  // Part 4 behavioural coherence bonus/penalty (small adjustments around the floor/ceiling).
+  const behaviouralBonus = Math.min(8, goldHitCount * 2);
+  const adjusted = baseScore + behaviouralBonus - contradictionPenalty - coherencePenalty;
+  const blendedScore = clamp(Math.round(adjusted));
 
   const indicators: TriggeredIndicator[] = [];
   indicators.push({
@@ -138,11 +154,12 @@ export function runEngine3Avri(
       avri: {
         family: family.id,
         classificationConfidence: classification.confidence,
-        goldCoverage: Math.round(goldCoverage),
+        baseRule,
+        baseScore,
+        behaviouralBonus,
         goldHitCount,
         contradictionPenalty: -contradictionPenalty,
         coherencePenalty: -coherencePenalty,
-        baseScore: Math.round(baseScore),
         legacyScore: legacy.score,
         blendedScore,
         coherenceIssues: coherenceIssues.map((i) => ({ id: i.id, penalty: -i.penalty })),

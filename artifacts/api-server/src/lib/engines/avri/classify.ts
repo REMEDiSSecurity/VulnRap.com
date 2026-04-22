@@ -21,6 +21,10 @@ export interface ClassificationResult {
   parentChain?: string[];
   /** Detected technology/language context (informational). */
   technology: string | null;
+  /** The first claimed/cited CWE id (numeric string), or null if none cited. */
+  cweId: string | null;
+  /** The family that the cited CWE maps to (may differ from `family` when off-topic). */
+  citedFamily: FamilyId | null;
 }
 
 const TECH_PATTERNS: Array<{ tech: string; pattern: RegExp }> = [
@@ -143,6 +147,25 @@ const FALLBACK_KEYWORDS: FallbackKeywords[] = [
   },
 ];
 
+/** Walk the cited CWEs and return the first one that maps to any rubric family,
+ * along with that family. Used so engine 3 can apply same-family vs off-family
+ * scoring even when the *detected* family (via keywords/extractors) differs. */
+function citedCweFamily(claimedCwes: string[] | undefined): { cweId: string | null; family: FamilyId | null } {
+  if (!claimedCwes || claimedCwes.length === 0) return { cweId: null, family: null };
+  for (const raw of claimedCwes) {
+    const id = normalizeCweId(raw);
+    if (!id) continue;
+    const direct = familyForCweNumber(id);
+    if (direct) return { cweId: id, family: direct };
+    for (const ancestor of ancestorsOf(id)) {
+      const famId = familyForCweNumber(ancestor);
+      if (famId) return { cweId: id, family: famId };
+    }
+    return { cweId: id, family: null };
+  }
+  return { cweId: null, family: null };
+}
+
 function classifyByCwe(claimedCwes: string[] | undefined): ClassificationResult | null {
   if (!claimedCwes || claimedCwes.length === 0) return null;
   for (const raw of claimedCwes) {
@@ -158,6 +181,8 @@ function classifyByCwe(claimedCwes: string[] | undefined): ClassificationResult 
         evidence: [`CWE-${id}`],
         parentChain: [id],
         technology: null,
+        cweId: id,
+        citedFamily: direct,
       };
     }
     // Walk ancestors.
@@ -173,6 +198,8 @@ function classifyByCwe(claimedCwes: string[] | undefined): ClassificationResult 
           evidence: [`CWE-${id}`, `→ CWE-${ancestor}`],
           parentChain: chain,
           technology: null,
+          cweId: id,
+          citedFamily: famId,
         };
       }
     }
@@ -211,6 +238,8 @@ function classifyByVulnType(text: string): ClassificationResult | null {
     reason: `Vulnerability type detector matched "${t}" → ${fam.displayName}.`,
     evidence: [`vuln-type:${t}`],
     technology: null,
+    cweId: null,
+    citedFamily: null,
   };
 }
 
@@ -237,6 +266,8 @@ function classifyByKeywords(text: string): ClassificationResult | null {
     reason: `Keyword fallback matched ${best.score} ${best.fam.displayName} terms.`,
     evidence: best.matches.slice(0, 6),
     technology: null,
+    cweId: null,
+    citedFamily: null,
   };
 }
 
@@ -245,17 +276,22 @@ export function classifyReport(
   claimedCwes: string[] | undefined,
 ): ClassificationResult {
   const technology = detectTechnology(text);
+  // Always compute the cited-CWE family up front so off-family detection works
+  // even when the *detected* family came from keywords/extractors.
+  const cited = citedCweFamily(claimedCwes);
   const byCwe = classifyByCwe(claimedCwes);
   if (byCwe) return { ...byCwe, technology };
   const byType = classifyByVulnType(text);
-  if (byType) return { ...byType, technology };
+  if (byType) return { ...byType, technology, cweId: cited.cweId, citedFamily: cited.family };
   const byKw = classifyByKeywords(text);
-  if (byKw) return { ...byKw, technology };
+  if (byKw) return { ...byKw, technology, cweId: cited.cweId, citedFamily: cited.family };
   return {
     family: FLAT_FAMILY,
     confidence: "LOW",
     reason: "No CWE / vulnerability-type / keyword evidence — falling back to generic rubric.",
     evidence: [],
     technology,
+    cweId: cited.cweId,
+    citedFamily: cited.family,
   };
 }

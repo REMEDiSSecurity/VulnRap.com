@@ -126,62 +126,44 @@ export function generateTriageRecommendation(
     const comp = context?.compositeScore ?? 50;
     const e2 = context?.engine2Score ?? 50;
 
-    // Sprint 11 §8 — AVRI matrix v2. Gold signals are extremely hard to
-    // fabricate, so when ≥2 are present we only need a moderate composite to
-    // PRIORITIZE, and a single gold signal is enough to skip CHALLENGE.
+    // Sprint 11 §8 — AVRI Triage Matrix v2.
+    //   composite >= 65                       → PRIORITIZE
+    //   composite >= 55                       → MANUAL_REVIEW
+    //   composite >= 40                       → STANDARD_TRIAGE
+    //   composite >= 25                       → CHALLENGE_REPORTER
+    //   composite <  25                       → AUTO_CLOSE
+    // Override: goldHits >= 2 && composite >= 40 → PRIORITIZE (gold signals are
+    // extremely hard to fabricate, so high gold coverage outranks the band).
     const goldHits = context?.goldHitCount ?? 0;
+    const familyLabel = context?.avriFamily ?? "the classified family";
     if (goldHits >= 2 && comp >= 40) {
       action = "PRIORITIZE";
-      reason = `Composite ${comp} with ${goldHits} AVRI gold signal(s) for ${context?.avriFamily ?? "the classified family"} — high-quality report.`;
+      reason = `Composite ${comp} with ${goldHits} AVRI gold signal(s) for ${familyLabel} — high-quality report.`;
       note = "Strong family-specific evidence (sanitizer trace, payload, KAT, etc.). Prioritize for senior reviewer.";
-    } else if (comp >= 70 && e2 >= 60 && (verificationRatio >= 0.5 || strongEvidence >= 2)) {
+    } else if (comp >= 65) {
       action = "PRIORITIZE";
-      reason = `Composite ${comp} with substance ${e2} and ${strongEvidence} strong evidence signal(s) — high-quality report.`;
-      note = "Strong evidence with coherent technical substance. Prioritize for senior reviewer.";
-    } else if (comp >= 60 && e2 >= 50) {
+      reason = `Composite ${comp} (≥65) with substance ${e2}${strongEvidence ? ` and ${strongEvidence} strong evidence signal(s)` : ""} — high-quality report.`;
+      note = "Prioritize for senior reviewer.";
+    } else if (comp >= 55) {
+      action = "MANUAL_REVIEW";
+      reason = `Composite ${comp} (≥55) with substance ${e2} — needs human eyes.`;
+      note = "Assign to a senior triager for manual assessment.";
+    } else if (comp >= 40) {
       action = "STANDARD_TRIAGE";
-      reason = `Composite ${comp} with substance ${e2} — within legitimate range.`;
+      reason = `Composite ${comp} (≥40) with substance ${e2} — within standard triage range.`;
       note = "Process through standard triage workflow.";
-    } else if (comp >= 45) {
-      // Mid-range — only escalate to CHALLENGE if NOT enough strong evidence.
-      if (strongEvidence >= 3) {
-        action = "STANDARD_TRIAGE";
-        reason = `Composite ${comp} but ${strongEvidence} strong evidence signals (crash/diff/stack) — skip challenge.`;
-        note = "Mid composite, but the report carries hard-to-fabricate evidence. Standard triage.";
-      } else if (notFoundCount >= 2 && verificationRatio < 0.3) {
-        action = "CHALLENGE_REPORTER";
-        reason = `${notFoundCount} referenced items could not be verified (verification ratio ${(verificationRatio * 100).toFixed(0)}%).`;
-        note = "Send the generated challenge questions below. A legitimate researcher can substantiate specifics within 48 hours.";
-      } else {
-        action = "MANUAL_REVIEW";
-        reason = `Composite ${comp}, substance ${e2}, ${strongEvidence} strong signal(s) — needs human eyes.`;
-        note = "Assign to a senior triager for manual assessment.";
-      }
-    } else if (comp >= 30) {
-      // Low-mid composite — manual review unless we have enough strong evidence
-      // OR the report is clearly slop.
-      if (strongEvidence >= 3) {
-        action = "MANUAL_REVIEW";
-        reason = `Low composite ${comp} but ${strongEvidence} strong evidence signal(s) — ambiguous.`;
-        note = "Substance disagrees with composite; review manually before any escalation.";
-      } else if (notFoundCount >= 2) {
-        action = "CHALLENGE_REPORTER";
-        reason = `Composite ${comp} with ${notFoundCount} unverifiable references.`;
-        note = "Send challenge questions; set a 48-hour response deadline.";
-      } else {
-        action = "MANUAL_REVIEW";
-        reason = `Low composite ${comp} — needs manual review.`;
-        note = "Assign to a senior triager.";
-      }
+    } else if (comp >= 25) {
+      action = "CHALLENGE_REPORTER";
+      reason = `Composite ${comp} (≥25) with substance ${e2}${notFoundCount ? `, ${notFoundCount} unverifiable reference(s)` : ""} — challenge for specifics.`;
+      note = "Send the generated challenge questions below. A legitimate researcher can substantiate specifics within 48 hours.";
     } else {
-      // composite < 30
       action = "AUTO_CLOSE";
       reason = `Very low composite (${comp}) with substance ${e2} — strong AI-generation / low-effort signals.`;
       note = "Consider auto-closing with a template response requesting original research.";
     }
 
-    // Override safety: never CHALLENGE_REPORTER if the report has 3+ strong
-    // evidence signals (CRASH_OUTPUT, STACK_TRACE, CODE_DIFF, SHELL_COMMAND, etc.).
+    // Safety override (kept from v3.6.0): never CHALLENGE_REPORTER if the report
+    // has 3+ strong evidence signals (CRASH_OUTPUT, STACK_TRACE, CODE_DIFF, etc.).
     if (action === "CHALLENGE_REPORTER" && strongEvidence >= 3) {
       action = "MANUAL_REVIEW";
       reason += ` Override: ${strongEvidence} strong evidence signals present — escalate to manual review instead of challenge.`;
