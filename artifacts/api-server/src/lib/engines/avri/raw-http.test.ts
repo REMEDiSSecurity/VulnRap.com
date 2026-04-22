@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { evaluateRawHttpRequest } from "./raw-http.js";
+import {
+  evaluateRawHttpRequest,
+  isPlaceholderBody,
+  stripPlaceholderBodies,
+} from "./raw-http.js";
 import { runEngine2Avri } from "./engine2-avri.js";
 import { FAMILIES_BY_ID } from "./families.js";
 import { extractSignals } from "../extractors.js";
@@ -470,5 +474,156 @@ describe("runEngine2Avri — INJECTION raw-HTTP integration", () => {
     expect(indicators).not.toContain("FAKE_RAW_HTTP");
     const survivingIds = result.detail.goldHits.map((g) => g.id);
     expect(survivingIds).toContain("specific_endpoint_param");
+  });
+});
+
+// SQLi slop fixture whose request HEADERS look real (real Host, real
+// Content-Type, integer Content-Length) but whose request BODY is a
+// placeholder slot (`q=<sql payload here>`) and whose prose names no real
+// payload. The header-fakeness checks all pass — only the body-payload
+// check can catch it. The injection family's `concrete_payload` and
+// `vulnerable_query_construction` gold signals must both be revoked
+// because they would otherwise be earned from the placeholder body.
+const SLOP_SQLI_PLACEHOLDER_BODY_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query,",
+  "leading to a UNION-based exfiltration. CWE-89. Severity: Critical.",
+  "Affects all customers in production.",
+  "",
+  "```http",
+  "POST /search HTTP/1.1",
+  "Host: shop.example.com",
+  "Content-Type: application/x-www-form-urlencoded",
+  "Content-Length: 27",
+  "",
+  "q=<sql payload here>",
+  "```",
+  "",
+  "Replay the request above with any modern database backend; the",
+  "response will include sensitive rows.",
+].join("\n");
+
+// Command-injection slop fixture: real-looking JSON POST headers, a JSON
+// body where every value is a `<...>` slot, and prose that talks about
+// "shell command injection" without naming a concrete command. Both
+// payload-class gold signals must be revoked.
+const SLOP_CMDI_PLACEHOLDER_BODY_FIXTURE = [
+  "# Critical command injection on POST /api/exec",
+  "",
+  "The `cmd` field is passed straight to a shell, allowing arbitrary",
+  "command execution. CWE-78. Severity: Critical.",
+  "",
+  "```http",
+  "POST /api/exec HTTP/1.1",
+  "Host: api.example.com",
+  "Content-Type: application/json",
+  "Content-Length: 42",
+  "",
+  '{ "cmd": "<command here>", "args": "<args>" }',
+  "```",
+  "",
+  "Any modern shell will exhibit this. Severe risk to the production",
+  "fleet — please prioritize.",
+].join("\n");
+
+describe("isPlaceholderBody", () => {
+  it("flags placeholder bodies (slot markers, TBD, [insert ...])", () => {
+    expect(isPlaceholderBody("<sql payload here>")).toBe(true);
+    expect(isPlaceholderBody("<inject>")).toBe(true);
+    expect(isPlaceholderBody("q=<sql payload here>")).toBe(true);
+    expect(isPlaceholderBody('{ "q": "<inject>" }')).toBe(true);
+    expect(isPlaceholderBody('{ "cmd": "<command here>" }')).toBe(true);
+    expect(isPlaceholderBody("[your payload]")).toBe(true);
+    expect(isPlaceholderBody("TBD")).toBe(true);
+    expect(isPlaceholderBody("<smuggled body here>")).toBe(true);
+  });
+
+  it("does not flag real exploit payloads", () => {
+    expect(isPlaceholderBody("q=' UNION SELECT password FROM users--")).toBe(false);
+    expect(isPlaceholderBody("id=1; cat /etc/passwd")).toBe(false);
+    expect(isPlaceholderBody('{"$ne": null}')).toBe(false);
+    expect(isPlaceholderBody("name=admin' OR 1=1--")).toBe(false);
+    expect(isPlaceholderBody("")).toBe(false);
+  });
+});
+
+describe("evaluateRawHttpRequest — placeholder body detection", () => {
+  it("flags a request with real headers but a placeholder body", () => {
+    const r = evaluateRawHttpRequest(SLOP_SQLI_PLACEHOLDER_BODY_FIXTURE);
+    expect(r.placeholderBodies).toBeGreaterThanOrEqual(1);
+    expect(r.placeholderBodyRanges.length).toBeGreaterThanOrEqual(1);
+    // The header check shouldn't fire (Host/Content-Type/Length are real).
+    expect(r.placeholderHeaders).toBe(0);
+    // …but the placeholder-body check on its own marks the bytes as fake.
+    expect(r.isFake).toBe(true);
+    expect(r.reason).toMatch(/body is a placeholder/i);
+  });
+
+  it("does not flag a request whose body is a real exploit payload", () => {
+    const r = evaluateRawHttpRequest(LEGIT_INJECTION_FIXTURE);
+    expect(r.placeholderBodies).toBe(0);
+    expect(r.placeholderBodyRanges).toEqual([]);
+  });
+
+  it("strips the placeholder body byte range from the surrounding text", () => {
+    const r = evaluateRawHttpRequest(SLOP_SQLI_PLACEHOLDER_BODY_FIXTURE);
+    const stripped = stripPlaceholderBodies(SLOP_SQLI_PLACEHOLDER_BODY_FIXTURE, r);
+    expect(stripped).not.toContain("<sql payload here>");
+    // Surrounding prose / headers survive.
+    expect(stripped).toContain("# Critical SQL injection");
+    expect(stripped).toContain("Host: shop.example.com");
+  });
+});
+
+describe("runEngine2Avri — INJECTION placeholder-body integration", () => {
+  it("revokes concrete_payload when the only payload is a SQLi placeholder body", () => {
+    const sig = extractSignals(SLOP_SQLI_PLACEHOLDER_BODY_FIXTURE);
+    const result = runEngine2Avri(sig, SLOP_SQLI_PLACEHOLDER_BODY_FIXTURE, INJ);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeIndObj = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeIndObj?.explanation).toMatch(/INJECTION/);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    // request-line `POST /search HTTP/1.1` only carries the endpoint, no
+    // ?param=, so specific_endpoint_param doesn't fire here either.
+  });
+
+  it("revokes both payload-class gold signals for a command-injection placeholder body", () => {
+    const sig = extractSignals(SLOP_CMDI_PLACEHOLDER_BODY_FIXTURE);
+    const result = runEngine2Avri(sig, SLOP_CMDI_PLACEHOLDER_BODY_FIXTURE, INJ);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    expect(survivingIds).not.toContain("vulnerable_query_construction");
+  });
+
+  it("keeps concrete_payload when prose carries a real payload alongside the placeholder body", () => {
+    // Same shape as the SQLi placeholder fixture, but the prose names a
+    // real `' UNION SELECT password FROM users--` payload outside the
+    // request bytes — that match must survive the body-stripping pass.
+    const fixture = [
+      "# SQL injection on POST /search",
+      "",
+      "Payload `' UNION SELECT password FROM users--` returns the full",
+      "user table. CWE-89.",
+      "",
+      "```http",
+      "POST /search HTTP/1.1",
+      "Host: shop.example.com",
+      "Content-Type: application/x-www-form-urlencoded",
+      "Content-Length: 27",
+      "",
+      "q=<sql payload here>",
+      "```",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, INJ);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).toContain("concrete_payload");
   });
 });

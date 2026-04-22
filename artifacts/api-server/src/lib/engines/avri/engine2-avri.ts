@@ -12,7 +12,13 @@ import type { EngineResult, TriggeredIndicator, Verdict } from "../engines";
 import { runEngine2 as runEngine2Legacy } from "../engines";
 import type { FamilyRubric } from "./families";
 import { evaluateCrashTrace, crashTraceGoldSignalIdsFor, type CrashTraceEvaluation } from "./crash-trace";
-import { evaluateRawHttpRequest, rawHttpGoldSignalIdsFor, type RawHttpEvaluation } from "./raw-http";
+import {
+  evaluateRawHttpRequest,
+  rawHttpGoldSignalIdsFor,
+  rawHttpBodyPayloadGoldSignalIdsFor,
+  stripPlaceholderBodies,
+  type RawHttpEvaluation,
+} from "./raw-http";
 
 const ABSENCE_PENALTY_CAP = 12;
 /** Out-of-cap penalty applied to crash-/race-trace-bearing reports whose
@@ -204,6 +210,45 @@ export function runEngine2Avri(
       }
       goldHits.length = 0;
       goldHits.push(...remaining);
+    }
+
+    // Body-payload revocation: even if the request bytes don't trip the
+    // header/CRLF/TE-CL checks above, a placeholder body (`q=<sql payload
+    // here>`, `{ "q": "<inject>" }`) means any payload-class gold signal
+    // (`concrete_payload`, `vulnerable_query_construction` for INJECTION)
+    // whose match ONLY appears inside that body should be revoked. The
+    // signal pattern is re-tested against text with placeholder bodies
+    // stripped — if it still matches (because the prose carries the real
+    // payload too), the gold point survives.
+    const bodyPayloadIds = rawHttpBodyPayloadGoldSignalIdsFor(family.id);
+    if (bodyPayloadIds && rawHttp.placeholderBodyRanges.length > 0) {
+      const stripped = stripPlaceholderBodies(fullText, rawHttp);
+      const remaining: typeof goldHits = [];
+      for (const hit of goldHits) {
+        if (bodyPayloadIds.has(hit.id)) {
+          const sigDef = family.goldSignals.find((g) => g.id === hit.id);
+          if (sigDef && !sigDef.pattern.test(stripped)) {
+            revokedRawHttpHits.push(hit);
+            goldTotal -= hit.points;
+            continue;
+          }
+        }
+        remaining.push(hit);
+      }
+      goldHits.length = 0;
+      goldHits.push(...remaining);
+      // If the placeholder-body revocation kicked in but the surrounding
+      // header check didn't, mark the evaluation fake so the FAKE_RAW_HTTP
+      // indicator and out-of-cap penalty fire too.
+      if (!rawHttp.isFake && revokedRawHttpHits.length > 0) {
+        rawHttp = {
+          ...rawHttp,
+          isFake: true,
+          reason:
+            rawHttp.reason ??
+            `Raw HTTP request body is a placeholder (${rawHttp.placeholderBodies}/${rawHttp.requestsAnalyzed} request block(s))`,
+        };
+      }
     }
   }
 

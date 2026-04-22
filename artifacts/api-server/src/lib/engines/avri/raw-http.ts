@@ -50,6 +50,15 @@ export interface RawHttpEvaluation {
   /** Of those, how many carry a fabricated credential value (empty /
    * placeholder-claim JWT, no-entropy signature, all-zero cookie, etc). */
   fakeCredentialHeaders: number;
+  /** Number of detected request blocks whose body content is itself a
+   * placeholder (e.g. "<sql payload here>", `q=<inject>`, `{ "q": "<inject>" }`).
+   * Real exploit payloads never contain `<...>` slot markers, so a body made
+   * up of those is evidence the "payload" was never actually sent. */
+  placeholderBodies: number;
+  /** Byte ranges (start, end half-open) of bodies that look like placeholders.
+   * Used by the AVRI engine to revoke payload-class gold signals whose only
+   * match was inside one of these bodies. */
+  placeholderBodyRanges: ReadonlyArray<{ start: number; end: number }>;
   /** True iff the raw request bytes look fabricated. */
   isFake: boolean;
   /** Human-readable explanation, set when isFake. */
@@ -268,6 +277,47 @@ function inspectCredentialHeader(name: string, value: string): string | null {
   return inspectOpaqueToken(`${name} header`, v);
 }
 
+// Vocabulary that, when seen inside a `<...>` slot in a request body, marks
+// that slot as a placeholder rather than a real attacker-supplied byte. Real
+// SQLi / cmd / NoSQL / LDAP / template payloads never contain `<...>` slot
+// markers — when a slop author "shows" a payload they reach for these.
+const BODY_PLACEHOLDER_KEYWORDS =
+  /(?:payload|inject|sqli?|cmd|command|shell|body|here|placeholder|insert|fill|target|host|value|your|jwt|token|hex|crlf|length|chunked|smuggled|attack(?:er)?|victim|exploit|malicious|user[\s_-]?input|param(?:eter)?|fixme|todo|tbd|secret|admin|password|hash|nosql|ldap|template|xpath|xxe|filename|filepath|file[\s_-]?path)/i;
+
+/** True iff the request body content looks like a placeholder rather than an
+ * actual attacker payload. Detects the common slop shapes:
+ *   - whole body is `<sql payload here>` / `<inject>` / `<request body here>`
+ *   - form body whose every value is `<inject>`: `q=<sql payload here>`
+ *   - JSON body whose every value is a `<...>` slot: `{ "q": "<inject>" }`
+ *   - bare TBD/TODO/FIXME bodies
+ *
+ * A real exploit body (`q=' UNION SELECT password FROM users--`,
+ * `id=1; cat /etc/passwd`, `{"$ne": null}`) returns false. */
+export function isPlaceholderBody(body: string): boolean {
+  const trimmed = body.trim();
+  if (trimmed.length === 0) return false;
+  // Bare admit-this-is-a-placeholder body.
+  if (/^(?:tbd|todo|fixme|placeholder|n\/?a)$/i.test(trimmed)) return true;
+  // [your payload] / [insert here] style square-bracket placeholders.
+  if (/\[(?:your|insert|placeholder|fill|todo|tbd|payload|inject|here)\b[^\]]*\]/i.test(trimmed)) {
+    return true;
+  }
+  // Find every angle-bracketed token in the body. Real exploit payloads
+  // don't contain `<foo>` slot markers (XSS payloads do, but XSS is the
+  // WEB_CLIENT family — INJECTION bodies don't carry HTML).
+  const angle = trimmed.match(/<[^>\n]{1,80}>/g);
+  if (!angle || angle.length === 0) return false;
+  for (const tok of angle) {
+    const inner = tok.slice(1, -1).trim();
+    if (inner.length === 0) continue;
+    // Slot whose inner text is a slop-vocabulary word — clearly a placeholder.
+    if (BODY_PLACEHOLDER_KEYWORDS.test(inner)) return true;
+    // Bare short identifier slot (`<foo>`, `<bar>`) — also a placeholder.
+    if (/^[a-z][a-z0-9_\-\s]{0,30}$/i.test(inner)) return true;
+  }
+  return false;
+}
+
 interface RequestBlock {
   /** Offset in `text` of the start of the request-line. */
   start: number;
@@ -312,6 +362,8 @@ export function evaluateRawHttpRequest(
       teClBroken: 0,
       credentialHeaders: 0,
       fakeCredentialHeaders: 0,
+      placeholderBodies: 0,
+      placeholderBodyRanges: [],
       isFake: false,
       reason: null,
     };
@@ -327,6 +379,8 @@ export function evaluateRawHttpRequest(
   let credentialHeaders = 0;
   let fakeCredentialHeaders = 0;
   let firstFakeCredentialReason: string | null = null;
+  let placeholderBodies = 0;
+  const placeholderBodyRanges: Array<{ start: number; end: number }> = [];
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -334,9 +388,29 @@ export function evaluateRawHttpRequest(
       i + 1 < blocks.length ? blocks[i + 1].start : text.length;
     const headerSection = text.slice(block.headerStart, nextBound);
     // Header section ends at the first blank line (CRLF CRLF or LF LF).
-    const blankIdx = headerSection.search(/\r?\n\r?\n/);
+    const blankMatch = /\r?\n\r?\n/.exec(headerSection);
+    const blankIdx = blankMatch ? blankMatch.index : -1;
     const headerOnly =
       blankIdx >= 0 ? headerSection.slice(0, blankIdx) : headerSection;
+
+    // Body section: everything after the blank-line terminator and before
+    // the next request-block, bounded by a closing markdown fence (``` on
+    // its own line) when present so we don't slurp surrounding prose.
+    if (blankIdx >= 0 && blankMatch) {
+      const bodyStart =
+        block.headerStart + blankIdx + blankMatch[0].length;
+      let bodyEnd = nextBound;
+      const bodySlice = text.slice(bodyStart, bodyEnd);
+      const fenceIdx = bodySlice.search(/(^|\n)```/);
+      if (fenceIdx >= 0) {
+        bodyEnd = bodyStart + fenceIdx;
+      }
+      const body = text.slice(bodyStart, bodyEnd);
+      if (isPlaceholderBody(body)) {
+        placeholderBodies++;
+        placeholderBodyRanges.push({ start: bodyStart, end: bodyEnd });
+      }
+    }
 
     // CRLF check: look at the request-line + headers chunk in the original
     // text. We require at least 2 line breaks (request-line + one header)
@@ -433,6 +507,13 @@ export function evaluateRawHttpRequest(
     // the audit.
     isFake = true;
     reason = firstFakeCredentialReason;
+  } else if (placeholderBodies > 0 && placeholderBodies === blocks.length) {
+    // Every detected request block has a placeholder body (`<sql payload
+    // here>`, `q=<inject>`, `{ "q": "<inject>" }`). The request bytes are
+    // fabricated even if the headers happen to look real — a reporter
+    // who actually sent the payload would paste the bytes that were sent.
+    isFake = true;
+    reason = `Raw HTTP request body is a placeholder (${placeholderBodies}/${blocks.length} request block(s))`;
   }
 
   return {
@@ -444,9 +525,36 @@ export function evaluateRawHttpRequest(
     teClBroken,
     credentialHeaders,
     fakeCredentialHeaders,
+    placeholderBodies,
+    placeholderBodyRanges,
     isFake,
     reason,
   };
+}
+
+/** Return `text` with every placeholder-body byte range replaced by a single
+ * space. Used by the AVRI engine to re-evaluate payload-class gold signals
+ * (`concrete_payload`, `vulnerable_query_construction`) after the raw-HTTP
+ * validator has flagged a body as a placeholder: if the signal pattern only
+ * matched inside that body, the gold point must be revoked. */
+export function stripPlaceholderBodies(
+  text: string,
+  evaluation: RawHttpEvaluation,
+): string {
+  if (evaluation.placeholderBodyRanges.length === 0) return text;
+  const ranges = [...evaluation.placeholderBodyRanges].sort(
+    (a, b) => a.start - b.start,
+  );
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const r of ranges) {
+    if (r.start < cursor) continue;
+    parts.push(text.slice(cursor, r.start));
+    parts.push(" ");
+    cursor = r.end;
+  }
+  parts.push(text.slice(cursor));
+  return parts.join("");
 }
 
 /** Per-family map of gold-signal IDs whose value depends on the raw HTTP
@@ -497,4 +605,33 @@ export function rawHttpGoldSignalIdsFor(
   familyId: string,
 ): ReadonlySet<string> | null {
   return RAW_HTTP_GOLD_SIGNAL_IDS_BY_FAMILY[familyId] ?? null;
+}
+
+/** Per-family map of gold-signal IDs that are payload-class — they reward a
+ * concrete attacker payload or unsafe sink construction (`concrete_payload`,
+ * `vulnerable_query_construction` in the INJECTION rubric). These signals
+ * match against the full report text, so they can be earned from prose or
+ * from the body of a placeholder POST (e.g. `q=<sql payload here>`). When
+ * the raw-HTTP validator flags a request body as a placeholder, these IDs
+ * are re-evaluated against the body-stripped text — if the signal pattern
+ * no longer matches, the gold point must be revoked because the only
+ * "payload" was the placeholder body.
+ *
+ * INJECTION: `concrete_payload` and `vulnerable_query_construction` are the
+ *   two payload-class gold signals. A slop SQLi/cmd report whose POST body
+ *   is `<sql payload here>` / `cmd=<command>` shouldn't earn either point
+ *   when no real payload appears anywhere in the prose. */
+export const RAW_HTTP_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  INJECTION: new Set([
+    "concrete_payload",
+    "vulnerable_query_construction",
+  ]),
+};
+
+export function rawHttpBodyPayloadGoldSignalIdsFor(
+  familyId: string,
+): ReadonlySet<string> | null {
+  return RAW_HTTP_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY[familyId] ?? null;
 }
