@@ -510,6 +510,9 @@ interface ArchetypeHistorySnapshot {
   avriOnMax: number;
   minDistanceToCeiling: number;
   ceiling: number;
+  // Task #92 — true when the row is a daily roll-up of older snapshots
+  // produced by the archetype-history compaction pass.
+  aggregated?: boolean;
 }
 
 interface ArchetypeHistoryResponse {
@@ -545,19 +548,65 @@ function HeadroomSparkline({ snapshots, ceiling }: {
   const lastX = PAD + (W - 2 * PAD);
   const lastY = PAD + (1 - (Math.max(0, Math.min(ceiling, last)) - yMin) / (yMax - yMin)) * (H - 2 * PAD);
   const stroke = last < 5 ? "#f87171" : last < 10 ? "#facc15" : "#34d399";
-  const tooltip = `${snapshots.length} snapshots: ${ys[0]!.toFixed(1)}pt → ${last.toFixed(1)}pt headroom`;
+
+  // Task #92 — older snapshots are down-sampled to one daily row per
+  // archetype. Render the aggregated prefix as a dashed segment so
+  // reviewers can tell raw recent points from rolled-up history at a
+  // glance. Both segments share the boundary point so the line is
+  // continuous.
+  const aggregatedCount = snapshots.filter(s => s.aggregated).length;
+  const rawCount = snapshots.length - aggregatedCount;
+  // Find the actual transition index by scanning the ordered snapshots
+  // rather than relying on the count alone — this stays correct even if
+  // upstream ordering ever interleaves aggregated/raw rows.
+  const firstRawIdx = snapshots.findIndex(s => !s.aggregated);
+  let aggregatedPoints: string[] = [];
+  let rawPoints: string[] = [];
+  if (firstRawIdx === -1) {
+    aggregatedPoints = points;
+  } else if (firstRawIdx === 0) {
+    rawPoints = points;
+  } else {
+    // Share the boundary point so the two segments connect visually.
+    aggregatedPoints = points.slice(0, firstRawIdx + 1);
+    rawPoints = points.slice(firstRawIdx);
+  }
+
+  const parts: string[] = [];
+  if (aggregatedCount > 0) {
+    parts.push(`${aggregatedCount} daily aggregate${aggregatedCount === 1 ? "" : "s"}`);
+  }
+  if (rawCount > 0 || aggregatedCount === 0) {
+    parts.push(`${rawCount} recent`);
+  }
+  const tooltip = `${parts.join(" + ")}: ${ys[0]!.toFixed(1)}pt → ${last.toFixed(1)}pt headroom`;
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-24 h-7" role="img" aria-label={tooltip}>
       <title>{tooltip}</title>
       <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />
-      <polyline
-        fill="none"
-        stroke={stroke}
-        strokeWidth={1.25}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={points.join(" ")}
-      />
+      {aggregatedPoints.length >= 2 && (
+        <polyline
+          fill="none"
+          stroke={stroke}
+          strokeOpacity={0.6}
+          strokeWidth={1.25}
+          strokeDasharray="2 1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={aggregatedPoints.join(" ")}
+        />
+      )}
+      {rawPoints.length >= 2 && (
+        <polyline
+          fill="none"
+          stroke={stroke}
+          strokeWidth={1.25}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={rawPoints.join(" ")}
+        />
+      )}
       <circle cx={lastX} cy={lastY} r={1.6} fill={stroke} />
     </svg>
   );
