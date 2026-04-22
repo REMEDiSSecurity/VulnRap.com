@@ -96,7 +96,20 @@ function findRequestBlocks(text: string): RequestBlock[] {
   return out;
 }
 
-export function evaluateRawHttpRequest(text: string): RawHttpEvaluation {
+export interface RawHttpEvaluationOptions {
+  /** When true, an LF-only multi-header request block is treated as
+   * fake (smuggling depends on byte-precise framing). When false (the
+   * default for AUTHN_AUTHZ / INJECTION), LF-only blocks are tolerated
+   * because markdown transcription routinely strips CRLFs and those
+   * families don't depend on byte-precise framing. */
+  strictCrlf?: boolean;
+}
+
+export function evaluateRawHttpRequest(
+  text: string,
+  options: RawHttpEvaluationOptions = {},
+): RawHttpEvaluation {
+  const strictCrlf = options.strictCrlf ?? false;
   const blocks = findRequestBlocks(text);
   if (blocks.length === 0) {
     return {
@@ -184,7 +197,7 @@ export function evaluateRawHttpRequest(text: string): RawHttpEvaluation {
     isFake = true;
     reason =
       "Claimed TE/CL conflict has incoherent values (Content-Length is not a plain integer or Transfer-Encoding is not \"chunked\")";
-  } else if (crlfRequired && !crlfPresent && totalHeaders >= 2) {
+  } else if (strictCrlf && crlfRequired && !crlfPresent && totalHeaders >= 2) {
     // Smuggling depends on byte-precise framing. A request-shaped block
     // that spans multiple header lines without a single CRLF is either
     // fabricated (slop pasted with `\n` only) or has been transcribed in
@@ -223,6 +236,22 @@ export function evaluateRawHttpRequest(text: string): RawHttpEvaluation {
  *   be revoked. Other family signals (`specific_proxy_or_server`,
  *   `cwe_correct_class`) survive because they reflect knowledge that
  *   slop authors can also fake but that don't depend on the raw bytes.
+ *
+ * AUTHN_AUTHZ: `authorization_header_swap` matches Authorization /
+ *   Set-Cookie / sessionid header lines, which are exactly the bytes a
+ *   slop author fabricates when they paste a fake `Authorization:
+ *   Bearer <jwt-token-here>` or `Cookie: sessionid=XXXX` block. When the
+ *   surrounding raw HTTP request is placeholder-padded the header swap
+ *   is fake too. Prose-grounded signals (`two_account_proof`,
+ *   `policy_or_check_function`, `cwe_correct_class`, `idor_object_id`,
+ *   `specific_endpoint`) survive.
+ *
+ * INJECTION: `specific_endpoint_param` is the only injection gold signal
+ *   tied to the request-line bytes (`POST /endpoint?param=` shape). A
+ *   slop report that pastes a fake POST request with placeholder headers
+ *   and a `<payload here>` body shouldn't earn this point; injection
+ *   payload / sink-construction signals stay because they can be
+ *   substantiated in code or prose independently of the raw bytes.
  */
 export const RAW_HTTP_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
   Record<string, ReadonlySet<string>>
@@ -231,6 +260,12 @@ export const RAW_HTTP_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
     "raw_http_request",
     "te_or_cl_conflict",
     "smuggled_second_request",
+  ]),
+  AUTHN_AUTHZ: new Set([
+    "authorization_header_swap",
+  ]),
+  INJECTION: new Set([
+    "specific_endpoint_param",
   ]),
 };
 

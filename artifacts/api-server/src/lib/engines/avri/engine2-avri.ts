@@ -170,20 +170,28 @@ export function runEngine2Avri(
       goldHits.push(...remaining);
     }
   }
-  // 1c. Raw-HTTP-bytes validation. REQUEST_SMUGGLING gold signals
-  // (`raw_http_request`, `te_or_cl_conflict`, `smuggled_second_request`)
-  // all match purely structural regexes against the pasted bytes; if
-  // those bytes are placeholder-padded, missing CRLFs, or carry a TE/CL
-  // conflict whose values aren't actually coherent, the matched gold
+  // 1c. Raw-HTTP-bytes validation. Several families award gold points
+  // for signals that match purely structural regexes against pasted HTTP
+  // request bytes — REQUEST_SMUGGLING (`raw_http_request`,
+  // `te_or_cl_conflict`, `smuggled_second_request`), AUTHN_AUTHZ
+  // (`authorization_header_swap` — Authorization/Cookie headers), and
+  // INJECTION (`specific_endpoint_param` — request-line + parameter).
+  // If those bytes are placeholder-padded, missing CRLFs, or carry a
+  // TE/CL conflict whose values aren't coherent, the matched gold
   // points must be revoked so a polished slop report can't pad its way
   // past the gold threshold on fake HTTP request bytes. Runs for any
-  // family whose rubric declares raw-HTTP-byte gold signals (currently
-  // REQUEST_SMUGGLING only).
+  // family whose rubric declares raw-HTTP-byte gold signals.
   let rawHttp: RawHttpEvaluation | null = null;
   const revokedRawHttpHits: Array<{ id: string; description: string; points: number }> = [];
   const rawHttpGoldIds = rawHttpGoldSignalIdsFor(family.id);
   if (rawHttpGoldIds) {
-    rawHttp = evaluateRawHttpRequest(fullText);
+    // Strict CRLF only for REQUEST_SMUGGLING — that family explicitly
+    // depends on byte-precise framing. AUTHN_AUTHZ / INJECTION reports
+    // routinely lose CRLFs in markdown transcription and shouldn't be
+    // flagged on that signal alone.
+    rawHttp = evaluateRawHttpRequest(fullText, {
+      strictCrlf: family.id === "REQUEST_SMUGGLING",
+    });
     if (rawHttp.isFake) {
       const remaining: typeof goldHits = [];
       for (const hit of goldHits) {
@@ -311,7 +319,7 @@ export function runEngine2Avri(
       signal: "FAKE_RAW_HTTP",
       value: `${rawHttp.requestsAnalyzed}r/${rawHttp.totalHeaders - rawHttp.placeholderHeaders}g/${rawHttp.placeholderHeaders}p`,
       strength: "HIGH",
-      explanation: `${rawHttp.reason ?? "Fabricated raw HTTP request"} (-${FAKE_RAW_HTTP_PENALTY}; revoked ${revokedRawHttpHits.length} smuggling gold signal(s))`,
+      explanation: `${rawHttp.reason ?? "Fabricated raw HTTP request"} (-${FAKE_RAW_HTTP_PENALTY}; revoked ${revokedRawHttpHits.length} ${family.id} gold signal(s))`,
     });
   }
   // Keep a couple of legacy indicators for continuity.
