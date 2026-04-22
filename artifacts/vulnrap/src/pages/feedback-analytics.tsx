@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey,
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
@@ -502,6 +502,83 @@ interface TestRunResponse {
   archetypes?: ArchetypeRow[];
 }
 
+interface ArchetypeHistorySnapshot {
+  timestamp: string;
+  archetype: string;
+  count: number;
+  avriOnMean: number;
+  avriOnMax: number;
+  minDistanceToCeiling: number;
+  ceiling: number;
+}
+
+interface ArchetypeHistoryResponse {
+  totalSnapshots: number;
+  archetypes: Array<{ archetype: string; snapshots: ArchetypeHistorySnapshot[] }>;
+}
+
+function HeadroomSparkline({ snapshots, ceiling }: {
+  snapshots: ArchetypeHistorySnapshot[];
+  ceiling: number;
+}) {
+  if (snapshots.length < 2) {
+    return (
+      <span className="text-[10px] text-muted-foreground/50 italic">
+        {snapshots.length === 1 ? "1 snapshot" : "no history"}
+      </span>
+    );
+  }
+  const W = 100;
+  const H = 28;
+  const PAD = 2;
+  const ys = snapshots.map(s => s.minDistanceToCeiling);
+  // Y-axis fixed to [0, ceiling] so multiple sparklines compare visually.
+  const yMin = 0;
+  const yMax = ceiling;
+  const points = ys.map((y, i) => {
+    const x = PAD + (i / (ys.length - 1)) * (W - 2 * PAD);
+    const norm = Math.max(yMin, Math.min(yMax, y));
+    const py = PAD + (1 - (norm - yMin) / (yMax - yMin)) * (H - 2 * PAD);
+    return `${x.toFixed(1)},${py.toFixed(1)}`;
+  });
+  const last = ys[ys.length - 1]!;
+  const lastX = PAD + (W - 2 * PAD);
+  const lastY = PAD + (1 - (Math.max(0, Math.min(ceiling, last)) - yMin) / (yMax - yMin)) * (H - 2 * PAD);
+  const stroke = last < 5 ? "#f87171" : last < 10 ? "#facc15" : "#34d399";
+  const tooltip = `${snapshots.length} snapshots: ${ys[0]!.toFixed(1)}pt → ${last.toFixed(1)}pt headroom`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-24 h-7" role="img" aria-label={tooltip}>
+      <title>{tooltip}</title>
+      <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />
+      <polyline
+        fill="none"
+        stroke={stroke}
+        strokeWidth={1.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points.join(" ")}
+      />
+      <circle cx={lastX} cy={lastY} r={1.6} fill={stroke} />
+    </svg>
+  );
+}
+
+/**
+ * Compute the recent decline in headroom, in composite points. Positive
+ * value means the latest snapshot has shrunk vs. the older comparison
+ * window (worst-case, most regression-y direction).
+ */
+function recentHeadroomDecline(snapshots: ArchetypeHistorySnapshot[]): number {
+  if (snapshots.length < 2) return 0;
+  // Compare current minDistanceToCeiling to the max observed in the
+  // earlier half of the window — picks up the worst regression rather
+  // than just the prior snapshot.
+  const cur = snapshots[snapshots.length - 1]!.minDistanceToCeiling;
+  const earlier = snapshots.slice(0, Math.max(1, Math.floor(snapshots.length / 2)));
+  const prevBest = Math.max(...earlier.map(s => s.minDistanceToCeiling));
+  return Number((prevBest - cur).toFixed(1));
+}
+
 const ARCHETYPE_LABELS: Record<string, string> = {
   fabricated_diff: "Fabricated diff",
   paraphrased_cve: "Paraphrased CVE",
@@ -510,7 +587,17 @@ const ARCHETYPE_LABELS: Record<string, string> = {
   prose_poc: "Prose PoC",
 };
 
-function ArchetypeRowView({ row, threshold }: { row: ArchetypeRow; threshold: number }) {
+function ArchetypeRowView({
+  row,
+  threshold,
+  history,
+  declineThreshold,
+}: {
+  row: ArchetypeRow;
+  threshold: number;
+  history: ArchetypeHistorySnapshot[];
+  declineThreshold: number;
+}) {
   const tight = row.minDistanceToCeiling < threshold;
   const label = ARCHETYPE_LABELS[row.archetype] ?? row.archetype;
   const worst = row.fixtures.reduce<ArchetypeFixture | null>(
@@ -523,21 +610,29 @@ function ArchetypeRowView({ row, threshold }: { row: ArchetypeRow; threshold: nu
       ? "text-yellow-400"
       : "text-green-400";
 
+  const decline = recentHeadroomDecline(history);
+  const shrinking = history.length >= 2 && decline >= declineThreshold;
+
   return (
     <div
       className={cn(
         "py-3 border-b border-border/20 last:border-0",
-        tight && "bg-red-500/5 -mx-4 px-4 rounded",
+        (tight || shrinking) && "bg-red-500/5 -mx-4 px-4 rounded",
       )}
     >
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-foreground">{label}</span>
             <code className="text-[10px] font-mono text-muted-foreground/60">{row.archetype}</code>
             {tight && (
               <Badge variant="outline" className="text-[10px] gap-1 text-red-400 bg-red-400/10 border-red-400/30">
                 <AlertTriangle className="w-3 h-3" /> Tight headroom
+              </Badge>
+            )}
+            {shrinking && (
+              <Badge variant="outline" className="text-[10px] gap-1 text-orange-400 bg-orange-400/10 border-orange-400/30">
+                <TrendingUp className="w-3 h-3 rotate-180" /> Headroom shrinking −{decline.toFixed(1)}pt
               </Badge>
             )}
           </div>
@@ -551,7 +646,16 @@ function ArchetypeRowView({ row, threshold }: { row: ArchetypeRow; threshold: nu
                 <span className="tabular-nums">{worst.avriOnScore.toFixed(1)}</span>
               </>
             )}
+            {history.length > 0 && (
+              <>
+                {" · "}
+                <span className="tabular-nums">{history.length}</span> snapshot{history.length === 1 ? "" : "s"}
+              </>
+            )}
           </div>
+        </div>
+        <div className="w-24 shrink-0">
+          <HeadroomSparkline snapshots={history} ceiling={row.ceiling} />
         </div>
         <div className="text-right w-20">
           <div className="text-sm font-bold tabular-nums">{row.avriOnMean.toFixed(1)}</div>
@@ -573,10 +677,14 @@ function ArchetypeRowView({ row, threshold }: { row: ArchetypeRow; threshold: nu
   );
 }
 
+const ARCHETYPE_HISTORY_QUERY_KEY = ["test-run-archetype-history"] as const;
+
 function EmergingArchetypesSection() {
   const [threshold, setThreshold] = useState(5);
+  const [declineThreshold, setDeclineThreshold] = useState(5);
+  const queryClient = useQueryClient();
 
-  const { data, isLoading, isError } = useQuery<TestRunResponse>({
+  const { data, isLoading, isError, dataUpdatedAt } = useQuery<TestRunResponse>({
     queryKey: ["test-run-archetypes"],
     queryFn: async () => {
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -586,6 +694,31 @@ function EmergingArchetypesSection() {
     },
     refetchInterval: 300_000,
     retry: false,
+  });
+
+  // Invalidate the persisted-history query whenever a fresh /api/test/run
+  // result lands so the new snapshot appears in the sparkline immediately,
+  // rather than waiting for the 5-minute refetch tick.
+  useEffect(() => {
+    if (data) {
+      queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_QUERY_KEY });
+    }
+  }, [dataUpdatedAt, data, queryClient]);
+
+  // Sprint 13 — pull persisted per-archetype headroom snapshots so each row
+  // can render a sparkline alongside its current worst-score number.
+  const { data: historyData } = useQuery<ArchetypeHistoryResponse>({
+    queryKey: ARCHETYPE_HISTORY_QUERY_KEY,
+    queryFn: async () => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/test/archetype-history`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 300_000,
+    retry: false,
+    // Refetch right after a /test/run completes so the new snapshot lands.
+    enabled: !isError,
   });
 
   if (isLoading) {
@@ -599,7 +732,15 @@ function EmergingArchetypesSection() {
   }
 
   const rows = data.archetypes;
+  const historyByArchetype = new Map<string, ArchetypeHistorySnapshot[]>();
+  for (const a of historyData?.archetypes ?? []) {
+    historyByArchetype.set(a.archetype, a.snapshots);
+  }
   const tightCount = rows.filter(r => r.minDistanceToCeiling < threshold).length;
+  const shrinkingCount = rows.filter(r => {
+    const h = historyByArchetype.get(r.archetype) ?? [];
+    return h.length >= 2 && recentHeadroomDecline(h) >= declineThreshold;
+  }).length;
   const ceilingMax = rows.reduce((m, r) => Math.max(m, r.ceiling), 35);
 
   return (
@@ -615,33 +756,64 @@ function EmergingArchetypesSection() {
                 <AlertTriangle className="w-3 h-3" /> {tightCount} tight
               </Badge>
             )}
+            {shrinkingCount > 0 && (
+              <Badge variant="outline" className="text-[10px] gap-1 text-orange-400 bg-orange-400/10 border-orange-400/30">
+                <TrendingUp className="w-3 h-3 rotate-180" /> {shrinkingCount} shrinking
+              </Badge>
+            )}
           </CardTitle>
-          <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
-            <span>Alert below</span>
-            <input
-              type="number"
-              min={0}
-              max={ceilingMax}
-              step={1}
-              value={threshold}
-              onChange={e => {
-                const v = Number(e.target.value);
-                if (!Number.isNaN(v)) setThreshold(Math.max(0, Math.min(ceilingMax, v)));
-              }}
-              className="w-14 px-2 py-1 rounded-md bg-background border border-border text-foreground tabular-nums text-xs"
-            />
-            <span>pts</span>
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span>Alert below</span>
+              <input
+                type="number"
+                min={0}
+                max={ceilingMax}
+                step={1}
+                value={threshold}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  if (!Number.isNaN(v)) setThreshold(Math.max(0, Math.min(ceilingMax, v)));
+                }}
+                className="w-14 px-2 py-1 rounded-md bg-background border border-border text-foreground tabular-nums text-xs"
+              />
+              <span>pts</span>
+            </label>
+            <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span>Trend drop ≥</span>
+              <input
+                type="number"
+                min={1}
+                max={ceilingMax}
+                step={1}
+                value={declineThreshold}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  if (!Number.isNaN(v)) setDeclineThreshold(Math.max(1, Math.min(ceilingMax, v)));
+                }}
+                className="w-14 px-2 py-1 rounded-md bg-background border border-border text-foreground tabular-nums text-xs"
+              />
+              <span>pts</span>
+            </label>
+          </div>
         </div>
         <CardDescription>
           Each row groups the dev fixture battery by reviewer-facing slop archetype.
           Distance to ceiling is the worst-case AVRI-on composite vs. the LIKELY-INVALID
           cutoff (35) — small numbers mean the next regression could escape auto-rejection.
+          The sparkline plots persisted headroom over the last {historyData?.totalSnapshots ?? 0} run snapshots,
+          and rows where headroom shrank by ≥ {declineThreshold}pt are flagged.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {rows.map(r => (
-          <ArchetypeRowView key={r.archetype} row={r} threshold={threshold} />
+          <ArchetypeRowView
+            key={r.archetype}
+            row={r}
+            threshold={threshold}
+            declineThreshold={declineThreshold}
+            history={historyByArchetype.get(r.archetype) ?? []}
+          />
         ))}
       </CardContent>
     </Card>

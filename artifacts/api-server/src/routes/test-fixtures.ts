@@ -10,6 +10,10 @@ import { analyzeWithEnginesTraced } from "../lib/engines";
 import { generateTriageRecommendation } from "../lib/triage-recommendation";
 import { performActiveVerification } from "../lib/active-verification";
 import { classifyReport } from "../lib/engines/avri";
+import {
+  appendArchetypeSnapshots,
+  readArchetypeHistory,
+} from "../lib/archetype-history";
 
 const router: IRouter = Router();
 
@@ -1991,12 +1995,33 @@ router.get("/test/run", async (_req, res) => {
     };
   });
 
+  // Sprint 13 — persist a per-archetype snapshot for the trend dashboard.
+  // Wrapped in try/catch because /api/test/run must keep returning a valid
+  // payload even if the data directory is read-only on the runner.
+  const snapshotTimestamp = new Date().toISOString();
+  try {
+    await appendArchetypeSnapshots(
+      archetypes.map(a => ({
+        archetype: a.archetype,
+        count: a.count,
+        avriOnMean: a.avriOnMean,
+        avriOnMax: a.avriOnMax,
+        minDistanceToCeiling: a.minDistanceToCeiling,
+        ceiling: a.ceiling,
+      })),
+      snapshotTimestamp,
+    );
+  } catch {
+    // Persistence failures are non-fatal for the dev smoke endpoint.
+  }
+
   res.json({
     fixtureCount: FIXTURES.length,
     passed: allFixturesPassed && gap >= 25,
     results,
     summary,
     archetypes,
+    archetypeSnapshotTimestamp: snapshotTimestamp,
     successMetrics: {
       legitMean: t1Mean,
       slopMean: t3Mean,
@@ -2006,6 +2031,31 @@ router.get("/test/run", async (_req, res) => {
       target: ">= 25pt gap between T1_LEGIT and T3_SLOP composite means; every fixture must pass its composite + Engine 2 + triage assertions",
     },
     avriComparison,
+  });
+});
+
+// Sprint 13 — historical per-archetype headroom snapshots for the
+// calibration dashboard sparklines. Dev-only, mirrors /api/test/run gating.
+router.get("/test/archetype-history", async (_req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not available in production." });
+    return;
+  }
+  const file = await readArchetypeHistory();
+  // Group by archetype so the UI can render one trend per row without
+  // re-walking the flat list. Snapshots are emitted in chronological
+  // order so the consumer can read .at(-1) for "current".
+  const byArchetype = new Map<string, typeof file.snapshots>();
+  for (const snap of file.snapshots) {
+    if (!byArchetype.has(snap.archetype)) byArchetype.set(snap.archetype, []);
+    byArchetype.get(snap.archetype)!.push(snap);
+  }
+  const archetypes = Array.from(byArchetype.entries())
+    .map(([archetype, snapshots]) => ({ archetype, snapshots }))
+    .sort((a, b) => a.archetype.localeCompare(b.archetype));
+  res.json({
+    totalSnapshots: file.snapshots.length,
+    archetypes,
   });
 });
 

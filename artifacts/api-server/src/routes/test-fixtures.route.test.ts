@@ -4,10 +4,12 @@
 // per-fixture AVRI on/off + distance-to-ceiling fields that calibration
 // consumers depend on.
 import http from "node:http";
+import path from "node:path";
+import os from "node:os";
+import { promises as fs } from "node:fs";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import testFixturesRouter from "./test-fixtures";
 
 interface ArchetypeFixture {
   id: string;
@@ -38,10 +40,15 @@ interface TestRunResponse {
 
 let server: http.Server;
 let baseUrl: string;
+let tmpDir: string;
 const previousNodeEnv = process.env.NODE_ENV;
+const previousHistoryPath = process.env.ARCHETYPE_HISTORY_PATH;
 
 beforeAll(async () => {
   delete process.env.NODE_ENV; // route 404s in production
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "archetype-history-"));
+  process.env.ARCHETYPE_HISTORY_PATH = path.join(tmpDir, "archetype-history.json");
+  const { default: testFixturesRouter } = await import("./test-fixtures");
   const app = express();
   app.use("/api", testFixturesRouter);
   await new Promise<void>(resolve => {
@@ -54,8 +61,26 @@ beforeAll(async () => {
 afterAll(async () => {
   if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = previousNodeEnv;
+  if (previousHistoryPath === undefined) delete process.env.ARCHETYPE_HISTORY_PATH;
+  else process.env.ARCHETYPE_HISTORY_PATH = previousHistoryPath;
   await new Promise<void>(resolve => server.close(() => resolve()));
+  try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
 });
+
+function fetchJson<T>(urlPath: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    http
+      .get(`${baseUrl}${urlPath}`, res => {
+        const chunks: Buffer[] = [];
+        res.on("data", c => chunks.push(c));
+        res.on("end", () => {
+          try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8"))); }
+          catch (err) { reject(err); }
+        });
+      })
+      .on("error", reject);
+  });
+}
 
 function fetchTestRun(): Promise<TestRunResponse> {
   return new Promise((resolve, reject) => {
@@ -137,4 +162,45 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
       ].sort(),
     );
   }, 60_000);
+});
+
+describe("GET /api/test/archetype-history — Sprint 13 trend persistence", () => {
+  interface HistoryRow {
+    timestamp: string;
+    archetype: string;
+    count: number;
+    avriOnMean: number;
+    avriOnMax: number;
+    minDistanceToCeiling: number;
+    ceiling: number;
+  }
+  interface HistoryResponse {
+    totalSnapshots: number;
+    archetypes: Array<{ archetype: string; snapshots: HistoryRow[] }>;
+  }
+
+  it("appends one snapshot per archetype on each /api/test/run and exposes the time series", async () => {
+    const before = await fetchJson<HistoryResponse>("/api/test/archetype-history");
+    const baselineCount = before.totalSnapshots;
+
+    await fetchTestRun();
+    await fetchTestRun();
+
+    const after = await fetchJson<HistoryResponse>("/api/test/archetype-history");
+    expect(after.totalSnapshots).toBe(baselineCount + after.archetypes.length * 2);
+
+    for (const a of after.archetypes) {
+      expect(a.snapshots.length).toBeGreaterThanOrEqual(2);
+      const last = a.snapshots[a.snapshots.length - 1]!;
+      expect(last.archetype).toBe(a.archetype);
+      expect(last.ceiling).toBe(35);
+      expect(typeof last.minDistanceToCeiling).toBe("number");
+      expect(typeof last.avriOnMean).toBe("number");
+      expect(typeof last.avriOnMax).toBe("number");
+      // Timestamps in chronological order.
+      const ts = a.snapshots.map(s => Date.parse(s.timestamp));
+      const sorted = [...ts].sort((x, y) => x - y);
+      expect(ts).toEqual(sorted);
+    }
+  }, 90_000);
 });
