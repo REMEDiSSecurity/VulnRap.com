@@ -223,22 +223,31 @@ function classifyByCwe(claimedCwes: string[] | undefined): ClassificationResult 
 function classifyByVulnType(text: string): ClassificationResult | null {
   const t = detectVulnerabilityType(text);
   if (!t) return null;
+  // Keys MUST match the labels emitted by detectVulnerabilityType in
+  // engines/extractors.ts (VULN_TYPE_PATTERNS). Past mismatches caused the
+  // off-family ceiling to misfire — the entries below are kept verbatim with
+  // the detector to make drift obvious.
   const map: Record<string, FamilyId | undefined> = {
-    "XSS": "WEB_CLIENT",
-    "SQL Injection": "INJECTION",
-    "Command Injection": "INJECTION",
-    "Path Traversal": "WEB_CLIENT",
-    "SSRF": "WEB_CLIENT",
-    "CSRF": "WEB_CLIENT",
-    "Open Redirect": "WEB_CLIENT",
-    "IDOR": "AUTHN_AUTHZ",
-    "Authentication Bypass": "AUTHN_AUTHZ",
-    "Authorization": "AUTHN_AUTHZ",
+    XSS: "WEB_CLIENT",
+    SQLi: "INJECTION",
+    SSRF: "WEB_CLIENT",
     "Buffer Overflow": "MEMORY_CORRUPTION",
     "Use After Free": "MEMORY_CORRUPTION",
+    "Path Traversal": "WEB_CLIENT",
+    "Auth Bypass": "AUTHN_AUTHZ",
+    CSRF: "WEB_CLIENT",
+    RCE: "INJECTION",
+    "Info Disclosure": "AUTHN_AUTHZ",
+    // Aliases kept for future detector outputs / tests.
+    "SQL Injection": "INJECTION",
+    "Command Injection": "INJECTION",
+    "Open Redirect": "WEB_CLIENT",
+    IDOR: "AUTHN_AUTHZ",
+    "Authentication Bypass": "AUTHN_AUTHZ",
+    Authorization: "AUTHN_AUTHZ",
     "Memory Corruption": "MEMORY_CORRUPTION",
-    "Deserialization": "DESERIALIZATION",
-    "Cryptographic": "CRYPTO",
+    Deserialization: "DESERIALIZATION",
+    Cryptographic: "CRYPTO",
     "Race Condition": "RACE_CONCURRENCY",
     "Request Smuggling": "REQUEST_SMUGGLING",
   };

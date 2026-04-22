@@ -87,11 +87,19 @@ export function runEngine3Avri(
   //    bonuses/penalties on top so the final score isn't perfectly flat.
   const citedFamily = classification.citedFamily;
   const evidenceFamily = classification.evidenceFamily;
-  const evidenceHighConf = classification.evidenceConfidence === "HIGH";
+  // Evidence confidence is MEDIUM when the vulnerability-type detector matched
+  // (a single canonical pattern hit) and HIGH-equivalent when the keyword
+  // fallback found ≥3 hits (still labelled MEDIUM by the classifier — see
+  // `classifyByKeywords`). Spec Part 4 says "high detection confidence" — we
+  // treat MEDIUM/HIGH as sufficient because the detector itself never returns
+  // HIGH for evidence-only paths; otherwise the off-family ceiling could
+  // never fire.
+  const evidenceConfidentEnough =
+    classification.evidenceConfidence === "HIGH" || classification.evidenceConfidence === "MEDIUM";
   const isCweCited = !!classification.cweId;
   const sameFamily = isCweCited && citedFamily !== null && evidenceFamily !== null && citedFamily === evidenceFamily;
   const offFamilyHighConf =
-    isCweCited && citedFamily !== null && evidenceFamily !== null && citedFamily !== evidenceFamily && evidenceHighConf;
+    isCweCited && citedFamily !== null && evidenceFamily !== null && citedFamily !== evidenceFamily && evidenceConfidentEnough;
   let baseScore: number;
   let baseRule: "SAME_FAMILY_FLOOR" | "OFF_FAMILY_CEILING" | "FAMILY_DETECTED_NO_CWE" | "FALLBACK";
   if (sameFamily) {
