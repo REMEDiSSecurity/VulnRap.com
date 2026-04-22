@@ -2,6 +2,28 @@ export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
 };
 
+// Task #113 — shared reviewer token for calibration mutations.
+// When set, customFetch attaches it as `X-Calibration-Token` to every
+// outgoing request. Sending the header on read endpoints is harmless
+// (the server only enforces it on calibration mutation routes), and
+// putting the wiring in one place means the vulnrap UI just calls
+// `setCalibrationToken(...)` once at startup and every generated
+// mutation hook automatically passes the credential.
+let calibrationToken: string | null = null;
+
+export function setCalibrationToken(token: string | null | undefined): void {
+  if (typeof token === "string") {
+    const trimmed = token.trim();
+    calibrationToken = trimmed.length > 0 ? trimmed : null;
+    return;
+  }
+  calibrationToken = null;
+}
+
+export function getCalibrationToken(): string | null {
+  return calibrationToken;
+}
+
 export type ErrorType<T = unknown> = ApiError<T>;
 
 export type BodyType<T> = T;
@@ -297,6 +319,10 @@ export async function customFetch<T = unknown>(
 
   if (responseType === "json" && !headers.has("accept")) {
     headers.set("accept", DEFAULT_JSON_ACCEPT);
+  }
+
+  if (calibrationToken && !headers.has("x-calibration-token")) {
+    headers.set("x-calibration-token", calibrationToken);
   }
 
   const requestInfo = { method, url: resolveUrl(input) };

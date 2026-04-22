@@ -8,6 +8,7 @@ import {
   removeHandwavyPhrase,
 } from "../lib/engines/avri/handwavy-phrases";
 import { TEST_FIXTURE_COHORTS } from "./test-fixtures";
+import { requireCalibrationAuth } from "../middlewares/require-calibration-auth";
 
 // Task #114 — preview a candidate FLAT hand-wavy phrase against the curated
 // benchmark corpus (the T1–T4 fixture cohorts also used by /api/test/run) so
@@ -157,7 +158,7 @@ router.get("/feedback/calibration/config", (_req, res) => {
   }
 });
 
-router.post("/feedback/calibration/apply", async (req, res) => {
+router.post("/feedback/calibration/apply", requireCalibrationAuth, async (req, res) => {
   try {
     const { changes, description } = req.body;
 
@@ -297,7 +298,7 @@ router.get("/feedback/calibration/handwavy-phrases", (_req, res) => {
   }
 });
 
-router.post("/feedback/calibration/handwavy-phrases", (req, res) => {
+router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
   try {
     const { phrase, category, dryRun } = (req.body ?? {}) as {
       phrase?: unknown;
@@ -359,7 +360,7 @@ router.post("/feedback/calibration/handwavy-phrases", (req, res) => {
   }
 });
 
-router.delete("/feedback/calibration/handwavy-phrases", (req, res) => {
+router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
   try {
     const { phrase } = (req.body ?? {}) as { phrase?: unknown };
     if (typeof phrase !== "string" || phrase.trim().length === 0) {
