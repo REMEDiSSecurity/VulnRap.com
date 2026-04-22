@@ -12,12 +12,18 @@ import type { EngineResult, TriggeredIndicator, Verdict } from "../engines";
 import { runEngine2 as runEngine2Legacy } from "../engines";
 import type { FamilyRubric } from "./families";
 import { evaluateCrashTrace, crashTraceGoldSignalIdsFor, type CrashTraceEvaluation } from "./crash-trace";
+import { evaluateRawHttpRequest, rawHttpGoldSignalIdsFor, type RawHttpEvaluation } from "./raw-http";
 
 const ABSENCE_PENALTY_CAP = 12;
 /** Out-of-cap penalty applied to crash-/race-trace-bearing reports whose
  * trace is stripped/placeholder. Sized to push a slop report whose only
  * substance is a fake sanitizer/TSan trace below the AVRI YELLOW threshold. */
 const STRIPPED_TRACE_PENALTY = 18;
+/** Out-of-cap penalty applied to REQUEST_SMUGGLING reports whose pasted
+ * raw HTTP bytes are fabricated (placeholder header values, no CRLFs, or
+ * incoherent TE/CL conflict). Sized like STRIPPED_TRACE_PENALTY so a slop
+ * smuggling report whose only substance is fake bytes lands below YELLOW. */
+const FAKE_RAW_HTTP_PENALTY = 18;
 
 function clamp(n: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, n));
@@ -164,6 +170,35 @@ export function runEngine2Avri(
       goldHits.push(...remaining);
     }
   }
+  // 1c. Raw-HTTP-bytes validation. REQUEST_SMUGGLING gold signals
+  // (`raw_http_request`, `te_or_cl_conflict`, `smuggled_second_request`)
+  // all match purely structural regexes against the pasted bytes; if
+  // those bytes are placeholder-padded, missing CRLFs, or carry a TE/CL
+  // conflict whose values aren't actually coherent, the matched gold
+  // points must be revoked so a polished slop report can't pad its way
+  // past the gold threshold on fake HTTP request bytes. Runs for any
+  // family whose rubric declares raw-HTTP-byte gold signals (currently
+  // REQUEST_SMUGGLING only).
+  let rawHttp: RawHttpEvaluation | null = null;
+  const revokedRawHttpHits: Array<{ id: string; description: string; points: number }> = [];
+  const rawHttpGoldIds = rawHttpGoldSignalIdsFor(family.id);
+  if (rawHttpGoldIds) {
+    rawHttp = evaluateRawHttpRequest(fullText);
+    if (rawHttp.isFake) {
+      const remaining: typeof goldHits = [];
+      for (const hit of goldHits) {
+        if (rawHttpGoldIds.has(hit.id)) {
+          revokedRawHttpHits.push(hit);
+          goldTotal -= hit.points;
+        } else {
+          remaining.push(hit);
+        }
+      }
+      goldHits.length = 0;
+      goldHits.push(...remaining);
+    }
+  }
+
   // Normalize gold score: full score (100) requires hitting the rubric's
   // "calibrated maximum" — the sum of the top N highest-weight signals,
   // chosen so a complete report reliably reaches 100 without needing every
@@ -203,7 +238,12 @@ export function runEngine2Avri(
   // cap budget. Only fires when the validator detected a placeholder trace.
   const strippedTracePenalty = crashTrace?.isStripped ? STRIPPED_TRACE_PENALTY : 0;
 
-  const rawAvriScore = clamp(baseScore - totalAbsencePenalty - contradictionPenalty - strippedTracePenalty);
+  // 3c. Fake-raw-HTTP penalty (out-of-cap), same shape as the stripped
+  // trace penalty so a slop smuggling report whose only substance is
+  // fabricated bytes lands below the AVRI YELLOW threshold.
+  const fakeRawHttpPenalty = rawHttp?.isFake ? FAKE_RAW_HTTP_PENALTY : 0;
+
+  const rawAvriScore = clamp(baseScore - totalAbsencePenalty - contradictionPenalty - strippedTracePenalty - fakeRawHttpPenalty);
 
   // 4. Blend with legacy substance. Default 50/50, but when the AVRI rubric
   //    crater-scores a report that the legacy substance engine considers
@@ -225,7 +265,8 @@ export function runEngine2Avri(
     legacy.score >= 55 &&
     !contradictionsAnywhere &&
     goldHits.length >= 1 &&
-    !crashTrace?.isStripped
+    !crashTrace?.isStripped &&
+    !rawHttp?.isFake
   ) {
     avriWeight = 0.25;
   }
@@ -263,6 +304,14 @@ export function runEngine2Avri(
       value: `${crashTrace.framesAnalyzed}f/${crashTrace.goodFrames}g/${crashTrace.placeholderFrames}p`,
       strength: "HIGH",
       explanation: `${crashTrace.reason ?? "Stripped crash trace"} (-${STRIPPED_TRACE_PENALTY}; revoked ${revokedTraceHits.length} trace gold signal(s))`,
+    });
+  }
+  if (rawHttp?.isFake) {
+    indicators.push({
+      signal: "FAKE_RAW_HTTP",
+      value: `${rawHttp.requestsAnalyzed}r/${rawHttp.totalHeaders - rawHttp.placeholderHeaders}g/${rawHttp.placeholderHeaders}p`,
+      strength: "HIGH",
+      explanation: `${rawHttp.reason ?? "Fabricated raw HTTP request"} (-${FAKE_RAW_HTTP_PENALTY}; revoked ${revokedRawHttpHits.length} smuggling gold signal(s))`,
     });
   }
   // Keep a couple of legacy indicators for continuity.
@@ -317,12 +366,26 @@ export function runEngine2Avri(
               penalty: -strippedTracePenalty,
             }
           : null,
+        rawHttp: rawHttp
+          ? {
+              requestsAnalyzed: rawHttp.requestsAnalyzed,
+              totalHeaders: rawHttp.totalHeaders,
+              placeholderHeaders: rawHttp.placeholderHeaders,
+              crlfPresent: rawHttp.crlfPresent,
+              teClConflicts: rawHttp.teClConflicts,
+              teClBroken: rawHttp.teClBroken,
+              isFake: rawHttp.isFake,
+              reason: rawHttp.reason,
+              revokedGoldHits: revokedRawHttpHits.map((r) => ({ id: r.id, points: r.points })),
+              penalty: -fakeRawHttpPenalty,
+            }
+          : null,
         rawAvriScore: Math.round(rawAvriScore),
         legacyScore: legacy.score,
         blendedScore,
       },
     },
-    note: `AVRI ${family.displayName}: ${goldHits.length} gold signal(s) (+${goldTotal}), -${totalAbsencePenalty} absence, -${contradictionPenalty} contradiction${strippedTracePenalty ? `, -${strippedTracePenalty} stripped-trace` : ""}. Blended with legacy substance: ${blendedScore}.`,
+    note: `AVRI ${family.displayName}: ${goldHits.length} gold signal(s) (+${goldTotal}), -${totalAbsencePenalty} absence, -${contradictionPenalty} contradiction${strippedTracePenalty ? `, -${strippedTracePenalty} stripped-trace` : ""}${fakeRawHttpPenalty ? `, -${fakeRawHttpPenalty} fake-raw-http` : ""}. Blended with legacy substance: ${blendedScore}.`,
   };
 
   return {
