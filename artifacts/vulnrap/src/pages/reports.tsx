@@ -317,7 +317,16 @@ export default function Reports() {
                     opt.value === familyFilter ||
                     (familyCounts[opt.value] ?? 0) > 0,
                   )
-                  .map((opt) => {
+                  .map((opt, idx) => ({ opt, idx }))
+                  .sort((a, b) => {
+                    if (a.opt.value === "All") return -1;
+                    if (b.opt.value === "All") return 1;
+                    const diff =
+                      (familyCounts[b.opt.value] ?? 0) -
+                      (familyCounts[a.opt.value] ?? 0);
+                    return diff !== 0 ? diff : a.idx - b.idx;
+                  })
+                  .map(({ opt }) => {
                     const count = familyCounts[opt.value] ?? 0;
                     const isZero = opt.value !== "All" && count === 0;
                     return (
