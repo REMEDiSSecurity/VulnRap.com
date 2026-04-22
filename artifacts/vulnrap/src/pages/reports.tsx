@@ -406,6 +406,51 @@ export default function Reports() {
         </span>
       </div>
 
+      {/* Sprint 12 — Per-filter dismissable chips. Lets reviewers drop a
+          single filter (tier/family/sort) without re-opening its menu or
+          clearing everything. Each chip resets paging to offset 0 to mirror
+          the behavior of changing the filter via its menu. */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap items-center gap-2 -mt-2">
+          {tierFilter !== "All" && (
+            <button
+              type="button"
+              onClick={() => setTierFilter("All")}
+              aria-label={`Remove tier filter: ${tierFilter}`}
+              className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
+            >
+              <span className="text-muted-foreground">Tier:</span>
+              <span className="text-foreground">{tierFilter}</span>
+              <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
+            </button>
+          )}
+          {familyFilter !== "All" && (
+            <button
+              type="button"
+              onClick={() => setFamilyFilter("All")}
+              aria-label={`Remove family filter: ${familyLabel(familyFilter) ?? familyFilter}`}
+              className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
+            >
+              <span className="text-muted-foreground">Family:</span>
+              <span className="text-foreground">{familyLabel(familyFilter) ?? familyFilter}</span>
+              <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
+            </button>
+          )}
+          {sort !== "newest" && (
+            <button
+              type="button"
+              onClick={() => setSort("newest")}
+              aria-label={`Reset sort to default`}
+              className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
+            >
+              <span className="text-muted-foreground">Sort:</span>
+              <span className="text-foreground">{SORT_OPTIONS.find((s) => s.value === sort)?.label}</span>
+              <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="space-y-2">
         {feedLoading ? (
           Array.from({ length: 5 }).map((_, i) => (
