@@ -98,7 +98,28 @@
     {
       "phrase": "weak security culture",
       "category": "buzzword"
+    },
+    {
+      "phrase": "bulk-test gamma t5fnmr",
+      "category": "absence",
+      "addedBy": "test-bot",
+      "addedAt": "2026-04-22T15:13:33.232Z"
     }
   ],
-  "history": []
+  "history": [
+    {
+      "phrase": "bulk-test alpha t5fnmr",
+      "category": "buzzword",
+      "removedAt": "2026-04-22T15:15:41.118Z",
+      "addedBy": "test-bot",
+      "addedAt": "2026-04-22T15:13:33.202Z"
+    },
+    {
+      "phrase": "bulk-test beta t5fnmr",
+      "category": "hedging",
+      "removedAt": "2026-04-22T15:15:41.188Z",
+      "addedBy": "test-bot",
+      "addedAt": "2026-04-22T15:13:33.223Z"
+    }
+  ]
 }

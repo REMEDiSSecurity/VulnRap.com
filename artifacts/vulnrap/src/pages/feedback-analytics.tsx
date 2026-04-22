@@ -620,6 +620,20 @@ function HandwavyPhrasesAdmin() {
     }
   });
   const [busy, setBusy] = useState<string | null>(null);
+  // Task #134 — bulk-remove state. `selected` is the set of currently-checked
+  // phrases (keyed by the normalized `phrase` string the server stores), and
+  // mirrors the CLI's batch removal flow: we collect a list, show ONE
+  // confirmation summary, then issue one DELETE per phrase. `bulkConfirm`
+  // toggles the inline confirmation panel; `bulkResults` keeps the per-phrase
+  // outcome (removed / not-found / auth-failed / error) visible after the
+  // batch completes so the reviewer can see exactly what happened without
+  // squinting at toasts. The active list is refreshed ONCE after the batch.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [bulkConfirm, setBulkConfirm] = useState<string[] | null>(null);
+  type BulkOutcome = "removed" | "not-found" | "auth-failed" | "error";
+  const [bulkResults, setBulkResults] = useState<
+    Array<{ phrase: string; status: BulkOutcome; message?: string }> | null
+  >(null);
   // Task #114 — corpus-impact preview state. After the reviewer presses
   // "Add phrase" we first issue a dry-run POST and surface the GREEN/YELLOW
   // false-positive count. The actual add only persists after the reviewer
@@ -792,12 +806,137 @@ function HandwavyPhrasesAdmin() {
     try {
       await removeHandwavyPhrase({ phrase, reviewer: reviewer.trim() || undefined });
       toast({ title: "Phrase removed", description: `"${phrase}" will no longer trigger the FLAT haircut.` });
+      // Drop the now-removed phrase from the selection so the bulk button
+      // doesn't carry stale entries forward.
+      setSelected((prev) => {
+        if (!prev.has(phrase)) return prev;
+        const next = new Set(prev);
+        next.delete(phrase);
+        return next;
+      });
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to remove phrase.";
       toast({ title: "Error", description: msg, variant: "destructive" });
     } finally {
       setBusy(null);
+    }
+  };
+
+  // Task #134 — bulk-remove helpers. The selection set lives independently of
+  // the active list so an in-flight refresh doesn't visually flicker the
+  // checkboxes; we filter against the live `phrases` list at render time.
+  const toggleSelected = (phrase: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(phrase)) next.delete(phrase);
+      else next.add(phrase);
+      return next;
+    });
+  };
+  const allPhrases = phrases.map((p) => p.phrase);
+  const selectedInList = allPhrases.filter((p) => selected.has(p));
+  const allSelected = allPhrases.length > 0 && selectedInList.length === allPhrases.length;
+  const someSelected = selectedInList.length > 0 && !allSelected;
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(allPhrases));
+    }
+  };
+
+  const openBulkConfirm = () => {
+    if (selectedInList.length === 0) return;
+    setBulkResults(null);
+    setBulkConfirm([...selectedInList]);
+  };
+  const cancelBulkConfirm = () => {
+    setBulkConfirm(null);
+  };
+  const dismissBulkResults = () => {
+    setBulkResults(null);
+  };
+
+  const confirmBulkRemove = async () => {
+    if (!bulkConfirm || bulkConfirm.length === 0) return;
+    setBusy("bulk-remove");
+    const results: Array<{ phrase: string; status: BulkOutcome; message?: string }> = [];
+    let authFailedSticky = false;
+    const reviewerName = reviewer.trim() || undefined;
+    for (const phrase of bulkConfirm) {
+      if (authFailedSticky) {
+        // Mirror the CLI: once auth fails for one phrase the token is bad for
+        // every subsequent phrase, so don't bother issuing more requests.
+        results.push({
+          phrase,
+          status: "auth-failed",
+          message: "skipped after earlier auth failure",
+        });
+        continue;
+      }
+      try {
+        await removeHandwavyPhrase({ phrase, reviewer: reviewerName });
+        results.push({ phrase, status: "removed" });
+      } catch (err) {
+        const status = (err as { status?: number } | null)?.status;
+        if (status === 401 || status === 403) {
+          authFailedSticky = true;
+          results.push({
+            phrase,
+            status: "auth-failed",
+            message: `HTTP ${status}`,
+          });
+        } else if (status === 404) {
+          results.push({
+            phrase,
+            status: "not-found",
+            message: "server reported 404 (already removed?)",
+          });
+        } else {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          results.push({ phrase, status: "error", message: msg });
+        }
+      }
+    }
+    // Refresh ONCE after the whole batch — the active list and history view
+    // both update from a single refetch instead of one per DELETE.
+    refresh();
+    // Drop successfully-removed phrases from the selection so the next batch
+    // doesn't try to act on them again.
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const r of results) {
+        if (r.status === "removed") next.delete(r.phrase);
+      }
+      return next;
+    });
+    setBulkConfirm(null);
+    setBulkResults(results);
+    setBusy(null);
+
+    const removed = results.filter((r) => r.status === "removed").length;
+    const notFound = results.filter((r) => r.status === "not-found").length;
+    const authFailed = results.filter((r) => r.status === "auth-failed").length;
+    const errored = results.filter((r) => r.status === "error").length;
+    const failures = notFound + authFailed + errored;
+    if (failures === 0) {
+      const noun = removed === 1 ? "phrase" : "phrases";
+      toast({
+        title: `${removed} ${noun} removed`,
+        description: "The active list has been refreshed.",
+      });
+    } else {
+      const parts: string[] = [];
+      if (removed > 0) parts.push(`${removed} removed`);
+      if (notFound > 0) parts.push(`${notFound} not-found`);
+      if (authFailed > 0) parts.push(`${authFailed} auth-failed`);
+      if (errored > 0) parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
+      toast({
+        title: "Bulk removal finished with issues",
+        description: parts.join(" · "),
+        variant: removed === 0 ? "destructive" : undefined,
+      });
     }
   };
 
@@ -1023,12 +1162,157 @@ function HandwavyPhrasesAdmin() {
           </div>
           );
         })()}
+        {/* Task #134 — bulk-remove confirmation banner. Shows EVERY selected
+            phrase so the reviewer can eyeball the batch before any DELETE
+            fires, mirroring the CLI's confirm-then-delete flow. */}
+        {bulkConfirm && bulkConfirm.length > 0 && (
+          <div
+            className="rounded-md border border-red-500/40 bg-red-500/5 p-3 space-y-2 text-xs"
+            data-testid="handwavy-bulk-confirm"
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+              <div className="flex-1">
+                <div className="font-semibold text-foreground">
+                  Remove {bulkConfirm.length} phrase{bulkConfirm.length === 1 ? "" : "s"} from the active list?
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Each phrase below will be deleted in its own request. The active list refreshes once when the batch finishes.
+                </div>
+              </div>
+            </div>
+            <ul
+              className="max-h-48 overflow-y-auto pl-2 border-l border-red-500/30 space-y-0.5"
+              data-testid="handwavy-bulk-confirm-list"
+            >
+              {bulkConfirm.map((p) => (
+                <li key={p} className="font-mono text-foreground/80 break-all text-[11px]">• {p}</li>
+              ))}
+            </ul>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={cancelBulkConfirm}
+                disabled={busy === "bulk-remove"}
+                data-testid="handwavy-bulk-cancel"
+              >
+                Back out
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={confirmBulkRemove}
+                disabled={busy === "bulk-remove"}
+                data-testid="handwavy-bulk-confirm-go"
+              >
+                {busy === "bulk-remove"
+                  ? "Removing…"
+                  : `Remove ${bulkConfirm.length} phrase${bulkConfirm.length === 1 ? "" : "s"}`}
+              </Button>
+            </div>
+          </div>
+        )}
+        {/* Task #134 — per-phrase results banner shown after a bulk batch
+            finishes, mirroring the CLI's per-phrase outcome summary. */}
+        {bulkResults && (
+          <div
+            className="rounded-md border border-border/40 bg-background/40 p-3 space-y-2 text-xs"
+            data-testid="handwavy-bulk-results"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-foreground">Bulk removal results</span>
+              <Badge variant="outline" className="text-[10px]">
+                {bulkResults.filter((r) => r.status === "removed").length} / {bulkResults.length} removed
+              </Badge>
+              <button
+                type="button"
+                className="ml-auto text-[10px] text-muted-foreground hover:text-foreground underline"
+                onClick={dismissBulkResults}
+                data-testid="handwavy-bulk-dismiss"
+              >
+                Dismiss
+              </button>
+            </div>
+            <ul className="space-y-0.5">
+              {bulkResults.map((r) => {
+                const cfg =
+                  r.status === "removed"
+                    ? { label: "removed", color: "text-emerald-400", icon: <CheckCircle2 className="w-3 h-3" /> }
+                    : r.status === "not-found"
+                      ? { label: "not-found", color: "text-yellow-400", icon: <AlertTriangle className="w-3 h-3" /> }
+                      : r.status === "auth-failed"
+                        ? { label: "auth-failed", color: "text-red-400", icon: <XCircle className="w-3 h-3" /> }
+                        : { label: "error", color: "text-red-400", icon: <XCircle className="w-3 h-3" /> };
+                return (
+                  <li
+                    key={`${r.phrase}-${r.status}`}
+                    className="flex items-start gap-2 text-[11px]"
+                    data-testid="handwavy-bulk-result-row"
+                  >
+                    <span className={cn("flex items-center gap-1 w-24 shrink-0", cfg.color)}>
+                      {cfg.icon}
+                      <span className="uppercase tracking-wide font-bold text-[9px]">{cfg.label}</span>
+                    </span>
+                    <span className="font-mono text-foreground/80 break-all flex-1">{r.phrase}</span>
+                    {r.message && (
+                      <span className="text-muted-foreground text-[10px] italic shrink-0 max-w-[40%] truncate">
+                        {r.message}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
         {isLoading ? (
           <Skeleton className="h-32 rounded-md" />
         ) : phrases.length === 0 ? (
           <div className="text-xs text-muted-foreground italic">No phrases configured.</div>
         ) : (
-          <div className="border border-border/30 rounded-md divide-y divide-border/20 max-h-96 overflow-y-auto">
+          <div className="border border-border/30 rounded-md max-h-96 overflow-y-auto">
+            {/* Task #134 — bulk-action toolbar. Sticky so the "Remove
+                selected" button stays in view while the reviewer scrolls a
+                long list. Indeterminate select-all checkbox toggles the
+                whole visible list at once. */}
+            <div
+              className="sticky top-0 z-10 bg-background/95 backdrop-blur flex items-center gap-3 px-3 py-2 border-b border-border/30 text-xs"
+              data-testid="handwavy-bulk-toolbar"
+            >
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected;
+                }}
+                onChange={toggleSelectAll}
+                aria-label={allSelected ? "Deselect all phrases" : "Select all phrases"}
+                data-testid="handwavy-select-all"
+              />
+              <span className="text-muted-foreground">
+                {selectedInList.length > 0
+                  ? `${selectedInList.length} selected`
+                  : "Select phrases to remove in bulk"}
+              </span>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="ml-auto h-7 px-2 text-xs gap-1"
+                disabled={
+                  selectedInList.length === 0 ||
+                  busy === "bulk-remove" ||
+                  bulkConfirm !== null
+                }
+                onClick={openBulkConfirm}
+                data-testid="handwavy-bulk-remove"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Remove selected{selectedInList.length > 0 ? ` (${selectedInList.length})` : ""}
+              </Button>
+            </div>
+            <div className="divide-y divide-border/20">
             {phrases.map((m) => {
               const addedAt = formatAuditTimestamp(m.addedAt);
               const isCurated = !m.addedBy && !m.addedAt;
@@ -1037,6 +1321,15 @@ function HandwavyPhrasesAdmin() {
               const lastEdit: HandwavyEditEntry | undefined =
                 editsList.length > 0 ? editsList[editsList.length - 1] : undefined;
               const lastEditAt = formatAuditTimestamp(lastEdit?.editedAt);
+              const isSelected = selected.has(m.phrase);
+              // Task #134 + Task #120 — bulk selection and inline edit are
+              // mutually exclusive on a per-row basis: while a row is being
+              // edited the reviewer shouldn't be able to retire it via the
+              // bulk path, and while a bulk batch is mid-flight or pending
+              // confirmation the row's edit affordance is disabled. The
+              // disable rules below keep both flows visible side-by-side
+              // without letting them step on each other.
+              const bulkBusy = busy === "bulk-remove" || bulkConfirm !== null;
               return (
                 <div
                   key={m.phrase}
@@ -1044,6 +1337,15 @@ function HandwavyPhrasesAdmin() {
                   data-testid="handwavy-row"
                 >
                   <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 cursor-pointer accent-primary shrink-0"
+                      checked={isSelected}
+                      onChange={() => toggleSelected(m.phrase)}
+                      disabled={bulkBusy || isEditing}
+                      aria-label={`Select phrase ${m.phrase} for bulk removal`}
+                      data-testid="handwavy-select"
+                    />
                     <span className="flex-1 font-mono text-foreground/80 break-all">{m.phrase}</span>
                     {isEditing ? (
                       <select
@@ -1095,7 +1397,7 @@ function HandwavyPhrasesAdmin() {
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-muted-foreground hover:text-primary"
-                          disabled={editing !== null || busy === `rm:${m.phrase}`}
+                          disabled={editing !== null || busy === `rm:${m.phrase}` || bulkBusy}
                           onClick={() => handleStartEdit(m.phrase, m.category, m.rationale)}
                           data-testid="handwavy-edit"
                           aria-label={`Edit phrase ${m.phrase}`}
@@ -1106,7 +1408,7 @@ function HandwavyPhrasesAdmin() {
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-muted-foreground hover:text-red-400"
-                          disabled={editing !== null || busy === `rm:${m.phrase}`}
+                          disabled={editing !== null || busy === `rm:${m.phrase}` || bulkBusy}
                           onClick={() => handleRemove(m.phrase)}
                           data-testid="handwavy-remove"
                           aria-label={`Remove phrase ${m.phrase}`}
@@ -1168,6 +1470,7 @@ function HandwavyPhrasesAdmin() {
                 </div>
               );
             })}
+            </div>
           </div>
         )}
         {sortedHistory.length > 0 && (
