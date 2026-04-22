@@ -42,4 +42,24 @@ describe("test-fixtures structural guards", () => {
       expect(f.expectedComposite[1], `${f.id} upper bound`).toBeLessThanOrEqual(35);
     }
   });
+
+  // Sprint 12 — emerging slop archetypes T3-11..T3-15 must each carry an
+  // archetype label so /api/test/run can group them for calibration.
+  it("Sprint 12 emerging slop fixtures (T3-11..T3-15) carry distinct archetype labels", () => {
+    const expected: Record<string, string> = {
+      "T3-11-fabricated-diff-no-proof": "fabricated_diff",
+      "T3-12-paraphrased-cve-renamed-fn": "paraphrased_cve",
+      "T3-13-narrated-curl-no-evidence": "narrated_curl",
+      "T3-14-pseudo-asan-symbolless": "pseudo_asan",
+      "T3-15-prose-poc-no-payload": "prose_poc",
+    };
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    for (const [id, archetype] of Object.entries(expected)) {
+      const f = byId.get(id);
+      expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
+      expect(f!.archetype, `${id} archetype label`).toBe(archetype);
+    }
+    const labels = Object.values(expected);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
 });

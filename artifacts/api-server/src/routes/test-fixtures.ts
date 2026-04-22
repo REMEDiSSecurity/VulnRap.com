@@ -29,6 +29,11 @@ interface Fixture {
   expectedComposite: [number, number];
   expectedEngine2: [number, number];
   expectedTriage: TriageAction[];
+  // Optional reviewer-facing label grouping fixtures by the slop "shape"
+  // they imitate (e.g. "fabricated_diff", "paraphrased_cve"). Surfaced in
+  // /api/test/run so calibration can monitor each archetype's regression
+  // headroom (current score vs. distance to LIKELY-INVALID ceiling).
+  archetype?: string;
 }
 
 // =============================================================================
@@ -1230,6 +1235,7 @@ Severity: High`,
   {
     id: "T3-11-fabricated-diff-no-proof",
     tier: "T3_SLOP",
+    archetype: "fabricated_diff",
     text: `# Authorization bypass in profile update endpoint
 
 The profile update endpoint allows a user to modify another user's
@@ -1256,6 +1262,7 @@ please consult the equivalent module in your codebase. Severity: High.`,
   {
     id: "T3-12-paraphrased-cve-renamed-fn",
     tier: "T3_SLOP",
+    archetype: "paraphrased_cve",
     text: `# Heap corruption in image decoding routine (independent finding)
 
 While auditing the image decoder, I observed that the routine that
@@ -1287,6 +1294,7 @@ Critical, CVSS 9.8.`,
   {
     id: "T3-13-narrated-curl-no-evidence",
     tier: "T3_SLOP",
+    archetype: "narrated_curl",
     text: `# Server-side request forgery in the link-preview service
 
 The link-preview service accepts a URL parameter and fetches the target
@@ -1320,6 +1328,7 @@ reasons. Severity: Critical (CVSS 9.1).`,
   {
     id: "T3-14-pseudo-asan-symbolless",
     tier: "T3_SLOP",
+    archetype: "pseudo_asan",
     text: `# Memory safety violation in request parsing path
 
 I ran the binary under a memory analyzer and reproduced what appears to
@@ -1352,6 +1361,7 @@ confirm in minutes. Severity: Critical.`,
   {
     id: "T3-15-prose-poc-no-payload",
     tier: "T3_SLOP",
+    archetype: "prose_poc",
     text: `# Reflected client-side script injection on the search results page
 
 The search results page reflects the value of the user-supplied query
@@ -1749,6 +1759,7 @@ router.get("/test/run", async (_req, res) => {
 
     return {
       id: f.id, tier: f.tier,
+      archetype: f.archetype ?? null,
       composite, e1, e2, e3,
       triage: triage.action,
       verification: {
@@ -1821,11 +1832,54 @@ router.get("/test/run", async (_req, res) => {
     perFixture,
   };
 
+  // Sprint 12 — group per-fixture results by their reviewer-facing archetype
+  // label so calibration can monitor each emerging slop "shape" at a glance.
+  // Each archetype reports its members' live composite, the AVRI-on/off
+  // composites from the comparison sweep, and the distance to the
+  // LIKELY-INVALID ceiling (composite 35) under AVRI-on — that distance is
+  // the regression headroom before a fixture would escape auto-rejection.
+  const LIKELY_INVALID_CEILING = 35;
+  const onById = new Map(perFixture.map(p => [p.id, p]));
+  const archetypeIds = Array.from(
+    new Set(results.map(r => r.archetype).filter((a): a is string => !!a)),
+  ).sort();
+  const archetypes = archetypeIds.map(archetype => {
+    const subset = results.filter(r => r.archetype === archetype);
+    const fixtures = subset.map(r => {
+      const cmp = onById.get(r.id);
+      const onScore = cmp?.onScore ?? r.composite;
+      const offScore = cmp?.offScore ?? null;
+      return {
+        id: r.id,
+        tier: r.tier,
+        composite: r.composite,
+        avriOnScore: onScore,
+        avriOffScore: offScore,
+        distanceToCeiling: Number((LIKELY_INVALID_CEILING - onScore).toFixed(1)),
+        triage: r.triage,
+        passed: r.passed,
+      };
+    });
+    const onScores = fixtures.map(f => f.avriOnScore);
+    const meanOn = onScores.reduce((a, b) => a + b, 0) / Math.max(1, onScores.length);
+    const maxOn = onScores.length ? Math.max(...onScores) : 0;
+    return {
+      archetype,
+      count: fixtures.length,
+      avriOnMean: Number(meanOn.toFixed(1)),
+      avriOnMax: Number(maxOn.toFixed(1)),
+      minDistanceToCeiling: Number((LIKELY_INVALID_CEILING - maxOn).toFixed(1)),
+      ceiling: LIKELY_INVALID_CEILING,
+      fixtures,
+    };
+  });
+
   res.json({
     fixtureCount: FIXTURES.length,
     passed: allFixturesPassed && gap >= 25,
     results,
     summary,
+    archetypes,
     successMetrics: {
       legitMean: t1Mean,
       slopMean: t3Mean,
