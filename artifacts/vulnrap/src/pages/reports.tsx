@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useGetReportFeed, getGetReportFeedQueryKey } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,11 +103,47 @@ function getTierBarColor(tier: string) {
   }
 }
 
+const VALID_SORTS = new Set<string>(SORT_OPTIONS.map((s) => s.value));
+const VALID_FAMILIES = new Set<string>(AVRI_FAMILY_OPTIONS.map((o) => o.value));
+const VALID_TIERS = new Set<string>(["All", ...TIER_ORDER]);
+
 export default function Reports() {
-  const [offset, setOffset] = useState(0);
-  const [sort, setSort] = useState<string>("newest");
-  const [tierFilter, setTierFilter] = useState<string>("All");
-  const [familyFilter, setFamilyFilter] = useState<string>("All");
+  // Sprint 12 — Persist filters in the URL so reviewers can bookmark or share
+  // a filtered view (e.g. /reports?avriFamily=INJECTION&sort=score_desc) and
+  // browser back/forward cycles between filter states.
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const rawSort = searchParams.get("sort") ?? "newest";
+  const sort = VALID_SORTS.has(rawSort) ? rawSort : "newest";
+  const rawTier = searchParams.get("tier") ?? "All";
+  const tierFilter = VALID_TIERS.has(rawTier) ? rawTier : "All";
+  const rawFamily = searchParams.get("avriFamily") ?? "All";
+  const familyFilter = VALID_FAMILIES.has(rawFamily) ? rawFamily : "All";
+  const rawOffset = parseInt(searchParams.get("offset") ?? "0", 10);
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
+
+  const updateParams = (updates: Record<string, string | null>) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [key, value] of Object.entries(updates)) {
+          if (value === null || value === "" || value === "All" || (key === "sort" && value === "newest") || (key === "offset" && value === "0")) {
+            next.delete(key);
+          } else {
+            next.set(key, value);
+          }
+        }
+        return next;
+      },
+      { replace: false },
+    );
+  };
+
+  const setSort = (value: string) => updateParams({ sort: value, offset: "0" });
+  const setTierFilter = (value: string) => updateParams({ tier: value, offset: "0" });
+  const setFamilyFilter = (value: string) => updateParams({ avriFamily: value, offset: "0" });
+  const setOffset = (value: number) => updateParams({ offset: String(value) });
+
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showTierMenu, setShowTierMenu] = useState(false);
   const [showFamilyMenu, setShowFamilyMenu] = useState(false);
@@ -242,7 +278,7 @@ export default function Reports() {
                   <button
                     key={tier}
                     type="button"
-                    onClick={() => { setTierFilter(tier); setOffset(0); setShowTierMenu(false); }}
+                    onClick={() => { setTierFilter(tier); setShowTierMenu(false); }}
                     className={cn(
                       "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
                       tierFilter === tier && "text-primary font-medium"
@@ -288,7 +324,7 @@ export default function Reports() {
                       <button
                         key={opt.value}
                         type="button"
-                        onClick={() => { setFamilyFilter(opt.value); setOffset(0); setShowFamilyMenu(false); }}
+                        onClick={() => { setFamilyFilter(opt.value); setShowFamilyMenu(false); }}
                         className={cn(
                           "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
                           familyFilter === opt.value && "text-primary font-medium",
@@ -321,7 +357,7 @@ export default function Reports() {
                   <button
                     key={s.value}
                     type="button"
-                    onClick={() => { setSort(s.value); setOffset(0); setShowSortMenu(false); }}
+                    onClick={() => { setSort(s.value); setShowSortMenu(false); }}
                     className={cn(
                       "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
                       sort === s.value && "text-primary font-medium"
