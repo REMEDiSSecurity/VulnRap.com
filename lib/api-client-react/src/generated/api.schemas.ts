@@ -1736,6 +1736,20 @@ export interface HandwavyPhraseUndoBody {
 }
 
 /**
+ * Task #132 — body for POST /feedback/calibration/handwavy-phrases/revert-edit.
+The edit entry is matched by `phrase` + `editedAt`.
+
+ */
+export interface HandwavyPhraseRevertEditBody {
+  /** Existing curated phrase (matched after lowercase + whitespace normalization). */
+  phrase: string;
+  /** ISO 8601 timestamp of the `edits` entry to undo. */
+  editedAt: string;
+  /** Reviewer name or email recorded on the inverse edit entry. Optional. */
+  reviewer?: string;
+}
+
+/**
  * Task #121 — body for POST /feedback/calibration/handwavy-phrases/reinstate.
 The history row is matched by `phrase` + `removedAt`.
 
@@ -1819,6 +1833,13 @@ POST/DELETE responses.
 POST/DELETE/reinstate responses.
  */
   undone?: boolean;
+  /** Task #132 — true when the response is from POST
+/feedback/calibration/handwavy-phrases/revert-edit. Inspect
+`edited` to tell whether the revert actually changed anything.
+Omitted on other endpoints.
+ */
+  reverted?: boolean;
+  revertedEntry?: HandwavyEditEntry;
   /** The normalized phrase that was added/removed. */
   phrase: string;
   category?: HandwavyCategory;

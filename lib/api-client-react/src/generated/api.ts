@@ -36,6 +36,7 @@ import type {
   HandwavyPhraseEditBody,
   HandwavyPhraseMutationResponse,
   HandwavyPhraseReinstateBody,
+  HandwavyPhraseRevertEditBody,
   HandwavyPhraseUndoBody,
   HandwavyPhrasesList,
   HashLookupResult,
@@ -2111,6 +2112,107 @@ export const useReinstateHandwavyPhrase = <
   TContext
 > => {
   return useMutation(getReinstateHandwavyPhraseMutationOptions(options));
+};
+
+/**
+ * Task #132 — undoes a single entry from a curated phrase's `edits` log
+in one click. The reviewer supplies the phrase and the `editedAt`
+timestamp of the edit they want to undo; the server restores
+whatever fields that entry recorded a change to (category and/or
+rationale) back to their `from` values, leaving any field the entry
+did NOT change alone. The audit log stays append-only — the revert
+appears as a fresh `HandwavyEditEntry` with the inverse before/after
+pair, attributed to the reviewer who pressed the button. A no-op
+revert (current values already match the target) returns
+`edited: false` and does not append a new entry.
+
+ * @summary Revert a single edit on a curated FLAT hand-wavy marker phrase
+ */
+export const getRevertHandwavyPhraseEditUrl = () => {
+  return `/api/feedback/calibration/handwavy-phrases/revert-edit`;
+};
+
+export const revertHandwavyPhraseEdit = async (
+  handwavyPhraseRevertEditBody: HandwavyPhraseRevertEditBody,
+  options?: RequestInit,
+): Promise<HandwavyPhraseMutationResponse> => {
+  return customFetch<HandwavyPhraseMutationResponse>(
+    getRevertHandwavyPhraseEditUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(handwavyPhraseRevertEditBody),
+    },
+  );
+};
+
+export const getRevertHandwavyPhraseEditMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revertHandwavyPhraseEdit>>,
+    TError,
+    { data: BodyType<HandwavyPhraseRevertEditBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revertHandwavyPhraseEdit>>,
+  TError,
+  { data: BodyType<HandwavyPhraseRevertEditBody> },
+  TContext
+> => {
+  const mutationKey = ["revertHandwavyPhraseEdit"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revertHandwavyPhraseEdit>>,
+    { data: BodyType<HandwavyPhraseRevertEditBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return revertHandwavyPhraseEdit(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevertHandwavyPhraseEditMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revertHandwavyPhraseEdit>>
+>;
+export type RevertHandwavyPhraseEditMutationBody =
+  BodyType<HandwavyPhraseRevertEditBody>;
+export type RevertHandwavyPhraseEditMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Revert a single edit on a curated FLAT hand-wavy marker phrase
+ */
+export const useRevertHandwavyPhraseEdit = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revertHandwavyPhraseEdit>>,
+    TError,
+    { data: BodyType<HandwavyPhraseRevertEditBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revertHandwavyPhraseEdit>>,
+  TError,
+  { data: BodyType<HandwavyPhraseRevertEditBody> },
+  TContext
+> => {
+  return useMutation(getRevertHandwavyPhraseEditMutationOptions(options));
 };
 
 /**

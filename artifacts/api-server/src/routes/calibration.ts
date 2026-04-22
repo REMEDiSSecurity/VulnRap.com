@@ -11,8 +11,8 @@ import {
   removeHandwavyPhrase,
   reinstateHandwavyPhrase,
   editHandwavyPhrase,
-
   undoHandwavyPhrase,
+  revertHandwavyPhraseEdit,
   type HandwavyCategory,
   type HandwavyMarker,
 } from "../lib/engines/avri/handwavy-phrases";
@@ -765,6 +765,67 @@ router.post(
     } catch (err) {
       req.log?.error(err, "Failed to undo hand-wavy phrase");
       res.status(500).json({ error: "Failed to undo hand-wavy phrase." });
+    }
+  },
+);
+
+// Task #132 — One-click revert of a single edit-history entry. The reviewer
+// supplies the phrase + the `editedAt` of the edit they want to undo. The
+// helper computes the inverse update from that entry's before/after and runs
+// it through the normal edit path so the audit log stays append-only — the
+// revert shows up as a fresh edit entry with the inverse before/after pair.
+router.post(
+  "/feedback/calibration/handwavy-phrases/revert-edit",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { phrase, editedAt, reviewer } = (req.body ?? {}) as {
+        phrase?: unknown;
+        editedAt?: unknown;
+        reviewer?: unknown;
+      };
+      if (typeof phrase !== "string" || phrase.trim().length === 0) {
+        res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+        return;
+      }
+      if (typeof editedAt !== "string" || editedAt.trim().length === 0) {
+        res.status(400).json({
+          error: "Body must include the 'editedAt' ISO timestamp of the edit entry to revert.",
+        });
+        return;
+      }
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res.status(400).json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      const result = revertHandwavyPhraseEdit(phrase, editedAt, {
+        reviewer: typeof reviewer === "string" ? reviewer : undefined,
+      });
+      if (!result.ok) {
+        if (result.reason === "phrase-not-found") {
+          res.status(404).json({ error: "Phrase not found in active list.", reason: result.reason });
+          return;
+        }
+        // edit-not-found
+        res.status(404).json({
+          error: "No matching edit entry on that phrase for the supplied editedAt.",
+          reason: result.reason,
+        });
+        return;
+      }
+      res.status(200).json({
+        reverted: true,
+        edited: result.edited,
+        phrase: result.phrase,
+        total: result.total,
+        marker: result.marker,
+        editEntry: result.editEntry,
+        revertedEntry: result.revertedEntry,
+        phrases: getHandwavyPhrases(),
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to revert hand-wavy phrase edit");
+      res.status(500).json({ error: "Failed to revert hand-wavy phrase edit." });
     }
   },
 );

@@ -740,6 +740,59 @@ export function undoHandwavyPhrase(
   return { ok: true, phrase, total: next.length, historyEntry: { ...historyEntry } };
 }
 
+/**
+ * Task #132 — One-click revert of a single edit-history entry. The reviewer
+ * picks an entry from a marker's `edits` log and we restore the marker to the
+ * "before" state captured by that entry: category goes back to
+ * `entry.category.from` (if the entry recorded a category change) and
+ * rationale goes back to `entry.rationale.from` (if the entry recorded a
+ * rationale change). Fields the entry did NOT change are left alone — so
+ * reverting an old edit only undoes what that edit changed, regardless of any
+ * intervening edits to OTHER fields.
+ *
+ * The audit log stays append-only: the revert is performed by calling the
+ * normal `editHandwavyPhrase` path, which appends a new entry capturing the
+ * inverse change (and the reviewer who pressed the revert button). Pure
+ * no-op reverts (current values already match the target) do not append an
+ * entry — `editHandwavyPhrase` short-circuits — and we surface that as
+ * `edited: false` so the UI can tell the reviewer there was nothing to undo.
+ *
+ * The original entry on `edits` is NOT modified or deleted; the revert is
+ * visible only as a fresh entry with the inverse before/after pair.
+ */
+export type RevertEditResult =
+  | (EditPhraseResult & { ok: true; revertedEntry: HandwavyEditEntry })
+  | { ok: false; reason: "phrase-not-found" | "edit-not-found"; phrase: string };
+
+export function revertHandwavyPhraseEdit(
+  rawPhrase: string,
+  editedAt: string,
+  options: EditPhraseOptions = {},
+): RevertEditResult {
+  const phrase = normalizePhrase(rawPhrase);
+  const { markers: current } = load();
+  const target = current.find((m) => m.phrase === phrase);
+  if (!target) {
+    return { ok: false, reason: "phrase-not-found", phrase };
+  }
+  const edits = target.edits ?? [];
+  const entry = edits.find((e) => e.editedAt === editedAt);
+  if (!entry) {
+    return { ok: false, reason: "edit-not-found", phrase };
+  }
+  const updates: EditPhraseUpdates = {};
+  if (entry.category) {
+    updates.category = entry.category.from;
+  }
+  if (entry.rationale) {
+    // editHandwavyPhrase treats undefined as "unchanged" and "" as "clear",
+    // which mirrors how the original entry stored a clear (`to: ""`).
+    updates.rationale = entry.rationale.from ?? "";
+  }
+  const result = editHandwavyPhrase(phrase, updates, options);
+  return { ...result, ok: true, revertedEntry: { ...entry } };
+}
+
 /** Test helper: drop the in-memory cache so the next read re-parses the file. */
 export function __resetHandwavyPhrasesForTests(): void {
   CACHED_MARKERS = null;

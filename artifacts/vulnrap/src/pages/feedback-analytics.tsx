@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey,
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
@@ -6,6 +6,7 @@ import {
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
   addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, editHandwavyPhrase, undoHandwavyPhrase,
+  revertHandwavyPhraseEdit,
   type HandwavyPhraseDryRunMatches,
   type HandwavyHistoryEntry,
   type HandwavyEditEntry,
@@ -33,7 +34,7 @@ import {
   MessageSquare, Star, ThumbsUp, ThumbsDown, TrendingUp, AlertTriangle,
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
-  Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon,
+  Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -797,6 +798,43 @@ function HandwavyPhrasesAdmin() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to edit phrase.";
       toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Task #132 — one-click undo of a single edit-history entry. The server
+  // restores whichever fields the entry recorded a change to back to their
+  // before-values and appends a fresh inverse edit (so the audit log stays
+  // append-only). A no-op revert (e.g. a later edit already put the field
+  // back) returns edited=false and we surface that as a "nothing to undo"
+  // toast so the reviewer doesn't think the click was lost.
+  const handleRevertEdit = async (phrase: string, entry: HandwavyEditEntry) => {
+    const editedAt =
+      entry.editedAt instanceof Date ? entry.editedAt.toISOString() : String(entry.editedAt);
+    const key = `revert:${phrase}:${editedAt}`;
+    setBusy(key);
+    try {
+      const result = await revertHandwavyPhraseEdit({
+        phrase,
+        editedAt,
+        reviewer: reviewer.trim() || undefined,
+      });
+      if (result.edited === false) {
+        toast({
+          title: "Nothing to undo",
+          description: `"${phrase}" already matches the values from that edit — likely because a later edit reverted it.`,
+        });
+      } else {
+        toast({
+          title: "Edit reverted",
+          description: `"${phrase}" is back to the values from before that edit. The revert is recorded as a new audit entry.`,
+        });
+      }
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to revert edit.";
+      toast({ title: "Revert failed", description: msg, variant: "destructive" });
     } finally {
       setBusy(null);
     }
@@ -1620,6 +1658,100 @@ function HandwavyPhrasesAdmin() {
                       </span>
                     )}
                   </div>
+                  {!isEditing && editsList.length > 0 && (
+                    // Task #132 — expandable per-edit log with one-click revert
+                    // buttons. Most-recent edit at the top so the typical
+                    // "undo what I just did" lands on the first row. Reverting
+                    // an edit appends a fresh inverse entry; the original
+                    // entry stays in place so the audit trail is append-only.
+                    <details className="text-[10px]" data-testid="handwavy-edits-details">
+                      <summary className="cursor-pointer text-muted-foreground/80 hover:text-foreground/80 select-none">
+                        {editsList.length === 1 ? "Show edit" : `Show all ${editsList.length} edits`}
+                      </summary>
+                      <ul
+                        className="mt-1 space-y-1 border-l border-primary/20 pl-2"
+                        data-testid="handwavy-edits-list"
+                      >
+                        {editsList
+                          .map((entry, idx) => ({ entry, idx }))
+                          .reverse()
+                          .map(({ entry, idx }) => {
+                            const editedAtKey =
+                              entry.editedAt instanceof Date
+                                ? entry.editedAt.toISOString()
+                                : String(entry.editedAt);
+                            const revertKey = `revert:${m.phrase}:${editedAtKey}`;
+                            const editedAtLabel = formatAuditTimestamp(entry.editedAt);
+                            const parts: ReactNode[] = [];
+                            if (entry.category) {
+                              parts.push(
+                                <span key="cat">
+                                  category{" "}
+                                  <span className="text-foreground/70">{entry.category.from}</span>
+                                  {" → "}
+                                  <span className="text-foreground/70">{entry.category.to}</span>
+                                </span>,
+                              );
+                            }
+                            if (entry.rationale) {
+                              const fromLbl = entry.rationale.from && entry.rationale.from.length > 0
+                                ? `“${entry.rationale.from}”`
+                                : "(empty)";
+                              const toLbl = entry.rationale.to && entry.rationale.to.length > 0
+                                ? `“${entry.rationale.to}”`
+                                : "(cleared)";
+                              parts.push(
+                                <span key="rat">
+                                  rationale{" "}
+                                  <span className="text-foreground/70">{fromLbl}</span>
+                                  {" → "}
+                                  <span className="text-foreground/70">{toLbl}</span>
+                                </span>,
+                              );
+                            }
+                            return (
+                              <li
+                                key={`${editedAtKey}-${idx}`}
+                                className="flex items-start gap-2"
+                                data-testid="handwavy-edit-entry"
+                              >
+                                <div className="flex-1 text-muted-foreground space-y-0.5">
+                                  <div>
+                                    <span className="text-foreground/70">
+                                      {entry.editedBy || "anonymous"}
+                                    </span>
+                                    {editedAtLabel && <> • {editedAtLabel}</>}
+                                  </div>
+                                  {parts.length > 0 && (
+                                    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                                      {parts.map((p, i) => (
+                                        <span key={i}>
+                                          {i > 0 && <span className="text-muted-foreground/50">; </span>}
+                                          {p}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-1.5 text-[10px] text-amber-300 hover:text-amber-200 shrink-0"
+                                  disabled={editing !== null || busy === revertKey || busy === `rm:${m.phrase}`}
+                                  onClick={() => handleRevertEdit(m.phrase, entry)}
+                                  data-testid="handwavy-revert-edit"
+                                  aria-label={`Revert edit on ${m.phrase} from ${editedAtLabel ?? entry.editedAt}`}
+                                  title="Restore the values from before this edit (recorded as a new audit entry)."
+                                >
+                                  <Undo2 className="w-3 h-3 mr-1" />
+                                  {busy === revertKey ? "Reverting…" : "Revert"}
+                                </Button>
+                              </li>
+                            );
+                          })}
+                      </ul>
+                    </details>
+                  )}
                   {isEditing ? (
                     <textarea
                       value={editing!.rationale}

@@ -14,6 +14,7 @@ let removeHandwavyPhrase: typeof import("./handwavy-phrases").removeHandwavyPhra
 let reinstateHandwavyPhrase: typeof import("./handwavy-phrases").reinstateHandwavyPhrase;
 let editHandwavyPhrase: typeof import("./handwavy-phrases").editHandwavyPhrase;
 let undoHandwavyPhrase: typeof import("./handwavy-phrases").undoHandwavyPhrase;
+let revertHandwavyPhraseEdit: typeof import("./handwavy-phrases").revertHandwavyPhraseEdit;
 let __resetHandwavyPhrasesForTests: typeof import("./handwavy-phrases").__resetHandwavyPhrasesForTests;
 let __restoreHandwavyPhraseDefaultsForTests: typeof import("./handwavy-phrases").__restoreHandwavyPhraseDefaultsForTests;
 
@@ -29,6 +30,7 @@ beforeAll(async () => {
   reinstateHandwavyPhrase = mod.reinstateHandwavyPhrase;
   editHandwavyPhrase = mod.editHandwavyPhrase;
   undoHandwavyPhrase = mod.undoHandwavyPhrase;
+  revertHandwavyPhraseEdit = mod.revertHandwavyPhraseEdit;
   __resetHandwavyPhrasesForTests = mod.__resetHandwavyPhrasesForTests;
   __restoreHandwavyPhraseDefaultsForTests = mod.__restoreHandwavyPhraseDefaultsForTests;
 });
@@ -514,6 +516,181 @@ describe("handwavy-phrases loader", () => {
         { now: "2026-04-22T12:00:30.000Z", windowMs: 60_000 },
       );
       expect(ok.ok).toBe(true);
+    });
+  });
+
+  // --- Task #132: revert a single edit-history entry ---
+
+  describe("revertHandwavyPhraseEdit", () => {
+    it("restores the prior category and appends an inverse edit entry attributed to the reverter", () => {
+      addHandwavyPhrase("revertable phrase one", "absence", {
+        reviewer: "alice@team.com",
+        rationale: "original reason",
+        now: "2026-04-20T08:00:00.000Z",
+      });
+      const edit = editHandwavyPhrase(
+        "revertable phrase one",
+        { category: "buzzword" },
+        { reviewer: "bob@team.com", now: "2026-04-22T13:00:00.000Z" },
+      );
+      expect(edit.editEntry?.editedAt).toBe("2026-04-22T13:00:00.000Z");
+
+      const result = revertHandwavyPhraseEdit(
+        "revertable phrase one",
+        "2026-04-22T13:00:00.000Z",
+        { reviewer: "carol@team.com", now: "2026-04-22T15:00:00.000Z" },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.edited).toBe(true);
+      expect(result.marker.category).toBe("absence");
+      // Original add metadata is preserved.
+      expect(result.marker.addedBy).toBe("alice@team.com");
+      expect(result.marker.rationale).toBe("original reason");
+      // The original edit row stays in place, and the revert appears as a
+      // fresh inverse entry — append-only audit log.
+      expect(result.marker.edits).toHaveLength(2);
+      const inverse = result.marker.edits?.[1];
+      expect(inverse?.editedBy).toBe("carol@team.com");
+      expect(inverse?.editedAt).toBe("2026-04-22T15:00:00.000Z");
+      expect(inverse?.category).toEqual({ from: "buzzword", to: "absence" });
+      expect(result.revertedEntry.editedAt).toBe("2026-04-22T13:00:00.000Z");
+    });
+
+    it("restores rationale, including reverting a 'cleared' edit back to the original text", () => {
+      addHandwavyPhrase("revertable phrase two", "hedging", {
+        rationale: "first take",
+        now: "2026-04-20T08:00:00.000Z",
+      });
+      // Edit clears the rationale.
+      editHandwavyPhrase(
+        "revertable phrase two",
+        { rationale: "" },
+        { now: "2026-04-22T10:00:00.000Z" },
+      );
+      const after = getHandwavyPhrases().find((m) => m.phrase === "revertable phrase two");
+      expect(after?.rationale).toBeUndefined();
+
+      const result = revertHandwavyPhraseEdit(
+        "revertable phrase two",
+        "2026-04-22T10:00:00.000Z",
+        { now: "2026-04-22T12:00:00.000Z" },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.edited).toBe(true);
+      expect(result.marker.rationale).toBe("first take");
+      expect(result.marker.edits?.[1].rationale).toEqual({ from: "", to: "first take" });
+    });
+
+    it("only undoes the fields the entry recorded a change to (later edits to OTHER fields stick)", () => {
+      addHandwavyPhrase("revertable phrase three", "absence", {
+        rationale: "initial reason",
+        now: "2026-04-20T08:00:00.000Z",
+      });
+      const e1 = editHandwavyPhrase(
+        "revertable phrase three",
+        { category: "hedging" },
+        { now: "2026-04-21T10:00:00.000Z" },
+      );
+      // Subsequent unrelated rationale edit should NOT be undone by reverting e1.
+      editHandwavyPhrase(
+        "revertable phrase three",
+        { rationale: "newer reason" },
+        { now: "2026-04-22T10:00:00.000Z" },
+      );
+      const result = revertHandwavyPhraseEdit(
+        "revertable phrase three",
+        e1.editEntry!.editedAt,
+        { now: "2026-04-22T15:00:00.000Z" },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.marker.category).toBe("absence");
+      // The unrelated rationale change is preserved.
+      expect(result.marker.rationale).toBe("newer reason");
+    });
+
+    it("returns edited=false when the current values already match the edit's before-state", () => {
+      addHandwavyPhrase("revertable phrase four", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      const e1 = editHandwavyPhrase(
+        "revertable phrase four",
+        { category: "hedging" },
+        { now: "2026-04-21T10:00:00.000Z" },
+      );
+      // A later edit happens to put the category back to absence.
+      editHandwavyPhrase(
+        "revertable phrase four",
+        { category: "absence" },
+        { now: "2026-04-22T10:00:00.000Z" },
+      );
+      // Revert e1 — nothing to undo because category is already 'absence'.
+      const result = revertHandwavyPhraseEdit(
+        "revertable phrase four",
+        e1.editEntry!.editedAt,
+        { now: "2026-04-22T15:00:00.000Z" },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.edited).toBe(false);
+      // No inverse entry was appended (still just the two original edits).
+      expect(result.marker.edits).toHaveLength(2);
+    });
+
+    it("returns phrase-not-found when the active list has no such phrase", () => {
+      const result = revertHandwavyPhraseEdit(
+        "phrase that was never added",
+        "2026-04-22T13:00:00.000Z",
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("phrase-not-found");
+      }
+    });
+
+    it("returns edit-not-found when no edit on the marker matches editedAt", () => {
+      addHandwavyPhrase("revertable phrase five", "absence");
+      editHandwavyPhrase(
+        "revertable phrase five",
+        { category: "hedging" },
+        { now: "2026-04-21T10:00:00.000Z" },
+      );
+      const result = revertHandwavyPhraseEdit(
+        "revertable phrase five",
+        "2099-01-01T00:00:00.000Z",
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("edit-not-found");
+      }
+    });
+
+    it("can be applied repeatedly — reverting a revert restores the original change", () => {
+      addHandwavyPhrase("revertable phrase six", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      const e1 = editHandwavyPhrase(
+        "revertable phrase six",
+        { category: "buzzword" },
+        { now: "2026-04-21T10:00:00.000Z" },
+      );
+      const r1 = revertHandwavyPhraseEdit(
+        "revertable phrase six",
+        e1.editEntry!.editedAt,
+        { now: "2026-04-22T10:00:00.000Z" },
+      );
+      expect(r1.ok).toBe(true);
+      if (!r1.ok) return;
+      // The revert appended a new edit; reverting THAT one should put us
+      // back to the original edit's "to" value (buzzword).
+      const inverse = r1.marker.edits?.[1];
+      expect(inverse?.editedAt).toBe("2026-04-22T10:00:00.000Z");
+      const r2 = revertHandwavyPhraseEdit(
+        "revertable phrase six",
+        inverse!.editedAt,
+        { now: "2026-04-22T12:00:00.000Z" },
+      );
+      expect(r2.ok).toBe(true);
+      if (!r2.ok) return;
+      expect(r2.marker.category).toBe("buzzword");
     });
   });
 

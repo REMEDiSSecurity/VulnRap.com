@@ -758,6 +758,89 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     });
   });
 
+  // --- Task #132: revert a single edit-history entry ---
+
+  describe("POST /feedback/calibration/handwavy-phrases/revert-edit", () => {
+    it("undoes a category edit, returning the new marker state and an inverse edit entry", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "revert-route phrase",
+        category: "absence",
+        reviewer: "alice@team.com",
+      });
+      const edit = await request<{ editEntry: { editedAt: string } }>(
+        "PATCH",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "revert-route phrase", category: "buzzword", reviewer: "bob@team.com" },
+      );
+      expect(edit.status).toBe(200);
+      const editedAt = edit.body.editEntry.editedAt;
+
+      const r = await request<{
+        reverted: boolean;
+        edited: boolean;
+        marker: { category: string; edits?: Array<{ category?: { from: string; to: string }; editedBy?: string }> };
+        revertedEntry: { editedAt: string };
+      }>("POST", "/feedback/calibration/handwavy-phrases/revert-edit", {
+        phrase: "revert-route phrase",
+        editedAt,
+        reviewer: "carol@team.com",
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.reverted).toBe(true);
+      expect(r.body.edited).toBe(true);
+      expect(r.body.marker.category).toBe("absence");
+      expect(r.body.marker.edits).toHaveLength(2);
+      const inverse = r.body.marker.edits?.[1];
+      expect(inverse?.editedBy).toBe("carol@team.com");
+      expect(inverse?.category).toEqual({ from: "buzzword", to: "absence" });
+      expect(r.body.revertedEntry.editedAt).toBe(editedAt);
+    });
+
+    it("returns 404 when the phrase is not in the active list", async () => {
+      const r = await request<{ error: string; reason: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/revert-edit",
+        { phrase: "phrase that was never added", editedAt: "2026-04-22T13:00:00.000Z" },
+      );
+      expect(r.status).toBe(404);
+      expect(r.body.reason).toBe("phrase-not-found");
+    });
+
+    it("returns 404 when no edit entry on that phrase matches editedAt", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "revert-route bad-ts",
+        category: "absence",
+      });
+      await request("PATCH", "/feedback/calibration/handwavy-phrases", {
+        phrase: "revert-route bad-ts",
+        category: "hedging",
+      });
+      const r = await request<{ error: string; reason: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/revert-edit",
+        { phrase: "revert-route bad-ts", editedAt: "2099-01-01T00:00:00.000Z" },
+      );
+      expect(r.status).toBe(404);
+      expect(r.body.reason).toBe("edit-not-found");
+    });
+
+    it("rejects missing phrase or editedAt with 400", async () => {
+      const noPhrase = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/revert-edit",
+        { editedAt: "2026-04-22T13:00:00.000Z" },
+      );
+      expect(noPhrase.status).toBe(400);
+      const noTs = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/revert-edit",
+        { phrase: "revert-route phrase" },
+      );
+      expect(noTs.status).toBe(400);
+      expect(noTs.body.error).toMatch(/editedAt/);
+    });
+  });
+
   it("restoreDefaults helper rewrites the file with the curated defaults", () => {
     __restoreDefaults();
     // Sanity: the restore helper does not throw and the file now contains

@@ -726,6 +726,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /feedback/calibration/handwavy-phrases/revert-edit:
+    post:
+      operationId: revertHandwavyPhraseEdit
+      tags: [feedback]
+      summary: Revert a single edit on a curated FLAT hand-wavy marker phrase
+      description: |
+        Task #132 — undoes a single entry from a curated phrase's `edits` log
+        in one click. The reviewer supplies the phrase and the `editedAt`
+        timestamp of the edit they want to undo; the server restores
+        whatever fields that entry recorded a change to (category and/or
+        rationale) back to their `from` values, leaving any field the entry
+        did NOT change alone. The audit log stays append-only — the revert
+        appears as a fresh `HandwavyEditEntry` with the inverse before/after
+        pair, attributed to the reviewer who pressed the button. A no-op
+        revert (current values already match the target) returns
+        `edited: false` and does not append a new entry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HandwavyPhraseRevertEditBody"
+      responses:
+        "200":
+          description: Revert applied (or no-op when current values already match)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Phrase or matching edit entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /stats:
     get:
       operationId: getStats
@@ -3141,6 +3183,24 @@ components:
           description: Reviewer name or email recorded as `removedBy`/`undoneBy` on the resulting history row. Optional.
       required: [phrase, addedAt]
 
+    HandwavyPhraseRevertEditBody:
+      type: object
+      description: |
+        Task #132 — body for POST /feedback/calibration/handwavy-phrases/revert-edit.
+        The edit entry is matched by `phrase` + `editedAt`.
+      properties:
+        phrase:
+          type: string
+          description: Existing curated phrase (matched after lowercase + whitespace normalization).
+        editedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of the `edits` entry to undo.
+        reviewer:
+          type: string
+          description: Reviewer name or email recorded on the inverse edit entry. Optional.
+      required: [phrase, editedAt]
+
     HandwavyPhraseReinstateBody:
       type: object
       description: |
@@ -3239,6 +3299,15 @@ components:
             Task #130 — true when the response is from POST
             /feedback/calibration/handwavy-phrases/undo. Omitted on plain
             POST/DELETE/reinstate responses.
+        reverted:
+          type: boolean
+          description: |
+            Task #132 — true when the response is from POST
+            /feedback/calibration/handwavy-phrases/revert-edit. Inspect
+            `edited` to tell whether the revert actually changed anything.
+            Omitted on other endpoints.
+        revertedEntry:
+          $ref: "#/components/schemas/HandwavyEditEntry"
         phrase:
           type: string
           description: The normalized phrase that was added/removed.

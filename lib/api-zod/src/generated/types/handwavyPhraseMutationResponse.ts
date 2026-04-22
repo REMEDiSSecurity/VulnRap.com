@@ -29,6 +29,13 @@ POST/DELETE responses.
 POST/DELETE/reinstate responses.
  */
   undone?: boolean;
+  /** Task #132 — true when the response is from POST
+/feedback/calibration/handwavy-phrases/revert-edit. Inspect
+`edited` to tell whether the revert actually changed anything.
+Omitted on other endpoints.
+ */
+  reverted?: boolean;
+  revertedEntry?: HandwavyEditEntry;
   /** The normalized phrase that was added/removed. */
   phrase: string;
   category?: HandwavyCategory;
