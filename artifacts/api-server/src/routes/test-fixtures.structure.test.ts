@@ -102,4 +102,78 @@ describe("test-fixtures structural guards", () => {
       ).toBe(true);
     }
   });
+
+  // Task #87 — cross-family fixtures for the AVRI_NO_GOLD_SIGNALS detector.
+  // Each one must (a) carry the shared "no_gold_signals" archetype label so
+  // calibration groups them together, and (b) actually surface the
+  // AVRI_NO_GOLD_SIGNALS override under AVRI-on. Asserting the override
+  // string directly locks the detector to the fixture text per family.
+  it("Task #87 cross-family no_gold_signals fixtures (T3-19..T3-22) carry the shared archetype", () => {
+    const expected: Record<string, string> = {
+      "T3-19-no-gold-injection": "no_gold_signals",
+      "T3-20-no-gold-web-client": "no_gold_signals",
+      "T3-21-no-gold-memory-corruption": "no_gold_signals",
+      "T3-22-no-gold-authn-authz": "no_gold_signals",
+    };
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    for (const [id, archetype] of Object.entries(expected)) {
+      const f = byId.get(id);
+      expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
+      expect(f!.archetype, `${id} archetype`).toBe(archetype);
+    }
+  });
+
+  it("Task #87 no_gold_signals fixtures surface AVRI_NO_GOLD_SIGNALS under AVRI-on", () => {
+    const ids = [
+      "T3-19-no-gold-injection",
+      "T3-20-no-gold-web-client",
+      "T3-21-no-gold-memory-corruption",
+      "T3-22-no-gold-authn-authz",
+    ];
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    for (const id of ids) {
+      const f = byId.get(id);
+      expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
+      const result = runAvriComposite(f!.text, { claimedCwes: f!.claimedCwes });
+      expect(
+        result.overridesApplied.some(o => o.includes("AVRI_NO_GOLD_SIGNALS")),
+        `${id} should surface AVRI_NO_GOLD_SIGNALS override (got: ${result.overridesApplied.join(" | ")})`,
+      ).toBe(true);
+    }
+  });
+
+  // Task #87 — cross-family fixtures for the AVRI_FAMILY_CONTRADICTION detector.
+  it("Task #87 cross-family family_contradiction fixtures (T3-23..T3-26) carry the shared archetype", () => {
+    const expected: Record<string, string> = {
+      "T3-23-contradiction-injection": "family_contradiction",
+      "T3-24-contradiction-web-client": "family_contradiction",
+      "T3-25-contradiction-memory-corruption": "family_contradiction",
+      "T3-26-contradiction-authn-authz": "family_contradiction",
+    };
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    for (const [id, archetype] of Object.entries(expected)) {
+      const f = byId.get(id);
+      expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
+      expect(f!.archetype, `${id} archetype`).toBe(archetype);
+    }
+  });
+
+  it("Task #87 family_contradiction fixtures surface AVRI_FAMILY_CONTRADICTION under AVRI-on", () => {
+    const ids = [
+      "T3-23-contradiction-injection",
+      "T3-24-contradiction-web-client",
+      "T3-25-contradiction-memory-corruption",
+      "T3-26-contradiction-authn-authz",
+    ];
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    for (const id of ids) {
+      const f = byId.get(id);
+      expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
+      const result = runAvriComposite(f!.text, { claimedCwes: f!.claimedCwes });
+      expect(
+        result.overridesApplied.some(o => o.includes("AVRI_FAMILY_CONTRADICTION")),
+        `${id} should surface AVRI_FAMILY_CONTRADICTION override (got: ${result.overridesApplied.join(" | ")})`,
+      ).toBe(true);
+    }
+  });
 });

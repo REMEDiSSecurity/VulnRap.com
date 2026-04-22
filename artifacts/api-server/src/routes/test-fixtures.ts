@@ -1509,6 +1509,256 @@ Severity: Critical, CVSS 9.8.`,
     expectedEngine2: [0, 35],
     expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
   },
+  // -------------------------------------------------------------------------
+  // Task #87 — cross-family coverage for the family-agnostic
+  // AVRI_NO_GOLD_SIGNALS detector. Each fixture cites a CWE that anchors
+  // it into a different major family but provides zero family-specific
+  // gold signals (no payloads, no traces, no diffs, no file references)
+  // so e2.goldHitCount and e3.goldHitCount both stay at zero. They share
+  // the new "no_gold_signals" archetype label so calibration can monitor
+  // the detector's headroom across families at a glance.
+  // -------------------------------------------------------------------------
+  {
+    id: "T3-19-no-gold-injection",
+    tier: "T3_SLOP",
+    archetype: "no_gold_signals",
+    claimedCwes: ["CWE-89"],
+    text: `# Database query exposed to untrusted input
+
+The reporting backend is exposed to untrusted input that ultimately
+influences how a database query is constructed. As a result, an
+attacker who can reach the affected functionality may be able to
+influence the resulting query in ways the maintainers did not intend,
+which is widely understood to be one of the more serious issue classes
+in modern web applications.
+
+The remediation is the textbook one for this class of issue: stop
+building queries through string concatenation, adopt the safe
+query-builder helpers offered by the underlying database driver, and
+apply a strict allowlist on any value that legitimately needs to be
+interpolated into the query body.
+
+I have not pasted a concrete attack string, identified a specific
+call site, or attached a captured request/response pair, both because
+the issue is structural rather than tied to a single call site and
+because doing so risks arming a copy-paste attacker before the fix
+lands. Severity: Critical.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-20-no-gold-web-client",
+    tier: "T3_SLOP",
+    archetype: "no_gold_signals",
+    claimedCwes: ["CWE-79"],
+    text: `# Reflected client-side issue on the public marketing pages
+
+The public marketing pages reflect a portion of the user-supplied
+query parameters back into the rendered response without performing
+contextual encoding at the template boundary. Browsers are then liable
+to interpret the reflected fragment as part of the document rather
+than as inert text, which is the defining condition for the reflected
+variant of this well-known issue class.
+
+Recommended remediation is the usual: contextual output encoding at
+the template boundary plus a strict response policy header that
+disables inline execution. Any standard cheat-sheet entry for the
+reflected variant of this class will reproduce the issue in
+essentially the same way against the affected pages.
+
+I have intentionally not pasted a payload string, named a specific
+parameter, or attached a captured response, both to avoid arming a
+copy-paste attacker before the fix lands and because the precise
+breakout depends on the surrounding template. Severity: High.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-21-no-gold-memory-corruption",
+    tier: "T3_SLOP",
+    archetype: "no_gold_signals",
+    claimedCwes: ["CWE-787"],
+    text: `# Memory safety issue in the request parsing layer
+
+While auditing the request parsing layer I observed what appears to be
+a memory safety issue. The parser performs an arithmetic computation
+on attacker-controlled length fields prior to sizing its destination
+buffer; when the computation underestimates the required size, the
+subsequent decode loop writes beyond the end of the buffer and
+corrupts adjacent allocations on the heap.
+
+The recommended remediation is the textbook one for this class of
+issue: validate the length fields against a sane upper bound before
+the multiplication that sizes the destination buffer, and switch to a
+width-checked allocation helper so a future regression in the bounds
+check still fails closed.
+
+I do not have a sanitizer trace, a debugger session, or a runnable
+reproducer to share at this time — the binary I tested was a release
+build and I did not rebuild with debug symbols. The reproducer is a
+malformed input that I am withholding from this report pending the
+fix. Severity: Critical, CVSS 9.8.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-22-no-gold-authn-authz",
+    tier: "T3_SLOP",
+    archetype: "no_gold_signals",
+    claimedCwes: ["CWE-639"],
+    text: `# Authorization weakness in the account management area
+
+The account management area appears to be exposed to a broken access
+control issue. A user who is authenticated to the application may be
+able to influence references to objects owned by other users in ways
+the maintainers did not intend, which is widely understood to be a
+serious access-control class of issue in modern web applications.
+
+The remediation is the textbook one for this class of issue: enforce
+an explicit ownership check on every object reference at the handler
+boundary, and reject any request whose authenticated principal does
+not match the resource's recorded owner before returning the resource
+in the response body.
+
+I have not paired this report with a side-by-side demonstration
+between two distinct sessions, named a specific protected endpoint, or
+attached a captured request/response pair. The exact path and the
+column carrying the object id are withheld from the public report;
+please consult the equivalent handler in your codebase. Severity:
+High.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  // -------------------------------------------------------------------------
+  // Task #87 — cross-family coverage for the family-agnostic
+  // AVRI_FAMILY_CONTRADICTION detector. Each fixture cites a CWE that
+  // anchors it into one major family but its prose drops a phrase from a
+  // different family's contradictionPhrases list (e.g. an XSS payload in
+  // an INJECTION-cited report) so e2.detail.contradictionsFound is
+  // non-empty. Each fixture also names the cited CWE id in plain text so
+  // the cwe_correct_class gold signal fires for the cited family — that
+  // suppresses the AVRI_NO_GOLD_SIGNALS override and keeps each fixture
+  // pinned to the FAMILY_CONTRADICTION detector under test. They share
+  // the new "family_contradiction" archetype label.
+  // -------------------------------------------------------------------------
+  {
+    id: "T3-23-contradiction-injection",
+    tier: "T3_SLOP",
+    archetype: "family_contradiction",
+    claimedCwes: ["CWE-89"],
+    text: `# SQL injection (CWE-89) in the admin reporting backend
+
+The admin reporting backend is exposed to a SQL injection issue: a
+field that flows from the request into the underlying database query
+is not properly neutralized before it is appended to the generated
+SQL. This is a textbook condition for the issue class and is widely
+understood to be one of the more serious issue classes in modern web
+applications.
+
+While exploring the affected functionality I also noticed that the
+same field is reflected into the rendered admin dashboard page, and
+that an alert(1) breakout in the surrounding HTML context is parsed by
+the browser as part of the document rather than as inert text. That
+behaviour is incidental to the SQL injection finding and is mentioned
+only for completeness; the primary issue here is the database one.
+
+I have not pasted a concrete payload, named the specific endpoint or
+parameter, or attached a captured request/response pair. The
+remediation is the textbook one for this issue class. Severity:
+Critical.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-24-contradiction-web-client",
+    tier: "T3_SLOP",
+    archetype: "family_contradiction",
+    claimedCwes: ["CWE-79"],
+    text: `# Cross-site scripting (CWE-79) on the public search results page
+
+The public search results page is exposed to a reflected cross-site
+scripting issue: the user-supplied query parameter is reflected back
+into the rendered response without contextual encoding at the
+template boundary, so a crafted query is parsed by the browser as
+part of the document rather than as inert text.
+
+While exploring the affected page I also noticed that the same field
+flows downstream into a database query that is built through string
+assembly, so an "or 1=1" style breakout against the trailing clause
+appears to influence the resulting query in ways the maintainers did
+not intend. That observation is incidental to the cross-site scripting
+finding and is mentioned only for completeness; the primary issue
+here is the client-side one.
+
+I have not pasted a concrete payload, named the specific parameter,
+or attached a captured response. The remediation is the textbook one
+for this issue class. Severity: High.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-25-contradiction-memory-corruption",
+    tier: "T3_SLOP",
+    archetype: "family_contradiction",
+    claimedCwes: ["CWE-787"],
+    text: `# Heap corruption (CWE-787) in the request parsing layer
+
+The request parsing layer is exposed to a heap corruption issue. The
+parser performs an arithmetic computation on attacker-controlled
+length fields prior to sizing its destination buffer; when that
+computation underestimates the required size, the decode loop writes
+beyond the end of the buffer and corrupts adjacent allocations.
+
+While exploring the affected functionality I also noticed that the
+same parsing layer is reachable from a public web surface where the
+parsed value is later reflected into a rendered response, and an
+alert(1) breakout in the surrounding HTML context is parsed by the
+browser as part of the document. That web-surface observation is
+incidental to the heap corruption finding and is mentioned only for
+completeness; the primary issue here is the memory safety one.
+
+I do not have a sanitizer trace, a debugger session, or a runnable
+reproducer to share at this time. The remediation is the textbook one
+for this issue class. Severity: Critical, CVSS 9.8.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-26-contradiction-authn-authz",
+    tier: "T3_SLOP",
+    archetype: "family_contradiction",
+    claimedCwes: ["CWE-639"],
+    text: `# Broken access control (CWE-639) in the account management area
+
+The account management area is exposed to a broken access control
+issue. An authenticated user is able to influence references to
+objects owned by other users in ways the maintainers did not intend,
+which is widely understood to be a serious access-control class of
+issue in modern web applications.
+
+While exploring the affected functionality I also noticed that one of
+the protected response bodies is reflected into the rendered profile
+page, and an alert(1) breakout in the surrounding HTML context is
+parsed by the browser as part of the document rather than as inert
+text. That client-side observation is incidental to the broken access
+control finding and is mentioned only for completeness; the primary
+issue here is the authorization one.
+
+I have not paired this report with a side-by-side demonstration
+between two distinct sessions, named a specific protected endpoint,
+or attached a captured request/response pair. The remediation is the
+textbook one for this issue class. Severity: High.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
 ];
 
 // =============================================================================

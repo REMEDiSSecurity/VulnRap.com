@@ -107,7 +107,9 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
     expect(Array.isArray(body.archetypes)).toBe(true);
     const expected = [
       "fabricated_diff",
+      "family_contradiction",
       "narrated_curl",
+      "no_gold_signals",
       "paraphrased_cve",
       "prose_poc",
       "pseudo_asan",
@@ -141,6 +143,16 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
       "T3-16-fabricated-diff-injection",
       "T3-17-fabricated-diff-web-client",
       "T3-18-fabricated-diff-memory-corruption",
+      // Task #87 — cross-family AVRI_NO_GOLD_SIGNALS fixtures.
+      "T3-19-no-gold-injection",
+      "T3-20-no-gold-web-client",
+      "T3-21-no-gold-memory-corruption",
+      "T3-22-no-gold-authn-authz",
+      // Task #87 — cross-family AVRI_FAMILY_CONTRADICTION fixtures.
+      "T3-23-contradiction-injection",
+      "T3-24-contradiction-web-client",
+      "T3-25-contradiction-memory-corruption",
+      "T3-26-contradiction-authn-authz",
     ]) {
       expect(sprint12Ids.has(id), `archetype groups should include ${id}`).toBe(true);
     }
@@ -159,6 +171,16 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
         "T3-16-fabricated-diff-injection",
         "T3-17-fabricated-diff-web-client",
         "T3-18-fabricated-diff-memory-corruption",
+        // Task #87 — cross-family fixtures for the other family-agnostic
+        // AVRI overrides (NO_GOLD_SIGNALS and FAMILY_CONTRADICTION).
+        "T3-19-no-gold-injection",
+        "T3-20-no-gold-web-client",
+        "T3-21-no-gold-memory-corruption",
+        "T3-22-no-gold-authn-authz",
+        "T3-23-contradiction-injection",
+        "T3-24-contradiction-web-client",
+        "T3-25-contradiction-memory-corruption",
+        "T3-26-contradiction-authn-authz",
       ].sort(),
     );
   }, 60_000);
