@@ -161,18 +161,24 @@ const FALLBACK_KEYWORDS: FallbackKeywords[] = [
  * scoring even when the *detected* family (via keywords/extractors) differs. */
 function citedCweFamily(claimedCwes: string[] | undefined): { cweId: string | null; family: FamilyId | null } {
   if (!claimedCwes || claimedCwes.length === 0) return { cweId: null, family: null };
+  // Walk *all* claimed CWEs in order looking for the first that maps to a
+  // family (directly or via ancestors). Only fall back to the first cited
+  // CWE with no family after exhausting every candidate, so a multi-CWE
+  // report with [unknown_cwe, mappable_cwe] still reaches Engine 3's
+  // same-family / off-family logic.
+  let firstCitedId: string | null = null;
   for (const raw of claimedCwes) {
     const id = normalizeCweId(raw);
     if (!id) continue;
+    if (firstCitedId === null) firstCitedId = id;
     const direct = familyForCweNumber(id);
     if (direct) return { cweId: id, family: direct };
     for (const ancestor of ancestorsOf(id)) {
       const famId = familyForCweNumber(ancestor);
       if (famId) return { cweId: id, family: famId };
     }
-    return { cweId: id, family: null };
   }
-  return { cweId: null, family: null };
+  return { cweId: firstCitedId, family: null };
 }
 
 function classifyByCwe(claimedCwes: string[] | undefined): ClassificationResult | null {
