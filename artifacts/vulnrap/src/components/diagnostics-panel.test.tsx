@@ -414,6 +414,109 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/tsan_or_helgrind_header/)).toBeInTheDocument();
   });
 
+  it("groups the FLAT hand-wavy phrase entries by category in the diagnostics panel", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "FLAT",
+          familyName: "FLAT",
+          classification: {
+            confidence: "LOW" as const,
+            reason: "no specific CWE family detected",
+            evidence: [],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 30,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 30,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "FLAT",
+                  familyName: "FLAT",
+                  baseScore: 50,
+                  goldHitCount: 0,
+                  goldTotalCount: 0,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: -24,
+                  absencePenalties: [
+                    {
+                      id: "flat_handwavy:do_not_have_a_reproducer",
+                      description: 'Hand-wavy phrase: "do not have a reproducer"',
+                      points: 6,
+                      flatHandwavyCategory: "absence",
+                    },
+                    {
+                      id: "flat_handwavy:private_poc",
+                      description: 'Hand-wavy phrase: "private poc"',
+                      points: 6,
+                      flatHandwavyCategory: "absence",
+                    },
+                    {
+                      id: "flat_handwavy:may_not_be_encrypted",
+                      description: 'Hand-wavy phrase: "may not be encrypted"',
+                      points: 6,
+                      flatHandwavyCategory: "hedging",
+                    },
+                    {
+                      id: "flat_handwavy:advanced_persistent_threats",
+                      description: 'Hand-wavy phrase: "advanced persistent threats"',
+                      points: 6,
+                      flatHandwavyCategory: "buzzword",
+                    },
+                  ],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  rawAvriScore: 26,
+                  legacyScore: 50,
+                  blendedScore: 30,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Hand-wavy Phrases Triggering Slop Haircut/i)).toBeInTheDocument();
+    });
+
+    // Each themed group header is rendered with its phrase count + raw-point subtotal.
+    const absenceHeader = screen.getByText(/Self-admitted absence of evidence/i);
+    expect(absenceHeader).toBeInTheDocument();
+    expect(absenceHeader.parentElement?.textContent ?? "").toMatch(/2 phrases.*−12 raw/);
+
+    const hedgingHeader = screen.getByText(/Generic hedging/i);
+    expect(hedgingHeader).toBeInTheDocument();
+    expect(hedgingHeader.parentElement?.textContent ?? "").toMatch(/1 phrase.*−6 raw/);
+
+    const buzzwordHeader = screen.getByText(/Buzzword-soup framings/i);
+    expect(buzzwordHeader).toBeInTheDocument();
+    expect(buzzwordHeader.parentElement?.textContent ?? "").toMatch(/1 phrase.*−6 raw/);
+
+    // Phrases still render under their group, with the same per-hit weight.
+    expect(screen.getByText(/"do not have a reproducer"/i)).toBeInTheDocument();
+    expect(screen.getByText(/"may not be encrypted"/i)).toBeInTheDocument();
+    expect(screen.getByText(/"advanced persistent threats"/i)).toBeInTheDocument();
+  });
+
   it("surfaces the FAKE_RAW_HTTP block in the printable markdown export with placeholder/CRLF/TE-CL counters", () => {
     const withRawHttp: DiagnosticsResponse = {
       ...SAMPLE_DIAGNOSTICS,

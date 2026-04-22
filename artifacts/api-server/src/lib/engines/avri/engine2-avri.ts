@@ -45,11 +45,19 @@ function stripCodeAndDiffs(text: string): string {
   return out;
 }
 
+/**
+ * Theme buckets for FLAT-family hand-wavy phrase markers, used by the
+ * diagnostics panel to group matched entries instead of rendering one long
+ * flat list. Only set on FLAT-branch absence-penalty entries; non-FLAT
+ * absence penalties leave this field undefined.
+ */
+export type HandwavyCategory = "absence" | "hedging" | "buzzword";
+
 export interface AvriEngine2Detail {
   family: string;
   baseScore: number;
   goldHits: Array<{ id: string; description: string; points: number }>;
-  absencePenaltiesApplied: Array<{ id: string; description: string; points: number }>;
+  absencePenaltiesApplied: Array<{ id: string; description: string; points: number; flatHandwavyCategory?: HandwavyCategory }>;
   contradictionsFound: string[];
   totalAbsencePenalty: number;
   contradictionPenalty: number;
@@ -84,34 +92,39 @@ export function runEngine2Avri(
   if (family.id === "FLAT") {
     // Collapse all whitespace so multi-line prose still matches phrase markers.
     const lowered = fullText.toLowerCase().replace(/\s+/g, " ");
-    const handwavyMarkers = [
+    // Each marker carries a `category` so the diagnostics panel can group the
+    // matched entries into themed buckets (absence-of-evidence vs. generic
+    // hedging vs. buzzword-soup framings) rather than rendering one long flat
+    // list of a dozen rows. The category travels with each absence-penalty
+    // entry into the diagnostics payload via `flatHandwavyCategory`.
+    const handwavyMarkers: Array<{ phrase: string; category: HandwavyCategory }> = [
       // Self-admitted absence of evidence
-      "do not have a runnable reproducer",
-      "do not have a reproducer",
-      "private fuzzing harness",
-      "private poc",
-      "structural rather than",
-      "structural vulnerability follows from the design",
-      "i have not enumerated",
-      "have not been able to confirm",
-      "no working proof-of-concept",
-      "no runnable proof",
-      "follows from the design as observed",
-      "deployment is no different in this respect",
+      { phrase: "do not have a runnable reproducer", category: "absence" },
+      { phrase: "do not have a reproducer", category: "absence" },
+      { phrase: "private fuzzing harness", category: "absence" },
+      { phrase: "private poc", category: "absence" },
+      { phrase: "structural rather than", category: "absence" },
+      { phrase: "structural vulnerability follows from the design", category: "absence" },
+      { phrase: "i have not enumerated", category: "absence" },
+      { phrase: "have not been able to confirm", category: "absence" },
+      { phrase: "no working proof-of-concept", category: "absence" },
+      { phrase: "no runnable proof", category: "absence" },
+      { phrase: "follows from the design as observed", category: "absence" },
+      { phrase: "deployment is no different in this respect", category: "absence" },
       // Generic "may/appears/likely" hedging that signals zero observation
-      "may not be encrypted",
-      "may be present in environment variables",
-      "do not appear to be",
-      "does not appear to be",
-      "appears to be susceptible",
-      "consider a holistic remediation",
-      "leadership-level discussion",
+      { phrase: "may not be encrypted", category: "hedging" },
+      { phrase: "may be present in environment variables", category: "hedging" },
+      { phrase: "do not appear to be", category: "hedging" },
+      { phrase: "does not appear to be", category: "hedging" },
+      { phrase: "appears to be susceptible", category: "hedging" },
+      { phrase: "consider a holistic remediation", category: "hedging" },
+      { phrase: "leadership-level discussion", category: "hedging" },
       // Buzzword-soup framings with zero specifics
-      "comprehensive zero-trust assessment",
-      "modern threat landscape",
-      "advanced persistent threats",
-      "defense-in-depth posture",
-      "weak security culture",
+      { phrase: "comprehensive zero-trust assessment", category: "buzzword" },
+      { phrase: "modern threat landscape", category: "buzzword" },
+      { phrase: "advanced persistent threats", category: "buzzword" },
+      { phrase: "defense-in-depth posture", category: "buzzword" },
+      { phrase: "weak security culture", category: "buzzword" },
     ];
     const HANDWAVY_POINTS_PER_HIT = 6;
     const HANDWAVY_HAIRCUT_CAP = 24;
@@ -119,15 +132,16 @@ export function runEngine2Avri(
     // diagnostics panel can show reviewers exactly which language fired.
     // The displayed per-entry value is the per-hit weight (6); the score
     // impact is the capped sum below, surfaced separately.
-    const absencePenaltiesApplied: Array<{ id: string; description: string; points: number }> = [];
+    const absencePenaltiesApplied: Array<{ id: string; description: string; points: number; flatHandwavyCategory?: HandwavyCategory }> = [];
     let haircutRaw = 0;
     for (const m of handwavyMarkers) {
-      if (lowered.includes(m)) {
-        const slug = m.replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+      if (lowered.includes(m.phrase)) {
+        const slug = m.phrase.replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
         absencePenaltiesApplied.push({
           id: `flat_handwavy:${slug}`,
-          description: `Hand-wavy phrase: "${m}"`,
+          description: `Hand-wavy phrase: "${m.phrase}"`,
           points: HANDWAVY_POINTS_PER_HIT,
+          flatHandwavyCategory: m.category,
         });
         haircutRaw += HANDWAVY_POINTS_PER_HIT;
       }
@@ -150,6 +164,7 @@ export function runEngine2Avri(
         id: a.id,
         description: a.description,
         points: a.points,
+        flatHandwavyCategory: a.flatHandwavyCategory,
       })),
       contradictions: [],
       contradictionPenalty: 0,

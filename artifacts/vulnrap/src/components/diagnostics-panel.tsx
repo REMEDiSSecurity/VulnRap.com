@@ -470,6 +470,18 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
   );
 }
 
+// Task 107: theme buckets for FLAT-family hand-wavy phrase markers. Mirrors
+// HandwavyCategory in artifacts/api-server/src/lib/engines/avri/engine2-avri.ts.
+type HandwavyCategoryUI = "absence" | "hedging" | "buzzword";
+
+const HANDWAVY_CATEGORY_LABELS: Record<HandwavyCategoryUI, string> = {
+  absence: "Self-admitted absence of evidence",
+  hedging: "Generic hedging (\"may / appears\")",
+  buzzword: "Buzzword-soup framings",
+};
+
+const HANDWAVY_CATEGORY_ORDER: HandwavyCategoryUI[] = ["absence", "hedging", "buzzword"];
+
 // Sprint 11 / Task 60: Render the AVRI family rubric used for this report —
 // detected family + classification confidence, expected vs found gold signals,
 // any absence penalties applied, contradictions, and AVRI composite overrides.
@@ -485,7 +497,7 @@ interface AvriEngine2Breakdown {
   goldHits?: Array<{ id: string; description: string; points: number }>;
   goldMisses?: Array<{ id: string; description: string; points: number }>;
   absencePenalty?: number;
-  absencePenalties?: Array<{ id: string; description: string; points: number }>;
+  absencePenalties?: Array<{ id: string; description: string; points: number; flatHandwavyCategory?: HandwavyCategoryUI }>;
   contradictions?: string[];
   contradictionPenalty?: number;
   // Sprint 11 / Task 78: stripped-crash-trace block written by Engine 2
@@ -644,25 +656,63 @@ function AvriFamilySection({
               No specific CWE family detected — generic substance scoring used (no family rubric applied).
             </div>
             {absencePenalties.length > 0 && (
-              <div>
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+              <div className="space-y-2">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
                   Hand-wavy Phrases Triggering Slop Haircut
                   <span className="ml-1 text-muted-foreground/70 normal-case">
                     (applied haircut: {e2Avri?.absencePenalty ?? 0}; per-hit markers shown, total capped at −24)
                   </span>
                 </div>
-                <ul className="space-y-0.5">
-                  {absencePenalties.map((a) => (
-                    <li
-                      key={a.id}
-                      className="text-[11px] font-mono text-orange-400/90 flex items-baseline gap-1"
-                    >
-                      <span>−{a.points}</span>
-                      <span className="text-foreground/80">{a.description}</span>
-                      <span className="text-muted-foreground">({a.id})</span>
-                    </li>
-                  ))}
-                </ul>
+                {(() => {
+                  // Task 107: group the matched hand-wavy entries by category
+                  // so a dozen-row list reads as themed buckets (absence /
+                  // hedging / buzzword) rather than one flat scroll. Markers
+                  // missing a category (e.g. older cached payloads) fall back
+                  // into an "Other" bucket rendered last.
+                  const groups = new Map<HandwavyCategoryUI | "other", typeof absencePenalties>();
+                  for (const a of absencePenalties) {
+                    const key: HandwavyCategoryUI | "other" = a.flatHandwavyCategory ?? "other";
+                    const arr = groups.get(key) ?? [];
+                    arr.push(a);
+                    groups.set(key, arr);
+                  }
+                  const orderedKeys: Array<HandwavyCategoryUI | "other"> = [
+                    ...HANDWAVY_CATEGORY_ORDER.filter((k) => groups.has(k)),
+                    ...(groups.has("other") ? (["other"] as const) : []),
+                  ];
+                  return (
+                    <div className="space-y-2">
+                      {orderedKeys.map((key) => {
+                        const items = groups.get(key) ?? [];
+                        const label =
+                          key === "other" ? "Other" : HANDWAVY_CATEGORY_LABELS[key];
+                        const subtotal = items.reduce((s, a) => s + a.points, 0);
+                        return (
+                          <div key={key}>
+                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80 mb-0.5 flex items-baseline gap-1">
+                              <span>{label}</span>
+                              <span className="text-muted-foreground/60 normal-case">
+                                ({items.length} phrase{items.length === 1 ? "" : "s"}, −{subtotal} raw)
+                              </span>
+                            </div>
+                            <ul className="space-y-0.5">
+                              {items.map((a) => (
+                                <li
+                                  key={a.id}
+                                  className="text-[11px] font-mono text-orange-400/90 flex items-baseline gap-1"
+                                >
+                                  <span>−{a.points}</span>
+                                  <span className="text-foreground/80">{a.description}</span>
+                                  <span className="text-muted-foreground">({a.id})</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
