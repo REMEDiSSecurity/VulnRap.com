@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { DiagnosticsPanel } from "./diagnostics-panel";
+import {
+  DiagnosticsPanel,
+  buildMarkdownSummary,
+  type DiagnosticsResponse,
+} from "./diagnostics-panel";
 
 const REPORT_ID = 4242;
 
@@ -408,6 +412,135 @@ describe("DiagnosticsPanel smoke test", () => {
       screen.getByText(/TSan trace has 3\/5 frames with placeholder symbols\/offsets/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/tsan_or_helgrind_header/)).toBeInTheDocument();
+  });
+
+  it("renders per-engine triggered indicators grouped by strength when the engine row is expanded", async () => {
+    const withIndicators: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 22,
+            verdict: "RED",
+            confidence: "MEDIUM",
+            triggeredIndicators: [
+              {
+                signal: "STRIPPED_CRASH_TRACE",
+                value: true,
+                strength: "HIGH",
+                explanation: "Crash trace has 4/6 frames with placeholder symbols",
+              },
+              {
+                signal: "ABSENCE_PENALTY",
+                value: -8,
+                strength: "MEDIUM",
+                explanation: "Missing required gold signals",
+              },
+              {
+                signal: "POC_MISMATCH",
+                value: "url",
+                strength: "LOW",
+                explanation: "PoC URL did not match claim",
+              },
+            ],
+            signalBreakdown: {},
+          },
+        ],
+      },
+    };
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify(withIndicators),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Per-Engine Scores/i)).toBeInTheDocument();
+    });
+
+    // Indicator count chip is rendered on the engine row
+    expect(screen.getByText(/\(3 indicators\)/)).toBeInTheDocument();
+
+    // Click the engine row to expand triggered indicators
+    await user.click(screen.getByRole("button", { name: /Technical Substance Analyzer/i }));
+
+    expect(screen.getAllByText(/Triggered Indicators/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("STRIPPED_CRASH_TRACE")).toBeInTheDocument();
+    expect(screen.getByText("ABSENCE_PENALTY")).toBeInTheDocument();
+    expect(screen.getByText("POC_MISMATCH")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Crash trace has 4\/6 frames with placeholder symbols/i),
+    ).toBeInTheDocument();
+
+    // Markdown export includes a Triggered Indicators subsection
+    const md = buildMarkdownSummary(withIndicators);
+    expect(md).toContain("### Triggered Indicators — Technical Substance Analyzer");
+    expect(md).toContain("**HIGH**");
+    expect(md).toContain("`STRIPPED_CRASH_TRACE`");
+    expect(md).toContain("**MEDIUM**");
+    expect(md).toContain("`ABSENCE_PENALTY`");
+    expect(md).toContain("**LOW**");
+    expect(md).toContain("`POC_MISMATCH`");
+  });
+
+  it("groups indicators with missing strength under UNSPECIFIED without duplicating them", async () => {
+    // Backend types mark `strength` as required, but defensive UI/markdown
+    // handling still puts malformed (missing/invalid) entries into a single
+    // UNSPECIFIED bucket — never both LOW and UNSPECIFIED.
+    // Indicator carries no `strength` field — backend types require it,
+    // but the UI must still degrade gracefully and not double-render.
+    const malformedIndicator = {
+      signal: "MYSTERY_SIGNAL",
+      value: 1,
+      explanation: "Indicator with no strength field",
+    };
+    const withMalformed: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 22,
+            verdict: "RED",
+            confidence: "MEDIUM",
+            triggeredIndicators: [malformedIndicator],
+            signalBreakdown: {},
+          },
+        ],
+      },
+    };
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify(withMalformed),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Per-Engine Scores/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /Technical Substance Analyzer/i }));
+
+    // The signal renders exactly once (in the UNSPECIFIED group, not also in LOW)
+    expect(screen.getAllByText("MYSTERY_SIGNAL")).toHaveLength(1);
+    expect(screen.getByText("UNSPECIFIED")).toBeInTheDocument();
+    expect(screen.queryByText("LOW")).not.toBeInTheDocument();
+
+    // Markdown export must not duplicate the entry across LOW and UNSPECIFIED.
+    const md = buildMarkdownSummary(withMalformed);
+    const occurrences = md.split("`MYSTERY_SIGNAL`").length - 1;
+    expect(occurrences).toBe(1);
+    expect(md).toContain("**UNSPECIFIED**");
+    expect(md).not.toContain("**LOW**");
   });
 
   it("surfaces an error message when the diagnostics endpoint fails", async () => {

@@ -38,11 +38,20 @@ interface PerplexityBreakdown {
   rawEngine1Verdict?: string;
 }
 
+interface TriggeredIndicator {
+  signal?: string;
+  value?: unknown;
+  threshold?: number;
+  strength?: "HIGH" | "MEDIUM" | "LOW";
+  explanation?: string;
+}
+
 interface EngineResult {
   engine: string;
   score: number;
   verdict: "GREEN" | "YELLOW" | "RED" | "GREY";
   confidence?: "HIGH" | "MEDIUM" | "LOW";
+  triggeredIndicators?: TriggeredIndicator[];
   signalBreakdown?: Record<string, unknown> & { perplexity?: PerplexityBreakdown };
   note?: string;
 }
@@ -282,18 +291,7 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
                     <div className="text-xs uppercase tracking-wide text-muted-foreground">Per-Engine Scores</div>
                     <div className="space-y-1.5">
                       {data.engines.engines.map((eng) => (
-                        <div key={eng.engine} className="flex items-center justify-between gap-2 text-xs font-mono">
-                          <span className="truncate">{eng.engine}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 ${VERDICT_COLOR[eng.verdict] || ""}`}>
-                              {eng.verdict}
-                            </Badge>
-                            {eng.confidence && (
-                              <span className="text-[10px] text-muted-foreground uppercase">conf: {eng.confidence}</span>
-                            )}
-                            <span className="font-bold w-8 text-right">{eng.score}</span>
-                          </div>
-                        </div>
+                        <EngineRow key={eng.engine} eng={eng} />
                       ))}
                     </div>
                   </section>
@@ -915,6 +913,39 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
       lines.push(`| ${e.engine} | ${e.score} | ${e.verdict} | ${e.confidence ?? "—"} |`);
     }
     lines.push("");
+    for (const e of engines) {
+      const indicators = e.triggeredIndicators ?? [];
+      if (indicators.length === 0) continue;
+      lines.push(`### Triggered Indicators — ${e.engine}`);
+      for (const s of STRENGTH_ORDER) {
+        const items = indicators.filter((i) => i.strength === s);
+        if (items.length === 0) continue;
+        lines.push(`- **${s}**`);
+        for (const ind of items) {
+          const valueStr = formatIndicatorValue(ind.value);
+          const parts: string[] = [];
+          if (valueStr !== null) parts.push(`value: ${valueStr}`);
+          if (typeof ind.threshold === "number") parts.push(`threshold: ${ind.threshold}`);
+          const meta = parts.length > 0 ? ` (${parts.join(", ")})` : "";
+          lines.push(`  - \`${ind.signal ?? "—"}\`${meta}${ind.explanation ? ` — ${ind.explanation}` : ""}`);
+        }
+      }
+      const unspecified = indicators.filter(
+        (i) => i.strength !== "HIGH" && i.strength !== "MEDIUM" && i.strength !== "LOW",
+      );
+      if (unspecified.length > 0) {
+        lines.push(`- **UNSPECIFIED**`);
+        for (const ind of unspecified) {
+          const valueStr = formatIndicatorValue(ind.value);
+          const parts: string[] = [];
+          if (valueStr !== null) parts.push(`value: ${valueStr}`);
+          if (typeof ind.threshold === "number") parts.push(`threshold: ${ind.threshold}`);
+          const meta = parts.length > 0 ? ` (${parts.join(", ")})` : "";
+          lines.push(`  - \`${ind.signal ?? "—"}\`${meta}${ind.explanation ? ` — ${ind.explanation}` : ""}`);
+        }
+      }
+      lines.push("");
+    }
   }
 
   const overrides = data.composite?.overridesApplied ?? data.trace?.composite?.overridesApplied ?? [];
@@ -1032,6 +1063,150 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
   }
 
   return lines.join("\n");
+}
+
+const STRENGTH_TONE: Record<"HIGH" | "MEDIUM" | "LOW", string> = {
+  HIGH: "text-red-400 border-red-500/40 bg-red-500/5",
+  MEDIUM: "text-orange-400 border-orange-500/40 bg-orange-500/5",
+  LOW: "text-muted-foreground border-muted-foreground/30 bg-muted/10",
+};
+
+const STRENGTH_ORDER: Array<"HIGH" | "MEDIUM" | "LOW"> = ["HIGH", "MEDIUM", "LOW"];
+
+function formatIndicatorValue(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+function EngineRow({ eng }: { eng: EngineResult }) {
+  const indicators = eng.triggeredIndicators ?? [];
+  const hasIndicators = indicators.length > 0;
+  const [open, setOpen] = useState(false);
+  const grouped = STRENGTH_ORDER
+    .map((s) => ({
+      strength: s,
+      items: indicators.filter((i) => i.strength === s),
+    }))
+    .filter((g) => g.items.length > 0);
+  const unspecified = indicators.filter(
+    (i) => i.strength !== "HIGH" && i.strength !== "MEDIUM" && i.strength !== "LOW",
+  );
+  return (
+    <div className="rounded-md border border-border/30 bg-muted/5">
+      <button
+        type="button"
+        onClick={() => hasIndicators && setOpen((v) => !v)}
+        disabled={!hasIndicators}
+        aria-expanded={open}
+        className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-xs font-mono ${hasIndicators ? "cursor-pointer hover:bg-muted/10" : "cursor-default"}`}
+      >
+        <span className="flex items-center gap-1.5 truncate min-w-0">
+          {hasIndicators && (
+            open ? <ChevronUp className="w-3 h-3 shrink-0" /> : <ChevronDown className="w-3 h-3 shrink-0" />
+          )}
+          <span className="truncate">{eng.engine}</span>
+          {hasIndicators && (
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              ({indicators.length} indicator{indicators.length === 1 ? "" : "s"})
+            </span>
+          )}
+        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 ${VERDICT_COLOR[eng.verdict] || ""}`}>
+            {eng.verdict}
+          </Badge>
+          {eng.confidence && (
+            <span className="text-[10px] text-muted-foreground uppercase">conf: {eng.confidence}</span>
+          )}
+          <span className="font-bold w-8 text-right">{eng.score}</span>
+        </div>
+      </button>
+      {hasIndicators && open && (
+        <div className="border-t border-border/30 px-2.5 py-2 space-y-2">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Triggered Indicators
+          </div>
+          {grouped.map((g) => (
+            <div key={g.strength} className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-mono">
+                {g.strength}
+              </div>
+              <ul className="space-y-1">
+                {g.items.map((ind, i) => {
+                  const valueStr = formatIndicatorValue(ind.value);
+                  return (
+                    <li
+                      key={`${ind.signal ?? "indicator"}-${i}`}
+                      className={`rounded border px-2 py-1.5 text-[11px] font-mono ${STRENGTH_TONE[g.strength]}`}
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="font-semibold">{ind.signal ?? "—"}</span>
+                        <div className="flex items-center gap-2">
+                          {valueStr !== null && (
+                            <span className="text-foreground/80">value: {valueStr}</span>
+                          )}
+                          {typeof ind.threshold === "number" && (
+                            <span className="text-muted-foreground">thr: {ind.threshold}</span>
+                          )}
+                          <Badge
+                            variant="outline"
+                            className={`text-[9px] px-1 py-0 h-4 ${STRENGTH_TONE[g.strength]}`}
+                          >
+                            {g.strength}
+                          </Badge>
+                        </div>
+                      </div>
+                      {ind.explanation && (
+                        <div className="text-foreground/70 mt-0.5 whitespace-pre-wrap break-words">
+                          {ind.explanation}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+          {unspecified.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-mono">
+                UNSPECIFIED
+              </div>
+              <ul className="space-y-1">
+                {unspecified.map((ind, i) => {
+                  const valueStr = formatIndicatorValue(ind.value);
+                  return (
+                    <li
+                      key={`u-${ind.signal ?? "indicator"}-${i}`}
+                      className="rounded border border-muted-foreground/30 bg-muted/10 px-2 py-1.5 text-[11px] font-mono"
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="font-semibold">{ind.signal ?? "—"}</span>
+                        {valueStr !== null && (
+                          <span className="text-muted-foreground">value: {valueStr}</span>
+                        )}
+                      </div>
+                      {ind.explanation && (
+                        <div className="text-foreground/70 mt-0.5 whitespace-pre-wrap break-words">
+                          {ind.explanation}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
