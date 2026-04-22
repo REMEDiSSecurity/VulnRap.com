@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { generateCalibrationReport, type BucketAnalysis } from "../lib/calibration";
 import { getCurrentConfig, getConfigHistory, applyNewConfig } from "../lib/scoring-config";
+import { generateAvriDriftReport } from "../lib/avri-drift";
 
 const router: IRouter = Router();
 
@@ -64,6 +65,22 @@ router.get("/feedback/calibration", async (_req, res) => {
   } catch (err) {
     _req.log?.error(err, "Failed to generate calibration report");
     res.status(500).json({ error: "Failed to generate calibration report." });
+  }
+});
+
+// Sprint 12 — AVRI calibration drift dashboard. Rolling weekly view of the
+// AVRI composite for production reports, bucketed by triage outcome.
+// Default window is 8 weeks; capped at 26 weeks by generateAvriDriftReport.
+router.get("/feedback/calibration/avri-drift", async (req, res) => {
+  try {
+    const weeksRaw = req.query.weeks;
+    const weeksParsed = typeof weeksRaw === "string" ? Number.parseInt(weeksRaw, 10) : undefined;
+    const weeks = Number.isFinite(weeksParsed) ? weeksParsed : undefined;
+    const report = await generateAvriDriftReport({ weeks });
+    res.json(report);
+  } catch (err) {
+    req.log?.error(err, "Failed to generate AVRI drift report");
+    res.status(500).json({ error: "Failed to generate AVRI drift report." });
   }
 });
 
