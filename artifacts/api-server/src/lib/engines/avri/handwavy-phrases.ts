@@ -66,21 +66,29 @@ export interface HandwavyMarker {
 }
 
 export interface HandwavyHistoryEntry {
-  phrase: string;
-  category: HandwavyCategory;
+  /**
+   * Single-removal entries (the legacy and still-supported single DELETE
+   * path) carry the removed phrase here. Task #135 batch-removal entries
+   * leave this empty and instead populate `phrases`.
+   */
+  phrase?: string;
+  /** Category of the single removed phrase. Empty for batch entries. */
+  category?: HandwavyCategory;
   addedBy?: string;
   addedAt?: string;
   rationale?: string;
   /** Task #120 — preserved on remove so reinstating still shows the edit history. */
   edits?: HandwavyEditEntry[];
-  /** Reviewer name or email that removed the phrase. */
+  /** Reviewer name or email that removed the phrase(s). */
   removedBy?: string;
-  /** ISO 8601 timestamp the phrase was removed. */
+  /** ISO 8601 timestamp the phrase(s) were removed. */
   removedAt: string;
   /**
    * Task #121 — set to true once a reviewer has reinstated this phrase
    * straight from the history log. The same history row can't be reinstated
    * twice — a fresh remove of the live marker creates a new history row.
+   * For batch entries this is the AGGREGATE flag: true once every inner
+   * phrase has been reinstated (see `phrases[].reinstated`).
    */
   reinstated?: boolean;
   /** Reviewer name or email that reinstated the phrase from history. */
@@ -96,6 +104,26 @@ export interface HandwavyHistoryEntry {
   undone?: boolean;
   /** Reviewer name or email that pressed Undo. */
   undoneBy?: string;
+  /**
+   * Task #135 — populated when a reviewer removed multiple phrases in a
+   * single batch action. Each entry mirrors the audit metadata that the
+   * legacy single-removal entry carried at the top level. Per-phrase
+   * `reinstated`/`reinstatedBy`/`reinstatedAt` track partial reinstates so a
+   * reviewer can pull individual phrases back out of a batch removal.
+   */
+  phrases?: HandwavyBatchHistoryPhrase[];
+}
+
+export interface HandwavyBatchHistoryPhrase {
+  phrase: string;
+  category: HandwavyCategory;
+  addedBy?: string;
+  addedAt?: string;
+  rationale?: string;
+  edits?: HandwavyEditEntry[];
+  reinstated?: boolean;
+  reinstatedBy?: string;
+  reinstatedAt?: string;
 }
 
 interface PhrasesFile {
@@ -250,14 +278,50 @@ function coerceMarker(entry: unknown): HandwavyMarker | null {
   return null;
 }
 
-function coerceHistory(entry: unknown): HandwavyHistoryEntry | null {
+function coerceBatchPhrase(entry: unknown): HandwavyBatchHistoryPhrase | null {
   if (!entry || typeof entry !== "object") return null;
   const obj = entry as Record<string, unknown>;
   if (typeof obj.phrase !== "string") return null;
   const phrase = normalizePhrase(obj.phrase);
   if (!phrase) return null;
+  const category: HandwavyCategory = isCategory(obj.category) ? obj.category : "absence";
+  const out: HandwavyBatchHistoryPhrase = { phrase, category };
+  const addedBy = trimOrUndefined(obj.addedBy, 200);
+  if (addedBy) out.addedBy = addedBy;
+  if (isIsoTimestamp(obj.addedAt)) out.addedAt = obj.addedAt;
+  const rationale = trimOrUndefined(obj.rationale, 500);
+  if (rationale) out.rationale = rationale;
+  const edits = coerceEdits(obj.edits);
+  if (edits) out.edits = edits;
+  if (obj.reinstated === true) out.reinstated = true;
+  const reinstatedBy = trimOrUndefined(obj.reinstatedBy, 200);
+  if (reinstatedBy) out.reinstatedBy = reinstatedBy;
+  if (isIsoTimestamp(obj.reinstatedAt)) out.reinstatedAt = obj.reinstatedAt;
+  return out;
+}
+
+function coerceHistory(entry: unknown): HandwavyHistoryEntry | null {
+  if (!entry || typeof entry !== "object") return null;
+  const obj = entry as Record<string, unknown>;
   const removedAt = isIsoTimestamp(obj.removedAt) ? obj.removedAt : undefined;
   if (!removedAt) return null;
+  // Task #135 — batch entries have a `phrases` array and no top-level
+  // `phrase`. Each inner phrase carries its own audit metadata.
+  const rawBatch = Array.isArray(obj.phrases) ? obj.phrases : null;
+  if (rawBatch) {
+    const phrases: HandwavyBatchHistoryPhrase[] = rawBatch
+      .map(coerceBatchPhrase)
+      .filter((p): p is HandwavyBatchHistoryPhrase => p !== null);
+    if (phrases.length === 0) return null;
+    const out: HandwavyHistoryEntry = { removedAt, phrases };
+    const removedBy = trimOrUndefined(obj.removedBy, 200);
+    if (removedBy) out.removedBy = removedBy;
+    if (phrases.every((p) => p.reinstated)) out.reinstated = true;
+    return out;
+  }
+  if (typeof obj.phrase !== "string") return null;
+  const phrase = normalizePhrase(obj.phrase);
+  if (!phrase) return null;
   const category: HandwavyCategory = isCategory(obj.category) ? obj.category : "absence";
   const out: HandwavyHistoryEntry = { phrase, category, removedAt };
   const removedBy = trimOrUndefined(obj.removedBy, 200);
@@ -336,7 +400,7 @@ function persist(markers: HandwavyMarker[], history: HandwavyHistoryEntry[]): Ha
       description:
         "Curated list of FLAT-family hand-wavy marker phrases. Loaded by lib/engines/avri/handwavy-phrases.ts. Phrases are matched as case-insensitive substrings against a whitespace-collapsed copy of the report text. Each entry is themed into one of three categories ('absence', 'hedging', 'buzzword') so the diagnostics panel can group matches into themed buckets. Reviewers can add, edit, or remove phrases through POST/PATCH/DELETE /feedback/calibration/handwavy-phrases without a redeploy. Each entry optionally tracks the reviewer (`addedBy`), ISO timestamp (`addedAt`), and free-text `rationale`, plus an `edits` log of subsequent in-place changes (who, when, before/after for category and rationale). Removed phrases are appended to `history` so reviewers can see what was pulled and reinstate it with context.",
     },
-    phrases: markers,
+    phrases: markers as unknown as Array<Record<string, unknown>>,
     history: trimmedHistory,
   };
   writeFileSync(p, JSON.stringify(body, null, 2) + "\n", "utf8");
@@ -446,6 +510,111 @@ export function removeHandwavyPhrase(
   return { removed: true, phrase, total: next.length, historyEntry: { ...historyEntry } };
 }
 
+export interface BatchRemovePhraseEntryResult {
+  /** Original (raw) phrase as supplied by the caller. */
+  raw: string;
+  /** Normalized form actually compared against the active list. */
+  phrase: string;
+  removed: boolean;
+  /** Reason when not removed: "not-found" or "duplicate-in-batch". */
+  reason?: "not-found" | "duplicate-in-batch";
+}
+
+export interface BatchRemovePhraseResult {
+  /** Number of active phrases AFTER the batch (unchanged when nothing was removed). */
+  total: number;
+  /** Per-phrase outcomes, in the same order as the input list. */
+  results: BatchRemovePhraseEntryResult[];
+  /** The single batch history entry, present iff at least one phrase was removed. */
+  historyEntry?: HandwavyHistoryEntry;
+  /** Count of phrases that actually came off the active list. */
+  removed: number;
+  /** Count of phrases that were not in the active list at lookup time. */
+  notFound: number;
+}
+
+/**
+ * Task #135 — remove multiple phrases in a single in-memory pass and a single
+ * file rewrite. The history log gets ONE batch entry that lists every removed
+ * phrase, so a release-checklist cleanup of a dozen phrases shows up as one
+ * reviewer action instead of N. Phrases that aren't in the active list are
+ * reported in the result with `removed: false, reason: "not-found"` and do
+ * NOT contribute a history entry.
+ */
+export function removeHandwavyPhrasesBatch(
+  rawPhrases: string[],
+  options: RemovePhraseOptions = {},
+): BatchRemovePhraseResult {
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  const removedAt = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const { markers: current, history } = load();
+
+  const results: BatchRemovePhraseEntryResult[] = [];
+  const removedMarkers: HandwavyMarker[] = [];
+  // Walk the input in order so the per-phrase results array mirrors what
+  // the caller asked for; track which indexes still need to be removed
+  // before finally building the new active list in one pass.
+  const toRemoveIndexes = new Set<number>();
+  const seenInBatch = new Set<string>();
+  for (const raw of rawPhrases) {
+    const normalized = normalizePhrase(raw);
+    if (seenInBatch.has(normalized)) {
+      results.push({ raw, phrase: normalized, removed: false, reason: "duplicate-in-batch" });
+      continue;
+    }
+    seenInBatch.add(normalized);
+    const idx = current.findIndex((m) => m.phrase === normalized);
+    if (idx < 0) {
+      results.push({ raw, phrase: normalized, removed: false, reason: "not-found" });
+      continue;
+    }
+    toRemoveIndexes.add(idx);
+    removedMarkers.push(current[idx]);
+    results.push({ raw, phrase: normalized, removed: true });
+  }
+
+  if (removedMarkers.length === 0) {
+    return {
+      total: current.length,
+      results,
+      removed: 0,
+      notFound: results.filter((r) => r.reason === "not-found").length,
+    };
+  }
+
+  const next = current.filter((_, i) => !toRemoveIndexes.has(i));
+  const batchPhrases: HandwavyBatchHistoryPhrase[] = removedMarkers.map((m) => {
+    const entry: HandwavyBatchHistoryPhrase = {
+      phrase: m.phrase,
+      category: m.category,
+    };
+    if (m.addedBy) entry.addedBy = m.addedBy;
+    if (m.addedAt) entry.addedAt = m.addedAt;
+    if (m.rationale) entry.rationale = m.rationale;
+    if (m.edits && m.edits.length > 0) entry.edits = m.edits.map((e) => ({ ...e }));
+    return entry;
+  });
+  const historyEntry: HandwavyHistoryEntry = {
+    removedAt,
+    phrases: batchPhrases,
+  };
+  if (reviewer) historyEntry.removedBy = reviewer;
+  const nextHistory = [...history, historyEntry];
+  const trimmed = persist(next, nextHistory);
+  CACHED_MARKERS = next;
+  CACHED_HISTORY = trimmed;
+  return {
+    total: next.length,
+    results,
+    historyEntry: {
+      ...historyEntry,
+      phrases: batchPhrases.map((p) => ({ ...p })),
+    },
+    removed: removedMarkers.length,
+    notFound: results.filter((r) => r.reason === "not-found").length,
+  };
+}
+
 export interface ReinstatePhraseOptions {
   reviewer?: string;
   /** Override the timestamp (tests). Defaults to `new Date().toISOString()`. */
@@ -493,45 +662,111 @@ export function reinstateHandwavyPhrase(
 ): ReinstatePhraseResult {
   const phrase = normalizePhrase(rawPhrase);
   const { markers: current, history } = load();
-  const idx = history.findIndex((h) => h.phrase === phrase && h.removedAt === removedAt);
-  if (idx < 0) {
+  // Try a single-entry match first, then fall back to a batch entry that
+  // contains this phrase with the matching removedAt (Task #135).
+  const singleIdx = history.findIndex(
+    (h) => h.phrase === phrase && h.removedAt === removedAt && !h.phrases,
+  );
+  let batchIdx = -1;
+  let batchPhraseIdx = -1;
+  if (singleIdx < 0) {
+    for (let i = 0; i < history.length; i++) {
+      const h = history[i];
+      if (h.removedAt !== removedAt || !h.phrases) continue;
+      const pi = h.phrases.findIndex((p) => p.phrase === phrase);
+      if (pi >= 0) {
+        batchIdx = i;
+        batchPhraseIdx = pi;
+        break;
+      }
+    }
+  }
+  if (singleIdx < 0 && batchIdx < 0) {
     return { ok: false, reason: "history-not-found", phrase };
   }
-  const entry = history[idx];
-  if (entry.reinstated) {
+
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  const at = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+
+  if (singleIdx >= 0) {
+    const entry = history[singleIdx];
+    if (entry.reinstated) {
+      return { ok: false, reason: "already-reinstated", phrase };
+    }
+    if (current.some((m) => m.phrase === phrase)) {
+      return { ok: false, reason: "already-active", phrase };
+    }
+    const category: HandwavyCategory = entry.category ?? "absence";
+    const marker: HandwavyMarker = { phrase, category };
+    if (reviewer) marker.addedBy = reviewer;
+    marker.addedAt = at;
+    if (entry.rationale) marker.rationale = entry.rationale;
+    const nextMarkers = [...current, marker];
+    const updatedEntry: HandwavyHistoryEntry = {
+      ...entry,
+      reinstated: true,
+      reinstatedAt: at,
+    };
+    if (reviewer) updatedEntry.reinstatedBy = reviewer;
+    const nextHistory = history.slice();
+    nextHistory[singleIdx] = updatedEntry;
+    const trimmed = persist(nextMarkers, nextHistory);
+    CACHED_MARKERS = nextMarkers;
+    CACHED_HISTORY = trimmed;
+    return {
+      ok: true,
+      phrase,
+      category,
+      total: nextMarkers.length,
+      marker: { ...marker },
+      historyEntry: { ...updatedEntry },
+    };
+  }
+
+  // Batch entry path.
+  const entry = history[batchIdx];
+  const innerPhrases = entry.phrases ?? [];
+  const inner = innerPhrases[batchPhraseIdx];
+  if (inner.reinstated) {
     return { ok: false, reason: "already-reinstated", phrase };
   }
-  // If the phrase is already active (someone manually re-added it before
-  // this reinstate fired), refuse rather than silently flipping the history
-  // row to "reinstated" — the audit trail must reflect reality.
   if (current.some((m) => m.phrase === phrase)) {
     return { ok: false, reason: "already-active", phrase };
   }
-  const reviewer = trimOrUndefined(options.reviewer, 200);
-  const at = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
-  const marker: HandwavyMarker = { phrase, category: entry.category };
+  const marker: HandwavyMarker = { phrase, category: inner.category };
   if (reviewer) marker.addedBy = reviewer;
   marker.addedAt = at;
-  if (entry.rationale) marker.rationale = entry.rationale;
+  if (inner.rationale) marker.rationale = inner.rationale;
   const nextMarkers = [...current, marker];
-  const updatedEntry: HandwavyHistoryEntry = {
-    ...entry,
+  const nextInnerPhrases = innerPhrases.slice();
+  const updatedInner: HandwavyBatchHistoryPhrase = {
+    ...inner,
     reinstated: true,
     reinstatedAt: at,
   };
-  if (reviewer) updatedEntry.reinstatedBy = reviewer;
+  if (reviewer) updatedInner.reinstatedBy = reviewer;
+  nextInnerPhrases[batchPhraseIdx] = updatedInner;
+  const updatedEntry: HandwavyHistoryEntry = {
+    ...entry,
+    phrases: nextInnerPhrases,
+  };
+  if (nextInnerPhrases.every((p) => p.reinstated)) {
+    updatedEntry.reinstated = true;
+  } else {
+    delete updatedEntry.reinstated;
+  }
   const nextHistory = history.slice();
-  nextHistory[idx] = updatedEntry;
+  nextHistory[batchIdx] = updatedEntry;
   const trimmed = persist(nextMarkers, nextHistory);
   CACHED_MARKERS = nextMarkers;
   CACHED_HISTORY = trimmed;
   return {
     ok: true,
     phrase,
-    category: entry.category,
+    category: inner.category,
     total: nextMarkers.length,
     marker: { ...marker },
-    historyEntry: { ...updatedEntry },
+    historyEntry: { ...updatedEntry, phrases: nextInnerPhrases.map((p) => ({ ...p })) },
   };
 }
 

@@ -270,49 +270,145 @@ async function main() {
 
   // Per-phrase results. status ∈ "removed" | "not-found" | "auth-failed" | "error" | "skipped-not-found"
   const results = [];
-  let authFailedSticky = false;
   let lastTotal = null;
 
-  for (const it of items) {
-    if (!it.entry) {
-      results.push({ ...it, status: "skipped-not-found", message: "not in active list at lookup time" });
-      continue;
-    }
-    if (authFailedSticky) {
-      results.push({ ...it, status: "auth-failed", message: "skipped after earlier auth failure" });
-      continue;
-    }
-    console.log(color("dim", `→ Removing "${it.normalized}" ...`));
-    const body = { phrase: it.raw };
-    if (args.reviewer) body.reviewer = args.reviewer;
-    let del;
+  // Task #135 — try the batch endpoint first so a dozen-phrase cleanup is one
+  // round-trip and one history entry. If the server doesn't recognise the
+  // `phrases` array (older deploy), fall back to the legacy per-phrase
+  // DELETE loop. Phrases that were already not-found at lookup time are
+  // never sent to the server — they're recorded as "skipped-not-found"
+  // here just like the per-phrase path.
+  const presentForServer = items.filter((it) => it.entry);
+  const skippedNotFound = items.filter((it) => !it.entry);
+  for (const it of skippedNotFound) {
+    results.push({ ...it, status: "skipped-not-found", message: "not in active list at lookup time" });
+  }
+
+  let useFallback = false;
+  if (presentForServer.length > 0) {
+    const batchBody = { phrases: presentForServer.map((it) => it.raw) };
+    if (args.reviewer) batchBody.reviewer = args.reviewer;
+    console.log(color("dim", `→ Sending batch DELETE for ${presentForServer.length} phrase${presentForServer.length === 1 ? "" : "s"} ...`));
+    let batch;
     try {
-      del = await request("DELETE", endpoint, body, token);
+      batch = await request("DELETE", endpoint, batchBody, token);
     } catch (err) {
-      results.push({ ...it, status: "error", message: err.message });
-      continue;
+      // Network failure — record one error per pending phrase and bail.
+      for (const it of presentForServer) {
+        results.push({ ...it, status: "error", message: err.message });
+      }
+      batch = null;
+      useFallback = false;
     }
-    if (del.status === 401 || del.status === 403) {
-      authFailedSticky = true;
-      results.push({ ...it, status: "auth-failed", message: `HTTP ${del.status}` });
-      continue;
+    if (batch) {
+      if (batch.status === 401 || batch.status === 403) {
+        for (const it of presentForServer) {
+          results.push({ ...it, status: "auth-failed", message: `HTTP ${batch.status}` });
+        }
+      } else if (batch.ok && batch.payload && batch.payload.batch === true && Array.isArray(batch.payload.results)) {
+        // Map server results back to our items by normalized phrase.
+        const byNorm = new Map();
+        for (const r of batch.payload.results) {
+          if (r && typeof r.phrase === "string") byNorm.set(r.phrase, r);
+        }
+        for (const it of presentForServer) {
+          const r = byNorm.get(it.normalized);
+          if (!r) {
+            results.push({ ...it, status: "error", message: "server response omitted phrase" });
+          } else if (r.removed) {
+            results.push({ ...it, status: "removed", message: null });
+          } else if (r.reason === "not-found") {
+            results.push({ ...it, status: "not-found", message: "server reported not-found (removed by someone else?)" });
+          } else if (r.reason === "duplicate-in-batch") {
+            results.push({ ...it, status: "error", message: "duplicate phrase within the batch (should have been deduped)" });
+          } else {
+            results.push({ ...it, status: "error", message: `unexpected server result: ${JSON.stringify(r)}` });
+          }
+        }
+        if (typeof batch.payload.total === "number") lastTotal = batch.payload.total;
+      } else if (
+        batch.status === 400 &&
+        batch.payload &&
+        typeof batch.payload === "object" &&
+        typeof batch.payload.error === "string" &&
+        // Older servers reject the `phrases` body with the legacy
+        // "Body must include a non-empty 'phrase' string." message.
+        /'phrase'/.test(batch.payload.error)
+      ) {
+        console.log(color("yellow", "→ Batch endpoint not supported by this server; falling back to per-phrase DELETEs."));
+        useFallback = true;
+      } else if (batch.status === 404 && batch.payload && batch.payload.batch === true && Array.isArray(batch.payload.results)) {
+        // Server recognised the batch but matched nothing: surface per-phrase
+        // not-found from the response body so we don't double-count.
+        const byNorm = new Map();
+        for (const r of batch.payload.results) {
+          if (r && typeof r.phrase === "string") byNorm.set(r.phrase, r);
+        }
+        for (const it of presentForServer) {
+          const r = byNorm.get(it.normalized);
+          if (!r) {
+            results.push({ ...it, status: "error", message: "server response omitted phrase" });
+          } else {
+            results.push({ ...it, status: "not-found", message: "server reported not-found (removed by someone else?)" });
+          }
+        }
+        if (typeof batch.payload.total === "number") lastTotal = batch.payload.total;
+      } else {
+        const msg = batch.payload && typeof batch.payload === "object" && "error" in batch.payload
+          ? batch.payload.error
+          : `HTTP ${batch.status}`;
+        for (const it of presentForServer) {
+          results.push({ ...it, status: "error", message: msg });
+        }
+      }
     }
-    if (del.status === 404) {
-      // Race with another reviewer: the GET above saw the phrase but it was
-      // gone by the time we issued the DELETE.
-      results.push({ ...it, status: "not-found", message: "server reported 404 (removed by someone else?)" });
-      continue;
+  }
+
+  if (useFallback) {
+    // Wipe the per-phrase placeholders we may have queued for the present
+    // items so the fallback loop populates them cleanly.
+    for (let i = results.length - 1; i >= 0; i--) {
+      const r = results[i];
+      if (presentForServer.some((it) => it.normalized === r.normalized)) {
+        results.splice(i, 1);
+      }
     }
-    if (!del.ok) {
-      const msg = del.payload && typeof del.payload === "object" && "error" in del.payload
-        ? del.payload.error
-        : `HTTP ${del.status}`;
-      results.push({ ...it, status: "error", message: msg });
-      continue;
+    let authFailedSticky = false;
+    for (const it of presentForServer) {
+      if (authFailedSticky) {
+        results.push({ ...it, status: "auth-failed", message: "skipped after earlier auth failure" });
+        continue;
+      }
+      console.log(color("dim", `→ Removing "${it.normalized}" ...`));
+      const body = { phrase: it.raw };
+      if (args.reviewer) body.reviewer = args.reviewer;
+      let del;
+      try {
+        del = await request("DELETE", endpoint, body, token);
+      } catch (err) {
+        results.push({ ...it, status: "error", message: err.message });
+        continue;
+      }
+      if (del.status === 401 || del.status === 403) {
+        authFailedSticky = true;
+        results.push({ ...it, status: "auth-failed", message: `HTTP ${del.status}` });
+        continue;
+      }
+      if (del.status === 404) {
+        results.push({ ...it, status: "not-found", message: "server reported 404 (removed by someone else?)" });
+        continue;
+      }
+      if (!del.ok) {
+        const msg = del.payload && typeof del.payload === "object" && "error" in del.payload
+          ? del.payload.error
+          : `HTTP ${del.status}`;
+        results.push({ ...it, status: "error", message: msg });
+        continue;
+      }
+      const result = del.payload ?? {};
+      if (typeof result.total === "number") lastTotal = result.total;
+      results.push({ ...it, status: "removed", message: null });
     }
-    const result = del.payload ?? {};
-    if (typeof result.total === "number") lastTotal = result.total;
-    results.push({ ...it, status: "removed", message: null });
   }
 
   // Summary

@@ -11,6 +11,7 @@ let getHandwavyPhrases: typeof import("./handwavy-phrases").getHandwavyPhrases;
 let getHandwavyPhraseHistory: typeof import("./handwavy-phrases").getHandwavyPhraseHistory;
 let addHandwavyPhrase: typeof import("./handwavy-phrases").addHandwavyPhrase;
 let removeHandwavyPhrase: typeof import("./handwavy-phrases").removeHandwavyPhrase;
+let removeHandwavyPhrasesBatch: typeof import("./handwavy-phrases").removeHandwavyPhrasesBatch;
 let reinstateHandwavyPhrase: typeof import("./handwavy-phrases").reinstateHandwavyPhrase;
 let editHandwavyPhrase: typeof import("./handwavy-phrases").editHandwavyPhrase;
 let undoHandwavyPhrase: typeof import("./handwavy-phrases").undoHandwavyPhrase;
@@ -27,6 +28,7 @@ beforeAll(async () => {
   getHandwavyPhraseHistory = mod.getHandwavyPhraseHistory;
   addHandwavyPhrase = mod.addHandwavyPhrase;
   removeHandwavyPhrase = mod.removeHandwavyPhrase;
+  removeHandwavyPhrasesBatch = mod.removeHandwavyPhrasesBatch;
   reinstateHandwavyPhrase = mod.reinstateHandwavyPhrase;
   editHandwavyPhrase = mod.editHandwavyPhrase;
   undoHandwavyPhrase = mod.undoHandwavyPhrase;
@@ -691,6 +693,112 @@ describe("handwavy-phrases loader", () => {
       expect(r2.ok).toBe(true);
       if (!r2.ok) return;
       expect(r2.marker.category).toBe("buzzword");
+    });
+  });
+
+  // --- Task #135: batched removal ---
+
+  describe("removeHandwavyPhrasesBatch", () => {
+    it("removes every requested phrase in a single pass and writes ONE batch history entry", () => {
+      addHandwavyPhrase("batch alpha", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("batch bravo", "hedging", { now: "2026-04-20T08:01:00.000Z" });
+      addHandwavyPhrase("batch charlie", "buzzword", {
+        rationale: "noisy across drills",
+        now: "2026-04-20T08:02:00.000Z",
+      });
+      const before = getHandwavyPhraseHistory().length;
+      const result = removeHandwavyPhrasesBatch(
+        ["batch alpha", "BATCH bravo", " batch charlie "],
+        { reviewer: "bob@team.com", now: "2026-04-22T13:00:00.000Z" },
+      );
+      expect(result.removed).toBe(3);
+      expect(result.notFound).toBe(0);
+      expect(result.results.every((r) => r.removed)).toBe(true);
+      expect(result.historyEntry?.phrases?.map((p) => p.phrase)).toEqual([
+        "batch alpha",
+        "batch bravo",
+        "batch charlie",
+      ]);
+      expect(result.historyEntry?.removedBy).toBe("bob@team.com");
+      expect(result.historyEntry?.removedAt).toBe("2026-04-22T13:00:00.000Z");
+      // Inner phrase metadata mirrors what the markers carried.
+      const charlieInner = result.historyEntry?.phrases?.find((p) => p.phrase === "batch charlie");
+      expect(charlieInner?.category).toBe("buzzword");
+      expect(charlieInner?.rationale).toMatch(/noisy across drills/);
+      // Active list no longer contains any of them.
+      const live = getHandwavyPhrases().map((m) => m.phrase);
+      expect(live).not.toContain("batch alpha");
+      expect(live).not.toContain("batch bravo");
+      expect(live).not.toContain("batch charlie");
+      // History grew by exactly one entry, not three.
+      const after = getHandwavyPhraseHistory();
+      expect(after.length).toBe(before + 1);
+      // And it survives a cache reset.
+      __resetHandwavyPhrasesForTests();
+      const reloaded = getHandwavyPhraseHistory();
+      const reloadedBatch = reloaded.find((h) => h.removedAt === "2026-04-22T13:00:00.000Z");
+      expect(reloadedBatch?.phrases?.length).toBe(3);
+    });
+
+    it("flags duplicates within the same batch and missing phrases without writing them to history", () => {
+      addHandwavyPhrase("present in batch", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      const result = removeHandwavyPhrasesBatch(
+        ["present in batch", "PRESENT in batch", "never seen"],
+        { now: "2026-04-22T13:00:00.000Z" },
+      );
+      expect(result.removed).toBe(1);
+      expect(result.notFound).toBe(1);
+      expect(result.results.find((r) => r.raw === "PRESENT in batch")?.reason).toBe("duplicate-in-batch");
+      expect(result.results.find((r) => r.raw === "never seen")?.reason).toBe("not-found");
+      expect(result.historyEntry?.phrases?.map((p) => p.phrase)).toEqual(["present in batch"]);
+    });
+
+    it("returns no historyEntry when nothing was removed", () => {
+      const before = getHandwavyPhraseHistory().length;
+      const result = removeHandwavyPhrasesBatch(["never added a", "never added b"]);
+      expect(result.removed).toBe(0);
+      expect(result.notFound).toBe(2);
+      expect(result.historyEntry).toBeUndefined();
+      expect(getHandwavyPhraseHistory().length).toBe(before);
+    });
+
+    it("supports per-phrase reinstate from a batch entry, flipping the aggregate flag once all are back", () => {
+      addHandwavyPhrase("batch reinstate one", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("batch reinstate two", "hedging", { now: "2026-04-20T08:01:00.000Z" });
+      removeHandwavyPhrasesBatch(["batch reinstate one", "batch reinstate two"], {
+        reviewer: "bob@team.com",
+        now: "2026-04-22T13:00:00.000Z",
+      });
+      const first = reinstateHandwavyPhrase(
+        "batch reinstate one",
+        "2026-04-22T13:00:00.000Z",
+        { reviewer: "carol@team.com", now: "2026-04-22T14:00:00.000Z" },
+      );
+      expect(first.ok).toBe(true);
+      // Aggregate flag should NOT be true yet — one inner phrase is still down.
+      const midHistory = getHandwavyPhraseHistory();
+      const midRow = midHistory.find((h) => h.removedAt === "2026-04-22T13:00:00.000Z");
+      expect(midRow?.reinstated).not.toBe(true);
+      const innerOne = midRow?.phrases?.find((p) => p.phrase === "batch reinstate one");
+      const innerTwo = midRow?.phrases?.find((p) => p.phrase === "batch reinstate two");
+      expect(innerOne?.reinstated).toBe(true);
+      expect(innerOne?.reinstatedBy).toBe("carol@team.com");
+      expect(innerTwo?.reinstated).not.toBe(true);
+      // Reinstate the second one — aggregate flips true.
+      const second = reinstateHandwavyPhrase(
+        "batch reinstate two",
+        "2026-04-22T13:00:00.000Z",
+        { reviewer: "carol@team.com", now: "2026-04-22T14:05:00.000Z" },
+      );
+      expect(second.ok).toBe(true);
+      const finalHistory = getHandwavyPhraseHistory();
+      const finalRow = finalHistory.find((h) => h.removedAt === "2026-04-22T13:00:00.000Z");
+      expect(finalRow?.reinstated).toBe(true);
+      expect(finalRow?.phrases?.every((p) => p.reinstated)).toBe(true);
+      // Trying to reinstate one of them again must fail.
+      const dupe = reinstateHandwavyPhrase("batch reinstate one", "2026-04-22T13:00:00.000Z");
+      expect(dupe.ok).toBe(false);
+      if (!dupe.ok) expect(dupe.reason).toBe("already-reinstated");
     });
   });
 

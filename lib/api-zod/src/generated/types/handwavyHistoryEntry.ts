@@ -5,29 +5,39 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { HandwavyBatchHistoryPhrase } from "./handwavyBatchHistoryPhrase";
 import type { HandwavyCategory } from "./handwavyCategory";
 import type { HandwavyEditEntry } from "./handwavyEditEntry";
 
 /**
- * Removed-phrase audit record used so reviewers can reinstate a phrase with original context.
+ * Removed-phrase audit record used so reviewers can reinstate a phrase
+with original context. Single-removal entries populate `phrase` +
+`category`; Task #135 batch-removal entries leave those empty and
+instead populate `phrases` with the list of removed phrases.
+
  */
 export interface HandwavyHistoryEntry {
-  phrase: string;
-  category: HandwavyCategory;
+  /** The removed phrase (single-removal entries). Empty/omitted on
+Task #135 batch entries — see `phrases` instead.
+ */
+  phrase?: string;
+  category?: HandwavyCategory;
   addedBy?: string;
   addedAt?: Date;
   rationale?: string;
-  /** Preserved on remove so reinstating still shows the edit history. */
+  /** Task */
   edits?: HandwavyEditEntry[];
-  /** Reviewer name or email that removed the phrase. */
+  /** Reviewer name or email that removed the phrase(s). */
   removedBy?: string;
-  /** ISO 8601 timestamp the phrase was removed. */
+  /** ISO 8601 timestamp the phrase(s) were removed. */
   removedAt: Date;
   /** Task #121 — true once a reviewer has reinstated this phrase
 straight from the history log via POST
 /feedback/calibration/handwavy-phrases/reinstate. The same row
 cannot be reinstated twice — if the phrase is removed again, a
-new history row is appended.
+new history row is appended. For Task #135 batch entries this
+is the AGGREGATE flag: true once every inner phrase has been
+reinstated (see `phrases[].reinstated`).
  */
   reinstated?: boolean;
   /** Reviewer name or email that reinstated the phrase from this history entry. */
@@ -43,4 +53,9 @@ reads "added then undone" rather than "added then removed".
   undone?: boolean;
   /** Reviewer name or email that pressed Undo on this entry. */
   undoneBy?: string;
+  /** Task #135 — present when the entry represents a batch removal.
+Each item lists one removed phrase plus its original add-history
+metadata and per-phrase reinstate state.
+ */
+  phrases?: HandwavyBatchHistoryPhrase[];
 }

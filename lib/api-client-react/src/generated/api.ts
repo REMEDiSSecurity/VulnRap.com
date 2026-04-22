@@ -32,6 +32,8 @@ import type {
   GetAvriDriftReportParams,
   GetReportFeedParams,
   GetTrendsParams,
+  HandwavyPhraseBatchRemoveBody,
+  HandwavyPhraseBatchRemoveResponse,
   HandwavyPhraseBody,
   HandwavyPhraseEditBody,
   HandwavyPhraseMutationResponse,
@@ -1830,43 +1832,51 @@ export const useEditHandwavyPhrase = <
 };
 
 /**
- * Removes a phrase (matched after lowercase + whitespace normalization) from the curated FLAT hand-wavy marker list.
- * @summary Remove a FLAT hand-wavy marker phrase
+ * Removes a phrase (matched after lowercase + whitespace normalization)
+from the curated FLAT hand-wavy marker list. Task #135 — accepts
+either a single phrase (`{phrase}`) or a batch (`{phrases: [...]}`)
+in one round-trip; the batch path appends one history entry that
+lists every removed phrase instead of N separate entries.
+
+ * @summary Remove one or many FLAT hand-wavy marker phrases
  */
 export const getRemoveHandwavyPhraseUrl = () => {
   return `/api/feedback/calibration/handwavy-phrases`;
 };
 
 export const removeHandwavyPhrase = async (
-  handwavyPhraseBody: HandwavyPhraseBody,
+  handwavyPhraseBodyHandwavyPhraseBatchRemoveBody:
+    | HandwavyPhraseBody
+    | HandwavyPhraseBatchRemoveBody,
   options?: RequestInit,
-): Promise<HandwavyPhraseMutationResponse> => {
-  return customFetch<HandwavyPhraseMutationResponse>(
-    getRemoveHandwavyPhraseUrl(),
-    {
-      ...options,
-      method: "DELETE",
-      headers: { "Content-Type": "application/json", ...options?.headers },
-      body: JSON.stringify(handwavyPhraseBody),
-    },
-  );
+): Promise<
+  HandwavyPhraseMutationResponse | HandwavyPhraseBatchRemoveResponse
+> => {
+  return customFetch<
+    HandwavyPhraseMutationResponse | HandwavyPhraseBatchRemoveResponse
+  >(getRemoveHandwavyPhraseUrl(), {
+    ...options,
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(handwavyPhraseBodyHandwavyPhraseBatchRemoveBody),
+  });
 };
 
 export const getRemoveHandwavyPhraseMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
+  TError = ErrorType<ErrorResponse | HandwavyPhraseBatchRemoveResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof removeHandwavyPhrase>>,
     TError,
-    { data: BodyType<HandwavyPhraseBody> },
+    { data: BodyType<HandwavyPhraseBody | HandwavyPhraseBatchRemoveBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof removeHandwavyPhrase>>,
   TError,
-  { data: BodyType<HandwavyPhraseBody> },
+  { data: BodyType<HandwavyPhraseBody | HandwavyPhraseBatchRemoveBody> },
   TContext
 > => {
   const mutationKey = ["removeHandwavyPhrase"];
@@ -1880,7 +1890,7 @@ export const getRemoveHandwavyPhraseMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof removeHandwavyPhrase>>,
-    { data: BodyType<HandwavyPhraseBody> }
+    { data: BodyType<HandwavyPhraseBody | HandwavyPhraseBatchRemoveBody> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -1893,27 +1903,31 @@ export const getRemoveHandwavyPhraseMutationOptions = <
 export type RemoveHandwavyPhraseMutationResult = NonNullable<
   Awaited<ReturnType<typeof removeHandwavyPhrase>>
 >;
-export type RemoveHandwavyPhraseMutationBody = BodyType<HandwavyPhraseBody>;
-export type RemoveHandwavyPhraseMutationError = ErrorType<ErrorResponse>;
+export type RemoveHandwavyPhraseMutationBody = BodyType<
+  HandwavyPhraseBody | HandwavyPhraseBatchRemoveBody
+>;
+export type RemoveHandwavyPhraseMutationError = ErrorType<
+  ErrorResponse | HandwavyPhraseBatchRemoveResponse
+>;
 
 /**
- * @summary Remove a FLAT hand-wavy marker phrase
+ * @summary Remove one or many FLAT hand-wavy marker phrases
  */
 export const useRemoveHandwavyPhrase = <
-  TError = ErrorType<ErrorResponse>,
+  TError = ErrorType<ErrorResponse | HandwavyPhraseBatchRemoveResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof removeHandwavyPhrase>>,
     TError,
-    { data: BodyType<HandwavyPhraseBody> },
+    { data: BodyType<HandwavyPhraseBody | HandwavyPhraseBatchRemoveBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof removeHandwavyPhrase>>,
   TError,
-  { data: BodyType<HandwavyPhraseBody> },
+  { data: BodyType<HandwavyPhraseBody | HandwavyPhraseBatchRemoveBody> },
   TContext
 > => {
   return useMutation(getRemoveHandwavyPhraseMutationOptions(options));

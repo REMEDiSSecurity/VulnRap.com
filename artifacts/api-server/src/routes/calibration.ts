@@ -9,6 +9,7 @@ import {
   getHandwavyPhraseHistory,
   addHandwavyPhrase,
   removeHandwavyPhrase,
+  removeHandwavyPhrasesBatch,
   reinstateHandwavyPhrase,
   editHandwavyPhrase,
   undoHandwavyPhrase,
@@ -830,20 +831,72 @@ router.post(
   },
 );
 
+// Task #135 — DELETE accepts either a single phrase (legacy `{phrase}`) or a
+// batch (`{phrases: [...]}`). The batch path runs in one in-memory pass, one
+// file rewrite, and one history-log append (containing the list of removed
+// phrases) so a release-checklist cleanup of a dozen phrases stops doing a
+// dozen round-trips and a dozen history rows.
 router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
   try {
-    const { phrase, reviewer } = (req.body ?? {}) as { phrase?: unknown; reviewer?: unknown };
-    if (typeof phrase !== "string" || phrase.trim().length === 0) {
-      res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
-      return;
-    }
+    const body = (req.body ?? {}) as { phrase?: unknown; phrases?: unknown; reviewer?: unknown };
+    const { phrase, phrases, reviewer } = body;
     if (reviewer !== undefined && typeof reviewer !== "string") {
       res.status(400).json({ error: "reviewer must be a string when provided." });
       return;
     }
-    const result = removeHandwavyPhrase(phrase, {
-      reviewer: typeof reviewer === "string" ? reviewer : undefined,
-    });
+    const reviewerStr = typeof reviewer === "string" ? reviewer : undefined;
+
+    // Batch path — `{phrases: string[]}`. Mutually exclusive with `phrase`.
+    if (phrases !== undefined) {
+      if (phrase !== undefined) {
+        res.status(400).json({
+          error: "Provide either 'phrase' (single removal) or 'phrases' (batch removal), not both.",
+        });
+        return;
+      }
+      if (!Array.isArray(phrases)) {
+        res.status(400).json({ error: "'phrases' must be an array of strings." });
+        return;
+      }
+      if (phrases.length === 0) {
+        res.status(400).json({ error: "'phrases' must contain at least one phrase." });
+        return;
+      }
+      if (phrases.length > 200) {
+        res.status(400).json({ error: "'phrases' batch is capped at 200 entries per request." });
+        return;
+      }
+      const cleaned: string[] = [];
+      for (const p of phrases) {
+        if (typeof p !== "string" || p.trim().length === 0) {
+          res.status(400).json({ error: "Every entry in 'phrases' must be a non-empty string." });
+          return;
+        }
+        cleaned.push(p);
+      }
+      const result = removeHandwavyPhrasesBatch(cleaned, { reviewer: reviewerStr });
+      // Status code policy: 200 when at least one phrase was removed (even if
+      // some were not-found), 404 only when nothing matched at all.
+      const status = result.removed > 0 ? 200 : 404;
+      res.status(status).json({
+        batch: true,
+        removed: result.removed,
+        notFound: result.notFound,
+        total: result.total,
+        results: result.results,
+        historyEntry: result.historyEntry ?? null,
+        phrases: getHandwavyPhrases(),
+        history: getHandwavyPhraseHistory(),
+      });
+      return;
+    }
+
+    // Single-phrase legacy path.
+    if (typeof phrase !== "string" || phrase.trim().length === 0) {
+      res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+      return;
+    }
+    const result = removeHandwavyPhrase(phrase, { reviewer: reviewerStr });
     if (!result.removed) {
       res.status(404).json({ ...result, error: "Phrase not found." });
       return;

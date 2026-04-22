@@ -1081,7 +1081,7 @@ function HandwavyPhrasesAdmin() {
   // distinct removes of the same phrase can be reinstated independently. The
   // server pulls the original category and rationale from that history row,
   // so the reviewer doesn't have to retype anything.
-  const handleReinstate = async (entry: HandwavyHistoryEntry) => {
+  const handleReinstate = async (entry: { phrase: string; removedAt: HandwavyHistoryEntry["removedAt"]; category?: HandwavyHistoryEntry["category"] }) => {
     const key = `reinstate:${entry.phrase}:${entry.removedAt}`;
     setBusy(key);
     try {
@@ -1096,7 +1096,7 @@ function HandwavyPhrasesAdmin() {
       });
       toast({
         title: "Phrase reinstated",
-        description: `"${entry.phrase}" is back on the active list with its original ${CATEGORY_LABELS[entry.category as keyof typeof CATEGORY_LABELS] ?? entry.category} context.`,
+        description: `"${entry.phrase}" is back on the active list with its original ${CATEGORY_LABELS[entry.category as keyof typeof CATEGORY_LABELS] ?? entry.category ?? "absence"} context.`,
       });
       refresh();
     } catch (err) {
@@ -1168,9 +1168,60 @@ function HandwavyPhrasesAdmin() {
   };
 
   // Most recent removals first, capped to keep the panel tidy.
-  const sortedHistory = [...history].sort((a, b) => {
-    const ta = Date.parse(a.removedAt ?? "") || 0;
-    const tb = Date.parse(b.removedAt ?? "") || 0;
+  // Task #135 — batch entries (one reviewer action that removed multiple
+  // phrases at once) are flattened into one display row per inner phrase
+  // for the audit panel. Each flattened row carries the parent batch's
+  // removedAt + a `batchSize` label so reviewers can still see "this came
+  // out of a batch of N".
+  type DisplayHistoryRow = {
+    phrase: string;
+    category: HandwavyHistoryEntry["category"];
+    addedBy?: string;
+    addedAt?: HandwavyHistoryEntry["addedAt"];
+    rationale?: string;
+    removedBy?: string;
+    removedAt: HandwavyHistoryEntry["removedAt"];
+    reinstated?: boolean;
+    reinstatedBy?: string;
+    reinstatedAt?: HandwavyHistoryEntry["reinstatedAt"];
+    batchSize?: number;
+  };
+  const flattenedHistory: DisplayHistoryRow[] = [];
+  for (const h of history) {
+    if (Array.isArray(h.phrases) && h.phrases.length > 0) {
+      for (const inner of h.phrases) {
+        flattenedHistory.push({
+          phrase: inner.phrase,
+          category: inner.category,
+          addedBy: inner.addedBy,
+          addedAt: inner.addedAt,
+          rationale: inner.rationale,
+          removedBy: h.removedBy,
+          removedAt: h.removedAt,
+          reinstated: inner.reinstated,
+          reinstatedBy: inner.reinstatedBy,
+          reinstatedAt: inner.reinstatedAt,
+          batchSize: h.phrases.length,
+        });
+      }
+    } else if (typeof h.phrase === "string" && h.phrase.length > 0) {
+      flattenedHistory.push({
+        phrase: h.phrase,
+        category: h.category,
+        addedBy: h.addedBy,
+        addedAt: h.addedAt,
+        rationale: h.rationale,
+        removedBy: h.removedBy,
+        removedAt: h.removedAt,
+        reinstated: h.reinstated,
+        reinstatedBy: h.reinstatedBy,
+        reinstatedAt: h.reinstatedAt,
+      });
+    }
+  }
+  const sortedHistory = flattenedHistory.sort((a, b) => {
+    const ta = Date.parse(String(a.removedAt ?? "")) || 0;
+    const tb = Date.parse(String(b.removedAt ?? "")) || 0;
     return tb - ta;
   });
   const visibleHistory = sortedHistory.slice(0, 25);
@@ -1946,6 +1997,14 @@ function HandwavyPhrasesAdmin() {
                         </span>
                         {" • "}
                         {formatAuditTimestamp(h.removedAt) ?? "unknown date"}
+                        {h.batchSize && h.batchSize > 1 && (
+                          <span
+                            className="ml-2 text-foreground/60"
+                            data-testid="handwavy-history-batch-label"
+                          >
+                            (part of a batch removal of {h.batchSize})
+                          </span>
+                        )}
                       </div>
                       {(h.addedBy || h.rationale) && (
                         <div className="text-foreground/60">

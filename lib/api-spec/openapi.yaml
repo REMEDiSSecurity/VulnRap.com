@@ -608,33 +608,48 @@ paths:
     delete:
       operationId: removeHandwavyPhrase
       tags: [feedback]
-      summary: Remove a FLAT hand-wavy marker phrase
-      description: Removes a phrase (matched after lowercase + whitespace normalization) from the curated FLAT hand-wavy marker list.
+      summary: Remove one or many FLAT hand-wavy marker phrases
+      description: |
+        Removes a phrase (matched after lowercase + whitespace normalization)
+        from the curated FLAT hand-wavy marker list. Task #135 — accepts
+        either a single phrase (`{phrase}`) or a batch (`{phrases: [...]}`)
+        in one round-trip; the batch path appends one history entry that
+        lists every removed phrase instead of N separate entries.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/HandwavyPhraseBody"
+              oneOf:
+                - $ref: "#/components/schemas/HandwavyPhraseBody"
+                - $ref: "#/components/schemas/HandwavyPhraseBatchRemoveBody"
       responses:
         "200":
-          description: Phrase removed
+          description: |
+            Phrase removed (single path) OR batch processed and at least one
+            phrase was removed (batch path; see `batch: true` and `results`).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
+                  - $ref: "#/components/schemas/HandwavyPhraseBatchRemoveResponse"
         "400":
-          description: Invalid phrase
+          description: Invalid phrase / batch body
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Phrase not in the list
+          description: |
+            Phrase not in the list (single path) OR batch matched zero phrases
+            (batch path returns the same `results` shape as 200).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/ErrorResponse"
+                  - $ref: "#/components/schemas/HandwavyPhraseBatchRemoveResponse"
 
   /feedback/calibration/handwavy-phrases/undo:
     post:
@@ -3047,9 +3062,14 @@ components:
             $ref: "#/components/schemas/HandwavyEditEntry"
       required: [phrase, category]
 
-    HandwavyHistoryEntry:
+    HandwavyBatchHistoryPhrase:
       type: object
-      description: Removed-phrase audit record used so reviewers can reinstate a phrase with original context.
+      description: |
+        Task #135 — one element of a batch-removal history entry's `phrases`
+        array. Mirrors the audit metadata that a single-removal entry carries
+        at its top level. Per-phrase `reinstated*` fields track partial
+        reinstates so a reviewer can pull individual phrases back out of a
+        batch removal.
       properties:
         phrase:
           type: string
@@ -3067,13 +3087,49 @@ components:
           description: Preserved on remove so reinstating still shows the edit history.
           items:
             $ref: "#/components/schemas/HandwavyEditEntry"
+        reinstated:
+          type: boolean
+        reinstatedBy:
+          type: string
+        reinstatedAt:
+          type: string
+          format: date-time
+      required: [phrase, category]
+
+    HandwavyHistoryEntry:
+      type: object
+      description: |
+        Removed-phrase audit record used so reviewers can reinstate a phrase
+        with original context. Single-removal entries populate `phrase` +
+        `category`; Task #135 batch-removal entries leave those empty and
+        instead populate `phrases` with the list of removed phrases.
+      properties:
+        phrase:
+          type: string
+          description: |
+            The removed phrase (single-removal entries). Empty/omitted on
+            Task #135 batch entries — see `phrases` instead.
+        category:
+          $ref: "#/components/schemas/HandwavyCategory"
+        addedBy:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+        rationale:
+          type: string
+        edits:
+          type: array
+          description: Task #120 — preserved on remove so reinstating still shows the edit history.
+          items:
+            $ref: "#/components/schemas/HandwavyEditEntry"
         removedBy:
           type: string
-          description: Reviewer name or email that removed the phrase.
+          description: Reviewer name or email that removed the phrase(s).
         removedAt:
           type: string
           format: date-time
-          description: ISO 8601 timestamp the phrase was removed.
+          description: ISO 8601 timestamp the phrase(s) were removed.
         reinstated:
           type: boolean
           description: |
@@ -3081,7 +3137,9 @@ components:
             straight from the history log via POST
             /feedback/calibration/handwavy-phrases/reinstate. The same row
             cannot be reinstated twice — if the phrase is removed again, a
-            new history row is appended.
+            new history row is appended. For Task #135 batch entries this
+            is the AGGREGATE flag: true once every inner phrase has been
+            reinstated (see `phrases[].reinstated`).
         reinstatedBy:
           type: string
           description: Reviewer name or email that reinstated the phrase from this history entry.
@@ -3100,7 +3158,15 @@ components:
         undoneBy:
           type: string
           description: Reviewer name or email that pressed Undo on this entry.
-      required: [phrase, category, removedAt]
+        phrases:
+          type: array
+          description: |
+            Task #135 — present when the entry represents a batch removal.
+            Each item lists one removed phrase plus its original add-history
+            metadata and per-phrase reinstate state.
+          items:
+            $ref: "#/components/schemas/HandwavyBatchHistoryPhrase"
+      required: [removedAt]
 
     HandwavyPhrasesList:
       type: object
@@ -3200,6 +3266,87 @@ components:
           type: string
           description: Reviewer name or email recorded on the inverse edit entry. Optional.
       required: [phrase, editedAt]
+
+    HandwavyPhraseBatchRemoveBody:
+      type: object
+      description: |
+        Task #135 — batch removal request body for DELETE
+        /feedback/calibration/handwavy-phrases. Sends up to 200 phrases in
+        one round-trip; the server runs a single in-memory pass, a single
+        file rewrite, and appends ONE history entry that lists every removed
+        phrase. Mutually exclusive with the single-phrase `phrase` field.
+      properties:
+        phrases:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: string
+          description: List of phrases to remove. Normalized server-side.
+        reviewer:
+          type: string
+          description: Reviewer name or email recorded on the batch history entry. Optional.
+      required: [phrases]
+
+    HandwavyPhraseBatchRemoveResultEntry:
+      type: object
+      description: |
+        Per-phrase outcome from a Task #135 batch removal. `phrase` is the
+        normalized form actually compared against the active list. `reason`
+        is omitted on successful removals.
+      properties:
+        raw:
+          type: string
+          description: Original (raw) phrase as supplied by the client.
+        phrase:
+          type: string
+          description: Normalized form actually compared against the active list.
+        removed:
+          type: boolean
+        reason:
+          type: string
+          enum: [not-found, duplicate-in-batch]
+      required: [raw, phrase, removed]
+
+    HandwavyPhraseBatchRemoveResponse:
+      type: object
+      description: |
+        Task #135 — response from a batch DELETE call. The shape is
+        intentionally distinct from `HandwavyPhraseMutationResponse` so
+        clients can disambiguate by checking `batch === true`.
+      properties:
+        batch:
+          type: boolean
+          enum: [true]
+        removed:
+          type: integer
+          description: Count of phrases that actually came off the active list.
+        notFound:
+          type: integer
+          description: Count of phrases that were not in the active list at lookup time.
+        total:
+          type: integer
+          description: Number of active phrases AFTER the batch.
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyPhraseBatchRemoveResultEntry"
+        historyEntry:
+          oneOf:
+            - $ref: "#/components/schemas/HandwavyHistoryEntry"
+            - type: "null"
+          description: The single batch history entry, or null if nothing was removed.
+        phrases:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyMarker"
+          description: Full active list after the batch.
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyHistoryEntry"
+          description: Full removal audit log after the batch.
+      required: [batch, removed, notFound, total, results, phrases, history]
 
     HandwavyPhraseReinstateBody:
       type: object

@@ -841,6 +841,113 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     });
   });
 
+  // Task #135 — batched DELETE so the CLI can remove many phrases in one
+  // round-trip and one history entry instead of N per-phrase calls.
+  describe("Task #135 batched DELETE", () => {
+    it("DELETE with {phrases: [...]} removes every match in one call and writes ONE batch history entry", async () => {
+      // Seed a couple of extra phrases on top of the SEED so we can remove a
+      // mix of present + absent in the same batch.
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "batch route alpha", category: "absence" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "batch route bravo", category: "hedging" });
+
+      const r = await request<{
+        batch: boolean;
+        removed: number;
+        notFound: number;
+        total: number;
+        results: Array<{ raw: string; phrase: string; removed: boolean; reason?: string }>;
+        historyEntry: { phrases: Array<{ phrase: string; category: string }>; removedBy?: string } | null;
+        phrases: Marker[];
+        history: Array<{ phrase?: string; phrases?: Array<{ phrase: string }>; removedAt: string }>;
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["seed phrase one", "batch route alpha", "BATCH route bravo", "never registered"],
+        reviewer: "bob@team.com",
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.batch).toBe(true);
+      expect(r.body.removed).toBe(3);
+      expect(r.body.notFound).toBe(1);
+      expect(r.body.results.find((x) => x.raw === "never registered")?.reason).toBe("not-found");
+      expect(r.body.historyEntry?.phrases.map((p) => p.phrase)).toEqual([
+        "seed phrase one",
+        "batch route alpha",
+        "batch route bravo",
+      ]);
+      expect(r.body.historyEntry?.removedBy).toBe("bob@team.com");
+      // Active list reflects all removals.
+      const active = r.body.phrases.map((m) => m.phrase);
+      expect(active).not.toContain("seed phrase one");
+      expect(active).not.toContain("batch route alpha");
+      expect(active).not.toContain("batch route bravo");
+      // History contains exactly one new batch entry, not three.
+      const batchEntries = r.body.history.filter((h) => Array.isArray(h.phrases));
+      expect(batchEntries.length).toBe(1);
+      expect(batchEntries[0].phrases?.length).toBe(3);
+    });
+
+    it("DELETE batch returns 404 when nothing matched", async () => {
+      const r = await request<{ batch: boolean; removed: number; notFound: number }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrases: ["never one", "never two"] },
+      );
+      expect(r.status).toBe(404);
+      expect(r.body.batch).toBe(true);
+      expect(r.body.removed).toBe(0);
+      expect(r.body.notFound).toBe(2);
+    });
+
+    it("DELETE batch rejects sending both `phrase` and `phrases` with 400", async () => {
+      const r = await request<{ error: string }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "seed phrase one", phrases: ["seed phrase two"] },
+      );
+      expect(r.status).toBe(400);
+    });
+
+    it("DELETE batch rejects an empty `phrases` array with 400", async () => {
+      const r = await request<{ error: string }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrases: [] },
+      );
+      expect(r.status).toBe(400);
+    });
+
+    it("DELETE batch rejects > 200 phrases with 400 (server-side cap)", async () => {
+      const phrases = Array.from({ length: 201 }, (_, i) => `bulk phrase ${i}`);
+      const r = await request<{ error: string }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrases },
+      );
+      expect(r.status).toBe(400);
+    });
+
+    it("DELETE batch supports per-phrase reinstate via the existing /reinstate endpoint", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "batch reinstate route a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "batch reinstate route b" });
+      const removed = await request<{
+        historyEntry: { removedAt: string; phrases: Array<{ phrase: string }> };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["batch reinstate route a", "batch reinstate route b"],
+      });
+      expect(removed.status).toBe(200);
+      const removedAt = removed.body.historyEntry.removedAt;
+      const reinstated = await request<{ reinstated: boolean; phrase: string; total: number }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate",
+        { phrase: "batch reinstate route a", removedAt, reviewer: "carol@team.com" },
+      );
+      expect([200, 201]).toContain(reinstated.status);
+      expect(reinstated.body.reinstated).toBe(true);
+      expect(reinstated.body.phrase).toBe("batch reinstate route a");
+      const list = await request<{ phrases: Marker[] }>("GET", "/feedback/calibration/handwavy-phrases");
+      expect(list.body.phrases.map((m) => m.phrase)).toContain("batch reinstate route a");
+    });
+  });
+
   it("restoreDefaults helper rewrites the file with the curated defaults", () => {
     __restoreDefaults();
     // Sanity: the restore helper does not throw and the file now contains

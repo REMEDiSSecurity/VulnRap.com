@@ -1642,9 +1642,14 @@ server-side per marker.
 }
 
 /**
- * Removed-phrase audit record used so reviewers can reinstate a phrase with original context.
+ * Task #135 — one element of a batch-removal history entry's `phrases`
+array. Mirrors the audit metadata that a single-removal entry carries
+at its top level. Per-phrase `reinstated*` fields track partial
+reinstates so a reviewer can pull individual phrases back out of a
+batch removal.
+
  */
-export interface HandwavyHistoryEntry {
+export interface HandwavyBatchHistoryPhrase {
   phrase: string;
   category: HandwavyCategory;
   addedBy?: string;
@@ -1652,15 +1657,40 @@ export interface HandwavyHistoryEntry {
   rationale?: string;
   /** Preserved on remove so reinstating still shows the edit history. */
   edits?: HandwavyEditEntry[];
-  /** Reviewer name or email that removed the phrase. */
+  reinstated?: boolean;
+  reinstatedBy?: string;
+  reinstatedAt?: string;
+}
+
+/**
+ * Removed-phrase audit record used so reviewers can reinstate a phrase
+with original context. Single-removal entries populate `phrase` +
+`category`; Task #135 batch-removal entries leave those empty and
+instead populate `phrases` with the list of removed phrases.
+
+ */
+export interface HandwavyHistoryEntry {
+  /** The removed phrase (single-removal entries). Empty/omitted on
+Task #135 batch entries — see `phrases` instead.
+ */
+  phrase?: string;
+  category?: HandwavyCategory;
+  addedBy?: string;
+  addedAt?: string;
+  rationale?: string;
+  /** Task */
+  edits?: HandwavyEditEntry[];
+  /** Reviewer name or email that removed the phrase(s). */
   removedBy?: string;
-  /** ISO 8601 timestamp the phrase was removed. */
+  /** ISO 8601 timestamp the phrase(s) were removed. */
   removedAt: string;
   /** Task #121 — true once a reviewer has reinstated this phrase
 straight from the history log via POST
 /feedback/calibration/handwavy-phrases/reinstate. The same row
 cannot be reinstated twice — if the phrase is removed again, a
-new history row is appended.
+new history row is appended. For Task #135 batch entries this
+is the AGGREGATE flag: true once every inner phrase has been
+reinstated (see `phrases[].reinstated`).
  */
   reinstated?: boolean;
   /** Reviewer name or email that reinstated the phrase from this history entry. */
@@ -1676,6 +1706,11 @@ reads "added then undone" rather than "added then removed".
   undone?: boolean;
   /** Reviewer name or email that pressed Undo on this entry. */
   undoneBy?: string;
+  /** Task #135 — present when the entry represents a batch removal.
+Each item lists one removed phrase plus its original add-history
+metadata and per-phrase reinstate state.
+ */
+  phrases?: HandwavyBatchHistoryPhrase[];
 }
 
 export interface HandwavyPhrasesList {
@@ -1747,6 +1782,71 @@ export interface HandwavyPhraseRevertEditBody {
   editedAt: string;
   /** Reviewer name or email recorded on the inverse edit entry. Optional. */
   reviewer?: string;
+}
+
+/**
+ * Task #135 — batch removal request body for DELETE
+/feedback/calibration/handwavy-phrases. Sends up to 200 phrases in
+one round-trip; the server runs a single in-memory pass, a single
+file rewrite, and appends ONE history entry that lists every removed
+phrase. Mutually exclusive with the single-phrase `phrase` field.
+
+ */
+export interface HandwavyPhraseBatchRemoveBody {
+  /**
+   * List of phrases to remove. Normalized server-side.
+   * @minItems 1
+   * @maxItems 200
+   */
+  phrases: string[];
+  /** Reviewer name or email recorded on the batch history entry. Optional. */
+  reviewer?: string;
+}
+
+export type HandwavyPhraseBatchRemoveResultEntryReason =
+  (typeof HandwavyPhraseBatchRemoveResultEntryReason)[keyof typeof HandwavyPhraseBatchRemoveResultEntryReason];
+
+export const HandwavyPhraseBatchRemoveResultEntryReason = {
+  "not-found": "not-found",
+  "duplicate-in-batch": "duplicate-in-batch",
+} as const;
+
+/**
+ * Per-phrase outcome from a Task #135 batch removal. `phrase` is the
+normalized form actually compared against the active list. `reason`
+is omitted on successful removals.
+
+ */
+export interface HandwavyPhraseBatchRemoveResultEntry {
+  /** Original (raw) phrase as supplied by the client. */
+  raw: string;
+  /** Normalized form actually compared against the active list. */
+  phrase: string;
+  removed: boolean;
+  reason?: HandwavyPhraseBatchRemoveResultEntryReason;
+}
+
+/**
+ * Task #135 — response from a batch DELETE call. The shape is
+intentionally distinct from `HandwavyPhraseMutationResponse` so
+clients can disambiguate by checking `batch === true`.
+
+ */
+export interface HandwavyPhraseBatchRemoveResponse {
+  batch: boolean;
+  /** Count of phrases that actually came off the active list. */
+  removed: number;
+  /** Count of phrases that were not in the active list at lookup time. */
+  notFound: number;
+  /** Number of active phrases AFTER the batch. */
+  total: number;
+  results: HandwavyPhraseBatchRemoveResultEntry[];
+  /** The single batch history entry, or null if nothing was removed. */
+  historyEntry?: HandwavyHistoryEntry | null;
+  /** Full active list after the batch. */
+  phrases: HandwavyMarker[];
+  /** Full removal audit log after the batch. */
+  history: HandwavyHistoryEntry[];
 }
 
 /**
