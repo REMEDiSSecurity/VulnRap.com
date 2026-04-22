@@ -1084,10 +1084,32 @@ function formatIndicatorValue(value: unknown): string | null {
   }
 }
 
+function buildIndicatorMarkdown(ind: TriggeredIndicator): string {
+  const signal = ind.signal ?? "INDICATOR";
+  const strength = ind.strength ?? "UNSPECIFIED";
+  const explanation = ind.explanation?.trim();
+  const base = `\`${signal}\` (${strength})`;
+  return explanation ? `${base} — ${explanation}` : base;
+}
+
 function EngineRow({ eng }: { eng: EngineResult }) {
   const indicators = eng.triggeredIndicators ?? [];
   const hasIndicators = indicators.length > 0;
   const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+  const copyIndicator = async (ind: TriggeredIndicator) => {
+    const md = buildIndicatorMarkdown(ind);
+    try {
+      await navigator.clipboard.writeText(md);
+      toast({ title: "Copied", description: "Indicator copied to clipboard." });
+    } catch {
+      toast({
+        title: "Copy failed",
+        description: "Could not copy to clipboard.",
+        variant: "destructive",
+      });
+    }
+  };
   const grouped = STRENGTH_ORDER
     .map((s) => ({
       strength: s,
@@ -1160,6 +1182,17 @@ function EngineRow({ eng }: { eng: EngineResult }) {
                           >
                             {g.strength}
                           </Badge>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0"
+                            aria-label={`Copy indicator ${ind.signal ?? ""} to clipboard`}
+                            title="Copy indicator to clipboard"
+                            onClick={() => void copyIndicator(ind)}
+                          >
+                            <ClipboardCopy className="w-3 h-3" />
+                          </Button>
                         </div>
                       </div>
                       {ind.explanation && (
@@ -1188,9 +1221,22 @@ function EngineRow({ eng }: { eng: EngineResult }) {
                     >
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className="font-semibold">{ind.signal ?? "—"}</span>
-                        {valueStr !== null && (
-                          <span className="text-muted-foreground">value: {valueStr}</span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {valueStr !== null && (
+                            <span className="text-muted-foreground">value: {valueStr}</span>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0"
+                            aria-label={`Copy indicator ${ind.signal ?? ""} to clipboard`}
+                            title="Copy indicator to clipboard"
+                            onClick={() => void copyIndicator(ind)}
+                          >
+                            <ClipboardCopy className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </div>
                       {ind.explanation && (
                         <div className="text-foreground/70 mt-0.5 whitespace-pre-wrap break-words">
