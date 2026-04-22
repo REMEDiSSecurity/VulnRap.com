@@ -145,6 +145,40 @@ function renderPreview(phrase, category, m) {
   return lines.join("\n");
 }
 
+// Task #123 — render overlap with the existing curated phrase list as
+// prominently as the GREEN/YELLOW false-positive warning. Substring overlap
+// is the most common reason a reviewer should NOT add a candidate, so we
+// surface it in red before the confirmation prompt.
+function describeOverlapRelation(rel) {
+  switch (rel) {
+    case "equal":
+      return "exact duplicate of";
+    case "candidate-contains-existing":
+      return "broader than (would supersede)";
+    case "existing-contains-candidate":
+      return "already covered by";
+    default:
+      return "overlaps with";
+  }
+}
+
+function renderOverlaps(overlaps) {
+  if (!overlaps || !overlaps.matches || overlaps.matches.length === 0) {
+    return "";
+  }
+  const lines = [];
+  const noun = overlaps.total === 1 ? "entry" : "entries";
+  lines.push(color("red", `  ⚠  Overlaps with ${overlaps.total} existing curated ${noun} — adding may be redundant:`));
+  for (const o of overlaps.matches) {
+    const rel = describeOverlapRelation(o.relation);
+    lines.push(
+      `    - ${color("red", rel)} "${o.phrase}" ${color("dim", `[${o.category}]`)}`,
+    );
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
 async function confirm(question) {
   const rl = createInterface({ input, output });
   try {
@@ -205,11 +239,26 @@ async function main() {
 
   console.log(renderPreview(normalizedPhrase, effectiveCategory, matches));
 
+  // Task #123 — surface overlap with already-curated phrases between the
+  // corpus-impact preview and the confirm prompt, mirroring how the
+  // GREEN/YELLOW false-positive warning is displayed.
+  const overlaps = dry.payload.dryRunOverlaps ?? null;
+  const overlapText = renderOverlaps(overlaps);
+  if (overlapText) console.log(overlapText);
+
   let proceed = args.yes;
   if (!proceed) {
-    const prompt = matches.falsePositives > 0
-      ? color("red", "Add this phrase anyway despite the false positives? [y/N] ")
-      : "Add this phrase to the active list? [y/N] ";
+    const overlapCount = overlaps?.total ?? 0;
+    let prompt;
+    if (matches.falsePositives > 0 && overlapCount > 0) {
+      prompt = color("red", `Add this phrase anyway despite the false positives AND ${overlapCount} curated overlap(s)? [y/N] `);
+    } else if (matches.falsePositives > 0) {
+      prompt = color("red", "Add this phrase anyway despite the false positives? [y/N] ");
+    } else if (overlapCount > 0) {
+      prompt = color("red", `Add this phrase anyway despite ${overlapCount} curated overlap(s)? [y/N] `);
+    } else {
+      prompt = "Add this phrase to the active list? [y/N] ";
+    }
     proceed = await confirm(prompt);
   }
   if (!proceed) {

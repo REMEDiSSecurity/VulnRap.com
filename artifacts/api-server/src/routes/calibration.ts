@@ -9,6 +9,8 @@ import {
   getHandwavyPhraseHistory,
   addHandwavyPhrase,
   removeHandwavyPhrase,
+  type HandwavyCategory,
+  type HandwavyMarker,
 } from "../lib/engines/avri/handwavy-phrases";
 import { TEST_FIXTURE_COHORTS } from "./test-fixtures";
 import { requireCalibrationAuth } from "../middlewares/require-calibration-auth";
@@ -158,11 +160,59 @@ async function previewHandwavyPhraseAgainstProduction(
   return scoreProductionRows(phrase, rows);
 }
 
+// Task #123 — Detect overlap between a candidate phrase and the existing
+// curated hand-wavy phrase list. Reviewers most commonly should NOT add a new
+// phrase when it duplicates or is wholly contained within an existing entry
+// (or vice-versa: the candidate is so broad that an existing entry is already
+// covered by it). The dry-run preview surfaces this so reviewers don't need
+// to eyeball the GET response separately. Matching mirrors the engine path:
+// both sides are normalized to lowercase + collapsed whitespace, then
+// compared via plain substring containment.
+type OverlapRelation = "equal" | "candidate-contains-existing" | "existing-contains-candidate";
+
+interface DryRunOverlap {
+  phrase: string;
+  category: HandwavyCategory;
+  relation: OverlapRelation;
+}
+
+interface DryRunOverlaps {
+  total: number;
+  matches: DryRunOverlap[];
+}
+
+function detectCuratedOverlaps(
+  normalizedCandidate: string,
+  curated: Iterable<HandwavyMarker>,
+): DryRunOverlaps {
+  const matches: DryRunOverlap[] = [];
+  for (const m of curated) {
+    const existing = m.phrase; // already normalized by the loader.
+    if (!existing) continue;
+    let relation: OverlapRelation | null = null;
+    if (existing === normalizedCandidate) {
+      relation = "equal";
+    } else if (existing.includes(normalizedCandidate)) {
+      // The candidate is a substring of (i.e. narrower than) an existing entry.
+      relation = "existing-contains-candidate";
+    } else if (normalizedCandidate.includes(existing)) {
+      // The candidate is broader than an existing entry — anything matching
+      // the existing entry would also match the candidate.
+      relation = "candidate-contains-existing";
+    }
+    if (relation) {
+      matches.push({ phrase: existing, category: m.category, relation });
+    }
+  }
+  return { total: matches.length, matches };
+}
+
 // Exported for unit testing the pure scoring step without DB access.
 export const __testing = {
   productionLabelToTier,
   scoreProductionRows,
   previewHandwavyPhrase,
+  detectCuratedOverlaps,
   PRODUCTION_PREVIEW_LIMIT,
 };
 
@@ -463,6 +513,9 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, as
       }
       const phrases = getHandwavyPhrases();
       const effectiveCategory = (category ?? "absence") as "absence" | "hedging" | "buzzword";
+      // Task #123 — flag overlap with existing curated entries so the reviewer
+      // can spot near-duplicates before they crowd the active list.
+      const overlaps = detectCuratedOverlaps(normalized, phrases);
       res.status(200).json({
         dryRun: true,
         added: false,
@@ -474,6 +527,7 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, as
         dryRunMatchesProduction: productionMatches,
         dryRunMatchesProductionError: productionError,
         dryRunMatchesProductionLimit: PRODUCTION_PREVIEW_LIMIT,
+        dryRunOverlaps: overlaps,
       });
       return;
     }

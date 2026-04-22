@@ -301,6 +301,73 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       expect(r.body.error).toMatch(/at least/);
     });
 
+    // Task #123 — overlap with the existing curated phrase list.
+    it("dryRun=true reports overlap with existing curated entries", async () => {
+      // Seed list contains "seed phrase one" and "seed phrase two".
+      // Candidate "seed phrase" is a substring of both — should flag both as
+      // existing-contains-candidate.
+      const r = await request<{
+        dryRunOverlaps: {
+          total: number;
+          matches: Array<{ phrase: string; category: string; relation: string }>;
+        };
+      }>("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "seed phrase",
+        dryRun: true,
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.dryRunOverlaps.total).toBe(2);
+      const phrases = r.body.dryRunOverlaps.matches.map((m) => m.phrase).sort();
+      expect(phrases).toEqual(["seed phrase one", "seed phrase two"]);
+      for (const m of r.body.dryRunOverlaps.matches) {
+        expect(m.relation).toBe("existing-contains-candidate");
+      }
+    });
+
+    it("dryRun=true flags an exact-duplicate candidate as 'equal'", async () => {
+      const r = await request<{
+        dryRunOverlaps: {
+          total: number;
+          matches: Array<{ phrase: string; relation: string }>;
+        };
+      }>("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "Seed Phrase  ONE", // exercises normalization too
+        dryRun: true,
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.dryRunOverlaps.total).toBe(1);
+      expect(r.body.dryRunOverlaps.matches[0].phrase).toBe("seed phrase one");
+      expect(r.body.dryRunOverlaps.matches[0].relation).toBe("equal");
+    });
+
+    it("dryRun=true flags a candidate broader than an existing entry as 'candidate-contains-existing'", async () => {
+      const r = await request<{
+        dryRunOverlaps: {
+          total: number;
+          matches: Array<{ phrase: string; relation: string }>;
+        };
+      }>("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "the seed phrase one with extra context",
+        dryRun: true,
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.dryRunOverlaps.total).toBe(1);
+      expect(r.body.dryRunOverlaps.matches[0].phrase).toBe("seed phrase one");
+      expect(r.body.dryRunOverlaps.matches[0].relation).toBe("candidate-contains-existing");
+    });
+
+    it("dryRun=true returns an empty overlap block when nothing in the curated list overlaps", async () => {
+      const r = await request<{
+        dryRunOverlaps: { total: number; matches: unknown[] };
+      }>("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "totally novel candidate xyzzy",
+        dryRun: true,
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.dryRunOverlaps.total).toBe(0);
+      expect(r.body.dryRunOverlaps.matches).toEqual([]);
+    });
+
     it("dryRun is independent of the real add path — a follow-up real add still appends", async () => {
       // First dry-run.
       const dry = await request<{ dryRun: boolean; added: boolean }>(
