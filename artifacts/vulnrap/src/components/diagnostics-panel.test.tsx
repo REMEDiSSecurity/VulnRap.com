@@ -515,6 +515,18 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/"do not have a reproducer"/i)).toBeInTheDocument();
     expect(screen.getByText(/"may not be encrypted"/i)).toBeInTheDocument();
     expect(screen.getByText(/"advanced persistent threats"/i)).toBeInTheDocument();
+
+    // Task 111: each themed group ships a one-line legend describing what
+    // the bucket signals about the report.
+    expect(
+      screen.getByText(/no runnable reproducer.*the bug is asserted, not observed/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/zero direct observation of the claimed behavior/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Marketing-style framings.*likely AI-generated prose/i),
+    ).toBeInTheDocument();
   });
 
   it("groups FLAT hand-wavy absence penalties by theme in the printable markdown export", () => {

@@ -480,6 +480,23 @@ const HANDWAVY_CATEGORY_LABELS: Record<HandwavyCategoryUI, string> = {
   buzzword: "Buzzword-soup framings",
 };
 
+// Task 111: one-line legend per theme so a reviewer seeing these buckets for
+// the first time can tell at a glance what the group signals about the
+// report. Wording mirrors the comments in
+// `api-server/src/lib/engines/avri/engine2-avri.ts` next to the FLAT
+// hand-wavy marker list (absence-of-evidence vs. generic hedging vs.
+// buzzword-soup framings).
+const HANDWAVY_CATEGORY_HELP: Record<HandwavyCategoryUI | "other", string> = {
+  absence:
+    "Reporter explicitly admits they have no runnable reproducer, PoC, or enumeration — the bug is asserted, not observed.",
+  hedging:
+    "Generic \"may / appears / likely\" language that signals zero direct observation of the claimed behavior.",
+  buzzword:
+    "Marketing-style framings (zero-trust, modern threat landscape, defense-in-depth) with no project-specific specifics — likely AI-generated prose.",
+  other:
+    "Hand-wavy phrases that don't carry a theme tag (older cached payloads).",
+};
+
 const HANDWAVY_CATEGORY_ORDER: HandwavyCategoryUI[] = ["absence", "hedging", "buzzword"];
 
 // Sprint 11 / Task 60: Render the AVRI family rubric used for this report —
@@ -687,6 +704,7 @@ function AvriFamilySection({
                         const label =
                           key === "other" ? "Other" : HANDWAVY_CATEGORY_LABELS[key];
                         const subtotal = items.reduce((s, a) => s + a.points, 0);
+                        const help = HANDWAVY_CATEGORY_HELP[key];
                         return (
                           <div key={key}>
                             <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80 mb-0.5 flex items-baseline gap-1">
@@ -695,6 +713,11 @@ function AvriFamilySection({
                                 ({items.length} phrase{items.length === 1 ? "" : "s"}, −{subtotal} raw)
                               </span>
                             </div>
+                            {help && (
+                              <div className="text-[11px] text-muted-foreground/80 normal-case mb-1 leading-snug">
+                                {help}
+                              </div>
+                            )}
                             <ul className="space-y-0.5">
                               {items.map((a) => (
                                 <li
