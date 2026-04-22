@@ -64,7 +64,7 @@ The ten levers documented below are the knobs that determine the final number af
 ### Lever 6 — FLAT hand-wavy haircut (`flat_handwavy_haircut`)
 
 - **Source:** `engine2-avri.ts` lines ~67–123.
-- **What it does:** When the classifier returns `FLAT` (no family fits), Engine 2 normally just passes through the legacy substance score. The haircut scans for ~20 hand-wavy markers ("private fuzzing harness", "structural rather than", "comprehensive zero-trust assessment", "modern threat landscape", etc.). Each match deducts 6 points; the total is capped at 24.
+- **What it does:** When the classifier returns `FLAT` (no family fits), Engine 2 normally just passes through the legacy substance score. The haircut scans for ~20 hand-wavy markers ("private fuzzing harness", "structural rather than", "comprehensive zero-trust assessment", "modern threat landscape", etc.). Each match deducts 6 points; the total is capped at 24. Each matched phrase is recorded as its own absence-penalty entry (`flat_handwavy:<slug>`) so the diagnostics panel shows reviewers exactly which phrases fired.
 - **Why this exists:** FLAT was the slop attacker's cheat code — write generic prose with no concrete evidence, no fingerprints fire, the family rubric can't crater you, and the legacy substance score (which doesn't know about hand-waving) leaves you in the YELLOW band. The haircut markers are a curated list of self-admitted-no-evidence phrases ("I do not have a runnable reproducer") and buzzword-soup framings ("defense-in-depth posture").
 - **Fixtures that motivated the value:** Sprint 11 buzzword-soup corpus; the "leadership-level discussion" / "weak security culture" archetype.
 

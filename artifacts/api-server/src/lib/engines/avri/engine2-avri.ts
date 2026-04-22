@@ -113,22 +113,70 @@ export function runEngine2Avri(
       "defense-in-depth posture",
       "weak security culture",
     ];
-    let haircut = 0;
+    const HANDWAVY_POINTS_PER_HIT = 6;
+    const HANDWAVY_HAIRCUT_CAP = 24;
+    // Record every matched phrase with id + phrase + per-hit points so the
+    // diagnostics panel can show reviewers exactly which language fired.
+    // The displayed per-entry value is the per-hit weight (6); the score
+    // impact is the capped sum below, surfaced separately.
+    const absencePenaltiesApplied: Array<{ id: string; description: string; points: number }> = [];
+    let haircutRaw = 0;
     for (const m of handwavyMarkers) {
-      if (lowered.includes(m)) haircut += 6;
+      if (lowered.includes(m)) {
+        const slug = m.replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+        absencePenaltiesApplied.push({
+          id: `flat_handwavy:${slug}`,
+          description: `Hand-wavy phrase: "${m}"`,
+          points: HANDWAVY_POINTS_PER_HIT,
+        });
+        haircutRaw += HANDWAVY_POINTS_PER_HIT;
+      }
     }
-    haircut = Math.min(24, haircut);
+    // The composite override math (lib/engines/avri/composite.ts ≥18 check)
+    // keys off `totalAbsencePenalty`, so cap the applied total here while
+    // leaving every matched-phrase entry visible in `absencePenaltiesApplied`.
+    const haircut = Math.min(HANDWAVY_HAIRCUT_CAP, haircutRaw);
     const adjusted = clamp(legacy.score - haircut);
+    const flatAvriBreakdown = {
+      family: family.id,
+      familyName: family.displayName,
+      baseScore: legacy.score,
+      goldHitCount: 0,
+      goldTotalCount: 0,
+      goldHits: [],
+      goldMisses: [],
+      absencePenalty: -haircut,
+      absencePenalties: absencePenaltiesApplied.map((a) => ({
+        id: a.id,
+        description: a.description,
+        points: a.points,
+      })),
+      contradictions: [],
+      contradictionPenalty: 0,
+      crashTrace: null,
+      rawHttp: null,
+      rawAvriScore: adjusted,
+      legacyScore: legacy.score,
+      blendedScore: adjusted,
+    };
     return {
-      engine: { ...legacy, score: adjusted },
+      engine: {
+        ...legacy,
+        score: adjusted,
+        signalBreakdown: {
+          ...legacy.signalBreakdown,
+          avri: flatAvriBreakdown,
+        },
+        note: absencePenaltiesApplied.length
+          ? `AVRI ${family.displayName}: ${absencePenaltiesApplied.length} hand-wavy phrase(s), -${haircut} haircut applied to legacy substance ${legacy.score} → ${adjusted}.`
+          : legacy.note,
+      },
       goldHitCount: 0,
       detail: {
         family: family.id,
         baseScore: legacy.score,
         goldHits: [],
-        absencePenaltiesApplied: haircut
-          ? [{ id: "flat_handwavy_haircut", description: "FLAT report with hand-wavy evidence markers", points: haircut }]
-          : [],
+        absencePenaltiesApplied,
         contradictionsFound: [],
         totalAbsencePenalty: haircut,
         contradictionPenalty: 0,

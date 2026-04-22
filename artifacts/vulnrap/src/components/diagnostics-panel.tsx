@@ -639,8 +639,32 @@ function AvriFamilySection({
         )}
 
         {isFlat ? (
-          <div className="text-[11px] text-muted-foreground">
-            No specific CWE family detected — generic substance scoring used (no family rubric applied).
+          <div className="space-y-2">
+            <div className="text-[11px] text-muted-foreground">
+              No specific CWE family detected — generic substance scoring used (no family rubric applied).
+            </div>
+            {absencePenalties.length > 0 && (
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                  Hand-wavy Phrases Triggering Slop Haircut
+                  <span className="ml-1 text-muted-foreground/70 normal-case">
+                    (applied haircut: {e2Avri?.absencePenalty ?? 0}; per-hit markers shown, total capped at −24)
+                  </span>
+                </div>
+                <ul className="space-y-0.5">
+                  {absencePenalties.map((a) => (
+                    <li
+                      key={a.id}
+                      className="text-[11px] font-mono text-orange-400/90 flex items-baseline gap-1"
+                    >
+                      <span>−{a.points}</span>
+                      <span className="text-foreground/80">{a.description}</span>
+                      <span className="text-muted-foreground">({a.id})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         ) : (
           <>
