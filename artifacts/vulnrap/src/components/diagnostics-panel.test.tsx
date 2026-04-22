@@ -414,6 +414,96 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/tsan_or_helgrind_header/)).toBeInTheDocument();
   });
 
+  it("surfaces the FAKE_RAW_HTTP block in the printable markdown export with placeholder/CRLF/TE-CL counters", () => {
+    const withRawHttp: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      avri: {
+        family: "REQUEST_SMUGGLING",
+        familyName: "HTTP request smuggling / desync",
+        classification: {
+          confidence: "HIGH" as const,
+          reason: "matched member CWE-444",
+          evidence: ["CWE-444"],
+          technology: null,
+        },
+        goldHitCount: 0,
+        velocityPenalty: 0,
+        templatePenalty: 0,
+        rawCompositeBeforeBehavioralPenalties: 18,
+      },
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 22,
+            verdict: "RED" as const,
+            confidence: "MEDIUM" as const,
+            triggeredIndicators: [
+              {
+                signal: "FAKE_RAW_HTTP",
+                value: "1r/3g/4p",
+                strength: "HIGH" as const,
+                explanation:
+                  "Fabricated raw HTTP request (no CRLFs, placeholder header values) (-18; revoked 2 smuggling gold signal(s))",
+              },
+            ],
+            signalBreakdown: {
+              avri: {
+                family: "REQUEST_SMUGGLING",
+                familyName: "HTTP request smuggling / desync",
+                baseScore: 18,
+                goldHitCount: 0,
+                goldTotalCount: 6,
+                goldHits: [],
+                goldMisses: [],
+                absencePenalty: 0,
+                absencePenalties: [],
+                contradictions: [],
+                contradictionPenalty: 0,
+                rawHttp: {
+                  requestsAnalyzed: 1,
+                  totalHeaders: 7,
+                  placeholderHeaders: 4,
+                  crlfPresent: false,
+                  teClConflicts: 1,
+                  teClBroken: 1,
+                  isFake: true,
+                  reason:
+                    "Fabricated raw HTTP request (no CRLFs, placeholder header values)",
+                  revokedGoldHits: [
+                    { id: "raw_http_te_cl_conflict", points: 22 },
+                    { id: "raw_http_request_with_headers", points: 14 },
+                  ],
+                  penalty: -18,
+                },
+                rawAvriScore: 0,
+                legacyScore: 30,
+                blendedScore: 22,
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const md = buildMarkdownSummary(withRawHttp);
+
+    // Indicator row in the per-engine triggered-indicators table.
+    expect(md).toContain("`FAKE_RAW_HTTP`");
+    // Structural rawHttp block under the AVRI Family Rubric, alongside the
+    // STRIPPED_CRASH_TRACE block, with the per-request counters spelled out.
+    expect(md).toContain("Fake raw HTTP request (penalty -18)");
+    expect(md).toContain("requests 1");
+    expect(md).toContain("headers 3/7 good");
+    expect(md).toContain("placeholder 4");
+    expect(md).toContain("CRLF no");
+    expect(md).toContain("TE/CL conflicts 1 (broken 1)");
+    expect(md).toContain(
+      "Smuggling gold signals revoked: raw_http_te_cl_conflict (−22), raw_http_request_with_headers (−14)",
+    );
+  });
+
   it("renders per-engine triggered indicators grouped by strength when the engine row is expanded", async () => {
     const withIndicators: DiagnosticsResponse = {
       ...SAMPLE_DIAGNOSTICS,

@@ -502,6 +502,24 @@ interface AvriEngine2Breakdown {
     revokedGoldHits: Array<{ id: string; points: number }>;
     penalty: number;
   } | null;
+  // Sprint 12 / Task 93: fake-raw-HTTP block written by Engine 2 when a
+  // REQUEST_SMUGGLING report's raw HTTP request bytes are fabricated
+  // (placeholder header values, no CRLFs, or incoherent TE/CL conflict).
+  // The presence of this block (with isFake=true) is what triggers the
+  // FAKE_RAW_HTTP indicator and the smuggling-gold revocation surfaced in
+  // the panel and the printable export.
+  rawHttp?: {
+    requestsAnalyzed: number;
+    totalHeaders: number;
+    placeholderHeaders: number;
+    crlfPresent: boolean;
+    teClConflicts: number;
+    teClBroken: number;
+    isFake: boolean;
+    reason: string | null;
+    revokedGoldHits: Array<{ id: string; points: number }>;
+    penalty: number;
+  } | null;
   rawAvriScore?: number;
   legacyScore?: number;
   blendedScore?: number;
@@ -999,6 +1017,21 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
       if (ct.revokedGoldHits.length > 0) {
         lines.push(
           `  - Trace gold signals revoked: ${ct.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
+        );
+      }
+    }
+    // Sprint 12 / Task 93: surface the FAKE_RAW_HTTP block alongside
+    // STRIPPED_CRASH_TRACE so reviewers reading the printable export see
+    // why a REQUEST_SMUGGLING report's gold hits were revoked.
+    if (e2Avri?.rawHttp?.isFake) {
+      const rh = e2Avri.rawHttp;
+      const goodHeaders = Math.max(0, rh.totalHeaders - rh.placeholderHeaders);
+      lines.push(
+        `- Fake raw HTTP request (penalty ${rh.penalty}): ${rh.reason ?? "fabricated raw HTTP request"} — requests ${rh.requestsAnalyzed}, headers ${goodHeaders}/${rh.totalHeaders} good, placeholder ${rh.placeholderHeaders}, CRLF ${rh.crlfPresent ? "yes" : "no"}, TE/CL conflicts ${rh.teClConflicts} (broken ${rh.teClBroken})`,
+      );
+      if (rh.revokedGoldHits.length > 0) {
+        lines.push(
+          `  - Smuggling gold signals revoked: ${rh.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
         );
       }
     }
