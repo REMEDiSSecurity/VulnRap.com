@@ -69,3 +69,6 @@ artifacts/*/playwright/.cache/
 
 # Dev-only persisted snapshots from /api/test/run
 artifacts/api-server/data/archetype-history.json
+
+# Runtime state (curated defaults live in DEFAULT_MARKERS in code; reviewers mutate this at runtime via /feedback/calibration/handwavy-phrases)
+artifacts/api-server/data/handwavy-phrases.json
