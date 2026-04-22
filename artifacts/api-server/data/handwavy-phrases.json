@@ -3,30 +3,102 @@
     "description": "Curated list of FLAT-family hand-wavy marker phrases. Loaded by lib/engines/avri/handwavy-phrases.ts. Phrases are matched as case-insensitive substrings against a whitespace-collapsed copy of the report text. Each entry is themed into one of three categories ('absence', 'hedging', 'buzzword') so the diagnostics panel can group matches into themed buckets. Reviewers can add or remove phrases through POST/DELETE /feedback/calibration/handwavy-phrases without a redeploy. Each entry optionally tracks the reviewer (`addedBy`), ISO timestamp (`addedAt`), and free-text `rationale`. Removed phrases are appended to `history` so reviewers can see what was pulled and reinstate it with context."
   },
   "phrases": [
-    { "phrase": "do not have a runnable reproducer", "category": "absence" },
-    { "phrase": "do not have a reproducer", "category": "absence" },
-    { "phrase": "private fuzzing harness", "category": "absence" },
-    { "phrase": "private poc", "category": "absence" },
-    { "phrase": "structural rather than", "category": "absence" },
-    { "phrase": "structural vulnerability follows from the design", "category": "absence" },
-    { "phrase": "i have not enumerated", "category": "absence" },
-    { "phrase": "have not been able to confirm", "category": "absence" },
-    { "phrase": "no working proof-of-concept", "category": "absence" },
-    { "phrase": "no runnable proof", "category": "absence" },
-    { "phrase": "follows from the design as observed", "category": "absence" },
-    { "phrase": "deployment is no different in this respect", "category": "absence" },
-    { "phrase": "may not be encrypted", "category": "hedging" },
-    { "phrase": "may be present in environment variables", "category": "hedging" },
-    { "phrase": "do not appear to be", "category": "hedging" },
-    { "phrase": "does not appear to be", "category": "hedging" },
-    { "phrase": "appears to be susceptible", "category": "hedging" },
-    { "phrase": "consider a holistic remediation", "category": "hedging" },
-    { "phrase": "leadership-level discussion", "category": "hedging" },
-    { "phrase": "comprehensive zero-trust assessment", "category": "buzzword" },
-    { "phrase": "modern threat landscape", "category": "buzzword" },
-    { "phrase": "advanced persistent threats", "category": "buzzword" },
-    { "phrase": "defense-in-depth posture", "category": "buzzword" },
-    { "phrase": "weak security culture", "category": "buzzword" }
+    {
+      "phrase": "do not have a runnable reproducer",
+      "category": "absence"
+    },
+    {
+      "phrase": "do not have a reproducer",
+      "category": "absence"
+    },
+    {
+      "phrase": "private fuzzing harness",
+      "category": "absence"
+    },
+    {
+      "phrase": "private poc",
+      "category": "absence"
+    },
+    {
+      "phrase": "structural rather than",
+      "category": "absence"
+    },
+    {
+      "phrase": "structural vulnerability follows from the design",
+      "category": "absence"
+    },
+    {
+      "phrase": "i have not enumerated",
+      "category": "absence"
+    },
+    {
+      "phrase": "have not been able to confirm",
+      "category": "absence"
+    },
+    {
+      "phrase": "no working proof-of-concept",
+      "category": "absence"
+    },
+    {
+      "phrase": "no runnable proof",
+      "category": "absence"
+    },
+    {
+      "phrase": "follows from the design as observed",
+      "category": "absence"
+    },
+    {
+      "phrase": "deployment is no different in this respect",
+      "category": "absence"
+    },
+    {
+      "phrase": "may not be encrypted",
+      "category": "hedging"
+    },
+    {
+      "phrase": "may be present in environment variables",
+      "category": "hedging"
+    },
+    {
+      "phrase": "do not appear to be",
+      "category": "hedging"
+    },
+    {
+      "phrase": "does not appear to be",
+      "category": "hedging"
+    },
+    {
+      "phrase": "appears to be susceptible",
+      "category": "hedging"
+    },
+    {
+      "phrase": "consider a holistic remediation",
+      "category": "hedging"
+    },
+    {
+      "phrase": "leadership-level discussion",
+      "category": "hedging"
+    },
+    {
+      "phrase": "comprehensive zero-trust assessment",
+      "category": "buzzword"
+    },
+    {
+      "phrase": "modern threat landscape",
+      "category": "buzzword"
+    },
+    {
+      "phrase": "advanced persistent threats",
+      "category": "buzzword"
+    },
+    {
+      "phrase": "defense-in-depth posture",
+      "category": "buzzword"
+    },
+    {
+      "phrase": "weak security culture",
+      "category": "buzzword"
+    }
   ],
   "history": []
 }
