@@ -2495,6 +2495,8 @@ export const AddHandwavyPhraseBody = zod.object({
 
 export const addHandwavyPhraseResponseDryRunMatchesSampleMatchesMax = 12;
 
+export const addHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax = 12;
+
 export const AddHandwavyPhraseResponse = zod.object({
   added: zod
     .boolean()
@@ -2698,6 +2700,87 @@ export const AddHandwavyPhraseResponse = zod.object({
     .describe(
       "Full removal audit log after the mutation (only included on DELETE).",
     ),
+  dryRunMatchesProduction: zod
+    .object({
+      total: zod
+        .number()
+        .describe(
+          "Total number of corpus fixtures the candidate phrase matched.",
+        ),
+      byTier: zod.object({
+        t1Legit: zod
+          .number()
+          .describe(
+            "Matches in T1 LEGIT fixtures (GREEN — legitimate, well-evidenced).",
+          ),
+        t2Borderline: zod
+          .number()
+          .describe(
+            "Matches in T2 BORDERLINE fixtures (YELLOW — debatable signal).",
+          ),
+        t3Slop: zod
+          .number()
+          .describe(
+            "Matches in T3 SLOP fixtures (RED — known slop archetypes).",
+          ),
+        t4Hallucinated: zod
+          .number()
+          .describe(
+            "Matches in T4 HALLUCINATED fixtures (RED — fabricated\/hallucinated).",
+          ),
+      }),
+      falsePositives: zod
+        .number()
+        .describe(
+          "T1 + T2 hits — the count of GREEN\/YELLOW corpus reports that would have been flagged.",
+        ),
+      corpusSize: zod
+        .number()
+        .describe("Total number of corpus fixtures evaluated."),
+      sampleMatches: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            tier: zod.enum([
+              "T1_LEGIT",
+              "T2_BORDERLINE",
+              "T3_SLOP",
+              "T4_HALLUCINATED",
+            ]),
+          }),
+        )
+        .max(
+          addHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax,
+        )
+        .describe(
+          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+        ),
+      warning: zod
+        .string()
+        .nullish()
+        .describe(
+          "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+    })
+    .describe(
+      "Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged\nthe curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)\nand T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high\nvalue is a strong signal that the phrase will crater AVRI for legitimate reports.\n",
+    )
+    .nullish()
+    .describe(
+      "Task #119 — Same shape as `dryRunMatches`, but scored against the most\nrecent N production reports (capped by `dryRunMatchesProductionLimit`)\ninstead of the curated benchmark cohorts. Production rows are bucketed\ninto the same T1\/T2\/T3\/T4 tiers as the curated corpus by mapping the\npersisted vulnrap composite label (STRONG\/PROMISING -> T1, REASONABLE\/\nNEEDS REVIEW -> T2, LIKELY INVALID -> T3, HIGH RISK -> T4). `corpusSize`\non this block is the number of production reports actually scanned\nafter dropping rows with no usable label \/ content. `null` when the\nproduction scan failed (see `dryRunMatchesProductionError`).\n",
+    ),
+  dryRunMatchesProductionError: zod
+    .string()
+    .nullish()
+    .describe(
+      "Task #119 — Reviewer-facing notice when the production-archive scan\ncould not run (e.g. DB unavailable). Null on success. The curated\n`dryRunMatches` block is still returned regardless.\n",
+    ),
+  dryRunMatchesProductionLimit: zod
+    .number()
+    .optional()
+    .describe(
+      'Task #119 — Upper bound on the number of most-recent production reports\nthe dry-run scan considered. Reported so reviewers know the depth of\nthe second signal (e.g. \"scanned the last 2000 reports\").\n',
+    ),
 });
 
 /**
@@ -2735,6 +2818,8 @@ export const RemoveHandwavyPhraseBody = zod.object({
 });
 
 export const removeHandwavyPhraseResponseDryRunMatchesSampleMatchesMax = 12;
+
+export const removeHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax = 12;
 
 export const RemoveHandwavyPhraseResponse = zod.object({
   added: zod
@@ -2938,6 +3023,87 @@ export const RemoveHandwavyPhraseResponse = zod.object({
     .optional()
     .describe(
       "Full removal audit log after the mutation (only included on DELETE).",
+    ),
+  dryRunMatchesProduction: zod
+    .object({
+      total: zod
+        .number()
+        .describe(
+          "Total number of corpus fixtures the candidate phrase matched.",
+        ),
+      byTier: zod.object({
+        t1Legit: zod
+          .number()
+          .describe(
+            "Matches in T1 LEGIT fixtures (GREEN — legitimate, well-evidenced).",
+          ),
+        t2Borderline: zod
+          .number()
+          .describe(
+            "Matches in T2 BORDERLINE fixtures (YELLOW — debatable signal).",
+          ),
+        t3Slop: zod
+          .number()
+          .describe(
+            "Matches in T3 SLOP fixtures (RED — known slop archetypes).",
+          ),
+        t4Hallucinated: zod
+          .number()
+          .describe(
+            "Matches in T4 HALLUCINATED fixtures (RED — fabricated\/hallucinated).",
+          ),
+      }),
+      falsePositives: zod
+        .number()
+        .describe(
+          "T1 + T2 hits — the count of GREEN\/YELLOW corpus reports that would have been flagged.",
+        ),
+      corpusSize: zod
+        .number()
+        .describe("Total number of corpus fixtures evaluated."),
+      sampleMatches: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            tier: zod.enum([
+              "T1_LEGIT",
+              "T2_BORDERLINE",
+              "T3_SLOP",
+              "T4_HALLUCINATED",
+            ]),
+          }),
+        )
+        .max(
+          removeHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax,
+        )
+        .describe(
+          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+        ),
+      warning: zod
+        .string()
+        .nullish()
+        .describe(
+          "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+    })
+    .describe(
+      "Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged\nthe curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)\nand T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high\nvalue is a strong signal that the phrase will crater AVRI for legitimate reports.\n",
+    )
+    .nullish()
+    .describe(
+      "Task #119 — Same shape as `dryRunMatches`, but scored against the most\nrecent N production reports (capped by `dryRunMatchesProductionLimit`)\ninstead of the curated benchmark cohorts. Production rows are bucketed\ninto the same T1\/T2\/T3\/T4 tiers as the curated corpus by mapping the\npersisted vulnrap composite label (STRONG\/PROMISING -> T1, REASONABLE\/\nNEEDS REVIEW -> T2, LIKELY INVALID -> T3, HIGH RISK -> T4). `corpusSize`\non this block is the number of production reports actually scanned\nafter dropping rows with no usable label \/ content. `null` when the\nproduction scan failed (see `dryRunMatchesProductionError`).\n",
+    ),
+  dryRunMatchesProductionError: zod
+    .string()
+    .nullish()
+    .describe(
+      "Task #119 — Reviewer-facing notice when the production-archive scan\ncould not run (e.g. DB unavailable). Null on success. The curated\n`dryRunMatches` block is still returned regardless.\n",
+    ),
+  dryRunMatchesProductionLimit: zod
+    .number()
+    .optional()
+    .describe(
+      'Task #119 — Upper bound on the number of most-recent production reports\nthe dry-run scan considered. Reported so reviewers know the depth of\nthe second signal (e.g. \"scanned the last 2000 reports\").\n',
     ),
 });
 

@@ -1719,6 +1719,27 @@ active phrase list (unchanged) is returned in `phrases`.
   dryRunMatches?: HandwavyPhraseDryRunMatches;
   /** Full removal audit log after the mutation (only included on DELETE). */
   history?: HandwavyHistoryEntry[];
+  /** Task #119 — Same shape as `dryRunMatches`, but scored against the most
+recent N production reports (capped by `dryRunMatchesProductionLimit`)
+instead of the curated benchmark cohorts. Production rows are bucketed
+into the same T1/T2/T3/T4 tiers as the curated corpus by mapping the
+persisted vulnrap composite label (STRONG/PROMISING -> T1, REASONABLE/
+NEEDS REVIEW -> T2, LIKELY INVALID -> T3, HIGH RISK -> T4). `corpusSize`
+on this block is the number of production reports actually scanned
+after dropping rows with no usable label / content. `null` when the
+production scan failed (see `dryRunMatchesProductionError`).
+ */
+  dryRunMatchesProduction?: HandwavyPhraseDryRunMatches | null;
+  /** Task #119 — Reviewer-facing notice when the production-archive scan
+could not run (e.g. DB unavailable). Null on success. The curated
+`dryRunMatches` block is still returned regardless.
+ */
+  dryRunMatchesProductionError?: string | null;
+  /** Task #119 — Upper bound on the number of most-recent production reports
+the dry-run scan considered. Reported so reviewers know the depth of
+the second signal (e.g. "scanned the last 2000 reports").
+ */
+  dryRunMatchesProductionLimit?: number;
 }
 
 export interface VisitRecorded {

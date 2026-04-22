@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { db, reportsTable } from "@workspace/db";
+import { and, isNotNull, sql } from "drizzle-orm";
 import { generateCalibrationReport, type BucketAnalysis } from "../lib/calibration";
 import { getCurrentConfig, getConfigHistory, applyNewConfig } from "../lib/scoring-config";
 import { generateAvriDriftReport } from "../lib/avri-drift";
@@ -32,6 +34,26 @@ interface DryRunMatches {
   warning: string | null;
 }
 
+function tallyMatches(
+  needle: string,
+  rows: Iterable<{ id: string; tier: CorpusTier; text: string }>,
+): { total: number; byTier: DryRunMatches["byTier"]; sampleMatches: DryRunMatches["sampleMatches"] } {
+  const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
+  const sampleMatches: Array<{ id: string; tier: CorpusTier }> = [];
+  let total = 0;
+  for (const r of rows) {
+    const haystack = r.text.toLowerCase().replace(/\s+/g, " ");
+    if (!needle || !haystack.includes(needle)) continue;
+    total += 1;
+    if (r.tier === "T1_LEGIT") byTier.t1Legit += 1;
+    else if (r.tier === "T2_BORDERLINE") byTier.t2Borderline += 1;
+    else if (r.tier === "T3_SLOP") byTier.t3Slop += 1;
+    else byTier.t4Hallucinated += 1;
+    if (sampleMatches.length < 12) sampleMatches.push({ id: r.id, tier: r.tier });
+  }
+  return { total, byTier, sampleMatches };
+}
+
 function previewHandwavyPhrase(phrase: string): DryRunMatches {
   const needle = normalizeForMatch(phrase);
   const cohorts: Array<{ tier: CorpusTier; fixtures: typeof TEST_FIXTURE_COHORTS.T1 }> = [
@@ -40,23 +62,13 @@ function previewHandwavyPhrase(phrase: string): DryRunMatches {
     { tier: "T3_SLOP", fixtures: TEST_FIXTURE_COHORTS.T3 },
     { tier: "T4_HALLUCINATED", fixtures: TEST_FIXTURE_COHORTS.T4 },
   ];
-  const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
-  const sampleMatches: Array<{ id: string; tier: CorpusTier }> = [];
-  let total = 0;
   let corpusSize = 0;
+  const flat: Array<{ id: string; tier: CorpusTier; text: string }> = [];
   for (const { tier, fixtures } of cohorts) {
     corpusSize += fixtures.length;
-    for (const f of fixtures) {
-      const haystack = f.text.toLowerCase().replace(/\s+/g, " ");
-      if (!needle || !haystack.includes(needle)) continue;
-      total += 1;
-      if (tier === "T1_LEGIT") byTier.t1Legit += 1;
-      else if (tier === "T2_BORDERLINE") byTier.t2Borderline += 1;
-      else if (tier === "T3_SLOP") byTier.t3Slop += 1;
-      else byTier.t4Hallucinated += 1;
-      if (sampleMatches.length < 12) sampleMatches.push({ id: f.id, tier });
-    }
+    for (const f of fixtures) flat.push({ id: f.id, tier, text: f.text });
   }
+  const { total, byTier, sampleMatches } = tallyMatches(needle, flat);
   const falsePositives = byTier.t1Legit + byTier.t2Borderline;
   let warning: string | null = null;
   if (falsePositives > 0) {
@@ -65,6 +77,94 @@ function previewHandwavyPhrase(phrase: string): DryRunMatches {
   }
   return { total, byTier, falsePositives, corpusSize, sampleMatches, warning };
 }
+
+// Task #119 — Map a persisted vulnrap composite label to the same T1–T4 tier
+// shape the curated corpus uses, so production reports can be scored with the
+// identical match-counting pipeline. The mapping mirrors `bucketForLabel` in
+// lib/avri-drift.ts but extends NEUTRAL into T2 and splits T3/T4 by severity:
+//   STRONG, PROMISING        -> T1_LEGIT       (PRIORITIZE-equivalent)
+//   REASONABLE, NEEDS REVIEW -> T2_BORDERLINE  (manual-review-equivalent)
+//   LIKELY INVALID           -> T3_SLOP        (AUTO_CLOSE-equivalent)
+//   HIGH RISK                -> T4_HALLUCINATED (highest-risk auto-close)
+// Rows whose label does not fall into any of these bands (null / unknown) are
+// skipped so they don't contaminate either bucket.
+function productionLabelToTier(label: string | null): CorpusTier | null {
+  switch (label) {
+    case "STRONG":
+    case "PROMISING":
+      return "T1_LEGIT";
+    case "REASONABLE":
+    case "NEEDS REVIEW":
+      return "T2_BORDERLINE";
+    case "LIKELY INVALID":
+      return "T3_SLOP";
+    case "HIGH RISK":
+      return "T4_HALLUCINATED";
+    default:
+      return null;
+  }
+}
+
+// Task #119 — bound on the production scan. The dry-run preview is reviewer
+// interactive (sub-second budget) so we cap at the most recent 2000 reports
+// with a persisted composite label. That gives a much sharper false-positive
+// signal than the ~50-fixture curated corpus alone without turning a phrase
+// preview into a full table scan.
+const PRODUCTION_PREVIEW_LIMIT = 2000;
+
+// Pure scoring step (no DB) so it can be unit-tested independently of the
+// drizzle layer.
+function scoreProductionRows(
+  phrase: string,
+  rows: Array<{ id: number | string; label: string | null; contentText: string | null }>,
+): DryRunMatches {
+  const needle = normalizeForMatch(phrase);
+  const tiered: Array<{ id: string; tier: CorpusTier; text: string }> = [];
+  for (const r of rows) {
+    const tier = productionLabelToTier(r.label);
+    if (!tier || r.contentText == null) continue;
+    tiered.push({ id: String(r.id), tier, text: r.contentText });
+  }
+  const { total, byTier, sampleMatches } = tallyMatches(needle, tiered);
+  const falsePositives = byTier.t1Legit + byTier.t2Borderline;
+  let warning: string | null = null;
+  if (falsePositives > 0) {
+    const noun = falsePositives === 1 ? "legitimate report" : "legitimate reports";
+    warning = `This phrase would have flagged ${falsePositives} ${noun} (${byTier.t1Legit} GREEN, ${byTier.t2Borderline} YELLOW) in the most recent ${tiered.length} production reports — consider rewording.`;
+  }
+  return { total, byTier, falsePositives, corpusSize: tiered.length, sampleMatches, warning };
+}
+
+async function previewHandwavyPhraseAgainstProduction(
+  phrase: string,
+  limit: number = PRODUCTION_PREVIEW_LIMIT,
+): Promise<DryRunMatches> {
+  const rows = await db
+    .select({
+      id: reportsTable.id,
+      label: reportsTable.vulnrapCompositeLabel,
+      contentText: reportsTable.contentText,
+    })
+    .from(reportsTable)
+    .where(
+      and(
+        isNotNull(reportsTable.vulnrapCompositeLabel),
+        isNotNull(reportsTable.contentText),
+      ),
+    )
+    .orderBy(sql`${reportsTable.createdAt} DESC`)
+    .limit(limit);
+
+  return scoreProductionRows(phrase, rows);
+}
+
+// Exported for unit testing the pure scoring step without DB access.
+export const __testing = {
+  productionLabelToTier,
+  scoreProductionRows,
+  previewHandwavyPhrase,
+  PRODUCTION_PREVIEW_LIMIT,
+};
 
 const router: IRouter = Router();
 
@@ -300,7 +400,7 @@ router.get("/feedback/calibration/handwavy-phrases", (_req, res) => {
   }
 });
 
-router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
+router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, async (req, res) => {
   try {
     const { phrase, category, dryRun, reviewer, rationale } = (req.body ?? {}) as {
       phrase?: unknown;
@@ -344,6 +444,23 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (r
         return;
       }
       const matches = previewHandwavyPhrase(normalized);
+      // Task #119 — Also score the candidate against the most recent production
+      // reports (capped at PRODUCTION_PREVIEW_LIMIT). The curated cohorts are
+      // tiny (~50 fixtures) so a domain-specific phrase can easily score 0/0
+      // there yet flag dozens of legitimate production reports. We surface the
+      // production block as a SECOND signal so reviewers see both. If the DB
+      // probe fails we don't fail the whole preview — the curated block is
+      // still useful — but we DO record the failure so the UI can render a
+      // clear "production scan unavailable" notice rather than silently
+      // hiding the second signal.
+      let productionMatches: DryRunMatches | null = null;
+      let productionError: string | null = null;
+      try {
+        productionMatches = await previewHandwavyPhraseAgainstProduction(normalized);
+      } catch (err) {
+        req.log?.error(err, "Production dry-run scan failed");
+        productionError = "Production archive scan failed; only curated-corpus signal is shown.";
+      }
       const phrases = getHandwavyPhrases();
       const effectiveCategory = (category ?? "absence") as "absence" | "hedging" | "buzzword";
       res.status(200).json({
@@ -354,6 +471,9 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (r
         total: phrases.length,
         phrases,
         dryRunMatches: matches,
+        dryRunMatchesProduction: productionMatches,
+        dryRunMatchesProductionError: productionError,
+        dryRunMatchesProductionLimit: PRODUCTION_PREVIEW_LIMIT,
       });
       return;
     }

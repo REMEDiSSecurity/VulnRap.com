@@ -212,6 +212,17 @@ describe("/feedback/calibration/handwavy-phrases", () => {
           sampleMatches: Array<{ id: string; tier: string }>;
           warning: string | null;
         };
+        // Task #119 — production-archive scoring block.
+        dryRunMatchesProduction: {
+          total: number;
+          byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
+          falsePositives: number;
+          corpusSize: number;
+          sampleMatches: Array<{ id: string; tier: string }>;
+          warning: string | null;
+        } | null;
+        dryRunMatchesProductionError: string | null;
+        dryRunMatchesProductionLimit: number;
       }>("POST", "/feedback/calibration/handwavy-phrases", {
         phrase: "totally novel phrase that no fixture mentions xyzzy",
         category: "buzzword",
@@ -227,6 +238,24 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       expect(r.body.dryRunMatches.warning).toBeNull();
       expect(r.body.dryRunMatches.corpusSize).toBeGreaterThan(0);
       expect(r.body.dryRunMatches.sampleMatches).toHaveLength(0);
+
+      // Task #119 — Production block must always be present (either as a
+      // populated DryRunMatches or as null+error so the UI can show a notice).
+      // The route must never silently omit it.
+      expect(r.body).toHaveProperty("dryRunMatchesProduction");
+      expect(r.body).toHaveProperty("dryRunMatchesProductionError");
+      expect(r.body.dryRunMatchesProductionLimit).toBe(2000);
+      if (r.body.dryRunMatchesProduction != null) {
+        expect(r.body.dryRunMatchesProduction.byTier).toEqual({
+          t1Legit: expect.any(Number),
+          t2Borderline: expect.any(Number),
+          t3Slop: expect.any(Number),
+          t4Hallucinated: expect.any(Number),
+        });
+        expect(r.body.dryRunMatchesProduction.sampleMatches.length).toBeLessThanOrEqual(12);
+      } else {
+        expect(typeof r.body.dryRunMatchesProductionError).toBe("string");
+      }
 
       // Confirm the active list was not mutated by the dry-run call.
       const list = await request<{ phrases: Marker[] }>("GET", "/feedback/calibration/handwavy-phrases");

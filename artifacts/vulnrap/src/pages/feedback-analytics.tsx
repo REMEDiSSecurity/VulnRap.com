@@ -530,6 +530,80 @@ function formatAuditTimestamp(iso: string | undefined | null): string | null {
   });
 }
 
+// Task #119 — Side-by-side render of one dry-run match block (curated vs.
+// production). Identical visual shape so reviewers can read both signals at
+// a glance; the `kind` prop only changes the leading icon and label noun.
+function PreviewMatchBlock({
+  kind,
+  title,
+  subtitle,
+  matches,
+  emptyHint,
+}: {
+  kind: "curated" | "production";
+  title: string;
+  subtitle: string;
+  matches: HandwavyPhraseDryRunMatches;
+  emptyHint: string;
+}) {
+  const fp = matches.falsePositives;
+  const sourceNoun = kind === "curated" ? "fixture" : "report";
+  return (
+    <div
+      className={cn(
+        "rounded-md border p-2.5 space-y-1.5 text-xs",
+        fp > 0
+          ? "border-red-500/40 bg-red-500/10"
+          : "border-emerald-500/30 bg-emerald-500/5",
+      )}
+      data-testid={`handwavy-preview-${kind}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="font-semibold text-foreground">{title}</div>
+        <Badge variant="outline" className="text-[9px] uppercase tracking-wide">
+          {subtitle}
+        </Badge>
+      </div>
+      {matches.warning ? (
+        <div
+          className="text-red-200 text-[11px]"
+          data-testid={`handwavy-preview-${kind}-warning`}
+        >
+          {matches.warning}
+        </div>
+      ) : (
+        <div className="text-emerald-200 text-[11px]">
+          {emptyHint}
+          {matches.total > 0
+            ? ` — ${matches.total} slop ${sourceNoun}${matches.total === 1 ? "" : "s"} would be caught.`
+            : "."}
+        </div>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5 text-[11px]">
+        <PreviewTierBadge label="GREEN (T1 legit)" count={matches.byTier.t1Legit} negative />
+        <PreviewTierBadge label="YELLOW (T2 borderline)" count={matches.byTier.t2Borderline} negative />
+        <PreviewTierBadge label="RED (T3 slop)" count={matches.byTier.t3Slop} />
+        <PreviewTierBadge label="RED (T4 hallucinated)" count={matches.byTier.t4Hallucinated} />
+      </div>
+      {matches.sampleMatches.length > 0 && (
+        <details className="text-[10px] text-muted-foreground">
+          <summary className="cursor-pointer hover:text-foreground">
+            Sample matched {sourceNoun}s ({matches.sampleMatches.length})
+          </summary>
+          <ul className="mt-1 ml-3 list-disc space-y-0.5 font-mono">
+            {matches.sampleMatches.map((s) => (
+              <li key={s.id}>
+                {kind === "production" ? `report #${s.id}` : s.id}{" "}
+                <span className="opacity-60">[{s.tier}]</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function HandwavyPhrasesAdmin() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -557,6 +631,13 @@ function HandwavyPhrasesAdmin() {
     matches: HandwavyPhraseDryRunMatches;
     reviewer?: string;
     rationale?: string;
+    // Task #119 — second signal: same shape as the curated `matches`, but
+    // scored against the most recent N production reports. `null` when the
+    // production scan failed (DB unavailable etc.) — `productionError` will
+    // explain why so the reviewer doesn't think the phrase is harmless.
+    productionMatches: HandwavyPhraseDryRunMatches | null;
+    productionError: string | null;
+    productionLimit: number | null;
   } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -621,6 +702,9 @@ function HandwavyPhrasesAdmin() {
         matches: dry.dryRunMatches,
         reviewer: reviewer.trim() || undefined,
         rationale: draftRationale.trim() || undefined,
+        productionMatches: dry.dryRunMatchesProduction ?? null,
+        productionError: dry.dryRunMatchesProductionError ?? null,
+        productionLimit: dry.dryRunMatchesProductionLimit ?? null,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to preview phrase.";
@@ -768,62 +852,76 @@ function HandwavyPhrasesAdmin() {
             disabled={busy === "preview" || busy === "confirm" || preview !== null}
           />
         </form>
-        {preview && (
+        {preview && (() => {
+          // Task #119 — combined false-positive count across BOTH the curated
+          // benchmark cohorts and the production-archive scan. Either signal
+          // turning red flips the outer card + confirm button to destructive
+          // styling so a phrase that's clean against the curated set but
+          // catastrophic against production still trips the warning UI.
+          const curatedFp = preview.matches.falsePositives;
+          const productionFp = preview.productionMatches?.falsePositives ?? 0;
+          const anyFp = curatedFp + productionFp;
+          return (
           <div
             className={cn(
-              "rounded-md border p-3 space-y-2",
-              preview.matches.falsePositives > 0
+              "rounded-md border p-3 space-y-3",
+              anyFp > 0
                 ? "border-red-500/40 bg-red-500/5"
                 : "border-emerald-500/40 bg-emerald-500/5",
             )}
             data-testid="handwavy-preview"
           >
             <div className="flex items-start gap-2">
-              {preview.matches.falsePositives > 0 ? (
+              {anyFp > 0 ? (
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
               ) : (
                 <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
               )}
-              <div className="text-xs space-y-1 flex-1">
+              <div className="text-xs flex-1">
                 <div className="font-semibold text-foreground">
                   Corpus impact for &ldquo;{preview.phrase}&rdquo;
                 </div>
-                {preview.matches.warning ? (
-                  <div className="text-red-200" data-testid="handwavy-preview-warning">
-                    {preview.matches.warning}
-                  </div>
-                ) : (
-                  <div className="text-emerald-200">
-                    No GREEN/YELLOW corpus reports would be flagged
-                    {preview.matches.total > 0
-                      ? ` — ${preview.matches.total} slop fixture${preview.matches.total === 1 ? "" : "s"} would be caught.`
-                      : "."}
-                  </div>
-                )}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
-                  <PreviewTierBadge label="GREEN (T1 legit)" count={preview.matches.byTier.t1Legit} negative />
-                  <PreviewTierBadge label="YELLOW (T2 borderline)" count={preview.matches.byTier.t2Borderline} negative />
-                  <PreviewTierBadge label="RED (T3 slop)" count={preview.matches.byTier.t3Slop} />
-                  <PreviewTierBadge label="RED (T4 hallucinated)" count={preview.matches.byTier.t4Hallucinated} />
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Two signals: the curated benchmark cohorts (T1–T4 fixtures) and the
+                  most recent production reports bucketed by their composite label.
                 </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Evaluated against {preview.matches.corpusSize} curated benchmark fixtures.
-                </div>
-                {preview.matches.sampleMatches.length > 0 && (
-                  <details className="text-[10px] text-muted-foreground">
-                    <summary className="cursor-pointer hover:text-foreground">
-                      Sample matched fixtures ({preview.matches.sampleMatches.length})
-                    </summary>
-                    <ul className="mt-1 ml-3 list-disc space-y-0.5 font-mono">
-                      {preview.matches.sampleMatches.map((s) => (
-                        <li key={s.id}>
-                          {s.id} <span className="opacity-60">[{s.tier}]</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
               </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <PreviewMatchBlock
+                kind="curated"
+                title="Curated benchmark"
+                subtitle={`${preview.matches.corpusSize} fixtures`}
+                matches={preview.matches}
+                emptyHint="No GREEN/YELLOW curated fixtures would be flagged"
+              />
+              {preview.productionMatches ? (
+                <PreviewMatchBlock
+                  kind="production"
+                  title="Production archive"
+                  subtitle={
+                    preview.productionLimit != null
+                      ? `last ${preview.productionMatches.corpusSize} of up to ${preview.productionLimit} reports`
+                      : `last ${preview.productionMatches.corpusSize} reports`
+                  }
+                  matches={preview.productionMatches}
+                  emptyHint="No GREEN/YELLOW production reports would be flagged"
+                />
+              ) : (
+                <div
+                  className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
+                  data-testid="handwavy-preview-production-error"
+                >
+                  <div className="font-semibold flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Production archive scan unavailable
+                  </div>
+                  <div className="mt-1 text-amber-100/80">
+                    {preview.productionError ??
+                      "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button
@@ -837,20 +935,21 @@ function HandwavyPhrasesAdmin() {
               </Button>
               <Button
                 size="sm"
-                variant={preview.matches.falsePositives > 0 ? "destructive" : "default"}
+                variant={anyFp > 0 ? "destructive" : "default"}
                 onClick={handleConfirmPreview}
                 disabled={busy === "confirm"}
                 data-testid="handwavy-preview-confirm"
               >
                 {busy === "confirm"
                   ? "Adding…"
-                  : preview.matches.falsePositives > 0
+                  : anyFp > 0
                   ? "Add anyway"
                   : "Confirm add"}
               </Button>
             </div>
           </div>
-        )}
+          );
+        })()}
         {isLoading ? (
           <Skeleton className="h-32 rounded-md" />
         ) : phrases.length === 0 ? (
