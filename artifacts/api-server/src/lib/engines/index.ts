@@ -29,6 +29,12 @@ export interface AnalyzeWithEnginesOptions {
   velocityPenalty?: number;
   /** AVRI: pre-computed template-fingerprint penalty (≤0) from the route layer. */
   templatePenalty?: number;
+  /**
+   * Force the AVRI feature flag for this single call, bypassing the
+   * VULNRAP_USE_AVRI env var. Used by the calibration battery to compare
+   * on-vs-off scoring without mutating global process state.
+   */
+  forceAvri?: boolean;
 }
 
 export interface AnalyzeWithEnginesTracedResult {
@@ -85,7 +91,8 @@ export function analyzeWithEnginesTraced(
   // object so the existing trace/persistence layer doesn't need to know about
   // AVRI specifically; the AVRI metadata is surfaced via the optional `avri`
   // field on the traced result.
-  if (FEATURE_USE_AVRI()) {
+  const avriEnabled = opts.forceAvri ?? FEATURE_USE_AVRI();
+  if (avriEnabled) {
     const signals = stage("extract_signals", () => extractSignals(text, opts.claimedCwes));
     const perplexity = stage("perplexity", () => computePerplexity(text, signals.codeBlocks));
     const avriComposite = stage("avri_composite", () =>
