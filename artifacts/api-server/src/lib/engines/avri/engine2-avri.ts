@@ -163,6 +163,12 @@ export function runEngine2Avri(
     blendedScore >= 40 ? "YELLOW" :
     "RED";
 
+  // Build the gold-signal "miss" list so the diagnostics panel can show
+  // reviewers which expected signals were absent for this family.
+  const goldMisses = family.goldSignals
+    .filter((g) => !goldHits.some((h) => h.id === g.id))
+    .map((g) => ({ id: g.id, description: g.description, points: g.points }));
+
   // Carry the legacy signalBreakdown forward so the v3.6.0 triage matrix
   // helpers (pickEngine2Fields → strongCount via signalBreakdown.evidenceStrength)
   // keep working unchanged. We add an `avri` block alongside.
@@ -176,10 +182,15 @@ export function runEngine2Avri(
       ...legacy.signalBreakdown,
       avri: {
         family: family.id,
+        familyName: family.displayName,
         baseScore: Math.round(baseScore),
         goldHitCount: goldHits.length,
-        goldHits: goldHits.map((g) => ({ id: g.id, points: g.points })),
+        goldTotalCount: family.goldSignals.length,
+        goldHits: goldHits.map((g) => ({ id: g.id, description: g.description, points: g.points })),
+        goldMisses,
         absencePenalty: -totalAbsencePenalty,
+        absencePenalties: absencePenaltiesApplied.map((a) => ({ id: a.id, description: a.description, points: a.points })),
+        contradictions: contradictionsFound,
         contradictionPenalty: -contradictionPenalty,
         rawAvriScore: Math.round(rawAvriScore),
         legacyScore: legacy.score,

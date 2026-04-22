@@ -154,6 +154,99 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/correlation: corr-test-1234/i)).toBeInTheDocument();
   });
 
+  it("renders the AVRI family rubric section with gold hits, misses, absence penalties, and overrides", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        composite: {
+          ...SAMPLE_DIAGNOSTICS.composite,
+          overridesApplied: [
+            "AVRI_NO_GOLD_SIGNALS: zero gold signals for Memory corruption / unsafe C",
+            "AVRI_VELOCITY: same-day submission velocity penalty (-10)",
+          ],
+        },
+        avri: {
+          family: "MEMORY_CORRUPTION",
+          familyName: "Memory corruption / unsafe C",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-787",
+            evidence: ["CWE-787"],
+            technology: null,
+          },
+          goldHitCount: 1,
+          velocityPenalty: -10,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 42,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 38,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "MEMORY_CORRUPTION",
+                  familyName: "Memory corruption / unsafe C",
+                  baseScore: 22,
+                  goldHitCount: 1,
+                  goldTotalCount: 8,
+                  goldHits: [
+                    { id: "asan_or_sanitizer", description: "AddressSanitizer crash output", points: 22 },
+                  ],
+                  goldMisses: [
+                    { id: "valgrind", description: "Valgrind error trace", points: 18 },
+                  ],
+                  absencePenalty: -8,
+                  absencePenalties: [
+                    { id: "no_size_or_offset", description: "No explicit byte/size/offset value", points: 5 },
+                  ],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  rawAvriScore: 14,
+                  legacyScore: 50,
+                  blendedScore: 38,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/AVRI Family Rubric/i)).toBeInTheDocument();
+    });
+
+    // Family + classification confidence
+    expect(screen.getAllByText(/Memory corruption \/ unsafe C/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/class:\s*HIGH/i)).toBeInTheDocument();
+    expect(screen.getByText(/matched member CWE-787/i)).toBeInTheDocument();
+
+    // Gold hits/misses descriptions
+    expect(screen.getByText(/Gold Signals Found/i)).toBeInTheDocument();
+    expect(screen.getByText(/AddressSanitizer crash output/i)).toBeInTheDocument();
+    expect(screen.getByText(/Expected Signals Missing/i)).toBeInTheDocument();
+    expect(screen.getByText(/Valgrind error trace/i)).toBeInTheDocument();
+
+    // Absence penalty surfaced with description
+    expect(screen.getByText(/Absence Penalties Applied/i)).toBeInTheDocument();
+    expect(screen.getByText(/No explicit byte\/size\/offset value/i)).toBeInTheDocument();
+
+    // Composite-level AVRI overrides surfaced
+    expect(screen.getByText(/AVRI Composite Overrides/i)).toBeInTheDocument();
+    expect(screen.getByText(/No gold signals for family/i)).toBeInTheDocument();
+    expect(screen.getByText(/Submission-velocity penalty/i)).toBeInTheDocument();
+  });
+
   it("surfaces an error message when the diagnostics endpoint fails", async () => {
     fetchSpy.mockImplementationOnce(async () => new Response("boom", { status: 500 }));
     const user = userEvent.setup();

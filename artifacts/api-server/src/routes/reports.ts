@@ -784,7 +784,19 @@ router.post("/reports", async (req, res): Promise<void> => {
         vulnrapCompositeScore: vulnrapComposite?.overallScore ?? null,
         vulnrapCompositeLabel: vulnrapComposite?.label ?? null,
         vulnrapEngineResults: vulnrapComposite
-          ? { engines: vulnrapComposite.engineResults, compositeBreakdown: vulnrapComposite.compositeBreakdown, warnings: vulnrapComposite.warnings, engineCount: vulnrapComposite.engineCount }
+          ? {
+              engines: vulnrapComposite.engineResults,
+              compositeBreakdown: vulnrapComposite.compositeBreakdown,
+              warnings: vulnrapComposite.warnings,
+              engineCount: vulnrapComposite.engineCount,
+              // Persist the AVRI composite block (family, classification, gold-hit
+              // count, behavioural penalties) so the diagnostics endpoint can
+              // surface them to the "Why this score?" panel without re-running
+              // the engines. Present only when AVRI is enabled.
+              ...((vulnrapComposite as VulnrapComposite & { avri?: unknown }).avri
+                ? { avri: (vulnrapComposite as VulnrapComposite & { avri?: unknown }).avri }
+                : {}),
+            }
           : null,
         vulnrapOverridesApplied: vulnrapComposite?.overridesApplied ?? null,
         vulnrapCorrelationId: vulnrapTrace?.correlationId ?? null,
@@ -1702,6 +1714,13 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
     traceRow = rows[0] ?? null;
   }
 
+  // Surface the AVRI composite block (family, classification, gold-hit count,
+  // behavioural penalties) so the "Why this score?" panel can render the
+  // family rubric used and any composite overrides. Stored on the engines
+  // blob by POST /reports above when AVRI is enabled.
+  const vulnrapBlob = (report.vulnrapEngineResults ?? {}) as { avri?: unknown };
+  const avriBlock = vulnrapBlob.avri ?? null;
+
   res.json({
     reportId: report.id,
     correlationId: report.vulnrapCorrelationId,
@@ -1711,6 +1730,7 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
       label: report.vulnrapCompositeLabel,
       overridesApplied: report.vulnrapOverridesApplied ?? [],
     },
+    avri: avriBlock,
     legacyMapping: report.vulnrapCompositeScore == null ? null : {
       slopScore: compositeToLegacySlopScore(report.vulnrapCompositeScore),
       displayMode: isNewCompositeEnabled() ? "vulnrap-composite" : "legacy-slop",
