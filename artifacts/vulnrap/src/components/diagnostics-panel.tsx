@@ -1071,7 +1071,36 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     }
     if (e2Avri?.absencePenalties && e2Avri.absencePenalties.length > 0) {
       lines.push("- Absence penalties applied:");
-      for (const a of e2Avri.absencePenalties) lines.push(`  - −${a.points} ${a.description} (${a.id})`);
+      // Task 110: mirror the on-screen FLAT grouping (Task 107) in the
+      // markdown export so a slop FLAT report doesn't dump every hand-wavy
+      // phrase as one ungrouped scroll. Entries with a flatHandwavyCategory
+      // get bucketed by theme with per-category subtotals; non-FLAT absence
+      // penalties (no category) keep the existing flat list.
+      const categorized = e2Avri.absencePenalties.filter(
+        (a) => a.flatHandwavyCategory != null,
+      );
+      const uncategorized = e2Avri.absencePenalties.filter(
+        (a) => a.flatHandwavyCategory == null,
+      );
+      if (categorized.length > 0) {
+        const groups = new Map<HandwavyCategoryUI, typeof categorized>();
+        for (const a of categorized) {
+          const key = a.flatHandwavyCategory as HandwavyCategoryUI;
+          const arr = groups.get(key) ?? [];
+          arr.push(a);
+          groups.set(key, arr);
+        }
+        for (const key of HANDWAVY_CATEGORY_ORDER) {
+          const items = groups.get(key);
+          if (!items || items.length === 0) continue;
+          const subtotal = items.reduce((s, a) => s + a.points, 0);
+          lines.push(
+            `  - ${HANDWAVY_CATEGORY_LABELS[key]} (${items.length} phrase${items.length === 1 ? "" : "s"}, −${subtotal} raw):`,
+          );
+          for (const a of items) lines.push(`    - −${a.points} ${a.description} (${a.id})`);
+        }
+      }
+      for (const a of uncategorized) lines.push(`  - −${a.points} ${a.description} (${a.id})`);
     }
     if (e2Avri?.contradictions && e2Avri.contradictions.length > 0) {
       lines.push(`- Contradiction phrases: ${e2Avri.contradictions.map((c) => `"${c}"`).join(", ")}`);

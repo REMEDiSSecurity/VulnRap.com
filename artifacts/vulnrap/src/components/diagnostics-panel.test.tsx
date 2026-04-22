@@ -517,6 +517,159 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/"advanced persistent threats"/i)).toBeInTheDocument();
   });
 
+  it("groups FLAT hand-wavy absence penalties by theme in the printable markdown export", () => {
+    // Task 110: mirror the on-screen Task 107 grouping in the markdown export.
+    const withFlatHandwavy: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      avri: {
+        family: "FLAT",
+        familyName: "FLAT",
+        classification: {
+          confidence: "LOW" as const,
+          reason: "no member CWE matched",
+          evidence: [],
+          technology: null,
+        },
+        goldHitCount: 0,
+        velocityPenalty: 0,
+        templatePenalty: 0,
+        rawCompositeBeforeBehavioralPenalties: 30,
+      },
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 30,
+            verdict: "RED" as const,
+            confidence: "MEDIUM" as const,
+            signalBreakdown: {
+              avri: {
+                family: "FLAT",
+                familyName: "FLAT",
+                baseScore: 50,
+                goldHitCount: 0,
+                goldTotalCount: 0,
+                goldHits: [],
+                goldMisses: [],
+                absencePenalty: -24,
+                absencePenalties: [
+                  {
+                    id: "flat_handwavy:do_not_have_a_reproducer",
+                    description: 'Hand-wavy phrase: "do not have a reproducer"',
+                    points: 6,
+                    flatHandwavyCategory: "absence",
+                  },
+                  {
+                    id: "flat_handwavy:private_poc",
+                    description: 'Hand-wavy phrase: "private poc"',
+                    points: 6,
+                    flatHandwavyCategory: "absence",
+                  },
+                  {
+                    id: "flat_handwavy:may_not_be_encrypted",
+                    description: 'Hand-wavy phrase: "may not be encrypted"',
+                    points: 6,
+                    flatHandwavyCategory: "hedging",
+                  },
+                  {
+                    id: "flat_handwavy:advanced_persistent_threats",
+                    description: 'Hand-wavy phrase: "advanced persistent threats"',
+                    points: 6,
+                    flatHandwavyCategory: "buzzword",
+                  },
+                ],
+                contradictions: [],
+                contradictionPenalty: 0,
+                rawAvriScore: 26,
+                legacyScore: 50,
+                blendedScore: 30,
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const md = buildMarkdownSummary(withFlatHandwavy);
+
+    expect(md).toContain("- Absence penalties applied:");
+    // Per-theme headers carry the same phrase count + raw subtotal as the on-screen panel.
+    expect(md).toContain("Self-admitted absence of evidence (2 phrases, −12 raw):");
+    expect(md).toContain("Generic hedging (\"may / appears\") (1 phrase, −6 raw):");
+    expect(md).toContain("Buzzword-soup framings (1 phrase, −6 raw):");
+    // Phrase rows still render under their theme bucket.
+    expect(md).toContain('−6 Hand-wavy phrase: "do not have a reproducer" (flat_handwavy:do_not_have_a_reproducer)');
+    expect(md).toContain('−6 Hand-wavy phrase: "may not be encrypted" (flat_handwavy:may_not_be_encrypted)');
+    expect(md).toContain('−6 Hand-wavy phrase: "advanced persistent threats" (flat_handwavy:advanced_persistent_threats)');
+
+    // Themed buckets render in the canonical absence → hedging → buzzword order.
+    const absenceIdx = md.indexOf("Self-admitted absence of evidence");
+    const hedgingIdx = md.indexOf("Generic hedging");
+    const buzzwordIdx = md.indexOf("Buzzword-soup framings");
+    expect(absenceIdx).toBeGreaterThan(-1);
+    expect(hedgingIdx).toBeGreaterThan(absenceIdx);
+    expect(buzzwordIdx).toBeGreaterThan(hedgingIdx);
+  });
+
+  it("keeps non-FLAT absence penalties as a flat list in the printable markdown export", () => {
+    // Task 110: only FLAT entries carry a flatHandwavyCategory. Family-rubric
+    // absence penalties (no category) keep the existing flat rendering.
+    const withFamilyAbsence: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 40,
+            verdict: "YELLOW" as const,
+            confidence: "MEDIUM" as const,
+            signalBreakdown: {
+              avri: {
+                family: "SQLI",
+                familyName: "SQL Injection",
+                baseScore: 60,
+                goldHitCount: 1,
+                goldTotalCount: 3,
+                goldHits: [],
+                goldMisses: [],
+                absencePenalty: -10,
+                absencePenalties: [
+                  {
+                    id: "sqli:missing_payload",
+                    description: "No SQL payload included",
+                    points: 5,
+                  },
+                  {
+                    id: "sqli:missing_db_error",
+                    description: "No database error excerpt cited",
+                    points: 5,
+                  },
+                ],
+                contradictions: [],
+                contradictionPenalty: 0,
+                rawAvriScore: 50,
+                legacyScore: 60,
+                blendedScore: 40,
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const md = buildMarkdownSummary(withFamilyAbsence);
+
+    expect(md).toContain("- Absence penalties applied:");
+    // No themed grouping headers for non-FLAT families.
+    expect(md).not.toContain("Self-admitted absence of evidence");
+    expect(md).not.toContain("Generic hedging");
+    expect(md).not.toContain("Buzzword-soup framings");
+    expect(md).toContain("−5 No SQL payload included (sqli:missing_payload)");
+    expect(md).toContain("−5 No database error excerpt cited (sqli:missing_db_error)");
+  });
+
   it("surfaces the FAKE_RAW_HTTP block in the printable markdown export with placeholder/CRLF/TE-CL counters", () => {
     const withRawHttp: DiagnosticsResponse = {
       ...SAMPLE_DIAGNOSTICS,
