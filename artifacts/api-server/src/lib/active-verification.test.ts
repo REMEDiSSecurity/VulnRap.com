@@ -140,6 +140,80 @@ describe("performActiveVerification — verification routing", () => {
     expect(endpointTypes.some((t) => t.startsWith("github_"))).toBe(false);
   });
 
+  it("search_fallback github checks are halved and excluded from score/triageNotes", async () => {
+    // v3.6.0 §2 guard: when no github.com URL is in the report, the verifier
+    // falls back to KNOWN_PROJECTS keyword matches (here, "curl") and tags the
+    // resulting checks as `search_fallback`. Those checks must:
+    //   1. be down-weighted to ~50% of the referenced_in_report version, and
+    //   2. NOT influence the report's score or triage notes.
+    // Without this, a wrong project guess could tank a real report's score.
+    const refsBlock = "The bug is in src/vtls/handshake.c at line 42.";
+    const nonce = Math.random().toString(36).slice(2);
+
+    // Name-only mention → known_project → search_fallback.
+    // No version pattern near "curl" so detectProjects keeps it as known_project.
+    const fallbackText = `Heap-overflow parsing TLS records.\n${refsBlock}\nTriggered when curl reads the server hello. Unique-${nonce}-a`;
+
+    // Same report but with an explicit repo URL → referenced_in_report.
+    // Trailing space (not period) after the URL so the github_url regex
+    // captures the slug as `curl/curl`, not `curl/curl.`.
+    const referencedText = `Heap-overflow parsing TLS records in https://github.com/curl/curl repo.\n${refsBlock}\nUnique-${nonce}-b`;
+
+    const fallback = await performActiveVerification(fallbackText, {
+      verificationMode: "SOURCE_CODE",
+    });
+    const referenced = await performActiveVerification(referencedText, {
+      verificationMode: "SOURCE_CODE",
+    });
+
+    const fallbackGh = fallback.checks.filter((c) => c.type.startsWith("github_"));
+    const referencedGh = referenced.checks.filter((c) => c.type.startsWith("github_"));
+
+    expect(fallbackGh.length).toBeGreaterThan(0);
+    expect(referencedGh.length).toBeGreaterThan(0);
+    expect(fallbackGh.every((c) => c.source === "search_fallback")).toBe(true);
+    expect(referencedGh.every((c) => c.source === "referenced_in_report")).toBe(true);
+
+    // (1) Each search_fallback check weighs ~50% of its referenced peer.
+    for (const fb of fallbackGh) {
+      const ref = referencedGh.find((r) => r.type === fb.type && r.target === fb.target);
+      expect(ref, `expected referenced peer for ${fb.type}:${fb.target}`).toBeDefined();
+      expect(fb.weight).toBe(Math.round(ref!.weight * 0.5));
+    }
+
+    // (2) Score and triageNotes match a "github checks stripped" baseline,
+    // i.e. the fallback report's outcome is identical to running verification
+    // on the same content but without anything that triggers GitHub probes.
+    // Building the baseline by removing the project name (no github project
+    // detected → no github_* checks at all) is the mechanical equivalent of
+    // stripping the search_fallback github checks from the fallback output.
+    const strippedText = `Heap-overflow parsing TLS records.\n${refsBlock}\nUnique-${nonce}-c`;
+    const stripped = await performActiveVerification(strippedText, {
+      verificationMode: "SOURCE_CODE",
+    });
+    expect(stripped.checks.filter((c) => c.type.startsWith("github_"))).toHaveLength(0);
+
+    // Score is unchanged by the search_fallback checks.
+    expect(fallback.score).toBe(stripped.score);
+
+    // Triage notes are unchanged modulo the benign "Report references X"
+    // line that is driven purely by detectedProjects (not by any check) and
+    // does not put fabrication pressure on the report. Everything else —
+    // including the "could not be verified" reviewer pressure — must match.
+    const PROJECT_NOTE_PREFIX = "Report references";
+    const fbScored = fallback.triageNotes.filter((n) => !n.startsWith(PROJECT_NOTE_PREFIX));
+    const stripScored = stripped.triageNotes.filter((n) => !n.startsWith(PROJECT_NOTE_PREFIX));
+    expect(fbScored).toEqual(stripScored);
+
+    // Sanity checks: prove the assertions above are non-vacuous by showing
+    // the referenced_in_report variant of the same checks DOES move the
+    // score and DOES surface the file-path / "could not be verified" notes.
+    expect(referenced.score).toBeLessThan(stripped.score);
+    const refNotes = referenced.triageNotes.join(" ");
+    expect(refNotes).toContain("could not be verified");
+    expect(refNotes).toContain("src/vtls/handshake.c");
+  });
+
   it("MANUAL_ONLY cache key differs by familyName", async () => {
     // The MANUAL_ONLY path folds the family name into the cache key because
     // the triage hint copy mentions the family by name. Two MANUAL_ONLY
