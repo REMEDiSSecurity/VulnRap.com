@@ -112,6 +112,10 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
       "T3-13-narrated-curl-no-evidence",
       "T3-14-pseudo-asan-symbolless",
       "T3-15-prose-poc-no-payload",
+      // Task #77 — cross-family fabricated_diff fixtures.
+      "T3-16-fabricated-diff-injection",
+      "T3-17-fabricated-diff-web-client",
+      "T3-18-fabricated-diff-memory-corruption",
     ]) {
       expect(sprint12Ids.has(id), `archetype groups should include ${id}`).toBe(true);
     }
@@ -124,6 +128,12 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
         "T3-13-narrated-curl-no-evidence",
         "T3-14-pseudo-asan-symbolless",
         "T3-15-prose-poc-no-payload",
+        // Task #77 — cross-family fabricated_diff fixtures share the
+        // existing "fabricated_diff" archetype label so calibration
+        // groups them next to T3-11.
+        "T3-16-fabricated-diff-injection",
+        "T3-17-fabricated-diff-web-client",
+        "T3-18-fabricated-diff-memory-corruption",
       ].sort(),
     );
   }, 60_000);

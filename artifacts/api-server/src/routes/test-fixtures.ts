@@ -1388,6 +1388,123 @@ strict Content Security Policy that disables inline scripts.`,
     expectedEngine2: [0, 45],
     expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
   },
+  // -------------------------------------------------------------------------
+  // Task #77 — cross-family coverage for the family-agnostic
+  // AVRI_FABRICATED_PATCH detector (Task #73). The original T3-11 only
+  // proved the detector against an AUTHN_AUTHZ-shaped report; these three
+  // fixtures wear INJECTION / WEB_CLIENT / MEMORY_CORRUPTION hats while
+  // pulling the same trick — a "suggested patch" / "here's the fix" quoted
+  // in prose with no real diff or code block — so a future heuristic
+  // weakening that only spares one family is caught here.
+  //
+  // They share the existing "fabricated_diff" archetype label so the
+  // calibration dashboard groups them next to T3-11 instead of inventing
+  // a new bucket per family.
+  // -------------------------------------------------------------------------
+  {
+    id: "T3-16-fabricated-diff-injection",
+    tier: "T3_SLOP",
+    archetype: "fabricated_diff",
+    claimedCwes: ["CWE-89"],
+    text: `# SQL injection in the admin reporting endpoint
+
+The admin reporting endpoint takes a user-supplied sort field and
+concatenates it directly into the underlying SQL query without proper
+neutralization. This is a textbook SQL injection condition and an
+attacker who can reach the endpoint can append arbitrary SQL to the
+ORDER BY clause to influence the resulting query.
+
+I have intentionally not pasted the exact payload string into this
+report — any standard SQLi cheat-sheet entry against the ORDER BY
+position will reproduce — and I have not captured the response body for
+safety reasons. The exact endpoint path and the column name carrying
+the injection are withheld from the public report; please consult the
+equivalent admin-reporting handler in your codebase.
+
+Suggested patch (illustrative, written from memory):
+
+> Replace the unsafe string interpolation with a strict allowlist on
+> the sort column name, falling back to a default value when the
+> supplied name is not in the allowed set. The query should then use a
+> parameterized statement rather than direct concatenation, so a
+> future regression in the allowlist still fails closed.
+
+I do not have a runnable reproducer or a captured request/response
+pair to attach. The file path and helper names referenced above are
+approximate. Severity: Critical, CVSS 9.8.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-17-fabricated-diff-web-client",
+    tier: "T3_SLOP",
+    archetype: "fabricated_diff",
+    claimedCwes: ["CWE-79"],
+    text: `# Reflected cross-site scripting on the search results page
+
+The search results page reflects the user-supplied query parameter back
+into the rendered HTML without contextual escaping. This is a textbook
+reflected cross-site scripting (XSS) condition — a crafted query that
+breaks out of the surrounding markup is parsed by the browser as part
+of the document and acts on the page as inline script.
+
+The vulnerable parameter is the standard search input on the public
+results page; payloads in the script-tag and onerror attribute families
+both trigger when reflected back, and the document.cookie value is then
+reachable to any attacker-supplied script.
+
+Here's the fix (illustrative, written from memory):
+
+> Apply contextual output encoding on the query parameter at the
+> template boundary, ensuring it is escaped for the surrounding HTML
+> context (attribute, text, or script body) rather than treated as raw
+> markup. Pair this with a strict Content Security Policy that disables
+> inline scripts so any future reflection is inert in the browser.
+
+I have intentionally not pasted the exact payload string into this
+report, both to avoid arming a copy-paste attacker before the fix
+lands and because the precise breakout depends on the surrounding
+template. Severity: High.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-18-fabricated-diff-memory-corruption",
+    tier: "T3_SLOP",
+    archetype: "fabricated_diff",
+    claimedCwes: ["CWE-787"],
+    text: `# Heap-buffer-overflow in image decoding routine
+
+While auditing the image decoder I observed what appears to be a
+heap-buffer-overflow in the row-expansion path. The decoder allocates
+a destination buffer sized from attacker-controlled width/height
+fields in the file header and then writes beyond the end of that
+buffer when the arithmetic underestimates the required size. This is
+a classic out-of-bounds write into adjacent heap metadata, in the
+use-after-free adjacent class of memory corruption issues.
+
+I do not have a sanitizer trace or a Valgrind run to share — the
+binary I tested was a release build without debug symbols and I did
+not rebuild with AddressSanitizer enabled. The reproducer is a
+malformed image file that I am withholding from this report pending
+the fix.
+
+Suggested patch (illustrative, written from memory):
+
+> Validate the width and height fields against a sane upper bound
+> before the multiplication that sizes the destination buffer,
+> returning an error code rather than allocating a smaller-than-
+> intended buffer. Then switch to a width-checked allocation helper so
+> that a future regression in the bounds check still fails closed
+> rather than overflowing into adjacent allocations.
+
+Severity: Critical, CVSS 9.8.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
 ];
 
 // =============================================================================
