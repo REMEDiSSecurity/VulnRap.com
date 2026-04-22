@@ -534,6 +534,13 @@ function AvriFamilySection({
   const goldHitCount = e2Avri?.goldHitCount ?? avri?.goldHitCount ?? 0;
   const goldTotalCount = e2Avri?.goldTotalCount ?? goldHits.length + goldMisses.length;
   const crashTrace = e2Avri?.crashTrace ?? null;
+  // Sprint 11 / Task 85: the same stripped-trace validator runs for both
+  // MEMORY_CORRUPTION (crash traces) and RACE_CONCURRENCY (TSan/Helgrind/DRD
+  // tool traces). Pick wording that reads naturally for whichever family
+  // produced the downgrade so reviewers see "race trace" / "tool trace"
+  // instead of "crash trace" on a race report.
+  const traceKindLabel =
+    familyId === "RACE_CONCURRENCY" ? "race trace" : familyId === "MEMORY_CORRUPTION" ? "crash trace" : "tool trace";
   const matchingOverrides = overrides
     .map((rule) => {
       const meta = AVRI_OVERRIDE_LABELS.find((m) => rule.startsWith(m.token));
@@ -675,7 +682,7 @@ function AvriFamilySection({
                     STRIPPED_CRASH_TRACE
                   </Badge>
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    crash trace downgraded ({crashTrace.penalty})
+                    {traceKindLabel} downgraded ({crashTrace.penalty})
                   </span>
                 </div>
                 {crashTrace.reason && (
@@ -904,8 +911,15 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     }
     if (e2Avri?.crashTrace?.isStripped) {
       const ct = e2Avri.crashTrace;
+      const familyId = data.avri?.family ?? e2Avri?.family ?? null;
+      const traceKindLabel =
+        familyId === "RACE_CONCURRENCY"
+          ? "race trace"
+          : familyId === "MEMORY_CORRUPTION"
+            ? "crash trace"
+            : "tool trace";
       lines.push(
-        `- Stripped crash trace (penalty ${ct.penalty}): ${ct.reason ?? "stripped trace"} — frames ${ct.framesAnalyzed}, good ${ct.goodFrames}, placeholder ${ct.placeholderFrames}`,
+        `- Stripped ${traceKindLabel} (penalty ${ct.penalty}): ${ct.reason ?? "stripped trace"} — frames ${ct.framesAnalyzed}, good ${ct.goodFrames}, placeholder ${ct.placeholderFrames}`,
       );
       if (ct.revokedGoldHits.length > 0) {
         lines.push(

@@ -331,6 +331,85 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/stack_trace_with_offset/)).toBeInTheDocument();
   });
 
+  it("renders the STRIPPED_CRASH_TRACE block with race-trace wording for RACE_CONCURRENCY reports", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "RACE_CONCURRENCY",
+          familyName: "Concurrency / data race",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-362",
+            evidence: ["CWE-362"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 22,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "RACE_CONCURRENCY",
+                  familyName: "Concurrency / data race",
+                  baseScore: 18,
+                  goldHitCount: 0,
+                  goldTotalCount: 6,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  crashTrace: {
+                    framesAnalyzed: 5,
+                    goodFrames: 1,
+                    placeholderFrames: 3,
+                    isStripped: true,
+                    reason: "TSan trace has 3/5 frames with placeholder symbols/offsets",
+                    revokedGoldHits: [
+                      { id: "tsan_or_helgrind_header", points: 22 },
+                    ],
+                    penalty: -18,
+                  },
+                  rawAvriScore: 0,
+                  legacyScore: 30,
+                  blendedScore: 22,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("STRIPPED_CRASH_TRACE")).toBeInTheDocument();
+    });
+
+    // Wording reads naturally for a race report (not "crash trace")
+    expect(screen.getByText(/race trace downgraded \(-18\)/i)).toBeInTheDocument();
+    expect(screen.queryByText(/crash trace downgraded/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/TSan trace has 3\/5 frames with placeholder symbols\/offsets/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/tsan_or_helgrind_header/)).toBeInTheDocument();
+  });
+
   it("surfaces an error message when the diagnostics endpoint fails", async () => {
     fetchSpy.mockImplementationOnce(async () => new Response("boom", { status: 500 }));
     const user = userEvent.setup();
