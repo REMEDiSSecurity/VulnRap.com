@@ -1218,6 +1218,166 @@ Severity: High`,
     expectedEngine2: [0, 35],
     expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW"],
   },
+  // -------------------------------------------------------------------------
+  // Sprint 12 emerging slop archetypes — patterns we expect to see in
+  // production once attackers / tooling adapt to AVRI. Each fixture imitates
+  // a different "shape" of evidence (fabricated diff, paraphrased CVE,
+  // narrated curl session, AI-pseudo-ASAN, prose PoC) without ever firing
+  // the family-specific gold signals. They stay below the LIKELY INVALID
+  // ceiling under the current AVRI-on configuration; if a future scoring
+  // change lets them through, this battery is the regression that catches it.
+  // -------------------------------------------------------------------------
+  {
+    id: "T3-11-fabricated-diff-no-proof",
+    tier: "T3_SLOP",
+    text: `# Authorization bypass in profile update endpoint
+
+The profile update endpoint allows a user to modify another user's
+profile data. The fix is straightforward — the handler must validate
+that the requesting user owns the target record before applying the
+update.
+
+Suggested patch (illustrative, written from memory):
+
+> Look up the profile record for the supplied target identifier, then
+> insert an ownership check that compares the requester's session
+> against the record's owner field, returning a 403-style response
+> when the check fails. Only then apply the requested changes and
+> return the profile response object.
+
+I have not included a runnable reproducer or a captured request /
+response pair — the issue follows directly from reading the handler.
+The file path and helper names referenced above are approximate;
+please consult the equivalent module in your codebase. Severity: High.`,
+    expectedComposite: [0, 45],
+    expectedEngine2: [0, 45],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-12-paraphrased-cve-renamed-fn",
+    tier: "T3_SLOP",
+    text: `# Heap corruption in image decoding routine (independent finding)
+
+While auditing the image decoder, I observed that the routine that
+processes width and height fields from the file header performs an
+arithmetic computation on attacker-controlled values prior to allocating
+the destination buffer. When the product of those values exceeds the
+maximum representable integer, the computation wraps and a
+smaller-than-intended buffer is allocated. The subsequent decode loop
+then writes past the end of that buffer, corrupting adjacent heap
+metadata.
+
+The relevant helper is \`decode_pixel_grid_v2()\` (renamed from
+\`decode_pixel_grid()\` in newer builds), which is invoked from the main
+decode dispatcher \`process_image_chunk_v2()\`. The arithmetic happens
+inside the inner row-processing helper \`expand_row_buffer_v2()\`.
+
+This pattern is well known in the image-codec literature and has been
+reported repeatedly against comparable libraries over the past decade.
+The fix is to validate the dimensions against a sane upper bound before
+the multiplication and to use a width-checked allocator.
+
+I do not have a runnable reproducer or a sanitizer trace to share at
+this time; the analysis is based on a static read of the code. Severity:
+Critical, CVSS 9.8.`,
+    expectedComposite: [0, 45],
+    expectedEngine2: [0, 45],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-13-narrated-curl-no-evidence",
+    tier: "T3_SLOP",
+    text: `# Server-side request forgery in the link-preview service
+
+The link-preview service accepts a URL parameter and fetches the target
+on the server side to render a preview card. Because there is no
+allowlist or destination filtering, a remote attacker can coerce the
+service into issuing requests against internal infrastructure.
+
+I exercised the endpoint repeatedly using \`curl\` against the public
+preview generator and observed that the service:
+
+- happily accepts arbitrary schemes and hosts in the destination field,
+- waits for the upstream response before returning, and
+- propagates the upstream response body into the preview card.
+
+Example session (output abbreviated):
+
+\`\`\`
+$ curl -s "https://preview.example.test/api/preview" --data-urlencode "target=<host>"
+{"title":"...","description":"...","status":"ok"}
+\`\`\`
+
+Substituting \`<host>\` with an internal hostname yielded a non-error
+response in every case I tried, which strongly suggests the request was
+issued from inside the perimeter. I am withholding the specific internal
+hostnames and the exact response bodies from this report for safety
+reasons. Severity: Critical (CVSS 9.1).`,
+    expectedComposite: [0, 45],
+    expectedEngine2: [0, 45],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-14-pseudo-asan-symbolless",
+    tier: "T3_SLOP",
+    text: `# Memory safety violation in request parsing path
+
+I ran the binary under a memory analyzer and reproduced what appears to
+be a memory safety violation in the request parsing path. The analyzer
+emitted the trace below before terminating the process.
+
+\`\`\`
+[memcheck] invalid access detected at offset +0xZZZZ
+[memcheck]   frame 0: <symbol stripped> in libserver
+[memcheck]   frame 1: <symbol stripped> in libserver
+[memcheck]   frame 2: <symbol stripped> in libserver
+[memcheck]   frame 3: <symbol stripped> in libnet
+[memcheck]   frame 4: <symbol stripped> in main
+[memcheck] aborting after first error
+\`\`\`
+
+The build I tested was stripped, so the analyzer was unable to recover
+function names or source locations. I did not rebuild with debug symbols
+because the issue reproduces deterministically against the shipped
+binary, which is the realistic attack surface.
+
+Based on the position of the offending frame in the call stack, this is
+almost certainly a use-after-free in the request parsing layer. A
+properly equipped maintainer with a debug build should be able to
+confirm in minutes. Severity: Critical.`,
+    expectedComposite: [0, 45],
+    expectedEngine2: [0, 45],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-15-prose-poc-no-payload",
+    tier: "T3_SLOP",
+    text: `# Reflected client-side script injection on the search results page
+
+The search results page reflects the value of the user-supplied query
+back into the rendered response without contextual escaping. As a
+result, a crafted query string ends up being interpreted by the browser
+as part of the document rather than as inert text, which is the
+textbook condition for a reflected client-side script injection.
+
+The reproduction is straightforward in concept: visit the affected
+page, submit a query whose value (when reflected back) breaks out of
+the surrounding markup context, and observe that the browser parses the
+reflected fragment as part of the document and acts on it accordingly.
+
+I have intentionally not pasted the exact payload string into this
+report, both to avoid arming a copy-paste attacker before the fix lands
+and because the precise breakout will depend on the surrounding
+template that is being reflected into. Any standard cheat-sheet entry
+for the reflected variant of this issue class will reproduce the issue
+against the affected page in essentially the same way.
+
+Recommended remediation is the usual: contextual output encoding plus a
+strict Content Security Policy that disables inline scripts.`,
+    expectedComposite: [0, 45],
+    expectedEngine2: [0, 45],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
 ];
 
 // =============================================================================
