@@ -10,6 +10,7 @@ import { classifyReport, type ClassificationResult } from "./classify";
 import { runEngine2Avri } from "./engine2-avri";
 import { runEngine3Avri } from "./engine3-avri";
 import type { FamilyRubric } from "./families";
+import { fabricatedPatchPenalty } from "./slop-signals";
 
 export interface AvriCompositeOptions {
   claimedCwes?: string[];
@@ -112,7 +113,23 @@ export function runAvriComposite(
     newOverrides.push(`AVRI_FLAT_SLOP_HAIRCUT: hand-wavy unclassifiable report (${flatSlopPenalty})`);
   }
 
-  const finalScore = Math.max(0, Math.min(100, baseComposite.overallScore + additionalPenalties + flatSlopPenalty));
+  // Family-agnostic slop signal: report claims a "patch"/"fix"/"diff" in
+  // prose without showing any actual diff hunk or code block. This catches
+  // reports that quote a remediation in plain English (or a markdown
+  // blockquote) and can otherwise score normally in families whose gold
+  // rubric doesn't require a diff (e.g. AUTHN_AUTHZ).
+  const fabricatedPatch = fabricatedPatchPenalty(text);
+  if (fabricatedPatch.points < 0 && fabricatedPatch.reason) {
+    newOverrides.push(fabricatedPatch.reason);
+  }
+
+  const finalScore = Math.max(
+    0,
+    Math.min(
+      100,
+      baseComposite.overallScore + additionalPenalties + flatSlopPenalty + fabricatedPatch.points,
+    ),
+  );
 
   return {
     ...baseComposite,
