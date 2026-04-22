@@ -1,6 +1,17 @@
 import { createHash } from "crypto";
 import { registerCvePublicationDate } from "./triage-recommendation";
 import { persistentCacheGet, persistentCacheSet, type TtlCategory } from "./cache-service";
+import type { VerificationMode } from "./engines/avri/families";
+
+export interface ActiveVerificationOptions {
+  // AVRI Step 6: route the active verification strategy from the family
+  // classification rather than always running every probe. When omitted the
+  // function behaves as in v3.6.0 ("GENERIC" — run every check).
+  verificationMode?: VerificationMode;
+  // Optional human-readable family name, used only in the MANUAL_ONLY triage
+  // hint so reviewers see *why* automated checks were skipped.
+  familyName?: string;
+}
 
 export interface VerificationCheck {
   type: string;
@@ -733,8 +744,24 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function performActiveVerification(text: string): Promise<VerificationResult> {
-  const cacheKey = contentCacheKey("verify", text);
+export async function performActiveVerification(
+  text: string,
+  opts: ActiveVerificationOptions = {},
+): Promise<VerificationResult> {
+  // AVRI Step 6: select strategy from the family's verificationMode. Default
+  // to GENERIC so legacy callers (and the diagnostics-mocked test path) keep
+  // behaving exactly as in v3.6.0.
+  const mode: VerificationMode = opts.verificationMode ?? "GENERIC";
+
+  // Cache key includes the mode so that switching strategies for the same
+  // text doesn't return a stale (different-mode) result. For MANUAL_ONLY we
+  // also fold in the family name because the triage hint mentions the family
+  // by name — without this, two MANUAL_ONLY families on identical text would
+  // see each other's hint copy.
+  const cacheKey = contentCacheKey(
+    mode === "MANUAL_ONLY" ? `verify:${mode}:${opts.familyName ?? ""}` : `verify:${mode}`,
+    text,
+  );
   const cached = await persistentCacheGet<VerificationResult>(cacheKey);
   if (cached) {
     return { ...cached.value, cacheMetadata: { hits: { l1: cached.source === "l1" ? 1 : 0, db: cached.source === "db" ? 1 : 0, fresh: 0 } } };
@@ -745,6 +772,51 @@ export async function performActiveVerification(text: string): Promise<Verificat
   const detectedProjects = detectProjects(text);
   const codeRefs = extractCodeReferences(text);
   const allChecks: VerificationCheck[] = [];
+
+  // MANUAL_ONLY families (race conditions, request smuggling, …): the spec
+  // says to flag and skip automated probes. Surface a single triage hint and
+  // a CVE pass — CVE existence is independent of the family and still cheap.
+  if (mode === "MANUAL_ONLY") {
+    const familyLabel = opts.familyName ? `the ${opts.familyName} family` : "this CWE family";
+    allChecks.push({
+      type: "manual_review_required",
+      target: opts.familyName ?? "MANUAL_ONLY",
+      result: "skipped",
+      detail: `Automated source/endpoint verification is not meaningful for ${familyLabel}; route to a human reviewer.`,
+      weight: 0,
+    });
+    const cveOnly = await verifyCveReferences(text);
+    allChecks.push(...cveOnly);
+
+    const inScopeChecks = allChecks.filter((c) => c.source !== "search_fallback");
+    const score = computeVerificationScore(inScopeChecks);
+    const triageNotes = [
+      `Active verification skipped — ${familyLabel.replace(/^the /, "")} requires manual reproduction.`,
+      ...buildTriageNotes(inScopeChecks, detectedProjects),
+    ];
+    const summary: VerificationSummary = {
+      verified: inScopeChecks.filter((c) => c.result === "verified").length,
+      notFound: inScopeChecks.filter((c) => c.result === "not_found").length,
+      warnings: inScopeChecks.filter((c) => c.result === "warning").length,
+      errors: inScopeChecks.filter((c) => c.result === "error").length,
+    };
+    const result: VerificationResult = {
+      checks: allChecks,
+      summary,
+      triageNotes,
+      score,
+      detectedProjects,
+      cacheMetadata: { hits: { ...cacheTracker } },
+    };
+    await persistentCacheSet(cacheKey, result, "mutable");
+    return result;
+  }
+
+  // SOURCE_CODE → file-path / function checks against detected GitHub repos.
+  // ENDPOINT    → URL/PoC plausibility checks.
+  // GENERIC     → both (legacy v3.6.0 behavior).
+  const runSourceCodeChecks = mode === "SOURCE_CODE" || mode === "GENERIC";
+  const runEndpointChecks = mode === "ENDPOINT" || mode === "GENERIC";
 
   // v3.6.0 §2: Prioritize repos explicitly referenced in the report
   // (github_url / gitlab_url). Fall back to KNOWN_PROJECTS keyword matches
@@ -777,7 +849,11 @@ export async function performActiveVerification(text: string): Promise<Verificat
     });
   }
 
-  if (githubProjects.length > 0 && (codeRefs.functions.length > 0 || codeRefs.filePaths.length > 0)) {
+  // SOURCE_CODE / GENERIC: probe detected GitHub repos for the file-path /
+  // symbol references the report cites. Skipped for ENDPOINT-mode families
+  // (XSS, IDOR, SQLi, …) where source-path verification is not the right
+  // signal — those reports live or die by the URL+payload, not a file tree.
+  if (runSourceCodeChecks && githubProjects.length > 0 && (codeRefs.functions.length > 0 || codeRefs.filePaths.length > 0)) {
     let totalGhChecks = 0;
     const MAX_TOTAL_GH_CHECKS = 5;
     for (const project of githubProjects) {
@@ -802,8 +878,14 @@ export async function performActiveVerification(text: string): Promise<Verificat
   const cveChecks = await verifyCveReferences(text);
   allChecks.push(...cveChecks);
 
-  const pocChecks = checkPocPlausibility(text);
-  allChecks.push(...pocChecks);
+  // ENDPOINT / GENERIC: PoC plausibility looks at HTTP responses, curl/wget
+  // payloads, placeholder vs real domains — i.e. the URL/endpoint surface.
+  // Skipped in SOURCE_CODE mode (memory-corruption, crypto, deserialization)
+  // where there is typically no URL to probe.
+  if (runEndpointChecks) {
+    const pocChecks = checkPocPlausibility(text);
+    allChecks.push(...pocChecks);
+  }
 
   // v3.6.0 §2: Confidence/scoring/triage pressure derive ONLY from checks the
   // reporter explicitly grounded in their write-up (or that have no source

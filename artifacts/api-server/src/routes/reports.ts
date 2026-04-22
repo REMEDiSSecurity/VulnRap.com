@@ -31,6 +31,8 @@ import { sanitizeText, sanitizeForAnalysis, sanitizeFileName, detectBinaryConten
 import { extractTextFromPdf } from "../lib/pdf";
 import { logger } from "../lib/logger";
 import { performActiveVerification, type VerificationResult } from "../lib/active-verification";
+import { classifyReport } from "../lib/engines/avri/classify";
+import type { VerificationMode } from "../lib/engines/avri/families";
 import { visitorHash, type VisitorAttribution } from "../lib/visitor";
 import { recordAndScore as recordVelocity } from "../lib/engines/avri/velocity";
 import { recordAndScore as recordTemplateFingerprint } from "../lib/engines/avri/template-fingerprint";
@@ -60,6 +62,42 @@ import {
 
 function parseBoolParam(value: unknown): boolean {
   return value === "true" || value === true;
+}
+
+// AVRI Step 6: derive the verification strategy from the rubric family that
+// classifies the report. We pull cited CWE ids inline (cheap regex) so the
+// classifier can use the CWE → family lookup in addition to the keyword /
+// vuln-type fallback — gives noticeably more accurate routing for reports
+// where the family signal is the cited CWE rather than the prose.
+const CWE_CITATION_RE = /\bCWE[-\s]?(\d{1,4})\b/gi;
+function extractCitedCwes(text: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  const re = new RegExp(CWE_CITATION_RE.source, "gi");
+  while ((m = re.exec(text)) !== null) {
+    const id = `CWE-${m[1]}`;
+    if (!seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
+}
+
+function deriveVerificationStrategy(
+  text: string,
+): { verificationMode: VerificationMode; familyName: string } {
+  try {
+    const claimedCwes = extractCitedCwes(text);
+    const classification = classifyReport(text, claimedCwes);
+    return {
+      verificationMode: classification.family.verificationMode,
+      familyName: classification.family.displayName,
+    };
+  } catch {
+    return { verificationMode: "GENERIC", familyName: "Generic" };
+  }
 }
 
 function safeBreakdown(bd: unknown): {
@@ -200,7 +238,10 @@ async function performAnalysis(
       runStage("heuristic_analysis", () => analyzeSloppiness(safeOriginal), diagnostics),
       runStage("linguistic_analysis", () => analyzeLinguistic(safeOriginal), diagnostics),
       runStage("factual_verification", () => analyzeFactual(safeOriginal), diagnostics),
-      runStage("active_verification", () => performActiveVerification(safeRedacted), diagnostics),
+      runStage("active_verification", () => {
+        const strategy = deriveVerificationStrategy(safeRedacted);
+        return performActiveVerification(safeRedacted, strategy);
+      }, diagnostics),
     ]);
 
     const llmResult: LLMSlopResult | null = (await llmPromise) ?? null;
@@ -1534,7 +1575,8 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
   let verification: VerificationResult | null = null;
   if (report.redactedText) {
     try {
-      verification = await performActiveVerification(report.redactedText);
+      const strategy = deriveVerificationStrategy(report.redactedText);
+      verification = await performActiveVerification(report.redactedText, strategy);
     } catch {
       verification = null;
     }
@@ -1765,7 +1807,8 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   let verification: VerificationResult | null = null;
   if (report.redactedText) {
     try {
-      verification = await performActiveVerification(report.redactedText);
+      const strategy = deriveVerificationStrategy(report.redactedText);
+      verification = await performActiveVerification(report.redactedText, strategy);
     } catch {
       verification = null;
     }

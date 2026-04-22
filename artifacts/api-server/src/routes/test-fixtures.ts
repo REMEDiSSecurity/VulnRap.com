@@ -1540,7 +1540,13 @@ router.get("/test/run", async (_req, res) => {
   // 3-engine composite + matrix triage) rather than just the engine layer.
   // Mirrors the path taken by POST /api/reports — see routes/reports.ts.
   const results = await Promise.all(FIXTURES.map(async f => {
-    const verification = await performActiveVerification(f.text);
+    // AVRI Step 6: route active verification by the family rubric so the
+    // smoke test mirrors the live POST /reports pipeline.
+    const classification = classifyReport(f.text, f.claimedCwes);
+    const verification = await performActiveVerification(f.text, {
+      verificationMode: classification.family.verificationMode,
+      familyName: classification.family.displayName,
+    });
     const traced = analyzeWithEnginesTraced(f.text, { claimedCwes: f.claimedCwes });
     const composite = traced.composite.overallScore;
     const e1 = traced.composite.engineResults.find(e => e.engine === "AI Authorship Detector")?.score ?? null;
