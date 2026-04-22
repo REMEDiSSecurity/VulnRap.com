@@ -1619,6 +1619,17 @@ export interface HandwavyHistoryEntry {
   removedBy?: string;
   /** ISO 8601 timestamp the phrase was removed. */
   removedAt: string;
+  /** Task #121 — true once a reviewer has reinstated this phrase
+straight from the history log via POST
+/feedback/calibration/handwavy-phrases/reinstate. The same row
+cannot be reinstated twice — if the phrase is removed again, a
+new history row is appended.
+ */
+  reinstated?: boolean;
+  /** Reviewer name or email that reinstated the phrase from this history entry. */
+  reinstatedBy?: string;
+  /** ISO 8601 timestamp the phrase was reinstated from this history entry. */
+  reinstatedAt?: string;
 }
 
 export interface HandwavyPhrasesList {
@@ -1643,6 +1654,20 @@ before they confirm the add. Defaults to false (write-through behavior).
   reviewer?: string;
   /** Free-text justification recorded with the phrase. Only consulted on POST. */
   rationale?: string;
+}
+
+/**
+ * Task #121 — body for POST /feedback/calibration/handwavy-phrases/reinstate.
+The history row is matched by `phrase` + `removedAt`.
+
+ */
+export interface HandwavyPhraseReinstateBody {
+  /** The (already-normalized) phrase from the matching history entry. */
+  phrase: string;
+  /** ISO 8601 timestamp of the matching history entry's `removedAt` field. */
+  removedAt: string;
+  /** Reviewer name or email recorded as `addedBy`/`reinstatedBy` in the audit trail. Optional. */
+  reviewer?: string;
 }
 
 export type HandwavyPhraseDryRunMatchesByTier = {
@@ -1702,6 +1727,11 @@ export interface HandwavyPhraseMutationResponse {
   added?: boolean;
   /** True when DELETE removed the phrase. Omitted on POST responses. */
   removed?: boolean;
+  /** Task #121 — true when the response is from POST
+/feedback/calibration/handwavy-phrases/reinstate. Omitted on plain
+POST/DELETE responses.
+ */
+  reinstated?: boolean;
   /** The normalized phrase that was added/removed. */
   phrase: string;
   category?: HandwavyCategory;

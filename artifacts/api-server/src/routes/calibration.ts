@@ -9,6 +9,7 @@ import {
   getHandwavyPhraseHistory,
   addHandwavyPhrase,
   removeHandwavyPhrase,
+  reinstateHandwavyPhrase,
   type HandwavyCategory,
   type HandwavyMarker,
 } from "../lib/engines/avri/handwavy-phrases";
@@ -552,6 +553,79 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, as
     res.status(500).json({ error: "Failed to add hand-wavy phrase." });
   }
 });
+
+// Task #121 — reinstate a previously removed phrase straight from the
+// removal-history log. The reviewer doesn't have to retype the phrase or
+// rationale; the server pulls them from the matching history entry (matched
+// by `phrase` + `removedAt`) and re-adds the marker with the original
+// category and rationale. The CURRENT reviewer is recorded as `addedBy` (so
+// the active list shows who reinstated it), and the history entry itself is
+// flagged `reinstated: true` so the same row can't be reinstated twice.
+router.post(
+  "/feedback/calibration/handwavy-phrases/reinstate",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { phrase, removedAt, reviewer } = (req.body ?? {}) as {
+        phrase?: unknown;
+        removedAt?: unknown;
+        reviewer?: unknown;
+      };
+      if (typeof phrase !== "string" || phrase.trim().length === 0) {
+        res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+        return;
+      }
+      if (typeof removedAt !== "string" || removedAt.trim().length === 0) {
+        res.status(400).json({
+          error: "Body must include the 'removedAt' ISO timestamp of the history entry to reinstate.",
+        });
+        return;
+      }
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res.status(400).json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      const result = reinstateHandwavyPhrase(phrase, removedAt, {
+        reviewer: typeof reviewer === "string" ? reviewer : undefined,
+      });
+      if (!result.ok) {
+        if (result.reason === "history-not-found") {
+          res.status(404).json({
+            error: "No matching removal-history entry found for that phrase + removedAt.",
+            reason: result.reason,
+          });
+          return;
+        }
+        if (result.reason === "already-reinstated") {
+          res.status(409).json({
+            error: "That history entry has already been reinstated.",
+            reason: result.reason,
+          });
+          return;
+        }
+        // already-active
+        res.status(409).json({
+          error: "That phrase is already in the active list.",
+          reason: result.reason,
+        });
+        return;
+      }
+      res.status(201).json({
+        reinstated: true,
+        phrase: result.phrase,
+        category: result.category,
+        total: result.total,
+        marker: result.marker,
+        historyEntry: result.historyEntry,
+        phrases: getHandwavyPhrases(),
+        history: getHandwavyPhraseHistory(),
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to reinstate hand-wavy phrase");
+      res.status(500).json({ error: "Failed to reinstate hand-wavy phrase." });
+    }
+  },
+);
 
 router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
   try {

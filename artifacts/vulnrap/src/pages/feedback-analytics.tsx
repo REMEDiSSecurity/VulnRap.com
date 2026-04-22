@@ -5,8 +5,9 @@ import {
   useGetScoringConfig, getGetScoringConfigQueryKey,
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
-  addHandwavyPhrase, removeHandwavyPhrase,
+  addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase,
   type HandwavyPhraseDryRunMatches,
+  type HandwavyHistoryEntry,
   applyCalibration,
   type FeedbackAnalyticsDailyTrendItem,
   type FeedbackAnalyticsScoreCorrelationItem,
@@ -30,7 +31,7 @@ import {
   MessageSquare, Star, ThumbsUp, ThumbsDown, TrendingUp, AlertTriangle,
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
-  Plus, Trash2, MessageCircleQuestion,
+  Plus, Trash2, MessageCircleQuestion, RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -759,6 +760,37 @@ function HandwavyPhrasesAdmin() {
     }
   };
 
+  // Task #121 — one-click reinstate of a removed phrase straight from the
+  // history log. The history row is identified by phrase + removedAt so two
+  // distinct removes of the same phrase can be reinstated independently. The
+  // server pulls the original category and rationale from that history row,
+  // so the reviewer doesn't have to retype anything.
+  const handleReinstate = async (entry: HandwavyHistoryEntry) => {
+    const key = `reinstate:${entry.phrase}:${entry.removedAt}`;
+    setBusy(key);
+    try {
+      const removedAt =
+        entry.removedAt instanceof Date
+          ? entry.removedAt.toISOString()
+          : String(entry.removedAt);
+      await reinstateHandwavyPhrase({
+        phrase: entry.phrase,
+        removedAt,
+        reviewer: reviewer.trim() || undefined,
+      });
+      toast({
+        title: "Phrase reinstated",
+        description: `"${entry.phrase}" is back on the active list with its original ${CATEGORY_LABELS[entry.category as keyof typeof CATEGORY_LABELS] ?? entry.category} context.`,
+      });
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to reinstate phrase.";
+      toast({ title: "Reinstate failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Most recent removals first, capped to keep the panel tidy.
   const sortedHistory = [...history].sort((a, b) => {
     const ta = Date.parse(a.removedAt ?? "") || 0;
@@ -1028,31 +1060,85 @@ function HandwavyPhrasesAdmin() {
                 className="mt-2 border border-border/20 rounded-md divide-y divide-border/10 max-h-64 overflow-y-auto"
                 data-testid="handwavy-history-list"
               >
-                {visibleHistory.map((h, idx) => (
-                  <div
-                    key={`${h.phrase}-${h.removedAt}-${idx}`}
-                    className="px-3 py-2 text-[11px] text-muted-foreground space-y-0.5"
-                    data-testid="handwavy-history-row"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-foreground/70 break-all flex-1 line-through">{h.phrase}</span>
-                      <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
-                    </div>
-                    <div>
-                      Removed by{" "}
-                      <span className="text-foreground/80">{h.removedBy || "anonymous"}</span>
-                      {" • "}
-                      {formatAuditTimestamp(h.removedAt) ?? "unknown date"}
-                    </div>
-                    {(h.addedBy || h.rationale) && (
-                      <div className="text-foreground/60">
-                        Originally added by{" "}
-                        <span className="text-foreground/80">{h.addedBy || "anonymous"}</span>
-                        {h.rationale && <> — “{h.rationale}”</>}
+                {visibleHistory.map((h, idx) => {
+                  const removedAtKey =
+                    h.removedAt instanceof Date
+                      ? h.removedAt.toISOString()
+                      : String(h.removedAt);
+                  const reinstateKey = `reinstate:${h.phrase}:${removedAtKey}`;
+                  // The phrase is also "active" if it lives in the current
+                  // markers list — for example, someone manually re-added it
+                  // (without using the reinstate button) after it was
+                  // removed. Hide the button so we don't show a control that
+                  // would 409 server-side.
+                  const isActive = phrases.some((m: { phrase: string }) => m.phrase === h.phrase);
+                  return (
+                    <div
+                      key={`${h.phrase}-${removedAtKey}-${idx}`}
+                      className="px-3 py-2 text-[11px] text-muted-foreground space-y-0.5"
+                      data-testid="handwavy-history-row"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-foreground/70 break-all flex-1 line-through">{h.phrase}</span>
+                        <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
+                        {h.reinstated ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-emerald-500/40 text-emerald-300"
+                            data-testid="handwavy-history-reinstated"
+                          >
+                            Reinstated
+                          </Badge>
+                        ) : isActive ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] text-muted-foreground"
+                            data-testid="handwavy-history-active"
+                          >
+                            Already active
+                          </Badge>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                            disabled={busy === reinstateKey}
+                            onClick={() => handleReinstate(h)}
+                            data-testid="handwavy-reinstate"
+                            aria-label={`Reinstate phrase ${h.phrase}`}
+                          >
+                            <RotateCcw className="w-3 h-3 mr-1" />
+                            {busy === reinstateKey ? "Reinstating…" : "Reinstate"}
+                          </Button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <div>
+                        Removed by{" "}
+                        <span className="text-foreground/80">{h.removedBy || "anonymous"}</span>
+                        {" • "}
+                        {formatAuditTimestamp(h.removedAt) ?? "unknown date"}
+                      </div>
+                      {(h.addedBy || h.rationale) && (
+                        <div className="text-foreground/60">
+                          Originally added by{" "}
+                          <span className="text-foreground/80">{h.addedBy || "anonymous"}</span>
+                          {h.rationale && <> — “{h.rationale}”</>}
+                        </div>
+                      )}
+                      {h.reinstated && (
+                        <div
+                          className="text-emerald-300/80"
+                          data-testid="handwavy-history-reinstated-meta"
+                        >
+                          Reinstated by{" "}
+                          <span className="text-foreground/80">{h.reinstatedBy || "anonymous"}</span>
+                          {" • "}
+                          {formatAuditTimestamp(h.reinstatedAt) ?? "unknown date"}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {sortedHistory.length > visibleHistory.length && (
                   <div className="px-3 py-2 text-[10px] italic text-muted-foreground/70">
                     Showing the {visibleHistory.length} most recent of {sortedHistory.length} removals.

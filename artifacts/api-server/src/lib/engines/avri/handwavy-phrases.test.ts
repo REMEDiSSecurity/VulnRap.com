@@ -11,6 +11,7 @@ let getHandwavyPhrases: typeof import("./handwavy-phrases").getHandwavyPhrases;
 let getHandwavyPhraseHistory: typeof import("./handwavy-phrases").getHandwavyPhraseHistory;
 let addHandwavyPhrase: typeof import("./handwavy-phrases").addHandwavyPhrase;
 let removeHandwavyPhrase: typeof import("./handwavy-phrases").removeHandwavyPhrase;
+let reinstateHandwavyPhrase: typeof import("./handwavy-phrases").reinstateHandwavyPhrase;
 let __resetHandwavyPhrasesForTests: typeof import("./handwavy-phrases").__resetHandwavyPhrasesForTests;
 let __restoreHandwavyPhraseDefaultsForTests: typeof import("./handwavy-phrases").__restoreHandwavyPhraseDefaultsForTests;
 
@@ -23,6 +24,7 @@ beforeAll(async () => {
   getHandwavyPhraseHistory = mod.getHandwavyPhraseHistory;
   addHandwavyPhrase = mod.addHandwavyPhrase;
   removeHandwavyPhrase = mod.removeHandwavyPhrase;
+  reinstateHandwavyPhrase = mod.reinstateHandwavyPhrase;
   __resetHandwavyPhrasesForTests = mod.__resetHandwavyPhrasesForTests;
   __restoreHandwavyPhraseDefaultsForTests = mod.__restoreHandwavyPhraseDefaultsForTests;
 });
@@ -163,6 +165,111 @@ describe("handwavy-phrases loader", () => {
     const reloaded = getHandwavyPhraseHistory();
     expect(reloaded.length).toBe(200);
     expect(reloaded[0].phrase).toBe("bounded marker 20");
+  });
+
+  // --- Task #121: reinstate from history ---
+
+  describe("reinstateHandwavyPhrase", () => {
+    it("re-adds the phrase with original category and rationale, recording the current reviewer as addedBy", () => {
+      addHandwavyPhrase("reinstatable phrase", "buzzword", {
+        reviewer: "alice@team.com",
+        rationale: "Caught it in three weekly drills.",
+        now: "2026-04-10T08:00:00.000Z",
+      });
+      const removed = removeHandwavyPhrase("reinstatable phrase", {
+        reviewer: "bob@team.com",
+        now: "2026-04-15T10:00:00.000Z",
+      });
+      expect(removed.removed).toBe(true);
+
+      const result = reinstateHandwavyPhrase(
+        "reinstatable phrase",
+        "2026-04-15T10:00:00.000Z",
+        { reviewer: "carol@team.com", now: "2026-04-22T14:00:00.000Z" },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.category).toBe("buzzword");
+      expect(result.marker.addedBy).toBe("carol@team.com");
+      expect(result.marker.addedAt).toBe("2026-04-22T14:00:00.000Z");
+      expect(result.marker.rationale).toMatch(/three weekly drills/);
+      expect(result.historyEntry.reinstated).toBe(true);
+      expect(result.historyEntry.reinstatedBy).toBe("carol@team.com");
+      expect(result.historyEntry.reinstatedAt).toBe("2026-04-22T14:00:00.000Z");
+
+      // Active list now contains the phrase, with the reinstator's name.
+      const active = getHandwavyPhrases().find((m) => m.phrase === "reinstatable phrase");
+      expect(active?.category).toBe("buzzword");
+      expect(active?.addedBy).toBe("carol@team.com");
+      expect(active?.rationale).toMatch(/three weekly drills/);
+
+      // History row is flagged so the same row can't be reinstated twice.
+      const history = getHandwavyPhraseHistory();
+      const row = history.find(
+        (h) => h.phrase === "reinstatable phrase" && h.removedAt === "2026-04-15T10:00:00.000Z",
+      );
+      expect(row?.reinstated).toBe(true);
+      expect(row?.reinstatedBy).toBe("carol@team.com");
+
+      // The flag survives a cache reset (i.e. it was actually persisted).
+      __resetHandwavyPhrasesForTests();
+      const reloaded = getHandwavyPhraseHistory();
+      const reloadedRow = reloaded.find(
+        (h) => h.phrase === "reinstatable phrase" && h.removedAt === "2026-04-15T10:00:00.000Z",
+      );
+      expect(reloadedRow?.reinstated).toBe(true);
+    });
+
+    it("returns history-not-found when no matching history entry exists", () => {
+      const result = reinstateHandwavyPhrase("never removed phrase", "2026-01-01T00:00:00.000Z");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("history-not-found");
+      }
+    });
+
+    it("refuses to reinstate the same history row twice", () => {
+      addHandwavyPhrase("double reinstate phrase", "absence", {
+        now: "2026-04-10T08:00:00.000Z",
+      });
+      removeHandwavyPhrase("double reinstate phrase", { now: "2026-04-12T10:00:00.000Z" });
+      const first = reinstateHandwavyPhrase(
+        "double reinstate phrase",
+        "2026-04-12T10:00:00.000Z",
+        { now: "2026-04-13T11:00:00.000Z" },
+      );
+      expect(first.ok).toBe(true);
+      // Now remove it again — that creates a NEW history row.
+      removeHandwavyPhrase("double reinstate phrase", { now: "2026-04-14T12:00:00.000Z" });
+      // Trying to reinstate the OLD (already-reinstated) row must fail.
+      const second = reinstateHandwavyPhrase(
+        "double reinstate phrase",
+        "2026-04-12T10:00:00.000Z",
+      );
+      expect(second.ok).toBe(false);
+      if (!second.ok) {
+        expect(second.reason).toBe("already-reinstated");
+      }
+      // But the NEW row can be reinstated independently.
+      const third = reinstateHandwavyPhrase(
+        "double reinstate phrase",
+        "2026-04-14T12:00:00.000Z",
+        { now: "2026-04-15T09:00:00.000Z" },
+      );
+      expect(third.ok).toBe(true);
+    });
+
+    it("refuses to reinstate when the phrase is already on the active list (manual re-add)", () => {
+      addHandwavyPhrase("collision phrase", "hedging", { now: "2026-04-10T00:00:00.000Z" });
+      removeHandwavyPhrase("collision phrase", { now: "2026-04-12T00:00:00.000Z" });
+      // Someone manually re-adds the phrase before the reinstate fires.
+      addHandwavyPhrase("collision phrase", "absence", { now: "2026-04-13T00:00:00.000Z" });
+      const result = reinstateHandwavyPhrase("collision phrase", "2026-04-12T00:00:00.000Z");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("already-active");
+      }
+    });
   });
 
   it("stamps addedAt automatically when no `now` override is supplied", () => {

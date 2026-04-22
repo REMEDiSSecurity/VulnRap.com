@@ -2448,6 +2448,24 @@ export const GetHandwavyPhrasesResponse = zod.object({
           removedAt: zod.coerce
             .date()
             .describe("ISO 8601 timestamp the phrase was removed."),
+          reinstated: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Task #121 — true once a reviewer has reinstated this phrase\nstraight from the history log via POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. The same row\ncannot be reinstated twice — if the phrase is removed again, a\nnew history row is appended.\n",
+            ),
+          reinstatedBy: zod
+            .string()
+            .optional()
+            .describe(
+              "Reviewer name or email that reinstated the phrase from this history entry.",
+            ),
+          reinstatedAt: zod.coerce
+            .date()
+            .optional()
+            .describe(
+              "ISO 8601 timestamp the phrase was reinstated from this history entry.",
+            ),
         })
         .describe(
           "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
@@ -2510,6 +2528,12 @@ export const AddHandwavyPhraseResponse = zod.object({
     .describe(
       "True when DELETE removed the phrase. Omitted on POST responses.",
     ),
+  reinstated: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #121 — true when the response is from POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. Omitted on plain\nPOST\/DELETE responses.\n",
+    ),
   phrase: zod
     .string()
     .describe("The normalized phrase that was added\/removed."),
@@ -2566,6 +2590,24 @@ export const AddHandwavyPhraseResponse = zod.object({
       removedAt: zod.coerce
         .date()
         .describe("ISO 8601 timestamp the phrase was removed."),
+      reinstated: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #121 — true once a reviewer has reinstated this phrase\nstraight from the history log via POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. The same row\ncannot be reinstated twice — if the phrase is removed again, a\nnew history row is appended.\n",
+        ),
+      reinstatedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that reinstated the phrase from this history entry.",
+        ),
+      reinstatedAt: zod.coerce
+        .date()
+        .optional()
+        .describe(
+          "ISO 8601 timestamp the phrase was reinstated from this history entry.",
+        ),
     })
     .optional()
     .describe(
@@ -2691,6 +2733,24 @@ export const AddHandwavyPhraseResponse = zod.object({
           removedAt: zod.coerce
             .date()
             .describe("ISO 8601 timestamp the phrase was removed."),
+          reinstated: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Task #121 — true once a reviewer has reinstated this phrase\nstraight from the history log via POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. The same row\ncannot be reinstated twice — if the phrase is removed again, a\nnew history row is appended.\n",
+            ),
+          reinstatedBy: zod
+            .string()
+            .optional()
+            .describe(
+              "Reviewer name or email that reinstated the phrase from this history entry.",
+            ),
+          reinstatedAt: zod.coerce
+            .date()
+            .optional()
+            .describe(
+              "ISO 8601 timestamp the phrase was reinstated from this history entry.",
+            ),
         })
         .describe(
           "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
@@ -2834,6 +2894,12 @@ export const RemoveHandwavyPhraseResponse = zod.object({
     .describe(
       "True when DELETE removed the phrase. Omitted on POST responses.",
     ),
+  reinstated: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #121 — true when the response is from POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. Omitted on plain\nPOST\/DELETE responses.\n",
+    ),
   phrase: zod
     .string()
     .describe("The normalized phrase that was added\/removed."),
@@ -2890,6 +2956,24 @@ export const RemoveHandwavyPhraseResponse = zod.object({
       removedAt: zod.coerce
         .date()
         .describe("ISO 8601 timestamp the phrase was removed."),
+      reinstated: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #121 — true once a reviewer has reinstated this phrase\nstraight from the history log via POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. The same row\ncannot be reinstated twice — if the phrase is removed again, a\nnew history row is appended.\n",
+        ),
+      reinstatedBy: zod
+        .string()
+        .optional()
+        .describe(
+          "Reviewer name or email that reinstated the phrase from this history entry.",
+        ),
+      reinstatedAt: zod.coerce
+        .date()
+        .optional()
+        .describe(
+          "ISO 8601 timestamp the phrase was reinstated from this history entry.",
+        ),
     })
     .optional()
     .describe(
@@ -3015,6 +3099,24 @@ export const RemoveHandwavyPhraseResponse = zod.object({
           removedAt: zod.coerce
             .date()
             .describe("ISO 8601 timestamp the phrase was removed."),
+          reinstated: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Task #121 — true once a reviewer has reinstated this phrase\nstraight from the history log via POST\n\/feedback\/calibration\/handwavy-phrases\/reinstate. The same row\ncannot be reinstated twice — if the phrase is removed again, a\nnew history row is appended.\n",
+            ),
+          reinstatedBy: zod
+            .string()
+            .optional()
+            .describe(
+              "Reviewer name or email that reinstated the phrase from this history entry.",
+            ),
+          reinstatedAt: zod.coerce
+            .date()
+            .optional()
+            .describe(
+              "ISO 8601 timestamp the phrase was reinstated from this history entry.",
+            ),
         })
         .describe(
           "Removed-phrase audit record used so reviewers can reinstate a phrase with original context.",
@@ -3106,6 +3208,41 @@ export const RemoveHandwavyPhraseResponse = zod.object({
       'Task #119 — Upper bound on the number of most-recent production reports\nthe dry-run scan considered. Reported so reviewers know the depth of\nthe second signal (e.g. \"scanned the last 2000 reports\").\n',
     ),
 });
+
+/**
+ * Task #121 — re-adds a phrase straight from the removal-history log so a
+reviewer doesn't have to retype it (and its rationale) into the add
+form. The history entry is matched by `phrase` + `removedAt`. The
+marker is added with the original category and rationale; the CURRENT
+reviewer is recorded as `addedBy` and a fresh `addedAt` timestamp is
+used so the audit trail still shows who reinstated and when. The
+history row is then flagged `reinstated: true` so the same row cannot
+be reinstated twice.
+
+ * @summary Reinstate a previously removed FLAT hand-wavy marker phrase from history
+ */
+export const ReinstateHandwavyPhraseBody = zod
+  .object({
+    phrase: zod
+      .string()
+      .describe(
+        "The (already-normalized) phrase from the matching history entry.",
+      ),
+    removedAt: zod.coerce
+      .date()
+      .describe(
+        "ISO 8601 timestamp of the matching history entry's `removedAt` field.",
+      ),
+    reviewer: zod
+      .string()
+      .optional()
+      .describe(
+        "Reviewer name or email recorded as `addedBy`\/`reinstatedBy` in the audit trail. Optional.",
+      ),
+  })
+  .describe(
+    "Task #121 — body for POST \/feedback\/calibration\/handwavy-phrases\/reinstate.\nThe history row is matched by `phrase` + `removedAt`.\n",
+  );
 
 /**
  * Returns aggregate statistics for the platform

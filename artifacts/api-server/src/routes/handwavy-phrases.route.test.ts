@@ -452,6 +452,110 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     expect(list.body.history.some((h) => h.phrase === "doomed marker" && h.removedBy === "bob@team.com")).toBe(true);
   });
 
+  // --- Task #121: reinstate from history ---
+
+  describe("Task #121 reinstate-from-history", () => {
+    it("POST /reinstate re-adds the phrase straight from a history row, with original category and rationale", async () => {
+      // Add (with audit), then remove, then reinstate.
+      await request("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "reinstate me",
+        category: "buzzword",
+        reviewer: "alice@team.com",
+        rationale: "Triggered three duplicate triages last sprint.",
+      });
+      const del = await request<{
+        historyEntry: { phrase: string; removedAt: string };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrase: "reinstate me",
+        reviewer: "bob@team.com",
+      });
+      const removedAt = del.body.historyEntry.removedAt;
+
+      const reinstate = await request<{
+        reinstated: boolean;
+        phrase: string;
+        category: string;
+        marker: { phrase: string; category: string; addedBy?: string; rationale?: string };
+        historyEntry: { reinstated: boolean; reinstatedBy?: string; reinstatedAt?: string };
+        phrases: Marker[];
+        history: Array<{ phrase: string; removedAt: string; reinstated?: boolean }>;
+      }>("POST", "/feedback/calibration/handwavy-phrases/reinstate", {
+        phrase: "reinstate me",
+        removedAt,
+        reviewer: "carol@team.com",
+      });
+      expect(reinstate.status).toBe(201);
+      expect(reinstate.body.reinstated).toBe(true);
+      expect(reinstate.body.phrase).toBe("reinstate me");
+      expect(reinstate.body.category).toBe("buzzword");
+      // Original rationale carried over.
+      expect(reinstate.body.marker.rationale).toMatch(/duplicate triages/);
+      // CURRENT reviewer recorded as addedBy on the active marker.
+      expect(reinstate.body.marker.addedBy).toBe("carol@team.com");
+      // History row flagged.
+      expect(reinstate.body.historyEntry.reinstated).toBe(true);
+      expect(reinstate.body.historyEntry.reinstatedBy).toBe("carol@team.com");
+      // Phrase is back on the active list.
+      expect(reinstate.body.phrases.map((m) => m.phrase)).toContain("reinstate me");
+      // History reflects the flag too.
+      const historyRow = reinstate.body.history.find(
+        (h) => h.phrase === "reinstate me" && h.removedAt === removedAt,
+      );
+      expect(historyRow?.reinstated).toBe(true);
+    });
+
+    it("POST /reinstate returns 404 when no matching history entry exists", async () => {
+      const r = await request<{ error: string; reason?: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate",
+        { phrase: "ghost phrase", removedAt: "2026-01-01T00:00:00.000Z" },
+      );
+      expect(r.status).toBe(404);
+      expect(r.body.reason).toBe("history-not-found");
+    });
+
+    it("POST /reinstate returns 409 when the same history row was already reinstated", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "twice reinstated phrase",
+        category: "absence",
+      });
+      const del = await request<{ historyEntry: { removedAt: string } }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "twice reinstated phrase" },
+      );
+      const removedAt = del.body.historyEntry.removedAt;
+      const first = await request("POST", "/feedback/calibration/handwavy-phrases/reinstate", {
+        phrase: "twice reinstated phrase",
+        removedAt,
+      });
+      expect(first.status).toBe(201);
+      const second = await request<{ reason?: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate",
+        { phrase: "twice reinstated phrase", removedAt },
+      );
+      expect(second.status).toBe(409);
+      expect(second.body.reason).toBe("already-reinstated");
+    });
+
+    it("POST /reinstate rejects missing phrase or removedAt with 400", async () => {
+      const noPhrase = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate",
+        { removedAt: "2026-04-01T00:00:00.000Z" },
+      );
+      expect(noPhrase.status).toBe(400);
+      const noTs = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate",
+        { phrase: "anything" },
+      );
+      expect(noTs.status).toBe(400);
+      expect(noTs.body.error).toMatch(/removedAt/);
+    });
+  });
+
   it("restoreDefaults helper rewrites the file with the curated defaults", () => {
     __restoreDefaults();
     // Sanity: the restore helper does not throw and the file now contains

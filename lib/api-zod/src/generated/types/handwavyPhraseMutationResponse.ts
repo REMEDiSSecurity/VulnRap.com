@@ -15,6 +15,11 @@ export interface HandwavyPhraseMutationResponse {
   added?: boolean;
   /** True when DELETE removed the phrase. Omitted on POST responses. */
   removed?: boolean;
+  /** Task #121 — true when the response is from POST
+/feedback/calibration/handwavy-phrases/reinstate. Omitted on plain
+POST/DELETE responses.
+ */
+  reinstated?: boolean;
   /** The normalized phrase that was added/removed. */
   phrase: string;
   category?: HandwavyCategory;

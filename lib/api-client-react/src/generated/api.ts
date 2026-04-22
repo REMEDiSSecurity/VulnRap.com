@@ -34,6 +34,7 @@ import type {
   GetTrendsParams,
   HandwavyPhraseBody,
   HandwavyPhraseMutationResponse,
+  HandwavyPhraseReinstateBody,
   HandwavyPhrasesList,
   HashLookupResult,
   HealthStatus,
@@ -1816,6 +1817,105 @@ export const useRemoveHandwavyPhrase = <
   TContext
 > => {
   return useMutation(getRemoveHandwavyPhraseMutationOptions(options));
+};
+
+/**
+ * Task #121 — re-adds a phrase straight from the removal-history log so a
+reviewer doesn't have to retype it (and its rationale) into the add
+form. The history entry is matched by `phrase` + `removedAt`. The
+marker is added with the original category and rationale; the CURRENT
+reviewer is recorded as `addedBy` and a fresh `addedAt` timestamp is
+used so the audit trail still shows who reinstated and when. The
+history row is then flagged `reinstated: true` so the same row cannot
+be reinstated twice.
+
+ * @summary Reinstate a previously removed FLAT hand-wavy marker phrase from history
+ */
+export const getReinstateHandwavyPhraseUrl = () => {
+  return `/api/feedback/calibration/handwavy-phrases/reinstate`;
+};
+
+export const reinstateHandwavyPhrase = async (
+  handwavyPhraseReinstateBody: HandwavyPhraseReinstateBody,
+  options?: RequestInit,
+): Promise<HandwavyPhraseMutationResponse> => {
+  return customFetch<HandwavyPhraseMutationResponse>(
+    getReinstateHandwavyPhraseUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(handwavyPhraseReinstateBody),
+    },
+  );
+};
+
+export const getReinstateHandwavyPhraseMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reinstateHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseReinstateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reinstateHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseReinstateBody> },
+  TContext
+> => {
+  const mutationKey = ["reinstateHandwavyPhrase"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reinstateHandwavyPhrase>>,
+    { data: BodyType<HandwavyPhraseReinstateBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return reinstateHandwavyPhrase(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReinstateHandwavyPhraseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reinstateHandwavyPhrase>>
+>;
+export type ReinstateHandwavyPhraseMutationBody =
+  BodyType<HandwavyPhraseReinstateBody>;
+export type ReinstateHandwavyPhraseMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Reinstate a previously removed FLAT hand-wavy marker phrase from history
+ */
+export const useReinstateHandwavyPhrase = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reinstateHandwavyPhrase>>,
+    TError,
+    { data: BodyType<HandwavyPhraseReinstateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reinstateHandwavyPhrase>>,
+  TError,
+  { data: BodyType<HandwavyPhraseReinstateBody> },
+  TContext
+> => {
+  return useMutation(getReinstateHandwavyPhraseMutationOptions(options));
 };
 
 /**

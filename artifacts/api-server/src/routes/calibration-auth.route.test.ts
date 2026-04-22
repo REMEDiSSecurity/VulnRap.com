@@ -178,6 +178,25 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
     expect(r.body.removed).toBe(true);
   });
 
+  it("POST /feedback/calibration/handwavy-phrases/reinstate without a token is rejected with 401", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/handwavy-phrases/reinstate",
+      { phrase: "anything", removedAt: "2026-01-01T00:00:00.000Z" },
+    );
+    expect(r.status).toBe(401);
+  });
+
+  it("POST /feedback/calibration/handwavy-phrases/reinstate with the token bypasses the gate (404 because no history)", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/handwavy-phrases/reinstate",
+      { phrase: "no such phrase", removedAt: "2026-01-01T00:00:00.000Z" },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).not.toBe(401);
+  });
+
   it("POST /feedback/calibration/apply without a token is rejected with 401", async () => {
     const r = await request<{ error: string }>(
       "POST",

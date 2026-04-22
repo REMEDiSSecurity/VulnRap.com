@@ -74,6 +74,7 @@ export * from "./handwavyPhraseDryRunMatchesByTier";
 export * from "./handwavyPhraseDryRunMatchesSampleMatchesItem";
 export * from "./handwavyPhraseDryRunMatchesSampleMatchesItemTier";
 export * from "./handwavyPhraseMutationResponse";
+export * from "./handwavyPhraseReinstateBody";
 export * from "./handwavyPhrasesList";
 export * from "./hardwareComponent";
 export * from "./hardwareComponentType";

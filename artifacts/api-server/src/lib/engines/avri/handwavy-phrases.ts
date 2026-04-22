@@ -50,6 +50,16 @@ export interface HandwavyHistoryEntry {
   removedBy?: string;
   /** ISO 8601 timestamp the phrase was removed. */
   removedAt: string;
+  /**
+   * Task #121 — set to true once a reviewer has reinstated this phrase
+   * straight from the history log. The same history row can't be reinstated
+   * twice — a fresh remove of the live marker creates a new history row.
+   */
+  reinstated?: boolean;
+  /** Reviewer name or email that reinstated the phrase from history. */
+  reinstatedBy?: string;
+  /** ISO 8601 timestamp the phrase was reinstated from history. */
+  reinstatedAt?: string;
 }
 
 interface PhrasesFile {
@@ -182,6 +192,10 @@ function coerceHistory(entry: unknown): HandwavyHistoryEntry | null {
   if (isIsoTimestamp(obj.addedAt)) out.addedAt = obj.addedAt;
   const rationale = trimOrUndefined(obj.rationale, 500);
   if (rationale) out.rationale = rationale;
+  if (obj.reinstated === true) out.reinstated = true;
+  const reinstatedBy = trimOrUndefined(obj.reinstatedBy, 200);
+  if (reinstatedBy) out.reinstatedBy = reinstatedBy;
+  if (isIsoTimestamp(obj.reinstatedAt)) out.reinstatedAt = obj.reinstatedAt;
   return out;
 }
 
@@ -347,6 +361,86 @@ export function removeHandwavyPhrase(
   CACHED_MARKERS = next;
   CACHED_HISTORY = trimmed;
   return { removed: true, phrase, total: next.length, historyEntry: { ...historyEntry } };
+}
+
+export interface ReinstatePhraseOptions {
+  reviewer?: string;
+  /** Override the timestamp (tests). Defaults to `new Date().toISOString()`. */
+  now?: string;
+}
+
+export type ReinstatePhraseResult =
+  | {
+      ok: true;
+      phrase: string;
+      category: HandwavyCategory;
+      total: number;
+      marker: HandwavyMarker;
+      historyEntry: HandwavyHistoryEntry;
+    }
+  | {
+      ok: false;
+      reason: "history-not-found" | "already-reinstated" | "already-active";
+      phrase: string;
+    };
+
+/**
+ * Task #121 — reinstate a previously removed phrase straight from the history
+ * log. The history entry is matched by `phrase` + `removedAt` so two distinct
+ * removes of the same phrase can be reinstated independently. The reinstated
+ * marker is added with the original category/rationale, but with the CURRENT
+ * reviewer recorded as `addedBy` and the current time as `addedAt`, so the
+ * audit trail still shows who reinstated and when. The history entry is
+ * marked `reinstated: true` so the same row cannot be reinstated twice (the
+ * UI hides the button after that).
+ */
+export function reinstateHandwavyPhrase(
+  rawPhrase: string,
+  removedAt: string,
+  options: ReinstatePhraseOptions = {},
+): ReinstatePhraseResult {
+  const phrase = normalizePhrase(rawPhrase);
+  const { markers: current, history } = load();
+  const idx = history.findIndex((h) => h.phrase === phrase && h.removedAt === removedAt);
+  if (idx < 0) {
+    return { ok: false, reason: "history-not-found", phrase };
+  }
+  const entry = history[idx];
+  if (entry.reinstated) {
+    return { ok: false, reason: "already-reinstated", phrase };
+  }
+  // If the phrase is already active (someone manually re-added it before
+  // this reinstate fired), refuse rather than silently flipping the history
+  // row to "reinstated" — the audit trail must reflect reality.
+  if (current.some((m) => m.phrase === phrase)) {
+    return { ok: false, reason: "already-active", phrase };
+  }
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  const at = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const marker: HandwavyMarker = { phrase, category: entry.category };
+  if (reviewer) marker.addedBy = reviewer;
+  marker.addedAt = at;
+  if (entry.rationale) marker.rationale = entry.rationale;
+  const nextMarkers = [...current, marker];
+  const updatedEntry: HandwavyHistoryEntry = {
+    ...entry,
+    reinstated: true,
+    reinstatedAt: at,
+  };
+  if (reviewer) updatedEntry.reinstatedBy = reviewer;
+  const nextHistory = history.slice();
+  nextHistory[idx] = updatedEntry;
+  const trimmed = persist(nextMarkers, nextHistory);
+  CACHED_MARKERS = nextMarkers;
+  CACHED_HISTORY = trimmed;
+  return {
+    ok: true,
+    phrase,
+    category: entry.category,
+    total: nextMarkers.length,
+    marker: { ...marker },
+    historyEntry: { ...updatedEntry },
+  };
 }
 
 /** Test helper: drop the in-memory cache so the next read re-parses the file. */

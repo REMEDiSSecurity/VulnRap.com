@@ -20,4 +20,15 @@ export interface HandwavyHistoryEntry {
   removedBy?: string;
   /** ISO 8601 timestamp the phrase was removed. */
   removedAt: Date;
+  /** Task #121 — true once a reviewer has reinstated this phrase
+straight from the history log via POST
+/feedback/calibration/handwavy-phrases/reinstate. The same row
+cannot be reinstated twice — if the phrase is removed again, a
+new history row is appended.
+ */
+  reinstated?: boolean;
+  /** Reviewer name or email that reinstated the phrase from this history entry. */
+  reinstatedBy?: string;
+  /** ISO 8601 timestamp the phrase was reinstated from this history entry. */
+  reinstatedAt?: Date;
 }
