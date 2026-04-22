@@ -5,6 +5,7 @@ import { FAMILIES_BY_ID } from "./families.js";
 import { extractSignals } from "../extractors.js";
 
 const MEM = FAMILIES_BY_ID.MEMORY_CORRUPTION;
+const RACE = FAMILIES_BY_ID.RACE_CONCURRENCY;
 
 const SYMBOL_RICH_TRACE = `# Heap Use-After-Free in libfoo
 \`\`\`asan
@@ -96,6 +97,74 @@ describe("runEngine2Avri — stripped crash trace integration", () => {
   it("still flags T3-14-style memcheck slop as RED-tier AVRI", () => {
     const sig = extractSignals(SYMBOL_STRIPPED_TRACE);
     const result = runEngine2Avri(sig, SYMBOL_STRIPPED_TRACE, MEM);
+    expect(result.detail.rawAvriScore).toBeLessThan(40);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RACE_CONCURRENCY — TSan/Helgrind tool output is just as fakeable as ASAN.
+// The validator must run for RACE_CONCURRENCY too and revoke the
+// `tsan_or_helgrind` gold signal when the trace is stripped.
+// ---------------------------------------------------------------------------
+
+const SYMBOL_RICH_TSAN_TRACE = `# Data race in connection pool reaper
+\`\`\`tsan
+WARNING: ThreadSanitizer: data race (pid=4711)
+  Write of size 8 at 0x7b0400000040 by thread T3:
+    #0 net::Pool::reap(net::Conn*) src/net/pool.cc:184 (server+0x4f2a31)
+    #1 net::Pool::tick() src/net/pool.cc:212 (server+0x4f2c80)
+    #2 std::__1::__thread_proxy<...>(void*) thread:373 (server+0x91d40e)
+
+  Previous read of size 8 at 0x7b0400000040 by thread T1:
+    #0 net::Pool::checkout() src/net/pool.cc:97 (server+0x4f1a02)
+    #1 http::Server::accept_loop() src/http/server.cc:441 (server+0x612b10)
+    #2 std::__1::__thread_proxy<...>(void*) thread:373 (server+0x91d40e)
+
+  Mutex M88 (0x7b1000000a40) created at:
+    #0 pthread_mutex_init <null> (libtsan.so.0+0x4d2a8)
+    #1 net::Pool::Pool() src/net/pool.cc:31 (server+0x4f0d40)
+
+SUMMARY: ThreadSanitizer: data race src/net/pool.cc:184 in net::Pool::reap
+\`\`\`
+Repro: run \`./server --threads 8\` under \`tsan\` and hit /healthz concurrently
+from two clients (thread 1 / thread 2 interleave); the race fires on the
+second iteration.`;
+
+const SYMBOL_STRIPPED_TSAN_TRACE = `# Data race in our shipped server binary
+\`\`\`
+WARNING: ThreadSanitizer: data race (pid=31337)
+  Write of size 8 at 0xZZZZZZZZ by thread Ta:
+    #0 0xXXXXXX in <symbol stripped>
+    #1 0xXXXXXX in <symbol stripped>
+    #2 0xXXXXXX in <symbol stripped>
+    #3 0xXXXXXX in <symbol stripped>
+  Previous read of size 8 at 0xZZZZZZZZ by thread Tb:
+    #0 0xXXXXXX in <symbol stripped>
+    #1 0xXXXXXX in <symbol stripped>
+    #2 0xXXXXXX in <symbol stripped>
+SUMMARY: ThreadSanitizer: data race in <symbol stripped>
+\`\`\`
+The race is reproducible against the shipped binary; rebuilding with debug
+symbols is left as an exercise. Severity: Critical. tsan crash on the
+shipped binary which is the realistic attack surface.`;
+
+describe("runEngine2Avri — stripped RACE_CONCURRENCY trace integration", () => {
+  it("keeps the tsan_or_helgrind gold hit for a symbol-rich legit TSan trace", () => {
+    const sig = extractSignals(SYMBOL_RICH_TSAN_TRACE);
+    const result = runEngine2Avri(sig, SYMBOL_RICH_TSAN_TRACE, RACE);
+    const goldIds = result.detail.goldHits.map((g) => g.id);
+    expect(goldIds).toContain("tsan_or_helgrind");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).not.toContain("STRIPPED_CRASH_TRACE");
+  });
+
+  it("revokes tsan_or_helgrind and pushes AVRI down for a stripped TSan slop trace", () => {
+    const sig = extractSignals(SYMBOL_STRIPPED_TSAN_TRACE);
+    const result = runEngine2Avri(sig, SYMBOL_STRIPPED_TSAN_TRACE, RACE);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("STRIPPED_CRASH_TRACE");
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("tsan_or_helgrind");
     expect(result.detail.rawAvriScore).toBeLessThan(40);
   });
 });

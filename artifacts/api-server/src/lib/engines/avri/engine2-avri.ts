@@ -11,12 +11,12 @@ import type { ExtractedSignals } from "../extractors";
 import type { EngineResult, TriggeredIndicator, Verdict } from "../engines";
 import { runEngine2 as runEngine2Legacy } from "../engines";
 import type { FamilyRubric } from "./families";
-import { evaluateCrashTrace, CRASH_TRACE_GOLD_SIGNAL_IDS, type CrashTraceEvaluation } from "./crash-trace";
+import { evaluateCrashTrace, crashTraceGoldSignalIdsFor, type CrashTraceEvaluation } from "./crash-trace";
 
 const ABSENCE_PENALTY_CAP = 12;
-/** Out-of-cap penalty applied to MEMORY_CORRUPTION reports whose crash
+/** Out-of-cap penalty applied to crash-/race-trace-bearing reports whose
  * trace is stripped/placeholder. Sized to push a slop report whose only
- * substance is a fake sanitizer trace below the AVRI YELLOW threshold. */
+ * substance is a fake sanitizer/TSan trace below the AVRI YELLOW threshold. */
 const STRIPPED_TRACE_PENALTY = 18;
 
 function clamp(n: number, lo = 0, hi = 100): number {
@@ -137,20 +137,23 @@ export function runEngine2Avri(
     }
   }
 
-  // 1b. Crash-trace validation (MEMORY_CORRUPTION only). Sanitizer/Valgrind
-  // headers and `#N 0x...` frame regexes are easy to fake; if the trace
-  // itself has no resolvable symbols/source lines (e.g. "<symbol stripped>"
-  // frames or "+0xZZZZ" placeholder offsets), revoke the trace-derived
-  // gold points so a polished slop report can't pad its way past the
-  // gold threshold on a fake crash dump.
+  // 1b. Crash/race-trace validation. Sanitizer/Valgrind/TSan headers and
+  // `#N 0x...` frame regexes are easy to fake; if the trace itself has no
+  // resolvable symbols/source lines (e.g. "<symbol stripped>" frames or
+  // "+0xZZZZ" placeholder offsets), revoke the trace-derived gold points
+  // so a polished slop report can't pad its way past the gold threshold
+  // on a fake crash/race dump. Runs for any family whose rubric declares
+  // tool-emitted-trace gold signals (currently MEMORY_CORRUPTION and
+  // RACE_CONCURRENCY).
   let crashTrace: CrashTraceEvaluation | null = null;
   const revokedTraceHits: Array<{ id: string; description: string; points: number }> = [];
-  if (family.id === "MEMORY_CORRUPTION") {
+  const traceGoldIds = crashTraceGoldSignalIdsFor(family.id);
+  if (traceGoldIds) {
     crashTrace = evaluateCrashTrace(fullText);
     if (crashTrace.isStripped) {
       const remaining: typeof goldHits = [];
       for (const hit of goldHits) {
-        if (CRASH_TRACE_GOLD_SIGNAL_IDS.has(hit.id)) {
+        if (traceGoldIds.has(hit.id)) {
           revokedTraceHits.push(hit);
           goldTotal -= hit.points;
         } else {

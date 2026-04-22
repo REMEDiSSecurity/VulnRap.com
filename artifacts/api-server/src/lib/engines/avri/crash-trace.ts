@@ -117,11 +117,45 @@ export function evaluateCrashTrace(text: string): CrashTraceEvaluation {
   return { framesAnalyzed, goodFrames, placeholderFrames, isStripped, reason };
 }
 
-/** Gold-signal IDs (in the MEMORY_CORRUPTION rubric) whose value depends
- * entirely on the crash trace being legitimate. When a trace is
- * stripped/placeholder, points awarded for these signals must be revoked. */
-export const CRASH_TRACE_GOLD_SIGNAL_IDS: ReadonlySet<string> = new Set([
-  "asan_or_sanitizer",
-  "valgrind",
-  "stack_trace_with_offset",
-]);
+/** Per-family map of gold-signal IDs whose value depends entirely on a
+ * tool-emitted crash/race trace being legitimate. When a trace is
+ * stripped/placeholder, points awarded for these signals must be revoked.
+ *
+ * MEMORY_CORRUPTION: ASAN/Valgrind sanitizer traces and the generic
+ *   "stack trace with offset" pattern can all be faked by pasting a
+ *   plausible header followed by `<symbol stripped>` frames.
+ * RACE_CONCURRENCY: ThreadSanitizer / Helgrind / DRD output uses the
+ *   same `#N 0x... in ...` frame shape as ASAN, and is just as easy to
+ *   fake. The TSan/Helgrind gold signal must therefore also depend on
+ *   the trace surviving the stripped-frame validator.
+ *
+ * Other families (e.g. REQUEST_SMUGGLING) rely on raw protocol bytes
+ * rather than tool-emitted frames; they have no entries here and the
+ * validator is not run for them.
+ */
+export const CRASH_TRACE_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  MEMORY_CORRUPTION: new Set([
+    "asan_or_sanitizer",
+    "valgrind",
+    "stack_trace_with_offset",
+  ]),
+  RACE_CONCURRENCY: new Set([
+    "tsan_or_helgrind",
+  ]),
+};
+
+/** Returns the set of gold-signal IDs to revoke for the given family when
+ * the crash/race trace is stripped, or null if the family does not rely
+ * on a tool-emitted trace. */
+export function crashTraceGoldSignalIdsFor(
+  familyId: string,
+): ReadonlySet<string> | null {
+  return CRASH_TRACE_GOLD_SIGNAL_IDS_BY_FAMILY[familyId] ?? null;
+}
+
+/** @deprecated Kept for backwards compatibility with callers that only
+ * cared about MEMORY_CORRUPTION. Prefer `crashTraceGoldSignalIdsFor()`. */
+export const CRASH_TRACE_GOLD_SIGNAL_IDS: ReadonlySet<string> =
+  CRASH_TRACE_GOLD_SIGNAL_IDS_BY_FAMILY.MEMORY_CORRUPTION;
