@@ -745,6 +745,21 @@ function HandwavyPhrasesAdmin() {
   // squinting at toasts. The active list is refreshed ONCE after the batch.
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkConfirm, setBulkConfirm] = useState<string[] | null>(null);
+  // Task #139 — when a single-phrase remove targets a phrase that's already
+  // been thrash'd (>=2 completed remove+reinstate cycles), we pause the DELETE
+  // behind a confirm panel so the reviewer sees the prior cycles before
+  // triggering what's likely to become cycle #N+1. Phrases with 0 or 1 cycles
+  // continue to fire the DELETE immediately, exactly as before.
+  type RemoveConfirmCycle = {
+    removedAt: string;
+    removedBy?: string;
+    reinstatedAt?: string;
+    reinstatedBy?: string;
+  };
+  const [removeConfirm, setRemoveConfirm] = useState<{
+    phrase: string;
+    cycles: RemoveConfirmCycle[];
+  } | null>(null);
   type BulkOutcome = "removed" | "not-found" | "auth-failed" | "error";
   const [bulkResults, setBulkResults] = useState<
     Array<{ phrase: string; status: BulkOutcome; message?: string }> | null
@@ -977,6 +992,26 @@ function HandwavyPhrasesAdmin() {
     } finally {
       setBusy(null);
     }
+  };
+
+  // Task #139 — gate the per-row trash button so phrases with >=2 completed
+  // remove+reinstate cycles route through a confirm panel before the DELETE
+  // fires. Lower-thrash phrases still go straight to `handleRemove`.
+  const requestRemove = (phrase: string, cycles: RemoveConfirmCycle[]) => {
+    if (cycles.length >= 2) {
+      setRemoveConfirm({ phrase, cycles });
+      return;
+    }
+    handleRemove(phrase);
+  };
+  const cancelRemoveConfirm = () => {
+    setRemoveConfirm(null);
+  };
+  const confirmRemoveAnyway = async () => {
+    if (!removeConfirm) return;
+    const { phrase } = removeConfirm;
+    setRemoveConfirm(null);
+    await handleRemove(phrase);
   };
 
   // Task #134 — bulk-remove helpers. The selection set lives independently of
@@ -1518,6 +1553,72 @@ function HandwavyPhrasesAdmin() {
             </div>
           </div>
         )}
+        {/* Task #139 — confirm panel for high-thrash single removals. Only
+            shown when the trash button is pressed on a phrase with >=2
+            completed remove+reinstate cycles, so reviewers see the prior
+            disagreement before triggering what's likely cycle #N+1. */}
+        {removeConfirm && (
+          <div
+            className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-2 text-xs"
+            data-testid="handwavy-remove-confirm"
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
+              <div className="flex-1">
+                <div className="font-semibold text-foreground">
+                  Remove "{removeConfirm.phrase}" anyway?
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  This phrase has already been removed and reinstated{" "}
+                  {removeConfirm.cycles.length}× — the next removal is more likely
+                  to get reverted again. Consider starting a discussion before
+                  flipping it once more.
+                </div>
+              </div>
+            </div>
+            <ol
+              className="max-h-48 overflow-y-auto pl-2 border-l border-amber-500/30 space-y-1.5 text-[10px] leading-snug"
+              data-testid="handwavy-remove-confirm-cycles"
+            >
+              {removeConfirm.cycles.map((c, i) => (
+                <li key={`${c.removedAt}-${i}`} className="space-y-0.5">
+                  <div>
+                    <span className="text-muted-foreground">#{i + 1} removed:</span>{" "}
+                    {formatAuditTimestamp(c.removedAt) ?? "unknown date"}
+                    {" by "}
+                    <span className="text-foreground/90">{c.removedBy || "anonymous"}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">reinstated:</span>{" "}
+                    {formatAuditTimestamp(c.reinstatedAt) ?? "unknown date"}
+                    {" by "}
+                    <span className="text-foreground/90">{c.reinstatedBy || "anonymous"}</span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={cancelRemoveConfirm}
+                disabled={busy === `rm:${removeConfirm.phrase}`}
+                data-testid="handwavy-remove-confirm-cancel"
+              >
+                Back out
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={confirmRemoveAnyway}
+                disabled={busy === `rm:${removeConfirm.phrase}`}
+                data-testid="handwavy-remove-confirm-go"
+              >
+                Remove anyway
+              </Button>
+            </div>
+          </div>
+        )}
         {/* Task #134 — per-phrase results banner shown after a bulk batch
             finishes, mirroring the CLI's per-phrase outcome summary. */}
         {bulkResults && (
@@ -1792,7 +1893,7 @@ function HandwavyPhrasesAdmin() {
                           size="sm"
                           className="h-7 px-2 text-muted-foreground hover:text-red-400"
                           disabled={editing !== null || busy === `rm:${m.phrase}` || bulkBusy}
-                          onClick={() => handleRemove(m.phrase)}
+                          onClick={() => requestRemove(m.phrase, cycles)}
                           data-testid="handwavy-remove"
                           aria-label={`Remove phrase ${m.phrase}`}
                         >
