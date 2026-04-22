@@ -55,9 +55,17 @@ export interface RawHttpEvaluation {
    * Real exploit payloads never contain `<...>` slot markers, so a body made
    * up of those is evidence the "payload" was never actually sent. */
   placeholderBodies: number;
-  /** Byte ranges (start, end half-open) of bodies that look like placeholders.
-   * Used by the AVRI engine to revoke payload-class gold signals whose only
-   * match was inside one of these bodies. */
+  /** Number of prose-level placeholder payload mentions detected outside of
+   * raw HTTP request bodies (e.g. "Payload: `<sql payload here>`",
+   * "Run: `<inject>`", "exec: `<command here>`"). Slop authors use these to
+   * gesture at a payload without naming one; if the family's payload-class
+   * gold signal happens to match unrelated tokens elsewhere in the report,
+   * the engine re-tests the signal pattern against text with these prose
+   * ranges stripped and revokes the point if no real match remains. */
+  prosePlaceholderPayloads: number;
+  /** Byte ranges (start, end half-open) of bodies and prose snippets that
+   * look like placeholders. Used by the AVRI engine to revoke payload-class
+   * gold signals whose only match was inside one of these ranges. */
   placeholderBodyRanges: ReadonlyArray<{ start: number; end: number }>;
   /** True iff the raw request bytes look fabricated. */
   isFake: boolean;
@@ -318,6 +326,44 @@ export function isPlaceholderBody(body: string): boolean {
   return false;
 }
 
+// Prose-level placeholder payload reference: a payload-context word
+// ("Payload:", "Inject:", "Exec:", "Run:", "Command:", "Shell:", "SQLi:")
+// followed by a `<...>` slot like `<sql payload here>` / `<inject>` /
+// `<command here>`, optionally wrapped in inline-code or quote markers.
+// Slop authors drop these in prose to gesture at a payload without naming
+// one — symmetric to the placeholder-body check, but for the prose path.
+//
+// The label list intentionally mirrors the body-placeholder vocabulary
+// (payload, inject, exec, run, command, cmd, shell, plus the injection
+// sub-families sqli/nosql/ldap/xpath/template) so a slop author can't
+// dodge by relabelling the slot.
+const PROSE_PAYLOAD_PLACEHOLDER_RE =
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template)\s*[:=]\s*[`'"]?(<[^>\n]{1,80}>)[`'"]?/gi;
+
+/** Find prose snippets shaped like "Payload: `<sql payload here>`" whose
+ * `<...>` slot is itself a placeholder (slop vocabulary or bare short
+ * identifier — same shapes as `isPlaceholderBody`). Returns the byte ranges
+ * of the full match so the caller can strip them before re-testing
+ * payload-class gold signals. */
+export function findProsePlaceholderPayloadRanges(
+  text: string,
+): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  PROSE_PAYLOAD_PLACEHOLDER_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = PROSE_PAYLOAD_PLACEHOLDER_RE.exec(text)) !== null) {
+    const slot = m[1];
+    const inner = slot.slice(1, -1).trim();
+    if (inner.length === 0) continue;
+    const looksPlaceholder =
+      BODY_PLACEHOLDER_KEYWORDS.test(inner) ||
+      /^[a-z][a-z0-9_\-\s]{0,30}$/i.test(inner);
+    if (!looksPlaceholder) continue;
+    ranges.push({ start: m.index, end: m.index + m[0].length });
+  }
+  return ranges;
+}
+
 interface RequestBlock {
   /** Offset in `text` of the start of the request-line. */
   start: number;
@@ -352,6 +398,11 @@ export function evaluateRawHttpRequest(
 ): RawHttpEvaluation {
   const strictCrlf = options.strictCrlf ?? false;
   const blocks = findRequestBlocks(text);
+  // Prose-level placeholder payload mentions are scanned regardless of
+  // whether any raw HTTP request blocks are present — the slop dodge here
+  // is to drop "Payload: `<inject>`" in plain prose with no fake bytes
+  // alongside it.
+  const proseRanges = findProsePlaceholderPayloadRanges(text);
   if (blocks.length === 0) {
     return {
       requestsAnalyzed: 0,
@@ -363,7 +414,8 @@ export function evaluateRawHttpRequest(
       credentialHeaders: 0,
       fakeCredentialHeaders: 0,
       placeholderBodies: 0,
-      placeholderBodyRanges: [],
+      prosePlaceholderPayloads: proseRanges.length,
+      placeholderBodyRanges: proseRanges,
       isFake: false,
       reason: null,
     };
@@ -516,6 +568,17 @@ export function evaluateRawHttpRequest(
     reason = `Raw HTTP request body is a placeholder (${placeholderBodies}/${blocks.length} request block(s))`;
   }
 
+  // Merge prose-level placeholder payload ranges into placeholderBodyRanges
+  // so the engine's strip-and-retest pass covers prose placeholders too.
+  // Skip any prose range that falls inside an already-tracked body range
+  // (the body range is broader and would double-strip the same bytes).
+  for (const r of proseRanges) {
+    const overlaps = placeholderBodyRanges.some(
+      (existing) => r.start < existing.end && r.end > existing.start,
+    );
+    if (!overlaps) placeholderBodyRanges.push(r);
+  }
+
   return {
     requestsAnalyzed: blocks.length,
     totalHeaders,
@@ -526,35 +589,78 @@ export function evaluateRawHttpRequest(
     credentialHeaders,
     fakeCredentialHeaders,
     placeholderBodies,
+    prosePlaceholderPayloads: proseRanges.length,
     placeholderBodyRanges,
     isFake,
     reason,
   };
 }
 
-/** Return `text` with every placeholder-body byte range replaced by a single
- * space. Used by the AVRI engine to re-evaluate payload-class gold signals
+/** Return `text` with every placeholder-body byte range replaced by spaces.
+ * Used by the AVRI engine to re-evaluate payload-class gold signals
  * (`concrete_payload`, `vulnerable_query_construction`) after the raw-HTTP
- * validator has flagged a body as a placeholder: if the signal pattern only
- * matched inside that body, the gold point must be revoked. */
+ * validator has flagged a body / prose mention as a placeholder: if the
+ * signal pattern only matched inside that range, the gold point must be
+ * revoked.
+ *
+ * When `prosePlaceholderPayloads > 0` (the prose itself contains a
+ * "Payload: `<inject>`"-shape placeholder mention), the function additionally
+ * blanks bare prose tokens — but PRESERVES the contents of triple-backtick
+ * code fences AND single-backtick inline code spans, since that is where a
+ * legitimate reporter pastes the actual exploit bytes / payload. This stops
+ * an incidental `UNION SELECT` / `; cat` token in CWE description prose
+ * from carrying a slop report past the payload-class gold threshold, while
+ * still letting a real payload survive when it lives in `inline code` or a
+ * fenced block alongside the placeholder mention. */
 export function stripPlaceholderBodies(
   text: string,
   evaluation: RawHttpEvaluation,
 ): string {
-  if (evaluation.placeholderBodyRanges.length === 0) return text;
-  const ranges = [...evaluation.placeholderBodyRanges].sort(
-    (a, b) => a.start - b.start,
-  );
-  const parts: string[] = [];
-  let cursor = 0;
-  for (const r of ranges) {
-    if (r.start < cursor) continue;
-    parts.push(text.slice(cursor, r.start));
-    parts.push(" ");
-    cursor = r.end;
+  const chars = text.split("");
+
+  // Step 1: blank placeholder-body ranges (length-preserving).
+  if (evaluation.placeholderBodyRanges.length > 0) {
+    for (const r of evaluation.placeholderBodyRanges) {
+      const end = Math.min(r.end, chars.length);
+      for (let i = r.start; i < end; i++) chars[i] = " ";
+    }
   }
-  parts.push(text.slice(cursor));
-  return parts.join("");
+
+  if (evaluation.prosePlaceholderPayloads === 0) return chars.join("");
+
+  // Step 2: identify ranges to PRESERVE (code fences + inline code spans).
+  // Anything outside these survives only if the placeholder-body strip
+  // already left it intact; bare prose bytes get blanked.
+  const preserve: Array<{ start: number; end: number }> = [];
+  const FENCE_RE = /```[\s\S]*?```/g;
+  let fm: RegExpExecArray | null;
+  while ((fm = FENCE_RE.exec(text)) !== null) {
+    preserve.push({ start: fm.index, end: fm.index + fm[0].length });
+  }
+  const INLINE_RE = /`[^`\n]+`/g;
+  let im: RegExpExecArray | null;
+  while ((im = INLINE_RE.exec(text)) !== null) {
+    const start = im.index;
+    const end = im.index + im[0].length;
+    const insideFence = preserve.some(
+      (r) => start >= r.start && end <= r.end,
+    );
+    if (!insideFence) preserve.push({ start, end });
+  }
+  preserve.sort((a, b) => a.start - b.start);
+
+  // Walk the buffer once, blanking any byte outside both the preserve
+  // ranges and the original-text fence/inline ranges.
+  let pIdx = 0;
+  for (let i = 0; i < chars.length; i++) {
+    while (pIdx < preserve.length && i >= preserve[pIdx].end) pIdx++;
+    const inPreserve =
+      pIdx < preserve.length &&
+      i >= preserve[pIdx].start &&
+      i < preserve[pIdx].end;
+    if (!inPreserve) chars[i] = " ";
+  }
+  return chars.join("");
 }
 
 /** Per-family map of gold-signal IDs whose value depends on the raw HTTP

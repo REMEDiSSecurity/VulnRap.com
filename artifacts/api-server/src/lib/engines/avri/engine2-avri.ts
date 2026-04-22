@@ -289,12 +289,22 @@ export function runEngine2Avri(
       // header check didn't, mark the evaluation fake so the FAKE_RAW_HTTP
       // indicator and out-of-cap penalty fire too.
       if (!rawHttp.isFake && revokedRawHttpHits.length > 0) {
+        let fallbackReason: string;
+        if (rawHttp.placeholderBodies > 0 && rawHttp.requestsAnalyzed > 0) {
+          fallbackReason = `Raw HTTP request body is a placeholder (${rawHttp.placeholderBodies}/${rawHttp.requestsAnalyzed} request block(s))`;
+        } else if (rawHttp.prosePlaceholderPayloads > 0) {
+          // Prose-only path: no fake bytes, just "Payload: `<inject>`"-shape
+          // mentions in the prose that gesture at a payload without naming
+          // one. The payload-class gold signal only matched incidental
+          // tokens elsewhere, so revoke and flag the report.
+          fallbackReason = `Prose payload reference is a placeholder (${rawHttp.prosePlaceholderPayloads} mention(s) like "Payload: <…>" with no concrete payload)`;
+        } else {
+          fallbackReason = "Raw HTTP request body is a placeholder";
+        }
         rawHttp = {
           ...rawHttp,
           isFake: true,
-          reason:
-            rawHttp.reason ??
-            `Raw HTTP request body is a placeholder (${rawHttp.placeholderBodies}/${rawHttp.requestsAnalyzed} request block(s))`,
+          reason: rawHttp.reason ?? fallbackReason,
         };
       }
     }

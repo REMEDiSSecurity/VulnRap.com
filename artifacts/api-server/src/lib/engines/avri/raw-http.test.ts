@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   evaluateRawHttpRequest,
+  findProsePlaceholderPayloadRanges,
   isPlaceholderBody,
   stripPlaceholderBodies,
 } from "./raw-http.js";
@@ -602,6 +603,26 @@ describe("runEngine2Avri — INJECTION placeholder-body integration", () => {
     expect(survivingIds).not.toContain("vulnerable_query_construction");
   });
 
+  it("keeps concrete_payload when a real payload lives in a code fence alongside a prose placeholder mention", () => {
+    // Prose says "Payload: `<sql payload here>`" (placeholder phrase), but a
+    // separate fenced code block carries the real payload. The real payload
+    // survives the strip-and-retest pass and concrete_payload stays.
+    const fixture = [
+      "# SQL injection on POST /search",
+      "",
+      "The q parameter is concatenated into a database query (CWE-89).",
+      "Payload: `<sql payload here>` — see proof below.",
+      "",
+      "```",
+      "q=' UNION SELECT password FROM users--",
+      "```",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, INJ);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).toContain("concrete_payload");
+  });
+
   it("keeps concrete_payload when prose carries a real payload alongside the placeholder body", () => {
     // Same shape as the SQLi placeholder fixture, but the prose names a
     // real `' UNION SELECT password FROM users--` payload outside the
@@ -625,5 +646,118 @@ describe("runEngine2Avri — INJECTION placeholder-body integration", () => {
     const result = runEngine2Avri(sig, fixture, INJ);
     const survivingIds = result.detail.goldHits.map((g) => g.id);
     expect(survivingIds).toContain("concrete_payload");
+  });
+});
+
+// SQLi slop fixture: prose only — no fake bytes, no fenced code, just a
+// "Payload: `<sql payload here>`" mention plus an incidental "UNION SELECT"
+// token in the CWE description prose. The injection family's
+// `concrete_payload` gold signal would happily fire on the incidental token,
+// so the prose-placeholder check must revoke it.
+const SLOP_SQLI_PROSE_PLACEHOLDER_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query.",
+  "This is the canonical UNION SELECT class of attacks (CWE-89).",
+  "Severity: Critical. Affects all customers in production.",
+  "",
+  "Payload: `<sql payload here>`.",
+  "",
+  "Replay against any modern database backend; the response will",
+  "include sensitive rows.",
+].join("\n");
+
+// Command-injection slop fixture: prose only, "Run: `<command here>`" plus
+// an incidental "; cat /etc/passwd" token in the CWE description.
+const SLOP_CMDI_PROSE_PLACEHOLDER_FIXTURE = [
+  "# Critical command injection on POST /api/exec",
+  "",
+  "The cmd field is passed straight to a shell, allowing arbitrary",
+  "command execution. Per CWE-78, exploitation typically uses",
+  "separators like ; cat /etc/passwd to chain commands.",
+  "Severity: Critical.",
+  "",
+  "Run: `<command here>`.",
+  "",
+  "Any modern shell will exhibit this. Severe risk to the production",
+  "fleet — please prioritize.",
+].join("\n");
+
+describe("findProsePlaceholderPayloadRanges", () => {
+  it("flags Payload:/Inject:/Exec:/Run: <slot> in prose", () => {
+    expect(
+      findProsePlaceholderPayloadRanges("Payload: `<sql payload here>`").length,
+    ).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("inject: <inject>").length).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("exec: `<command here>`").length,
+    ).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("Run: `<inject>`").length).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("Command: <shell command here>").length,
+    ).toBe(1);
+  });
+
+  it("does not flag prose without a placeholder slot", () => {
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "Payload: ' UNION SELECT password FROM users--",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("exec: cat /etc/passwd").length,
+    ).toBe(0);
+  });
+
+  it("does not flag <slot> without a payload-context word", () => {
+    expect(
+      findProsePlaceholderPayloadRanges("the value <unknown> means it failed")
+        .length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("Host: <target> in a request").length,
+    ).toBe(0);
+  });
+});
+
+describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
+  it("revokes concrete_payload when prose only gestures at a SQLi payload", () => {
+    const sig = extractSignals(SLOP_SQLI_PROSE_PLACEHOLDER_FIXTURE);
+    const result = runEngine2Avri(sig, SLOP_SQLI_PROSE_PLACEHOLDER_FIXTURE, INJ);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+  });
+
+  it("keeps concrete_payload when a real payload sits in an inline code span alongside the prose placeholder", () => {
+    // The placeholder phrase says "Payload: `<inject>`", but a separate
+    // inline-code span carries the real exploit. The prose-strip pass
+    // must preserve inline code spans so the real payload survives the
+    // strip-and-retest, and concrete_payload stays.
+    const fixture = [
+      "# SQL injection on /search via the q parameter",
+      "",
+      "Payload: `<sql payload here>` — placeholder above. The actual",
+      "exploit `' UNION SELECT password FROM users--` returns the full",
+      "user table. CWE-89.",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, INJ);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).toContain("concrete_payload");
+  });
+
+  it("revokes concrete_payload when prose only gestures at a command-injection payload", () => {
+    const sig = extractSignals(SLOP_CMDI_PROSE_PLACEHOLDER_FIXTURE);
+    const result = runEngine2Avri(sig, SLOP_CMDI_PROSE_PLACEHOLDER_FIXTURE, INJ);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
   });
 });
