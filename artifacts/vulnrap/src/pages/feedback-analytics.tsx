@@ -618,10 +618,141 @@ function PreviewMatchBlock({
   );
 }
 
+// Task #147 — word-level diff for rationale edits in the audit log so reviewers
+// can see at a glance which words actually changed instead of mentally diffing
+// two quoted strings. Tokenizing on whitespace+word runs keeps punctuation and
+// spacing aligned with how reviewers read the text.
+function tokenizeForDiff(s: string): string[] {
+  return s.match(/\s+|\S+/g) ?? [];
+}
+
+type RationaleDiffOp = { type: "eq" | "add" | "del"; text: string };
+
+function diffTokens(a: string[], b: string[]): RationaleDiffOp[] {
+  const n = a.length;
+  const m = b.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const ops: RationaleDiffOp[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      ops.push({ type: "eq", text: a[i] });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      ops.push({ type: "del", text: a[i] });
+      i++;
+    } else {
+      ops.push({ type: "add", text: b[j] });
+      j++;
+    }
+  }
+  while (i < n) ops.push({ type: "del", text: a[i++] });
+  while (j < m) ops.push({ type: "add", text: b[j++] });
+  const merged: RationaleDiffOp[] = [];
+  for (const op of ops) {
+    const last = merged[merged.length - 1];
+    if (last && last.type === op.type) last.text += op.text;
+    else merged.push({ ...op });
+  }
+  return merged;
+}
+
+function RationaleDiff({
+  from,
+  to,
+  wrapperTestId = "handwavy-edit-rationale",
+}: {
+  from: string;
+  to: string;
+  wrapperTestId?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const ops = useMemo(
+    () => diffTokens(tokenizeForDiff(from), tokenizeForDiff(to)),
+    [from, to],
+  );
+  // Long rationales get clamped to two lines until the reviewer asks for the
+  // rest — keeps the audit log scannable without hiding any data.
+  const longish = from.length > 140 || to.length > 140;
+  const isEmptyFrom = from.length === 0;
+  const isEmptyTo = to.length === 0;
+  return (
+    <div className="space-y-0.5" data-testid={wrapperTestId}>
+      <div className="text-muted-foreground/60 uppercase tracking-wider text-[9px] font-semibold">
+        rationale
+      </div>
+      <div
+        className={cn(
+          "rounded border border-border/30 bg-muted/20 px-1.5 py-1 leading-snug whitespace-pre-wrap break-words",
+          !expanded && longish && "line-clamp-2",
+        )}
+        data-testid="handwavy-edit-rationale-diff"
+      >
+        {isEmptyFrom && !isEmptyTo && (
+          <span className="italic text-muted-foreground/60 mr-1">(was empty)</span>
+        )}
+        {ops.map((op, idx) => {
+          if (op.type === "eq") {
+            return (
+              <span key={idx} className="text-foreground/70">
+                {op.text}
+              </span>
+            );
+          }
+          if (op.type === "add") {
+            return (
+              <span
+                key={idx}
+                className="bg-emerald-500/15 text-emerald-300 rounded-sm"
+                data-testid="rationale-diff-add"
+              >
+                {op.text}
+              </span>
+            );
+          }
+          return (
+            <span
+              key={idx}
+              className="bg-rose-500/15 text-rose-300 line-through rounded-sm"
+              data-testid="rationale-diff-del"
+            >
+              {op.text}
+            </span>
+          );
+        })}
+        {!isEmptyFrom && isEmptyTo && (
+          <span className="italic text-muted-foreground/60 ml-1">(cleared)</span>
+        )}
+      </div>
+      {longish && (
+        <button
+          type="button"
+          className="text-[9px] text-muted-foreground/70 hover:text-foreground/80 underline underline-offset-2"
+          onClick={() => setExpanded((v) => !v)}
+          data-testid="handwavy-edit-rationale-toggle"
+        >
+          {expanded ? "Show less" : "Show full text"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Shared renderer for the per-edit list. Both the single-edit
 // <details> affordance (Task #132) and the full chronological history
 // panel (Task #133) call this so they stay structurally aligned and
 // every entry keeps the Revert button.
+//
+// Task #147 — category and rationale render as visually distinct blocks
+// (pill swap for category, word-level inline diff for rationale) so
+// reviewers can tell at a glance which fields changed.
 function renderHandwavyEditEntries({
   editsList,
   phrase,
@@ -656,7 +787,7 @@ function renderHandwavyEditEntries({
           className="flex items-start gap-2 text-[10px] text-muted-foreground"
           data-testid={showHistoryTestIds ? "handwavy-edit-history-row" : "handwavy-edit-entry"}
         >
-          <div className="flex-1 space-y-0.5">
+          <div className="flex-1 space-y-1">
             <div className="flex flex-wrap gap-x-2 gap-y-0.5">
               <span>
                 {showHistoryTestIds ? "By " : ""}
@@ -667,30 +798,32 @@ function renderHandwavyEditEntries({
               {editedAtLabel && <span>{showHistoryTestIds ? editedAtLabel : `• ${editedAtLabel}`}</span>}
             </div>
             {entry.category && (
-              <div data-testid={showHistoryTestIds ? "handwavy-edit-history-category" : undefined}>
-                {showHistoryTestIds ? "Category: " : "category "}
-                <span className="text-foreground/70 capitalize">{entry.category.from}</span>
-                {" → "}
-                <span className={cn(showHistoryTestIds ? "text-foreground/90" : "text-foreground/70", "capitalize")}>
+              <div
+                className="flex items-center gap-1 flex-wrap"
+                data-testid={
+                  showHistoryTestIds ? "handwavy-edit-history-category" : "handwavy-edit-category"
+                }
+              >
+                <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px] font-semibold mr-1">
+                  category
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-muted/40 text-foreground/70 capitalize">
+                  {entry.category.from}
+                </span>
+                <ArrowRight className="w-3 h-3 text-muted-foreground/60" />
+                <span className="px-1.5 py-0.5 rounded bg-primary/15 text-primary capitalize">
                   {entry.category.to}
                 </span>
               </div>
             )}
             {entry.rationale && (
-              <div data-testid={showHistoryTestIds ? "handwavy-edit-history-rationale" : undefined}>
-                {showHistoryTestIds ? "Rationale: " : "rationale "}
-                <span className="text-foreground/70 italic">
-                  {entry.rationale.from && entry.rationale.from.length > 0
-                    ? `“${entry.rationale.from}”`
-                    : "(empty)"}
-                </span>
-                {" → "}
-                <span className={cn(showHistoryTestIds ? "text-foreground/90" : "text-foreground/70", "italic")}>
-                  {entry.rationale.to && entry.rationale.to.length > 0
-                    ? `“${entry.rationale.to}”`
-                    : showHistoryTestIds ? "(empty)" : "(cleared)"}
-                </span>
-              </div>
+              <RationaleDiff
+                from={entry.rationale.from ?? ""}
+                to={entry.rationale.to ?? ""}
+                wrapperTestId={
+                  showHistoryTestIds ? "handwavy-edit-history-rationale" : "handwavy-edit-rationale"
+                }
+              />
             )}
             {showHistoryTestIds && !entry.category && !entry.rationale && (
               <div className="italic">No tracked field changes recorded.</div>
