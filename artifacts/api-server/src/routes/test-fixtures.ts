@@ -1759,6 +1759,106 @@ textbook one for this issue class. Severity: High.`,
     expectedEngine2: [0, 35],
     expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
   },
+  // -------------------------------------------------------------------------
+  // Task #100 — cross-driver coverage for the family-agnostic
+  // AVRI_FLAT_SLOP_HAIRCUT detector. The override fires when an
+  // unclassifiable (FLAT) report racks up ≥18 points of FLAT hand-wavy
+  // markers in Engine 2. To keep that detector honest against a future
+  // scoring tweak that lowers any single marker's weight, each fixture
+  // below is anchored on a *different* group of marker drivers (no-PoC,
+  // structural-only, buzzword-soup) so any one driver could be weakened
+  // without all three fixtures losing their haircut at once. Each fixture
+  // omits any claimed CWE and avoids the family-keyword fallback so
+  // classification falls through to FLAT, which is the only path on
+  // which the haircut composite override fires. They share the new
+  // "flat_slop_haircut" archetype label so calibration can monitor the
+  // detector's headroom across drivers at a glance.
+  // -------------------------------------------------------------------------
+  {
+    id: "T3-27-flat-slop-no-poc",
+    tier: "T3_SLOP",
+    archetype: "flat_slop_haircut",
+    text: `# Suspected systemic weakness in the platform's request handling
+
+After a multi-day review of the platform I have come to believe that
+the request handling layer carries a systemic weakness that should be
+investigated by the maintainers. The condition is one I have observed
+across several of the surfaces I exercised, and it is the kind of
+issue that is easy to overlook in code review yet has historically
+been the source of repeat findings in comparable platforms.
+
+I do not have a runnable reproducer to attach to this report. The
+exploration was driven by a private fuzzing harness that I am not in
+a position to share, and to date there is no working proof-of-concept
+that chains the observation into an end-to-end demonstration. The
+harness stops short of producing a usable artifact for the
+maintainers.
+
+Recommended next steps are to assign an engineer familiar with the
+request handling layer to perform a focused internal review of the
+arrangement described above. Severity is High in my estimation,
+pending confirmation by the maintainers.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-28-flat-slop-structural-only",
+    tier: "T3_SLOP",
+    archetype: "flat_slop_haircut",
+    text: `# Design-level concern in the asset rendering pipeline
+
+While reviewing the asset rendering pipeline I formed a concern about
+the way trust boundaries are arranged between the upstream producer
+of asset descriptors and the consumer that materializes them at the
+final stage. The arrangement appears to be susceptible to the kind of
+cross-component confusion that has previously been reported against
+comparable pipelines in the wider ecosystem.
+
+The condition is structural rather than tied to a specific request
+or response, and follows from the design as observed in the public
+documentation and in the externally visible behaviour of the
+pipeline. I have not derived a single concrete trigger; instead the
+concern attaches to the overall arrangement of the pipeline as a
+whole.
+
+Recommended remediation is for the maintainers to revisit the trust
+boundary placement between the producer and the consumer stages and
+to document the assumed contract between the two. Severity is High in
+my estimation, pending confirmation by the maintainers.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
+  {
+    id: "T3-29-flat-slop-buzzword-soup",
+    tier: "T3_SLOP",
+    archetype: "flat_slop_haircut",
+    text: `# Strategic security review of the platform's posture
+
+After several days of strategic review I have prepared this
+disclosure to highlight what I assess to be a meaningful gap in the
+platform's overall posture. The findings below are framed at the
+level of program design rather than a specific technical artifact,
+and are intended to support a leadership-level discussion about how
+the platform's posture should evolve over the coming year.
+
+A comprehensive zero-trust assessment of the platform's surface
+area would, in my view, surface several arrangements that are not
+aligned with the modern threat landscape as it has developed over
+the past eighteen months. In particular the platform's
+defense-in-depth posture, when viewed against contemporary peer
+benchmarks, leaves opportunities for an organized adversary to chain
+otherwise minor observations into a more meaningful outcome.
+
+Recommended next steps are to commission a multi-week engagement
+covering posture review, governance, and reviewer education.
+Severity is High at the program level. I am happy to scope the
+engagement on request.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+  },
 ];
 
 // =============================================================================

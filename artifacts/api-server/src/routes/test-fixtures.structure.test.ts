@@ -176,4 +176,49 @@ describe("test-fixtures structural guards", () => {
       ).toBe(true);
     }
   });
+
+  // Task #100 — cross-driver fixtures for the AVRI_FLAT_SLOP_HAIRCUT
+  // detector. Each one must (a) carry the shared "flat_slop_haircut"
+  // archetype label so calibration groups them together, and (b) actually
+  // surface the AVRI_FLAT_SLOP_HAIRCUT override under AVRI-on with a
+  // composite that lands in the LIKELY INVALID / HIGH RISK band (≤35).
+  // The three fixtures are anchored on disjoint marker-driver groups
+  // (no-PoC / structural-only / buzzword-soup) so a future scoring tweak
+  // that lowers any single marker's weight cannot quietly weaken the
+  // haircut without tripping at least one of these guards.
+  it("Task #100 cross-driver flat_slop_haircut fixtures (T3-27..T3-29) carry the shared archetype", () => {
+    const expected: Record<string, string> = {
+      "T3-27-flat-slop-no-poc": "flat_slop_haircut",
+      "T3-28-flat-slop-structural-only": "flat_slop_haircut",
+      "T3-29-flat-slop-buzzword-soup": "flat_slop_haircut",
+    };
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    for (const [id, archetype] of Object.entries(expected)) {
+      const f = byId.get(id);
+      expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
+      expect(f!.archetype, `${id} archetype`).toBe(archetype);
+    }
+  });
+
+  it("Task #100 flat_slop_haircut fixtures surface AVRI_FLAT_SLOP_HAIRCUT and stay ≤35 under AVRI-on", () => {
+    const ids = [
+      "T3-27-flat-slop-no-poc",
+      "T3-28-flat-slop-structural-only",
+      "T3-29-flat-slop-buzzword-soup",
+    ];
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    for (const id of ids) {
+      const f = byId.get(id);
+      expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
+      const result = runAvriComposite(f!.text, { claimedCwes: f!.claimedCwes });
+      expect(
+        result.overridesApplied.some(o => o.includes("AVRI_FLAT_SLOP_HAIRCUT")),
+        `${id} should surface AVRI_FLAT_SLOP_HAIRCUT override (got: ${result.overridesApplied.join(" | ")})`,
+      ).toBe(true);
+      expect(
+        result.overallScore,
+        `${id} AVRI-on composite should stay in LIKELY INVALID / HIGH RISK band (≤35), got ${result.overallScore}`,
+      ).toBeLessThanOrEqual(35);
+    }
+  });
 });

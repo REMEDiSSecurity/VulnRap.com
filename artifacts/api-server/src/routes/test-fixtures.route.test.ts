@@ -108,6 +108,7 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
     const expected = [
       "fabricated_diff",
       "family_contradiction",
+      "flat_slop_haircut",
       "narrated_curl",
       "no_gold_signals",
       "paraphrased_cve",
@@ -153,6 +154,10 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
       "T3-24-contradiction-web-client",
       "T3-25-contradiction-memory-corruption",
       "T3-26-contradiction-authn-authz",
+      // Task #100 — cross-driver fixtures for AVRI_FLAT_SLOP_HAIRCUT.
+      "T3-27-flat-slop-no-poc",
+      "T3-28-flat-slop-structural-only",
+      "T3-29-flat-slop-buzzword-soup",
     ]) {
       expect(sprint12Ids.has(id), `archetype groups should include ${id}`).toBe(true);
     }
@@ -181,6 +186,10 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
         "T3-24-contradiction-web-client",
         "T3-25-contradiction-memory-corruption",
         "T3-26-contradiction-authn-authz",
+        // Task #100 — cross-driver fixtures for AVRI_FLAT_SLOP_HAIRCUT.
+        "T3-27-flat-slop-no-poc",
+        "T3-28-flat-slop-structural-only",
+        "T3-29-flat-slop-buzzword-soup",
       ].sort(),
     );
   }, 60_000);
