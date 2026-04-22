@@ -113,11 +113,16 @@ const WEB_CLIENT: FamilyRubric = {
     { id: "specific_dom_sink", description: "Names a specific DOM sink/source", pattern: /\b(innerhtml|outerhtml|document\.write|eval\(|setattribute\(|location\.hash|location\.search|window\.name|postmessage)/i, points: 10 },
     { id: "endpoint_with_param", description: "Specific endpoint and reflected parameter", pattern: /(?:get|post)\s+\/[\w\-\/\.{}]+.*\?\w+=|\?(?:q|search|name|return|redirect|url|next|callback|cb|jsonp)=/i, points: 8 },
     { id: "csrf_specific_request", description: "(CSRF) shows the cross-origin request being forged", pattern: /<form[^>]+action=|<img[^>]+src=|fetch\s*\(\s*["']https?:|xmlhttprequest|samesite\s*=\s*(?:none|lax|strict)/i, points: 8 },
-    { id: "cwe_correct_class", description: "Mentions CWE-79/352/451/601/611/1021", pattern: /cwe-(79|352|451|601|611|1021)/i, points: 4 },
+    { id: "ssrf_internal_metadata", description: "Concrete cloud-metadata or RFC1918 SSRF target URL", pattern: /https?:\/\/169\.254\.169\.254|metadata\.google\.internal\/computemetadata|metadata\.azure\.com|169\.254\.169\.254\/latest|\/computemetadata\/v\d|\/latest\/meta-data\/[\w\-\/]+|fd00:ec2::254/i, points: 20 },
+    { id: "path_traversal_payload", description: "Concrete path-traversal payload reaching a sensitive file", pattern: /(?:\.\.\/|\.\.\\|\.\.%2f|%2e%2e[\/]|\.\.%5c|%2e%2e%2f|%252e%252e[\/%]).{0,80}(?:passwd|shadow|hosts|boot\.ini|win\.ini|\/etc\/|\/proc\/|secret|\.aws\/|id_rsa|web\.config)/i, points: 18 },
+    { id: "ssrf_or_traversal_sink", description: "Sink that fetches a URL or reads a file from user input", pattern: /\b(?:http\.get|http\.client|requests\.(?:get|post)|urllib\.request|urlopen|fetch\s*\(\s*url|axios\.(?:get|post)|net\/http|httpclient|file_get_contents|send_file|sendfile|safe_join|os\.path\.join\s*\(\s*[A-Z_]+_DIR|readfile|fopen)\s*\(/i, points: 8 },
+    { id: "code_diff_for_fix", description: "Diff/patch hunk", pattern: /^---\s+\S+|^\+\+\+\s+\S+|^@@\s+-\d+,\d+\s+\+\d+,\d+\s+@@/m, points: 10 },
+    { id: "file_with_line", description: "File path with line number reference", pattern: /[\w\-\/]+\.(?:js|ts|tsx|py|rb|go|rs|java|kt|swift|php|cs|m|mm|sh|yml|yaml|json|xml|cpp|c|h)\s*[:#L@]\s*\d+/i, points: 6 },
+    { id: "cwe_correct_class", description: "Mentions a WEB_CLIENT-family CWE", pattern: /cwe-(22|79|80|83|352|451|601|611|918|1021)/i, points: 4 },
   ],
   absencePenalties: [
-    { id: "no_payload", description: "No concrete XSS/CSRF/redirect payload", pattern: /(<script|<img|<svg|javascript:|on\w+\s*=|document\.cookie|<form|<iframe)/i, points: 10 },
-    { id: "no_url", description: "No real URL or endpoint", pattern: /https?:\/\/[\w\-\.]+\/[\w\-\/?=&%.{}]*[a-z0-9]/i, points: 5 },
+    { id: "no_payload", description: "No concrete XSS/CSRF/redirect/SSRF/traversal payload", pattern: /(<script|<img|<svg|javascript:|on\w+\s*=|document\.cookie|<form|<iframe|169\.254\.169\.254|metadata\.google\.internal|\.\.\/|%2e%2e|\.\.%2f|\/etc\/passwd|\/etc\/shadow)/i, points: 10 },
+    { id: "no_url", description: "No real URL or endpoint", pattern: /https?:\/\/[\w\-\.]+\/[\w\-\/?=&%.{}]*[a-z0-9]/i, points: 4 },
   ],
   contradictionPhrases: [
     "stack-buffer-overflow", "heap-buffer-overflow", "use-after-free",
@@ -126,7 +131,7 @@ const WEB_CLIENT: FamilyRubric = {
   ],
   reproductionExpectation: "Web-client issues need the payload, the vulnerable endpoint/parameter, and proof of execution (alert/console.log/cookie exfil).",
   verificationMode: "ENDPOINT",
-  memberCwes: ["79", "80", "83", "352", "451", "601", "611", "918", "1021"],
+  memberCwes: ["22", "79", "80", "83", "352", "451", "601", "611", "918", "1021"],
 };
 
 const AUTHN_AUTHZ: FamilyRubric = {
@@ -186,11 +191,14 @@ const DESERIALIZATION: FamilyRubric = {
     { id: "exec_or_rce_evidence", description: "Shows arbitrary code/command execution result", pattern: /(?:rce|remote code execution|arbitrary command|getshell|reverse shell|bind shell|\/bin\/(?:sh|bash)|cmd\.exe|powershell)/i, points: 12 },
     { id: "specific_class_or_lib", description: "Names a specific deserialized class/library", pattern: /\b(commons-collections|commons-beanutils|c3p0|aspectjweaver|spring-aop|hibernate|fastjson|jackson|kryo|gson|protobuf|msgpack|bson|cpickle|pyyaml|node-serialize|funcster)\b/i, points: 8 },
     { id: "code_reference", description: "Source code showing the deserialization sink", pattern: /(?:objectinputstream|readobject\(|unmarshal\(|deserialize\(|fromjson\(|fromxml\(|yaml\.load|pickle\.loads|node-serialize)/i, points: 8 },
+    { id: "xxe_doctype_entity", description: "Concrete XXE DOCTYPE/ENTITY declaration with file:/http: URI", pattern: /<!doctype[^\[]*\[[\s\S]*?<!entity[\s\S]*?(?:system\s+["'](?:file|http|gopher|ftp):|%\s+\w+\s+system)/i, points: 18 },
+    { id: "xml_parser_lib", description: "Specific XML parser library/API", pattern: /\b(libxml2?|xmlreader|xmlparser|xmlreadmemory|saxparser|documentbuilder|xerces|lxml|defusedxml|expat|nokogiri|jdom|simplexml)\b/i, points: 10 },
+    { id: "xxe_entity_load_flag", description: "Parser flag enabling external entity loading", pattern: /\b(XML_PARSE_NOENT|XML_PARSE_DTDLOAD|setExpandEntityReferences|isExpandEntityReferences|loadDTD|FEATURE_SECURE_PROCESSING|setFeature\s*\([^)]*external)\b/, points: 12 },
     { id: "cwe_correct_class", description: "Mentions CWE-502/611/776/827", pattern: /cwe-(502|611|776|827|915)/i, points: 4 },
   ],
   absencePenalties: [
-    { id: "no_payload_or_gadget", description: "No payload or gadget chain shown", pattern: /(ysoserial|marshalsec|pickle|yaml\.load|objectinputstream|readobject|deserialize|payload)/i, points: 10 },
-    { id: "no_lib_named", description: "No specific library/format named", pattern: /(jackson|fastjson|gson|pyyaml|pickle|java serialization|node-serialize|msgpack|kryo)/i, points: 6 },
+    { id: "no_payload_or_gadget", description: "No payload or gadget chain shown", pattern: /(ysoserial|marshalsec|pickle|yaml\.load|objectinputstream|readobject|deserialize|payload|<!doctype|<!entity|xml_parse_noent)/i, points: 10 },
+    { id: "no_lib_named", description: "No specific library/format named", pattern: /(jackson|fastjson|gson|pyyaml|pickle|java serialization|node-serialize|msgpack|kryo|libxml2?|xmlreader|saxparser|documentbuilder|xerces|lxml|defusedxml|expat|nokogiri)/i, points: 6 },
   ],
   contradictionPhrases: [
     "<script>", "alert(1)", "innerhtml",

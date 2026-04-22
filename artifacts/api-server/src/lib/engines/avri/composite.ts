@@ -97,7 +97,22 @@ export function runAvriComposite(
     newOverrides.push(`AVRI_FAMILY_CONTRADICTION: report contradicts claimed family (${e2.detail.contradictionsFound[0]})`);
   }
 
-  const finalScore = Math.max(0, Math.min(100, baseComposite.overallScore + additionalPenalties));
+  // FLAT slop additional composite haircut: when an unclassifiable report
+  // self-admits to having no concrete evidence (≥3 hand-wavy markers fired
+  // in Engine 2 → totalAbsencePenalty=18+), apply an extra -8 at the
+  // composite level. The Engine 2 haircut alone only zeroes the substance
+  // score; Engines 1 and 3 still contribute their legacy values, which can
+  // leave a buzzword-soup composite hovering in the high teens to twenties.
+  // This penalty pushes those reports below the LIKELY INVALID band where
+  // they belong, without touching legitimate FLAT reports (which never
+  // accumulate a haircut).
+  let flatSlopPenalty = 0;
+  if (family.id === "FLAT" && e2.detail.totalAbsencePenalty >= 18) {
+    flatSlopPenalty = -8;
+    newOverrides.push(`AVRI_FLAT_SLOP_HAIRCUT: hand-wavy unclassifiable report (${flatSlopPenalty})`);
+  }
+
+  const finalScore = Math.max(0, Math.min(100, baseComposite.overallScore + additionalPenalties + flatSlopPenalty));
 
   return {
     ...baseComposite,

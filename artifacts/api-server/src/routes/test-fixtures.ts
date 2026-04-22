@@ -1637,6 +1637,17 @@ router.get("/test/run", async (_req, res) => {
   const avriOffRows = runFixturesWithMode(FIXTURES, false);
   const avriOn = summarizeMode(avriOnRows);
   const avriOff = summarizeMode(avriOffRows);
+  const perFixture = avriOnRows.map((on, i) => {
+    const off = avriOffRows[i]!;
+    return {
+      id: on.id,
+      tier: on.tier,
+      family: on.family,
+      onScore: on.composite,
+      offScore: off.composite,
+      delta: Number((on.composite - off.composite).toFixed(1)),
+    };
+  });
   const avriComparison = {
     on: avriOn,
     off: avriOff,
@@ -1647,6 +1658,7 @@ router.get("/test/run", async (_req, res) => {
     },
     avriOnGapMeetsTarget: avriOn.gap >= 50,
     avriOffGapMeetsTarget: avriOff.gap >= 25,
+    perFixture,
   };
 
   res.json({

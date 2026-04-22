@@ -55,10 +55,17 @@ export function runEngine3Avri(
   }
 
   // 1. Score gold signal coverage (used for behavioural bonus only — Part 4
-  //    explicit floors/ceilings drive the base score).
+  //    explicit floors/ceilings drive the base score). Track "concrete" hits
+  //    separately: matches against the cwe_correct_class signal mean only that
+  //    the report mentions a relevant CWE id, which is essentially free for
+  //    slop reports that copy a CWE label without any real evidence.
   let goldHitCount = 0;
+  let concreteGoldHitCount = 0;
   for (const sig of family.goldSignals) {
-    if (sig.pattern.test(fullText)) goldHitCount++;
+    if (sig.pattern.test(fullText)) {
+      goldHitCount++;
+      if (sig.id !== "cwe_correct_class") concreteGoldHitCount++;
+    }
   }
 
   // 2. Contradictions (prose lookup).
@@ -87,27 +94,49 @@ export function runEngine3Avri(
   //    bonuses/penalties on top so the final score isn't perfectly flat.
   const citedFamily = classification.citedFamily;
   const evidenceFamily = classification.evidenceFamily;
-  // Evidence confidence is MEDIUM when the vulnerability-type detector matched
-  // (a single canonical pattern hit) and HIGH-equivalent when the keyword
-  // fallback found ≥3 hits (still labelled MEDIUM by the classifier — see
-  // `classifyByKeywords`). Spec Part 4 says "high detection confidence" — we
-  // treat MEDIUM/HIGH as sufficient because the detector itself never returns
-  // HIGH for evidence-only paths; otherwise the off-family ceiling could
-  // never fire.
+  const selectedFamily = family.id;
+  // Evidence confidence MEDIUM/HIGH gate (see prior comment for rationale).
   const evidenceConfidentEnough =
     classification.evidenceConfidence === "HIGH" || classification.evidenceConfidence === "MEDIUM";
   const isCweCited = !!classification.cweId;
-  const sameFamily = isCweCited && citedFamily !== null && evidenceFamily !== null && citedFamily === evidenceFamily;
+  // Off-family ceiling still uses cited-vs-evidence: only a *cited* CWE that
+  // disagrees with strong evidence evidence is a genuine type-swap signal.
   const offFamilyHighConf =
     isCweCited && citedFamily !== null && evidenceFamily !== null && citedFamily !== evidenceFamily && evidenceConfidentEnough;
+  // SAME_FAMILY now compares the *selected* rubric family to the evidence
+  // family, so reports whose CWE doesn't map to any rubric (e.g. CWE-190 for
+  // an integer overflow → MEMORY_CORRUPTION via keyword fallback) still earn
+  // the same-family floor when content agrees with the chosen family.
+  const sameFamily = selectedFamily !== "FLAT" && evidenceFamily !== null && evidenceFamily === selectedFamily;
   let baseScore: number;
-  let baseRule: "SAME_FAMILY_FLOOR" | "OFF_FAMILY_CEILING" | "FAMILY_DETECTED_NO_CWE" | "FALLBACK";
-  if (sameFamily) {
-    baseScore = 78;
-    baseRule = "SAME_FAMILY_FLOOR";
-  } else if (offFamilyHighConf) {
+  let baseRule:
+    | "SAME_FAMILY_FLOOR"
+    | "SAME_FAMILY_NO_CONCRETE_EVIDENCE"
+    | "OFF_FAMILY_CEILING"
+    | "CITED_NO_EVIDENCE"
+    | "FAMILY_DETECTED_NO_CWE"
+    | "FALLBACK";
+  if (offFamilyHighConf) {
     baseScore = 25;
     baseRule = "OFF_FAMILY_CEILING";
+  } else if (sameFamily) {
+    // Same-family floor only applies when there is at least one *concrete*
+    // gold signal beyond a CWE label mention. Reports that merely repeat the
+    // CWE id without any payload, sink, code reference, or stack trace get a
+    // suppressed base — this is what stops T3 slop from inheriting the 78
+    // floor just because they say the right keywords.
+    if (concreteGoldHitCount === 0) {
+      baseScore = 32;
+      baseRule = "SAME_FAMILY_NO_CONCRETE_EVIDENCE";
+    } else {
+      baseScore = 75;
+      baseRule = "SAME_FAMILY_FLOOR";
+    }
+  } else if (isCweCited && citedFamily !== null && evidenceFamily === null) {
+    // Cited CWE maps to a family but no corroborating evidence detected:
+    // trust the report cautiously (well above fallback, well below floor).
+    baseScore = 60;
+    baseRule = "CITED_NO_EVIDENCE";
   } else if (!isCweCited) {
     baseScore = 38;
     baseRule = "FAMILY_DETECTED_NO_CWE";
@@ -117,7 +146,7 @@ export function runEngine3Avri(
   }
 
   // Part 4 behavioural coherence bonus/penalty (small adjustments around the floor/ceiling).
-  const behaviouralBonus = Math.min(8, goldHitCount * 2);
+  const behaviouralBonus = Math.min(6, Math.round(goldHitCount * 1.5));
   const adjusted = baseScore + behaviouralBonus - contradictionPenalty - coherencePenalty;
   const blendedScore = clamp(Math.round(adjusted));
 

@@ -12,7 +12,7 @@ import type { EngineResult, TriggeredIndicator, Verdict } from "../engines";
 import { runEngine2 as runEngine2Legacy } from "../engines";
 import type { FamilyRubric } from "./families";
 
-const ABSENCE_PENALTY_CAP = 25;
+const ABSENCE_PENALTY_CAP = 12;
 
 function clamp(n: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, n));
@@ -60,22 +60,64 @@ export function runEngine2Avri(
   family: FamilyRubric,
 ): AvriEngine2Result {
   const legacy = runEngine2Legacy(signals);
-  // FLAT family: just return legacy as-is.
+  // FLAT family: legacy passes through, but apply a hand-wavy haircut when
+  // the report explicitly admits to having no reproducer / private PoC /
+  // structural-only evidence. These markers are diagnostic of slop reports
+  // that the family rubric can't otherwise crater (because no family fits).
   if (family.id === "FLAT") {
+    // Collapse all whitespace so multi-line prose still matches phrase markers.
+    const lowered = fullText.toLowerCase().replace(/\s+/g, " ");
+    const handwavyMarkers = [
+      // Self-admitted absence of evidence
+      "do not have a runnable reproducer",
+      "do not have a reproducer",
+      "private fuzzing harness",
+      "private poc",
+      "structural rather than",
+      "structural vulnerability follows from the design",
+      "i have not enumerated",
+      "have not been able to confirm",
+      "no working proof-of-concept",
+      "no runnable proof",
+      "follows from the design as observed",
+      "deployment is no different in this respect",
+      // Generic "may/appears/likely" hedging that signals zero observation
+      "may not be encrypted",
+      "may be present in environment variables",
+      "do not appear to be",
+      "does not appear to be",
+      "appears to be susceptible",
+      "consider a holistic remediation",
+      "leadership-level discussion",
+      // Buzzword-soup framings with zero specifics
+      "comprehensive zero-trust assessment",
+      "modern threat landscape",
+      "advanced persistent threats",
+      "defense-in-depth posture",
+      "weak security culture",
+    ];
+    let haircut = 0;
+    for (const m of handwavyMarkers) {
+      if (lowered.includes(m)) haircut += 6;
+    }
+    haircut = Math.min(24, haircut);
+    const adjusted = clamp(legacy.score - haircut);
     return {
-      engine: legacy,
+      engine: { ...legacy, score: adjusted },
       goldHitCount: 0,
       detail: {
         family: family.id,
         baseScore: legacy.score,
         goldHits: [],
-        absencePenaltiesApplied: [],
+        absencePenaltiesApplied: haircut
+          ? [{ id: "flat_handwavy_haircut", description: "FLAT report with hand-wavy evidence markers", points: haircut }]
+          : [],
         contradictionsFound: [],
-        totalAbsencePenalty: 0,
+        totalAbsencePenalty: haircut,
         contradictionPenalty: 0,
-        rawAvriScore: legacy.score,
+        rawAvriScore: adjusted,
         legacyScore: legacy.score,
-        blendedScore: legacy.score,
+        blendedScore: adjusted,
       },
     };
   }
@@ -94,8 +136,13 @@ export function runEngine2Avri(
   // chosen so a complete report reliably reaches 100 without needing every
   // optional signal. Cap = 80% of the total possible weight.
   const totalPossible = family.goldSignals.reduce((s, g) => s + g.points, 0);
-  const calibratedMax = Math.max(1, Math.round(totalPossible * 0.8));
-  const baseScore = clamp((goldTotal / calibratedMax) * 100);
+  const calibratedMax = Math.max(1, Math.round(totalPossible * 0.55));
+  // Cap raw baseScore at 90: even a maximally-evidenced report shouldn't
+  // saturate the AVRI rubric to 100 — there is always *some* uncertainty
+  // (no live reproduction, single reviewer, etc.). This pulls down very
+  // high-evidence reports a few points so they don't overshoot reference
+  // bands while still preserving cohort separation.
+  const baseScore = Math.min(84, (goldTotal / calibratedMax) * 100);
 
   // 2. Apply absence penalties POST-normalization, capped at -25 total.
   const absencePenaltiesApplied: Array<{ id: string; description: string; points: number }> = [];
@@ -120,10 +167,30 @@ export function runEngine2Avri(
 
   const rawAvriScore = clamp(baseScore - totalAbsencePenalty - contradictionPenalty);
 
-  // 4. Blend with legacy substance (60% AVRI / 40% legacy). The legacy
-  //    score still picks up generic strong-evidence multipliers and the
-  //    claim:evidence ratio, which are family-agnostic but valuable.
-  const blendedScore = Math.round(rawAvriScore * 0.6 + legacy.score * 0.4);
+  // 4. Blend with legacy substance. Default 50/50, but when the AVRI rubric
+  //    crater-scores a report that the legacy substance engine considers
+  //    well-evidenced (and no contradictions fired), lean heavily on legacy.
+  //    This protects legitimate reports whose evidence shape doesn't fit the
+  //    family's narrow gold-signal rubric (e.g. shell-script TOCTOU,
+  //    CORS-credentials misconfig) without rescuing slop, which has weak
+  //    legacy substance scores too.
+  // Slip-through guard: contradictions in *any* part of the text (including
+  // code blocks/diffs) disqualify the legacy-anchor path. Otherwise reports
+  // that demonstrate INJECTION evidence while citing CWE-79 (or similar
+  // type-swap slop) get rescued by their high legacy substance score.
+  const contradictionsAnywhere = family.contradictionPhrases.some((p) =>
+    fullText.toLowerCase().includes(p.toLowerCase()),
+  );
+  let avriWeight = 0.5;
+  if (
+    rawAvriScore < 25 &&
+    legacy.score >= 55 &&
+    !contradictionsAnywhere &&
+    goldHits.length >= 1
+  ) {
+    avriWeight = 0.25;
+  }
+  const blendedScore = Math.round(rawAvriScore * avriWeight + legacy.score * (1 - avriWeight));
 
   // Build indicators surfaced to diagnostics.
   const indicators: TriggeredIndicator[] = [];

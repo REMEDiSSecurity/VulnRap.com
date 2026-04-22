@@ -132,6 +132,8 @@ const FALLBACK_KEYWORDS: FallbackKeywords[] = [
       /\bysoserial|marshalsec|pickle\.loads?\(|yaml\.(?:unsafe_)?load\(/i,
       /\bobjectinputstream|readobject\(|fastjson|jackson(?:databind)?/i,
       /\bnode-serialize|funcster\b/i,
+      /\bxml\s+external\s+entity|\bxxe\b|<!doctype[^\[]*\[|<!entity\s+\w+\s+system/i,
+      /\bxml_parse_noent|xml_parse_dtdload|xmlreadmemory|libxml2/i,
     ],
   },
   {
