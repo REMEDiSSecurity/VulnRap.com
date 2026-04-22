@@ -17,11 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquare, Star, ThumbsUp, ThumbsDown, TrendingUp, AlertTriangle,
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
-  CheckCircle2, XCircle, Info, Play,
+  CheckCircle2, XCircle, Info, Play, Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -477,6 +477,177 @@ function CalibrationSection() {
   );
 }
 
+interface ArchetypeFixture {
+  id: string;
+  tier: string;
+  composite: number;
+  avriOnScore: number;
+  avriOffScore: number | null;
+  distanceToCeiling: number;
+  triage: string;
+  passed: boolean;
+}
+
+interface ArchetypeRow {
+  archetype: string;
+  count: number;
+  avriOnMean: number;
+  avriOnMax: number;
+  minDistanceToCeiling: number;
+  ceiling: number;
+  fixtures: ArchetypeFixture[];
+}
+
+interface TestRunResponse {
+  archetypes?: ArchetypeRow[];
+}
+
+const ARCHETYPE_LABELS: Record<string, string> = {
+  fabricated_diff: "Fabricated diff",
+  paraphrased_cve: "Paraphrased CVE",
+  narrated_curl: "Narrated curl",
+  pseudo_asan: "Pseudo ASAN",
+  prose_poc: "Prose PoC",
+};
+
+function ArchetypeRowView({ row, threshold }: { row: ArchetypeRow; threshold: number }) {
+  const tight = row.minDistanceToCeiling < threshold;
+  const label = ARCHETYPE_LABELS[row.archetype] ?? row.archetype;
+  const worst = row.fixtures.reduce<ArchetypeFixture | null>(
+    (acc, f) => (acc === null || f.avriOnScore > acc.avriOnScore ? f : acc),
+    null,
+  );
+  const distanceColor = tight
+    ? "text-red-400"
+    : row.minDistanceToCeiling < threshold * 2
+      ? "text-yellow-400"
+      : "text-green-400";
+
+  return (
+    <div
+      className={cn(
+        "py-3 border-b border-border/20 last:border-0",
+        tight && "bg-red-500/5 -mx-4 px-4 rounded",
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground">{label}</span>
+            <code className="text-[10px] font-mono text-muted-foreground/60">{row.archetype}</code>
+            {tight && (
+              <Badge variant="outline" className="text-[10px] gap-1 text-red-400 bg-red-400/10 border-red-400/30">
+                <AlertTriangle className="w-3 h-3" /> Tight headroom
+              </Badge>
+            )}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            {row.count} fixture{row.count === 1 ? "" : "s"}
+            {worst && (
+              <>
+                {" · worst-case "}
+                <code className="font-mono">{worst.id}</code>
+                {" @ "}
+                <span className="tabular-nums">{worst.avriOnScore.toFixed(1)}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="text-right w-20">
+          <div className="text-sm font-bold tabular-nums">{row.avriOnMean.toFixed(1)}</div>
+          <div className="text-[10px] text-muted-foreground">mean (AVRI on)</div>
+        </div>
+        <div className="text-right w-20">
+          <div className="text-sm font-bold tabular-nums">{row.avriOnMax.toFixed(1)}</div>
+          <div className="text-[10px] text-muted-foreground">worst score</div>
+        </div>
+        <div className="text-right w-24">
+          <div className={cn("text-sm font-bold tabular-nums", distanceColor)}>
+            {row.minDistanceToCeiling > 0 ? "+" : ""}
+            {row.minDistanceToCeiling.toFixed(1)}
+          </div>
+          <div className="text-[10px] text-muted-foreground">to ceiling ({row.ceiling})</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmergingArchetypesSection() {
+  const [threshold, setThreshold] = useState(5);
+
+  const { data, isLoading, isError } = useQuery<TestRunResponse>({
+    queryKey: ["test-run-archetypes"],
+    queryFn: async () => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/test/run`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 300_000,
+    retry: false,
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-48 rounded-xl" />;
+  }
+
+  // /api/test/run is dev-only; in production the endpoint 404s. Hide the
+  // panel rather than surface a noisy error to reviewers.
+  if (isError || !data?.archetypes || data.archetypes.length === 0) {
+    return null;
+  }
+
+  const rows = data.archetypes;
+  const tightCount = rows.filter(r => r.minDistanceToCeiling < threshold).length;
+  const ceilingMax = rows.reduce((m, r) => Math.max(m, r.ceiling), 35);
+
+  return (
+    <Card className="glass-card rounded-xl border-primary/10">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Layers className="w-4 h-4 text-primary" />
+            Emerging Slop Archetypes
+            <Badge variant="secondary" className="text-[10px]">{rows.length}</Badge>
+            {tightCount > 0 && (
+              <Badge variant="outline" className="text-[10px] gap-1 text-red-400 bg-red-400/10 border-red-400/30">
+                <AlertTriangle className="w-3 h-3" /> {tightCount} tight
+              </Badge>
+            )}
+          </CardTitle>
+          <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <span>Alert below</span>
+            <input
+              type="number"
+              min={0}
+              max={ceilingMax}
+              step={1}
+              value={threshold}
+              onChange={e => {
+                const v = Number(e.target.value);
+                if (!Number.isNaN(v)) setThreshold(Math.max(0, Math.min(ceilingMax, v)));
+              }}
+              className="w-14 px-2 py-1 rounded-md bg-background border border-border text-foreground tabular-nums text-xs"
+            />
+            <span>pts</span>
+          </label>
+        </div>
+        <CardDescription>
+          Each row groups the dev fixture battery by reviewer-facing slop archetype.
+          Distance to ceiling is the worst-case AVRI-on composite vs. the LIKELY-INVALID
+          cutoff (35) — small numbers mean the next regression could escape auto-rejection.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {rows.map(r => (
+          <ArchetypeRowView key={r.archetype} row={r} threshold={threshold} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -631,6 +802,8 @@ export default function FeedbackAnalytics() {
       </div>
 
       <CalibrationSection />
+
+      <EmergingArchetypesSection />
 
       {dailyTrend.length > 0 && (
         <Card className="glass-card rounded-xl">
