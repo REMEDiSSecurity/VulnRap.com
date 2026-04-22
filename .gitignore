@@ -66,3 +66,6 @@ attached_assets/
 artifacts/*/test-results/
 artifacts/*/playwright-report/
 artifacts/*/playwright/.cache/
+
+# Dev-only persisted snapshots from /api/test/run
+artifacts/api-server/data/archetype-history.json
