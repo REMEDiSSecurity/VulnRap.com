@@ -767,6 +767,21 @@ router.post("/reports", async (req, res): Promise<void> => {
         verified: verifiedRef,
         total: referencedChecks.length,
       };
+      // Task 62: Surface the routing decision (mode + family) so the
+      // diagnostics "Active Verification" card can explain why specific
+      // probes were skipped (e.g. "no GitHub checks" for ENDPOINT-mode
+      // reports, "manual review only" for race conditions).
+      const v = analysisResult.verification;
+      if (v.mode) {
+        (e2.signalBreakdown as Record<string, unknown>).activeVerification = {
+          mode: v.mode,
+          familyName: v.familyName ?? null,
+          // For MANUAL_ONLY families, the lib already pushed the "skipped, route
+          // to a human reviewer" hint as the first triage note — pass it through
+          // so the panel can render it verbatim.
+          skipReason: v.mode === "MANUAL_ONLY" ? (v.triageNotes[0] ?? null) : null,
+        };
+      }
     }
     // v3.6.0 §4: Recompute triage with the templateMatch+temporal-adjusted
     // slopScore. The matrix decision is composite-driven, but we still rebuild

@@ -133,6 +133,7 @@ export * from "./verificationBadge";
 export * from "./verificationCheck";
 export * from "./verificationCheckResult";
 export * from "./verificationCheckSource";
+export * from "./verificationMode";
 export * from "./verificationSummary";
 export * from "./visitorStats";
 export * from "./visitRecorded";

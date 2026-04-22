@@ -1615,6 +1615,22 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DetectedProject"
+        mode:
+          type: string
+          enum:
+            - SOURCE_CODE
+            - ENDPOINT
+            - MANUAL_ONLY
+            - GENERIC
+          description: |
+            Active-verification routing decision. SOURCE_CODE probes detected
+            GitHub repos for cited file paths/symbols; ENDPOINT runs PoC
+            plausibility checks; MANUAL_ONLY short-circuits automated probes
+            (race conditions, request smuggling) and only verifies CVE
+            existence; GENERIC runs both source-code and endpoint probes.
+        familyName:
+          type: string
+          description: Human-readable AVRI family name that drove the verification mode (e.g. "Web client (XSS / CSRF / clickjacking / open redirect)").
       required:
         - checks
         - summary

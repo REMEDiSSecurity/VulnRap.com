@@ -320,6 +320,24 @@ export interface DetectedProject {
   source: string;
 }
 
+/**
+ * Active-verification routing decision. SOURCE_CODE probes detected
+GitHub repos for cited file paths/symbols; ENDPOINT runs PoC
+plausibility checks; MANUAL_ONLY short-circuits automated probes
+(race conditions, request smuggling) and only verifies CVE
+existence; GENERIC runs both source-code and endpoint probes.
+
+ */
+export type VerificationMode =
+  (typeof VerificationMode)[keyof typeof VerificationMode];
+
+export const VerificationMode = {
+  SOURCE_CODE: "SOURCE_CODE",
+  ENDPOINT: "ENDPOINT",
+  MANUAL_ONLY: "MANUAL_ONLY",
+  GENERIC: "GENERIC",
+} as const;
+
 export interface Verification {
   checks: VerificationCheck[];
   summary: VerificationSummary;
@@ -328,6 +346,15 @@ export interface Verification {
   /** Verification axis score (0-100, 50=neutral, above=slop signals, below=human signals) */
   score: number;
   detectedProjects: DetectedProject[];
+  /** Active-verification routing decision. SOURCE_CODE probes detected
+GitHub repos for cited file paths/symbols; ENDPOINT runs PoC
+plausibility checks; MANUAL_ONLY short-circuits automated probes
+(race conditions, request smuggling) and only verifies CVE
+existence; GENERIC runs both source-code and endpoint probes.
+ */
+  mode?: VerificationMode;
+  /** Human-readable AVRI family name that drove the verification mode (e.g. "Web client (XSS / CSRF / clickjacking / open redirect)"). */
+  familyName?: string;
 }
 
 /**

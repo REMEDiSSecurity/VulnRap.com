@@ -45,6 +45,11 @@ export interface VerificationResult {
   score: number;
   detectedProjects: DetectedProject[];
   cacheMetadata?: CacheMetadata;
+  // Task 62: Persist the active-verification routing decision so the
+  // diagnostics UI can explain *which* mode ran (and why specific probes
+  // were skipped) without having to reclassify the report frontend-side.
+  mode?: VerificationMode;
+  familyName?: string;
 }
 
 interface DetectedProject {
@@ -764,7 +769,15 @@ export async function performActiveVerification(
   );
   const cached = await persistentCacheGet<VerificationResult>(cacheKey);
   if (cached) {
-    return { ...cached.value, cacheMetadata: { hits: { l1: cached.source === "l1" ? 1 : 0, db: cached.source === "db" ? 1 : 0, fresh: 0 } } };
+    // Task 62: Backfill mode/familyName for results that were cached before
+    // they were tracked, so older cache entries still surface the routing
+    // decision in the diagnostics panel.
+    return {
+      ...cached.value,
+      mode: cached.value.mode ?? mode,
+      familyName: cached.value.familyName ?? opts.familyName,
+      cacheMetadata: { hits: { l1: cached.source === "l1" ? 1 : 0, db: cached.source === "db" ? 1 : 0, fresh: 0 } },
+    };
   }
 
   resetCacheTracker();
@@ -807,6 +820,8 @@ export async function performActiveVerification(
       score,
       detectedProjects,
       cacheMetadata: { hits: { ...cacheTracker } },
+      mode,
+      familyName: opts.familyName,
     };
     await persistentCacheSet(cacheKey, result, "mutable");
     return result;
@@ -914,6 +929,8 @@ export async function performActiveVerification(
     score,
     detectedProjects,
     cacheMetadata,
+    mode,
+    familyName: opts.familyName,
   };
 
   await persistentCacheSet(cacheKey, result, "mutable");

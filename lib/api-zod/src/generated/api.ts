@@ -496,6 +496,18 @@ export const GetReportResponse = zod.object({
               ),
           }),
         ),
+        mode: zod
+          .enum(["SOURCE_CODE", "ENDPOINT", "MANUAL_ONLY", "GENERIC"])
+          .optional()
+          .describe(
+            "Active-verification routing decision. SOURCE_CODE probes detected\nGitHub repos for cited file paths\/symbols; ENDPOINT runs PoC\nplausibility checks; MANUAL_ONLY short-circuits automated probes\n(race conditions, request smuggling) and only verifies CVE\nexistence; GENERIC runs both source-code and endpoint probes.\n",
+          ),
+        familyName: zod
+          .string()
+          .optional()
+          .describe(
+            'Human-readable AVRI family name that drove the verification mode (e.g. \"Web client (XSS \/ CSRF \/ clickjacking \/ open redirect)\").',
+          ),
       }),
       zod.null(),
     ])
@@ -1508,6 +1520,18 @@ export const CheckReportResponse = zod.object({
               ),
           }),
         ),
+        mode: zod
+          .enum(["SOURCE_CODE", "ENDPOINT", "MANUAL_ONLY", "GENERIC"])
+          .optional()
+          .describe(
+            "Active-verification routing decision. SOURCE_CODE probes detected\nGitHub repos for cited file paths\/symbols; ENDPOINT runs PoC\nplausibility checks; MANUAL_ONLY short-circuits automated probes\n(race conditions, request smuggling) and only verifies CVE\nexistence; GENERIC runs both source-code and endpoint probes.\n",
+          ),
+        familyName: zod
+          .string()
+          .optional()
+          .describe(
+            'Human-readable AVRI family name that drove the verification mode (e.g. \"Web client (XSS \/ CSRF \/ clickjacking \/ open redirect)\").',
+          ),
       }),
       zod.null(),
     ])

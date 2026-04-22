@@ -7,6 +7,28 @@ import { Separator } from "@/components/ui/separator";
 import { ChevronDown, ChevronUp, Activity, AlertCircle, Download, ClipboardCopy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+// Task 62: keep in sync with VerificationMode in
+// artifacts/api-server/src/lib/engines/avri/families.ts.
+type VerificationModeUI = "SOURCE_CODE" | "ENDPOINT" | "MANUAL_ONLY" | "GENERIC";
+
+const VERIFICATION_MODE_DESCRIPTION: Record<VerificationModeUI, string> = {
+  SOURCE_CODE:
+    "Probes detected GitHub repos for the file paths and symbols cited in the report; PoC/endpoint plausibility checks are skipped.",
+  ENDPOINT:
+    "Runs PoC plausibility checks (URLs, payloads, HTTP responses); GitHub source-path probes are skipped because endpoint-class bugs live or die by the request, not the file tree.",
+  MANUAL_ONLY:
+    "Automated source/endpoint probes are not meaningful for this family — the report needs a human reviewer to reproduce. Only CVE existence is checked.",
+  GENERIC:
+    "No specific CWE family detected — runs both GitHub source-path checks and endpoint/PoC plausibility checks (legacy behavior).",
+};
+
+const VERIFICATION_MODE_TONE: Record<VerificationModeUI, string> = {
+  SOURCE_CODE: "text-blue-400 border-blue-500/40",
+  ENDPOINT: "text-purple-400 border-purple-500/40",
+  MANUAL_ONLY: "text-yellow-400 border-yellow-500/40",
+  GENERIC: "text-muted-foreground border-muted-foreground/30",
+};
+
 interface PerplexityBreakdown {
   bigramEntropy?: number;
   functionWordRate?: number;
@@ -677,7 +699,13 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
   const verifyBreakdown = sb.verificationSources as
     | { referenced?: number; fallback?: number; verified?: number; total?: number }
     | undefined;
-  if (!ev && !verifyBreakdown) return null;
+  // Task 62: routing decision recorded by performActiveVerification — which
+  // verification mode ran (SOURCE_CODE / ENDPOINT / MANUAL_ONLY / GENERIC)
+  // and the AVRI family that drove it.
+  const activeVerif = sb.activeVerification as
+    | { mode?: VerificationModeUI; familyName?: string | null; skipReason?: string | null }
+    | undefined;
+  if (!ev && !verifyBreakdown && !activeVerif) return null;
   return (
     <>
       <Separator className="bg-border/30" />
@@ -685,6 +713,30 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
         <div className="text-xs uppercase tracking-wide text-muted-foreground">
           Engine 2 — Evidence Strength &amp; Verification Sources
         </div>
+        {activeVerif?.mode && (
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+              <span className="text-muted-foreground">Active verification mode:</span>
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-1.5 py-0 h-5 font-mono ${VERIFICATION_MODE_TONE[activeVerif.mode]}`}
+              >
+                {activeVerif.mode}
+              </Badge>
+              {activeVerif.familyName && (
+                <span className="text-muted-foreground">— {activeVerif.familyName}</span>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              {VERIFICATION_MODE_DESCRIPTION[activeVerif.mode]}
+            </p>
+            {activeVerif.mode === "MANUAL_ONLY" && activeVerif.skipReason && (
+              <p className="text-[11px] font-mono text-yellow-400/90 leading-relaxed">
+                {activeVerif.skipReason}
+              </p>
+            )}
+          </div>
+        )}
         {ev && (
           <div className="space-y-1.5">
             <div className="flex items-center gap-3 text-[11px] font-mono">
@@ -807,13 +859,25 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
   const e2Engine = engines.find(e => /Technical Substance/i.test(e.engine));
   const verifyBreakdown = (e2Engine?.signalBreakdown ?? {}) as {
     verificationSources?: { verified?: number; total?: number; referenced?: number; fallback?: number };
+    activeVerification?: { mode?: VerificationModeUI; familyName?: string | null; skipReason?: string | null };
   };
   const verifySources = verifyBreakdown.verificationSources;
-  if (verifySources) {
-    lines.push("## Active Verification Sources");
-    lines.push(
-      `- verified ${verifySources.verified ?? 0}/${verifySources.total ?? 0} · referenced: ${verifySources.referenced ?? 0} · search-fallback: ${verifySources.fallback ?? 0}`,
-    );
+  const activeVerif = verifyBreakdown.activeVerification;
+  if (verifySources || activeVerif?.mode) {
+    lines.push("## Active Verification");
+    if (activeVerif?.mode) {
+      const familySuffix = activeVerif.familyName ? ` — ${activeVerif.familyName}` : "";
+      lines.push(`- Mode: **${activeVerif.mode}**${familySuffix}`);
+      lines.push(`- ${VERIFICATION_MODE_DESCRIPTION[activeVerif.mode]}`);
+      if (activeVerif.mode === "MANUAL_ONLY" && activeVerif.skipReason) {
+        lines.push(`- ${activeVerif.skipReason}`);
+      }
+    }
+    if (verifySources) {
+      lines.push(
+        `- verified ${verifySources.verified ?? 0}/${verifySources.total ?? 0} · referenced: ${verifySources.referenced ?? 0} · search-fallback: ${verifySources.fallback ?? 0}`,
+      );
+    }
     lines.push("");
   }
 

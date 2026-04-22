@@ -7,6 +7,7 @@
  */
 import type { DetectedProject } from "./detectedProject";
 import type { VerificationCheck } from "./verificationCheck";
+import type { VerificationMode } from "./verificationMode";
 import type { VerificationSummary } from "./verificationSummary";
 
 export interface Verification {
@@ -17,4 +18,13 @@ export interface Verification {
   /** Verification axis score (0-100, 50=neutral, above=slop signals, below=human signals) */
   score: number;
   detectedProjects: DetectedProject[];
+  /** Active-verification routing decision. SOURCE_CODE probes detected
+GitHub repos for cited file paths/symbols; ENDPOINT runs PoC
+plausibility checks; MANUAL_ONLY short-circuits automated probes
+(race conditions, request smuggling) and only verifies CVE
+existence; GENERIC runs both source-code and endpoint probes.
+ */
+  mode?: VerificationMode;
+  /** Human-readable AVRI family name that drove the verification mode (e.g. "Web client (XSS / CSRF / clickjacking / open redirect)"). */
+  familyName?: string;
 }
