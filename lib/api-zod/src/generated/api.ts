@@ -2431,7 +2431,15 @@ export const AddHandwavyPhraseBody = zod.object({
     .describe(
       "Theme bucket used by the diagnostics panel to group matched phrases.",
     ),
+  dryRun: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #114 — when true, the server does NOT persist the phrase. It runs the\ncandidate phrase against the curated benchmark corpus (T1 LEGIT \/ T2 BORDERLINE\n\/ T3 SLOP \/ T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so\nreviewers can see how many GREEN \/ YELLOW reports the phrase would have hit\nbefore they confirm the add. Defaults to false (write-through behavior).\n",
+    ),
 });
+
+export const addHandwavyPhraseResponseDryRunMatchesSampleMatchesMax = 12;
 
 export const AddHandwavyPhraseResponse = zod.object({
   added: zod
@@ -2468,6 +2476,76 @@ export const AddHandwavyPhraseResponse = zod.object({
       }),
     )
     .describe("Full active list after the mutation."),
+  dryRun: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #114 — true when the response is a preview only and the phrase was NOT\npersisted. When dryRun is true, `dryRunMatches` is populated and the existing\nactive phrase list (unchanged) is returned in `phrases`.\n",
+    ),
+  dryRunMatches: zod
+    .object({
+      total: zod
+        .number()
+        .describe(
+          "Total number of corpus fixtures the candidate phrase matched.",
+        ),
+      byTier: zod.object({
+        t1Legit: zod
+          .number()
+          .describe(
+            "Matches in T1 LEGIT fixtures (GREEN — legitimate, well-evidenced).",
+          ),
+        t2Borderline: zod
+          .number()
+          .describe(
+            "Matches in T2 BORDERLINE fixtures (YELLOW — debatable signal).",
+          ),
+        t3Slop: zod
+          .number()
+          .describe(
+            "Matches in T3 SLOP fixtures (RED — known slop archetypes).",
+          ),
+        t4Hallucinated: zod
+          .number()
+          .describe(
+            "Matches in T4 HALLUCINATED fixtures (RED — fabricated\/hallucinated).",
+          ),
+      }),
+      falsePositives: zod
+        .number()
+        .describe(
+          "T1 + T2 hits — the count of GREEN\/YELLOW corpus reports that would have been flagged.",
+        ),
+      corpusSize: zod
+        .number()
+        .describe("Total number of corpus fixtures evaluated."),
+      sampleMatches: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            tier: zod.enum([
+              "T1_LEGIT",
+              "T2_BORDERLINE",
+              "T3_SLOP",
+              "T4_HALLUCINATED",
+            ]),
+          }),
+        )
+        .max(addHandwavyPhraseResponseDryRunMatchesSampleMatchesMax)
+        .describe(
+          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+        ),
+      warning: zod
+        .string()
+        .nullish()
+        .describe(
+          "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+    })
+    .optional()
+    .describe(
+      "Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged\nthe curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)\nand T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high\nvalue is a strong signal that the phrase will crater AVRI for legitimate reports.\n",
+    ),
 });
 
 /**
@@ -2486,7 +2564,15 @@ export const RemoveHandwavyPhraseBody = zod.object({
     .describe(
       "Theme bucket used by the diagnostics panel to group matched phrases.",
     ),
+  dryRun: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #114 — when true, the server does NOT persist the phrase. It runs the\ncandidate phrase against the curated benchmark corpus (T1 LEGIT \/ T2 BORDERLINE\n\/ T3 SLOP \/ T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so\nreviewers can see how many GREEN \/ YELLOW reports the phrase would have hit\nbefore they confirm the add. Defaults to false (write-through behavior).\n",
+    ),
 });
+
+export const removeHandwavyPhraseResponseDryRunMatchesSampleMatchesMax = 12;
 
 export const RemoveHandwavyPhraseResponse = zod.object({
   added: zod
@@ -2523,6 +2609,76 @@ export const RemoveHandwavyPhraseResponse = zod.object({
       }),
     )
     .describe("Full active list after the mutation."),
+  dryRun: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #114 — true when the response is a preview only and the phrase was NOT\npersisted. When dryRun is true, `dryRunMatches` is populated and the existing\nactive phrase list (unchanged) is returned in `phrases`.\n",
+    ),
+  dryRunMatches: zod
+    .object({
+      total: zod
+        .number()
+        .describe(
+          "Total number of corpus fixtures the candidate phrase matched.",
+        ),
+      byTier: zod.object({
+        t1Legit: zod
+          .number()
+          .describe(
+            "Matches in T1 LEGIT fixtures (GREEN — legitimate, well-evidenced).",
+          ),
+        t2Borderline: zod
+          .number()
+          .describe(
+            "Matches in T2 BORDERLINE fixtures (YELLOW — debatable signal).",
+          ),
+        t3Slop: zod
+          .number()
+          .describe(
+            "Matches in T3 SLOP fixtures (RED — known slop archetypes).",
+          ),
+        t4Hallucinated: zod
+          .number()
+          .describe(
+            "Matches in T4 HALLUCINATED fixtures (RED — fabricated\/hallucinated).",
+          ),
+      }),
+      falsePositives: zod
+        .number()
+        .describe(
+          "T1 + T2 hits — the count of GREEN\/YELLOW corpus reports that would have been flagged.",
+        ),
+      corpusSize: zod
+        .number()
+        .describe("Total number of corpus fixtures evaluated."),
+      sampleMatches: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            tier: zod.enum([
+              "T1_LEGIT",
+              "T2_BORDERLINE",
+              "T3_SLOP",
+              "T4_HALLUCINATED",
+            ]),
+          }),
+        )
+        .max(removeHandwavyPhraseResponseDryRunMatchesSampleMatchesMax)
+        .describe(
+          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+        ),
+      warning: zod
+        .string()
+        .nullish()
+        .describe(
+          "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+    })
+    .optional()
+    .describe(
+      "Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged\nthe curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)\nand T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high\nvalue is a strong signal that the phrase will crater AVRI for legitimate reports.\n",
+    ),
 });
 
 /**

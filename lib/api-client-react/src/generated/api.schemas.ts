@@ -1609,6 +1609,65 @@ export interface HandwavyPhraseBody {
   /** Marker phrase (case-insensitive substring match against report text after whitespace collapsing). */
   phrase: string;
   category?: HandwavyCategory;
+  /** Task #114 — when true, the server does NOT persist the phrase. It runs the
+candidate phrase against the curated benchmark corpus (T1 LEGIT / T2 BORDERLINE
+/ T3 SLOP / T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so
+reviewers can see how many GREEN / YELLOW reports the phrase would have hit
+before they confirm the add. Defaults to false (write-through behavior).
+ */
+  dryRun?: boolean;
+}
+
+export type HandwavyPhraseDryRunMatchesByTier = {
+  /** Matches in T1 LEGIT fixtures (GREEN — legitimate, well-evidenced). */
+  t1Legit: number;
+  /** Matches in T2 BORDERLINE fixtures (YELLOW — debatable signal). */
+  t2Borderline: number;
+  /** Matches in T3 SLOP fixtures (RED — known slop archetypes). */
+  t3Slop: number;
+  /** Matches in T4 HALLUCINATED fixtures (RED — fabricated/hallucinated). */
+  t4Hallucinated: number;
+};
+
+export type HandwavyPhraseDryRunMatchesSampleMatchesItemTier =
+  (typeof HandwavyPhraseDryRunMatchesSampleMatchesItemTier)[keyof typeof HandwavyPhraseDryRunMatchesSampleMatchesItemTier];
+
+export const HandwavyPhraseDryRunMatchesSampleMatchesItemTier = {
+  T1_LEGIT: "T1_LEGIT",
+  T2_BORDERLINE: "T2_BORDERLINE",
+  T3_SLOP: "T3_SLOP",
+  T4_HALLUCINATED: "T4_HALLUCINATED",
+} as const;
+
+export type HandwavyPhraseDryRunMatchesSampleMatchesItem = {
+  id: string;
+  tier: HandwavyPhraseDryRunMatchesSampleMatchesItemTier;
+};
+
+/**
+ * Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged
+the curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)
+and T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high
+value is a strong signal that the phrase will crater AVRI for legitimate reports.
+
+ */
+export interface HandwavyPhraseDryRunMatches {
+  /** Total number of corpus fixtures the candidate phrase matched. */
+  total: number;
+  byTier: HandwavyPhraseDryRunMatchesByTier;
+  /** T1 + T2 hits — the count of GREEN/YELLOW corpus reports that would have been flagged. */
+  falsePositives: number;
+  /** Total number of corpus fixtures evaluated. */
+  corpusSize: number;
+  /**
+   * Up to 12 sample matched fixtures (id + tier) for reviewer review.
+   * @maxItems 12
+   */
+  sampleMatches: HandwavyPhraseDryRunMatchesSampleMatchesItem[];
+  /** Reviewer-facing warning string when the phrase would flag legitimate reports
+(`falsePositives > 0`). Null when there are no GREEN/YELLOW hits.
+ */
+  warning?: string | null;
 }
 
 export interface HandwavyPhraseMutationResponse {
@@ -1623,6 +1682,12 @@ export interface HandwavyPhraseMutationResponse {
   total: number;
   /** Full active list after the mutation. */
   phrases: HandwavyMarker[];
+  /** Task #114 — true when the response is a preview only and the phrase was NOT
+persisted. When dryRun is true, `dryRunMatches` is populated and the existing
+active phrase list (unchanged) is returned in `phrases`.
+ */
+  dryRun?: boolean;
+  dryRunMatches?: HandwavyPhraseDryRunMatches;
 }
 
 export interface VisitRecorded {

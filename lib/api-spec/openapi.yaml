@@ -2846,7 +2846,69 @@ components:
           description: Marker phrase (case-insensitive substring match against report text after whitespace collapsing).
         category:
           $ref: "#/components/schemas/HandwavyCategory"
+        dryRun:
+          type: boolean
+          description: |
+            Task #114 — when true, the server does NOT persist the phrase. It runs the
+            candidate phrase against the curated benchmark corpus (T1 LEGIT / T2 BORDERLINE
+            / T3 SLOP / T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so
+            reviewers can see how many GREEN / YELLOW reports the phrase would have hit
+            before they confirm the add. Defaults to false (write-through behavior).
       required: [phrase]
+
+    HandwavyPhraseDryRunMatches:
+      type: object
+      description: |
+        Task #114 — preview of how a candidate FLAT hand-wavy phrase would have flagged
+        the curated benchmark corpus. `falsePositives` is the count of T1 LEGIT (GREEN)
+        and T2 BORDERLINE (YELLOW) fixtures the substring would have matched — a high
+        value is a strong signal that the phrase will crater AVRI for legitimate reports.
+      properties:
+        total:
+          type: integer
+          description: Total number of corpus fixtures the candidate phrase matched.
+        byTier:
+          type: object
+          properties:
+            t1Legit:
+              type: integer
+              description: Matches in T1 LEGIT fixtures (GREEN — legitimate, well-evidenced).
+            t2Borderline:
+              type: integer
+              description: Matches in T2 BORDERLINE fixtures (YELLOW — debatable signal).
+            t3Slop:
+              type: integer
+              description: Matches in T3 SLOP fixtures (RED — known slop archetypes).
+            t4Hallucinated:
+              type: integer
+              description: Matches in T4 HALLUCINATED fixtures (RED — fabricated/hallucinated).
+          required: [t1Legit, t2Borderline, t3Slop, t4Hallucinated]
+        falsePositives:
+          type: integer
+          description: T1 + T2 hits — the count of GREEN/YELLOW corpus reports that would have been flagged.
+        corpusSize:
+          type: integer
+          description: Total number of corpus fixtures evaluated.
+        sampleMatches:
+          type: array
+          maxItems: 12
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              tier:
+                type: string
+                enum: [T1_LEGIT, T2_BORDERLINE, T3_SLOP, T4_HALLUCINATED]
+            required: [id, tier]
+          description: Up to 12 sample matched fixtures (id + tier) for reviewer review.
+        warning:
+          type: string
+          nullable: true
+          description: |
+            Reviewer-facing warning string when the phrase would flag legitimate reports
+            (`falsePositives > 0`). Null when there are no GREEN/YELLOW hits.
+      required: [total, byTier, falsePositives, corpusSize, sampleMatches]
 
     HandwavyPhraseMutationResponse:
       type: object
@@ -2870,6 +2932,14 @@ components:
           items:
             $ref: "#/components/schemas/HandwavyMarker"
           description: Full active list after the mutation.
+        dryRun:
+          type: boolean
+          description: |
+            Task #114 — true when the response is a preview only and the phrase was NOT
+            persisted. When dryRun is true, `dryRunMatches` is populated and the existing
+            active phrase list (unchanged) is returned in `phrases`.
+        dryRunMatches:
+          $ref: "#/components/schemas/HandwavyPhraseDryRunMatches"
       required: [phrase, total, phrases]
 
     VisitRecorded:

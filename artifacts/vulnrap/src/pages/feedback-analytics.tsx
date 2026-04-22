@@ -6,6 +6,7 @@ import {
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
   addHandwavyPhrase, removeHandwavyPhrase,
+  type HandwavyPhraseDryRunMatches,
   applyCalibration,
   type FeedbackAnalyticsDailyTrendItem,
   type FeedbackAnalyticsScoreCorrelationItem,
@@ -488,11 +489,43 @@ function CalibrationSection() {
   );
 }
 
+// Task #114 — small per-tier counter chip rendered inside the dry-run preview
+// panel. `negative` flips the palette to red so GREEN/YELLOW (legitimate)
+// matches stand out as bad-news rather than blending in with the slop totals.
+function PreviewTierBadge({ label, count, negative }: { label: string; count: number; negative?: boolean }) {
+  const danger = negative === true && count > 0;
+  return (
+    <div
+      className={cn(
+        "rounded border px-2 py-1 flex flex-col items-start gap-0.5",
+        danger
+          ? "border-red-500/40 bg-red-500/10 text-red-200"
+          : count > 0
+          ? "border-amber-500/30 bg-amber-500/5 text-amber-100"
+          : "border-border/30 bg-background/30 text-muted-foreground",
+      )}
+    >
+      <span className="uppercase tracking-wide text-[9px] opacity-80">{label}</span>
+      <span className="font-bold tabular-nums text-sm">{count}</span>
+    </div>
+  );
+}
+
 function HandwavyPhrasesAdmin() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  // Task #114 — corpus-impact preview state. After the reviewer presses
+  // "Add phrase" we first issue a dry-run POST and surface the GREEN/YELLOW
+  // false-positive count. The actual add only persists after the reviewer
+  // confirms the preview, so a poorly-chosen phrase can't crater AVRI for
+  // legitimate reports without an explicit second click.
+  const [preview, setPreview] = useState<{
+    phrase: string;
+    category: "absence" | "hedging" | "buzzword";
+    matches: HandwavyPhraseDryRunMatches;
+  } | null>(null);
 
   const { data, isLoading } = useGetHandwavyPhrases({
     query: { queryKey: getGetHandwavyPhrasesQueryKey() },
@@ -514,15 +547,49 @@ function HandwavyPhrasesAdmin() {
     e.preventDefault();
     const phrase = draft.trim();
     if (!phrase) return;
-    setBusy("add");
+    setBusy("preview");
     try {
-      const result = await addHandwavyPhrase({ phrase, category: draftCategory });
+      // Task #114: ask the API to score the candidate against the corpus
+      // BEFORE we persist anything. The server returns the identical phrase
+      // (normalized) plus a per-tier match summary.
+      const dry = await addHandwavyPhrase({ phrase, category: draftCategory, dryRun: true });
+      if (!dry.dryRunMatches) {
+        // Fail closed: if the server's response is missing the preview block
+        // we do NOT silently fall through to a real add. The whole point of
+        // the two-step flow is that reviewers see corpus impact before any
+        // mutation, so degraded API responses must surface as an error.
+        toast({
+          title: "Preview unavailable",
+          description: "The server did not return a corpus impact preview. The phrase was not added — please retry.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setPreview({
+        phrase: dry.phrase,
+        category: (dry.category ?? draftCategory) as "absence" | "hedging" | "buzzword",
+        matches: dry.dryRunMatches,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to preview phrase.";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleConfirmPreview = async () => {
+    if (!preview) return;
+    setBusy("confirm");
+    try {
+      const result = await addHandwavyPhrase({ phrase: preview.phrase, category: preview.category });
       if (result.added === false) {
         toast({ title: "Already in the list", description: `"${result.phrase}" was already a hand-wavy marker.` });
       } else {
-        toast({ title: "Phrase added", description: `New triages will flag "${result.phrase}" (${CATEGORY_LABELS[draftCategory]}) immediately.` });
+        toast({ title: "Phrase added", description: `New triages will flag "${result.phrase}" (${CATEGORY_LABELS[preview.category]}) immediately.` });
       }
       setDraft("");
+      setPreview(null);
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to add phrase.";
@@ -530,6 +597,10 @@ function HandwavyPhrasesAdmin() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleCancelPreview = () => {
+    setPreview(null);
   };
 
   const handleRemove = async (phrase: string) => {
@@ -573,14 +644,14 @@ function HandwavyPhrasesAdmin() {
             maxLength={200}
             className="flex-1 h-9 px-3 rounded-md border border-border/40 bg-background/40 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
             data-testid="handwavy-input"
-            disabled={busy === "add"}
+            disabled={busy === "preview" || busy === "confirm" || preview !== null}
           />
           <select
             value={draftCategory}
             onChange={(e) => setDraftCategory(e.target.value as "absence" | "hedging" | "buzzword")}
             className="h-9 px-2 rounded-md border border-border/40 bg-background/40 text-xs"
             data-testid="handwavy-category"
-            disabled={busy === "add"}
+            disabled={busy === "preview" || busy === "confirm" || preview !== null}
             aria-label="Theme category"
           >
             <option value="absence">Absence of evidence</option>
@@ -590,13 +661,96 @@ function HandwavyPhrasesAdmin() {
           <Button
             type="submit"
             size="sm"
-            disabled={busy === "add" || draft.trim().length < 3}
+            disabled={busy === "preview" || busy === "confirm" || preview !== null || draft.trim().length < 3}
             data-testid="handwavy-add"
           >
             <Plus className="w-3.5 h-3.5 mr-1" />
-            Add phrase
+            {busy === "preview" ? "Checking corpus…" : "Preview impact"}
           </Button>
         </form>
+        {preview && (
+          <div
+            className={cn(
+              "rounded-md border p-3 space-y-2",
+              preview.matches.falsePositives > 0
+                ? "border-red-500/40 bg-red-500/5"
+                : "border-emerald-500/40 bg-emerald-500/5",
+            )}
+            data-testid="handwavy-preview"
+          >
+            <div className="flex items-start gap-2">
+              {preview.matches.falsePositives > 0 ? (
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
+              )}
+              <div className="text-xs space-y-1 flex-1">
+                <div className="font-semibold text-foreground">
+                  Corpus impact for &ldquo;{preview.phrase}&rdquo;
+                </div>
+                {preview.matches.warning ? (
+                  <div className="text-red-200" data-testid="handwavy-preview-warning">
+                    {preview.matches.warning}
+                  </div>
+                ) : (
+                  <div className="text-emerald-200">
+                    No GREEN/YELLOW corpus reports would be flagged
+                    {preview.matches.total > 0
+                      ? ` — ${preview.matches.total} slop fixture${preview.matches.total === 1 ? "" : "s"} would be caught.`
+                      : "."}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
+                  <PreviewTierBadge label="GREEN (T1 legit)" count={preview.matches.byTier.t1Legit} negative />
+                  <PreviewTierBadge label="YELLOW (T2 borderline)" count={preview.matches.byTier.t2Borderline} negative />
+                  <PreviewTierBadge label="RED (T3 slop)" count={preview.matches.byTier.t3Slop} />
+                  <PreviewTierBadge label="RED (T4 hallucinated)" count={preview.matches.byTier.t4Hallucinated} />
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  Evaluated against {preview.matches.corpusSize} curated benchmark fixtures.
+                </div>
+                {preview.matches.sampleMatches.length > 0 && (
+                  <details className="text-[10px] text-muted-foreground">
+                    <summary className="cursor-pointer hover:text-foreground">
+                      Sample matched fixtures ({preview.matches.sampleMatches.length})
+                    </summary>
+                    <ul className="mt-1 ml-3 list-disc space-y-0.5 font-mono">
+                      {preview.matches.sampleMatches.map((s) => (
+                        <li key={s.id}>
+                          {s.id} <span className="opacity-60">[{s.tier}]</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleCancelPreview}
+                disabled={busy === "confirm"}
+                data-testid="handwavy-preview-cancel"
+              >
+                Back out
+              </Button>
+              <Button
+                size="sm"
+                variant={preview.matches.falsePositives > 0 ? "destructive" : "default"}
+                onClick={handleConfirmPreview}
+                disabled={busy === "confirm"}
+                data-testid="handwavy-preview-confirm"
+              >
+                {busy === "confirm"
+                  ? "Adding…"
+                  : preview.matches.falsePositives > 0
+                  ? "Add anyway"
+                  : "Confirm add"}
+              </Button>
+            </div>
+          </div>
+        )}
         {isLoading ? (
           <Skeleton className="h-32 rounded-md" />
         ) : phrases.length === 0 ? (

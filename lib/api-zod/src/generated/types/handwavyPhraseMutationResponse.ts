@@ -7,6 +7,7 @@
  */
 import type { HandwavyCategory } from "./handwavyCategory";
 import type { HandwavyMarker } from "./handwavyMarker";
+import type { HandwavyPhraseDryRunMatches } from "./handwavyPhraseDryRunMatches";
 
 export interface HandwavyPhraseMutationResponse {
   /** True when POST appended the phrase. Omitted on DELETE responses. */
@@ -20,4 +21,10 @@ export interface HandwavyPhraseMutationResponse {
   total: number;
   /** Full active list after the mutation. */
   phrases: HandwavyMarker[];
+  /** Task #114 — true when the response is a preview only and the phrase was NOT
+persisted. When dryRun is true, `dryRunMatches` is populated and the existing
+active phrase list (unchanged) is returned in `phrases`.
+ */
+  dryRun?: boolean;
+  dryRunMatches?: HandwavyPhraseDryRunMatches;
 }

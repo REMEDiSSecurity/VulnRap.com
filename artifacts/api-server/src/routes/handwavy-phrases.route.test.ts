@@ -193,6 +193,107 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     expect(r.status).toBe(400);
   });
 
+  // Task #114 — dry-run preview: the route must report a corpus-match summary
+  // for the candidate phrase WITHOUT persisting it, so reviewers can back out
+  // before a poorly-chosen phrase craters the AVRI score for legitimate reports.
+  describe("Task #114 dry-run preview", () => {
+    it("dryRun=true returns a corpus match summary and does NOT persist the phrase", async () => {
+      const r = await request<{
+        dryRun: boolean;
+        added: boolean;
+        phrase: string;
+        category: string;
+        phrases: Marker[];
+        dryRunMatches: {
+          total: number;
+          byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
+          falsePositives: number;
+          corpusSize: number;
+          sampleMatches: Array<{ id: string; tier: string }>;
+          warning: string | null;
+        };
+      }>("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "totally novel phrase that no fixture mentions xyzzy",
+        category: "buzzword",
+        dryRun: true,
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.added).toBe(false);
+      expect(r.body.phrase).toBe("totally novel phrase that no fixture mentions xyzzy");
+      expect(r.body.category).toBe("buzzword");
+      expect(r.body.dryRunMatches.total).toBe(0);
+      expect(r.body.dryRunMatches.falsePositives).toBe(0);
+      expect(r.body.dryRunMatches.warning).toBeNull();
+      expect(r.body.dryRunMatches.corpusSize).toBeGreaterThan(0);
+      expect(r.body.dryRunMatches.sampleMatches).toHaveLength(0);
+
+      // Confirm the active list was not mutated by the dry-run call.
+      const list = await request<{ phrases: Marker[] }>("GET", "/feedback/calibration/handwavy-phrases");
+      expect(list.body.phrases.map((m) => m.phrase)).not.toContain(
+        "totally novel phrase that no fixture mentions xyzzy",
+      );
+    });
+
+    it("dryRun=true surfaces a reviewer warning when the phrase would flag legitimate corpus reports", async () => {
+      // "cvss" appears in many T1 LEGIT fixtures (well-evidenced reports cite
+      // CVSS vectors), so it is the canonical example of a phrase a reviewer
+      // must NOT blindly add to the FLAT haircut list.
+      const r = await request<{
+        dryRun: boolean;
+        dryRunMatches: {
+          total: number;
+          byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
+          falsePositives: number;
+          warning: string | null;
+          sampleMatches: Array<{ id: string; tier: string }>;
+        };
+      }>("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "cvss",
+        dryRun: true,
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.dryRunMatches.total).toBeGreaterThan(0);
+      // The matcher must find at least one GREEN/YELLOW corpus hit.
+      expect(r.body.dryRunMatches.falsePositives).toBeGreaterThan(0);
+      expect(r.body.dryRunMatches.warning).not.toBeNull();
+      expect(r.body.dryRunMatches.warning).toMatch(/legitimate/);
+      // Sample matches are capped at 12 entries.
+      expect(r.body.dryRunMatches.sampleMatches.length).toBeLessThanOrEqual(12);
+    });
+
+    it("dryRun=true rejects too-short phrases with 400 (same validation as real add)", async () => {
+      const r = await request<{ error: string }>("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "a",
+        dryRun: true,
+      });
+      expect(r.status).toBe(400);
+      expect(r.body.error).toMatch(/at least/);
+    });
+
+    it("dryRun is independent of the real add path — a follow-up real add still appends", async () => {
+      // First dry-run.
+      const dry = await request<{ dryRun: boolean; added: boolean }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "preview-then-commit phrase", dryRun: true },
+      );
+      expect(dry.body.dryRun).toBe(true);
+      expect(dry.body.added).toBe(false);
+
+      // Then a real add (no dryRun) must succeed and persist.
+      const real = await request<{ added: boolean; phrases: Marker[] }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "preview-then-commit phrase" },
+      );
+      expect(real.status).toBe(201);
+      expect(real.body.added).toBe(true);
+      expect(real.body.phrases.map((m) => m.phrase)).toContain("preview-then-commit phrase");
+    });
+  });
+
   it("restoreDefaults helper rewrites the file with the curated defaults", () => {
     __restoreDefaults();
     // Sanity: the restore helper does not throw and the file now contains

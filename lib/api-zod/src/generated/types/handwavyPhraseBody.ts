@@ -11,4 +11,11 @@ export interface HandwavyPhraseBody {
   /** Marker phrase (case-insensitive substring match against report text after whitespace collapsing). */
   phrase: string;
   category?: HandwavyCategory;
+  /** Task #114 — when true, the server does NOT persist the phrase. It runs the
+candidate phrase against the curated benchmark corpus (T1 LEGIT / T2 BORDERLINE
+/ T3 SLOP / T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so
+reviewers can see how many GREEN / YELLOW reports the phrase would have hit
+before they confirm the add. Defaults to false (write-through behavior).
+ */
+  dryRun?: boolean;
 }
