@@ -13,6 +13,7 @@ Production-relevant external dependencies are GitHub/NVD lookups for active veri
 - **User feedback data** — ratings, helpful/not-helpful signals, optional comments, and report associations. These may contain reviewer reasoning or additional sensitive context.
 - **Calibration state** — scoring config, hand-wavy phrase list, phrase history, and reviewer metadata. Integrity matters because tampering can bias scoring; confidentiality matters where reviewer identities or live tuning data are exposed.
 - **Application secrets** — database credentials, `CALIBRATION_TOKEN`, `VISITOR_HMAC_KEY`, API keys, and any provider tokens. Exposure or unsafe defaults can compromise integrity, privacy, or cost controls.
+- **Bundled client configuration** — any `VITE_*` or other browser-exposed build-time values. These are public to every visitor and must never carry reviewer or server-only secrets.
 - **Service availability / spend budget** — public analysis endpoints can trigger CPU-heavy parsing, database work, outbound verification, and optional LLM calls. Abuse here can create downtime or unexpected cost.
 
 ## Trust Boundaries
@@ -21,13 +22,14 @@ Production-relevant external dependencies are GitHub/NVD lookups for active veri
 - **API server → PostgreSQL** — the API has broad access to stored reports, feedback, traces, and calibration data. Any broken authorization or over-broad response shaping can expose the full corpus.
 - **API server → external services** — verification requests to GitHub/NVD and optional LLM calls cross into third-party systems and consume rate-limited/costed resources.
 - **Public → reviewer boundary** — most routes are intentionally public, while calibration mutations are supposed to be reviewer-only when `CALIBRATION_TOKEN` is configured. This boundary must never fail open for production-sensitive actions.
+- **Browser bundle → server secret boundary** — anything shipped in the public frontend bundle is attacker-readable. Reviewer credentials and other privileged secrets cannot rely on frontend secrecy.
 - **Public feed / share link boundary** — `showInFeed` and `contentMode` create privacy expectations for submitted reports. Public retrieval routes must honor those expectations consistently.
 - **Production / dev-only boundary** — `artifacts/mockup-sandbox`, tests, fixtures, and local-only workflows are out of scope unless reachable from the production Express app or bundled frontend.
 
 ## Scan Anchors
 
 - **Production entry points:** `artifacts/api-server/src/app.ts`, `artifacts/api-server/src/routes/*.ts`, frontend pages under `artifacts/vulnrap/src/pages/*` that call `/api/*`.
-- **Highest-risk code areas:** `artifacts/api-server/src/routes/reports.ts`, `artifacts/api-server/src/routes/feedback.ts`, `artifacts/api-server/src/routes/calibration.ts`, `artifacts/api-server/src/lib/active-verification.ts`, `artifacts/api-server/src/lib/llm-slop.ts`, `lib/db/src/schema/reports.ts`.
+- **Highest-risk code areas:** `artifacts/api-server/src/routes/reports.ts`, `artifacts/api-server/src/routes/feedback.ts`, `artifacts/api-server/src/routes/calibration.ts`, `artifacts/api-server/src/middlewares/require-calibration-auth.ts`, `artifacts/vulnrap/src/main.tsx`, `lib/api-client-react/src/custom-fetch.ts`, `artifacts/api-server/src/lib/active-verification.ts`, `artifacts/api-server/src/lib/llm-slop.ts`, `lib/db/src/schema/reports.ts`.
 - **Public surfaces:** report submission/check endpoints, report retrieval/compare/verify/diagnostics/triage endpoints, stats, feedback analytics, and calibration read endpoints.
 - **Reviewer-only surfaces:** calibration mutation routes guarded by `requireCalibrationAuth`.
 - **Usually ignore unless proven reachable in prod:** `artifacts/mockup-sandbox`, tests, scripts, fixtures, and migration metadata.
@@ -69,6 +71,7 @@ The main privileged action in this codebase is reviewer calibration control rath
 Required guarantees:
 - Reviewer-only routes MUST validate a strong secret server-side before applying state changes.
 - Production deployments MUST configure required secrets for privileged routes and identity-derived hashing.
+- Reviewer credentials MUST NOT be embedded in public client code, build-time browser env vars, or network flows available to anonymous visitors.
 
 ### Security Misconfiguration / Secret Handling
 
@@ -77,4 +80,5 @@ The service behavior changes materially when environment variables are missing (
 Required guarantees:
 - Production-sensitive secrets MUST fail closed where omission would expose privileged functionality.
 - Optional analytics/privacy secrets MUST not silently create broader tracking or disclosure risk.
+- Server-only secrets MUST never be shipped in `VITE_*` or any other browser-readable bundle variable.
 - Public CORS and headers MUST stay constrained to intended origins and methods.
