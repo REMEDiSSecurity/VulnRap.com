@@ -1351,50 +1351,9 @@ export default function Home() {
           your report enters at the top, fans out into three engines whose channel widths above are drawn to match their actual voting weights, and the three sub-scores fuse into a single composite (0&ndash;100) and triage label. <span className="text-violet-300">AVRI</span> (in flight, behind the <span className="font-mono">VULNRAP_USE_AVRI</span> flag) swaps Engine 2's rubric for the matching CWE family without changing the 5/55/40 weights. <span className="italic">Weights and signals are recalibrated against new corpora as we collect them.</span>
         </p>
 
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground/90">Three engines, voting with different weights</h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            We run three independent analyzers over your report and combine their scores. They don't all count equally — we weight them based on which signals actually predicted slop in our test corpus.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-cyan-400" />
-                  Technical Substance
-                </h4>
-                <span className="font-mono text-xs font-bold text-cyan-400">55%</span>
-              </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                The biggest single vote. Looks at whether the report actually contains a real proof of concept — concrete steps, real file paths, working commands, specific line numbers — versus vague hand-waving like "an attacker could potentially…". Reports that describe what they did get rewarded; reports that only describe what an attacker might do get penalized.
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                  <Shield className="w-4 h-4 text-violet-400" />
-                  CWE Coherence
-                </h4>
-                <span className="font-mono text-xs font-bold text-violet-400">40%</span>
-              </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Checks that the vulnerability class the report claims (e.g. "SQL injection", "buffer overflow", "SSRF") matches the evidence shown. If the title says "XSS" but the proof of concept is hitting a database error, that disagreement counts heavily against the report — it's one of the strongest tells of an LLM-generated submission.
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                  <BrainCircuit className="w-4 h-4 text-amber-400" />
-                  AI Authorship
-                </h4>
-                <span className="font-mono text-xs font-bold text-amber-400">5%</span>
-              </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Linguistic fingerprinting — sentence-length variance, vocabulary patterns, telltale phrasing. We deliberately keep this small because lots of legitimate analysts use AI to clean up their writing. It nudges the score, it doesn't drive it.
-              </p>
-            </div>
-          </div>
-        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          For the deep breakdown of each engine — sub-component weights, what evidence moves the needle, and the AVRI family-rubric upgrade — open the <span className="text-foreground font-semibold">Validity Scoring</span> card near the top of the page. The rest of this section covers what happens <em>around</em> the engines: which sources we hit live, and which pieces of evidence get an outsized effect.
+        </p>
 
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground/90">How we check the claims (validation sources)</h3>
