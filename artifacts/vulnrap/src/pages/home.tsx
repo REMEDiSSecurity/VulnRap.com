@@ -412,7 +412,7 @@ function SlopDetectionCard() {
             Validity Scoring
             <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
           </h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">Two-axis scoring: Authenticity measures AI-authorship patterns, Validity measures technical substance. Combined into a single slopScore with quadrant classification. Tap to see how.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">Three-engine composite scoring: Technical Substance (55%), CWE Coherence (40%), and AI Authorship (5%) vote with different weights and fuse into a single composite score and triage label. Tap to see how.</p>
         </div>
       </button>
 
@@ -420,19 +420,22 @@ function SlopDetectionCard() {
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
 
           <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2.5 space-y-1">
-            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Two-Axis Scoring (v4.0)</p>
+            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Three-Engine Composite Scoring (current)</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Every report is scored on two independent axes: <span className="text-foreground font-mono">Authenticity (0–100)</span> measures AI-authorship likelihood from linguistic fingerprinting, spectral analysis, and template detection. <span className="text-foreground font-mono">Validity (0–100)</span> measures technical substance from evidence quality, hallucination detection, claim specificity, internal consistency, and factual verification. The final slopScore is derived as <span className="text-foreground font-mono">authenticity × 0.65 + (100 − validity) × 0.35</span>. Reports are classified into quadrants: AI Slop (high auth, low validity → auto-close), AI Assisted (high auth, high validity → prioritize review), Weak Human (low auth, low validity → request details), Strong Human (low auth, high validity → accept). Fabrication evidence (fake CVEs, hallucinated functions) triggers a 1.3× boost. Verified references reduce the score. Human-writing signals (contractions, terse style, commit refs) reduce authenticity post-fusion.
+              Every report is scored by three independent engines that each return a 0–100 sub-score, then combined by fixed weights into a single composite (0–100) and triage label. <span className="text-foreground font-mono">Technical Substance (55%)</span> rewards concrete proof — real file paths, line numbers, working commands, sanitizer output, request/response pairs — and penalises vague speculation. <span className="text-foreground font-mono">CWE Coherence (40%)</span> checks that the vulnerability class the report claims actually matches the evidence shown; a stated XSS report whose payload triggers a database error loses heavily here. <span className="text-foreground font-mono">AI Authorship (5%)</span> contributes linguistic, template, and spectral surface signals — kept deliberately small because legitimate analysts often use AI for writing polish. Override rules can then PRIORITIZE a report (e.g. ≥2 gold evidence hits at composite ≥40) or de-prioritise it (e.g. high-volume same-day templated submissions). The legacy <span className="font-mono">slopScore</span> field returned by the API is mapped from this composite for backward compatibility.
+            </p>
+            <p className="text-[11px] text-muted-foreground/80 leading-relaxed pt-1">
+              <span className="text-violet-300 font-semibold">In flight (v3.7.0, behind <span className="font-mono">VULNRAP_USE_AVRI</span> flag):</span> AVRI swaps Engine 2 for a CWE-family-specific rubric — eight families (memory corruption, injection, auth/access, crypto/protocol, DoS/resource, info exposure, request forgery, hardware) each with their own gold signals and absence penalties — plus optional same-day velocity and template-fingerprint signals. The 5/55/40 weights stay the same; only what Engine 2 looks for changes. Default off in production until the calibration battery confirms the score-gap target.
             </p>
           </div>
 
           <div className="space-y-2">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400/60" />
-              Authenticity Axis — AI surface patterns (deterministic)
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60" />
+              Inside Engine 1 — AI Authorship surface patterns (deterministic, 5% of composite)
             </h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
-              Three components feed the authenticity score: <span className="font-mono text-violet-300">Linguistic (40%)</span> = lexical 60% + statistical 40%, <span className="font-mono text-cyan-300">Template (35%)</span>, <span className="font-mono text-orange-300">Spectral (25%)</span>. If both linguistic and template scores are high, a compound boost of up to 15 points is applied.
+              Three components feed Engine 1's 0–100 sub-score: <span className="font-mono text-violet-300">Linguistic (40%)</span> = lexical 60% + statistical 40%, <span className="font-mono text-cyan-300">Template (35%)</span>, <span className="font-mono text-orange-300">Spectral (25%)</span>. If both linguistic and template scores are high, a compound boost of up to 15 points is applied. Engine 1 then contributes 5% to the final composite.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {authenticitySignals.map((signal) => (
@@ -473,20 +476,30 @@ function SlopDetectionCard() {
           <div className="space-y-2 border-t border-border/30 pt-4">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60" />
-              Validity Axis — technical substance
+              Inside Engine 2 — Technical Substance (55% of composite)
             </h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
-              Six heuristic components feed the validity score: <span className="font-mono text-cyan-300">Evidence Quality (25%) + Hallucination (20%) + Claim Specificity (20%) + Internal Consistency (15%) + Factual (10%) + Verification (10%)</span>. When LLM analysis is enabled, heuristic and LLM validity scores are blended 50/50. If they disagree by more than 30 points, the lower (more conservative) score is used.
+              In the current production path, Engine 2's 0–100 sub-score is built from five weighted evidence categories: <span className="font-mono text-cyan-300">Code Evidence (35%) + References (30%) + Reproducibility (20%) + PoC Integrity (10%) + Claim/Evidence Ratio (5%)</span>, with up to a +15 point bonus when many strong-evidence signals stack. When LLM analysis is enabled, heuristic and LLM substance scores are blended 50/50; if they disagree by more than 30 points, the lower (more conservative) score is used. <span className="text-violet-300">Under the AVRI flag, this entire rubric is swapped for the matching CWE-family rubric — same Engine 2 slot, family-specific gold signals and absence penalties.</span>
+            </p>
+          </div>
+
+          <div className="space-y-2 border-t border-border/30 pt-4">
+            <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400/60" />
+              Inside Engine 3 — CWE Coherence (40% of composite)
+            </h4>
+            <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
+              Engine 3 checks that the vulnerability class the report claims (e.g. SQL injection, buffer overflow, SSRF) is consistent with the evidence and PoC actually shown. A claimed XSS whose payload triggers a database error, a stated buffer overflow with no memory-corruption indicators, or a CVE citation that disagrees with NVD's assigned CWE all lower this engine's sub-score sharply. CWE Coherence is the second-largest vote (40%) because mismatched-class reports are one of the most reliable LLM-slop tells.
             </p>
           </div>
 
           <div className="space-y-2 border-t border-border/30 pt-4">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60" />
-              LLM Substance Analysis (optional)
+              LLM Substance Analysis (optional, feeds Engine 2)
             </h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
-              The LLM evaluates reports from a PSIRT triage perspective across five substance dimensions that regex cannot assess. It returns per-dimension 0–100 scores plus concrete observations. LLM substance scores also feed back into the authenticity axis — low PoC validity or domain coherence increases the authenticity score, while high scores reduce it.
+              When the LLM is enabled, it evaluates the report from a PSIRT triage perspective across five substance dimensions that regex cannot assess. It returns per-dimension 0–100 scores plus concrete observations, which are then blended into Engine 2's substance sub-score (50/50, conservative-on-disagreement). The LLM is also gated by a cost guard — it only runs when the heuristic score lands in the borderline 25–60 range or initial confidence is below 0.5 — so most clearly-clean and clearly-slop reports never incur an LLM call.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {llmSubstanceDimensions.map((dim) => (
@@ -596,6 +609,172 @@ function Explainer({ text }: { text: string }) {
         {text}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function ScoringPipelineDiagram() {
+  const engines = [
+    { key: "e1", label: "Engine 1", title: "AI Authorship", weight: 5, fill: "#fbbf24", soft: "rgba(251,191,36,0.18)", border: "rgba(251,191,36,0.55)" },
+    { key: "e2", label: "Engine 2", title: "Technical Substance", weight: 55, fill: "#22d3ee", soft: "rgba(34,211,238,0.18)", border: "rgba(34,211,238,0.55)" },
+    { key: "e3", label: "Engine 3", title: "CWE Coherence", weight: 40, fill: "#a78bfa", soft: "rgba(167,139,250,0.18)", border: "rgba(167,139,250,0.55)" },
+  ];
+
+  const VBW = 1000;
+  const VBH = 460;
+  const padX = 40;
+  const innerW = VBW - padX * 2;
+  const gapPx = 12;
+  const totalGap = gapPx * (engines.length - 1);
+  const usableW = innerW - totalGap;
+  const totalWeight = engines.reduce((s, e) => s + e.weight, 0);
+
+  let cursor = padX;
+  const cols = engines.map((e) => {
+    const w = (e.weight / totalWeight) * usableW;
+    const x = cursor;
+    cursor += w + gapPx;
+    return { ...e, x, w };
+  });
+
+  const reportY = 30;
+  const reportH = 46;
+  const reportW = 220;
+  const reportX = (VBW - reportW) / 2;
+  const reportCx = VBW / 2;
+  const reportBottom = reportY + reportH;
+
+  const channelTopY = reportBottom + 18;
+  const channelBottomY = 178;
+
+  const engineY = 198;
+  const engineH = 110;
+  const engineBottom = engineY + engineH;
+
+  const fuseTopY = engineBottom + 28;
+  const fuseY = fuseTopY + 16;
+  const fuseH = 22;
+  const fuseW = innerW;
+  const fuseX = padX;
+
+  const compY = fuseY + fuseH + 22;
+  const compH = 38;
+  const compW = 320;
+  const compX = (VBW - compW) / 2;
+
+  return (
+    <div className="rounded-lg border border-border/50 bg-background/40 p-3 sm:p-4">
+      <svg
+        viewBox={`0 0 ${VBW} ${VBH}`}
+        role="img"
+        aria-label="Three-engine composite scoring pipeline. A report flows into three parallel engines whose horizontal widths are proportional to their voting weights: AI Authorship 5 percent, Technical Substance 55 percent, CWE Coherence 40 percent. The three sub-scores fuse into a single composite score."
+        className="w-full h-auto"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <linearGradient id="fuseGrad" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="#fbbf24" />
+            <stop offset="5%" stopColor="#fbbf24" />
+            <stop offset="6%" stopColor="#22d3ee" />
+            <stop offset="60%" stopColor="#22d3ee" />
+            <stop offset="61%" stopColor="#a78bfa" />
+            <stop offset="100%" stopColor="#a78bfa" />
+          </linearGradient>
+          <linearGradient id="compGrad" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="#34d399" />
+            <stop offset="100%" stopColor="#22d3ee" />
+          </linearGradient>
+        </defs>
+
+        {/* Incoming report */}
+        <rect x={reportX} y={reportY} width={reportW} height={reportH} rx={10} fill="rgba(148,163,184,0.10)" stroke="rgba(148,163,184,0.55)" />
+        <text x={reportCx} y={reportY + reportH / 2 + 5} textAnchor="middle" fontSize="16" fontWeight="600" fill="#e2e8f0" fontFamily="ui-sans-serif, system-ui">
+          Incoming report
+        </text>
+
+        {/* Channels — width proportional to weight */}
+        {cols.map((c) => {
+          const cx = c.x + c.w / 2;
+          const channelW = Math.max(2, c.w * 0.85);
+          const channelX = cx - channelW / 2;
+          return (
+            <g key={`ch-${c.key}`}>
+              <line x1={reportCx} y1={reportBottom} x2={cx} y2={channelTopY} stroke={c.border} strokeWidth="1.25" strokeDasharray="3 3" opacity="0.7" />
+              <rect x={channelX} y={channelTopY} width={channelW} height={channelBottomY - channelTopY} fill={c.soft} stroke={c.border} strokeWidth="1" rx={3} />
+              <text x={cx} y={channelTopY + (channelBottomY - channelTopY) / 2 + 5} textAnchor="middle" fontSize="15" fontWeight="700" fill={c.fill} fontFamily="ui-monospace, SFMono-Regular">
+                {c.weight}%
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Engine boxes — also width proportional to weight */}
+        {cols.map((c) => (
+          <g key={`eng-${c.key}`}>
+            <rect x={c.x} y={engineY} width={c.w} height={engineH} rx={10} fill="rgba(15,23,42,0.55)" stroke={c.border} strokeWidth="1.25" />
+            <text x={c.x + c.w / 2} y={engineY + 26} textAnchor="middle" fontSize="12" fontWeight="700" fill={c.fill} fontFamily="ui-sans-serif, system-ui" letterSpacing="0.5">
+              {c.label.toUpperCase()}
+            </text>
+            <text x={c.x + c.w / 2} y={engineY + 50} textAnchor="middle" fontSize="14" fontWeight="600" fill="#e2e8f0" fontFamily="ui-sans-serif, system-ui">
+              {c.title}
+            </text>
+            <text x={c.x + c.w / 2} y={engineY + 80} textAnchor="middle" fontSize="22" fontWeight="800" fill={c.fill} fontFamily="ui-monospace, SFMono-Regular">
+              {c.weight}%
+            </text>
+          </g>
+        ))}
+
+        {/* AVRI annotation next to Engine 2 */}
+        {(() => {
+          const e2 = cols.find((c) => c.key === "e2")!;
+          const tagX = e2.x + e2.w - 78;
+          const tagY = engineY - 14;
+          return (
+            <g>
+              <rect x={tagX} y={tagY} width={72} height={20} rx={10} fill="rgba(167,139,250,0.18)" stroke="rgba(167,139,250,0.6)" />
+              <text x={tagX + 36} y={tagY + 14} textAnchor="middle" fontSize="11" fontWeight="700" fill="#c4b5fd" fontFamily="ui-monospace, SFMono-Regular">
+                AVRI ◇
+              </text>
+            </g>
+          );
+        })()}
+
+        {/* Funnels from each engine into the fuse bar */}
+        {cols.map((c) => (
+          <line
+            key={`fn-${c.key}`}
+            x1={c.x + c.w / 2}
+            y1={engineBottom}
+            x2={c.x + c.w / 2}
+            y2={fuseY}
+            stroke={c.border}
+            strokeWidth="1.5"
+            opacity="0.8"
+          />
+        ))}
+
+        {/* Fuse bar — segments sized exactly to weights */}
+        {(() => {
+          let x = fuseX;
+          return cols.map((c) => {
+            const segW = (c.weight / totalWeight) * fuseW;
+            const seg = <rect key={`seg-${c.key}`} x={x} y={fuseY} width={segW} height={fuseH} fill={c.fill} opacity="0.85" />;
+            x += segW;
+            return seg;
+          });
+        })()}
+        <rect x={fuseX} y={fuseY} width={fuseW} height={fuseH} fill="none" stroke="rgba(148,163,184,0.4)" rx={3} />
+        <text x={fuseX + 8} y={fuseY - 6} fontSize="11" fill="#94a3b8" fontFamily="ui-sans-serif, system-ui" fontWeight="600">
+          Weighted fusion (5 / 55 / 40)
+        </text>
+
+        {/* Composite output */}
+        <line x1={VBW / 2} y1={fuseY + fuseH} x2={VBW / 2} y2={compY} stroke="rgba(148,163,184,0.6)" strokeWidth="1.5" />
+        <rect x={compX} y={compY} width={compW} height={compH} rx={10} fill="rgba(34,211,238,0.10)" stroke="url(#compGrad)" strokeWidth="1.5" />
+        <text x={VBW / 2} y={compY + compH / 2 + 5} textAnchor="middle" fontSize="14" fontWeight="700" fill="#e2e8f0" fontFamily="ui-sans-serif, system-ui">
+          Composite score (0&ndash;100) + triage label
+        </text>
+      </svg>
+    </div>
   );
 }
 
@@ -1166,6 +1345,12 @@ export default function Home() {
           </p>
         </div>
 
+        <ScoringPipelineDiagram />
+        <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+          <span className="text-foreground font-semibold">Pipeline at a glance:</span>{" "}
+          your report enters at the top, fans out into three engines whose channel widths above are drawn to match their actual voting weights, and the three sub-scores fuse into a single composite (0&ndash;100) and triage label. <span className="text-violet-300">AVRI</span> (in flight, behind the <span className="font-mono">VULNRAP_USE_AVRI</span> flag) swaps Engine 2's rubric for the matching CWE family without changing the 5/55/40 weights. <span className="italic">Weights and signals are recalibrated against new corpora as we collect them.</span>
+        </p>
+
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground/90">Three engines, voting with different weights</h3>
           <p className="text-xs text-muted-foreground leading-relaxed">
@@ -1391,7 +1576,7 @@ function TransparencySection() {
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">1.</span>Your raw text is received over HTTPS. For URLs, we fetch the content server-side (HTTPS only, allowlisted hosts).</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">2.</span>The redaction engine runs immediately — regex patterns strip PII, secrets, credentials, and company names. The raw text is discarded and never stored.</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">3.</span>All analysis (hashing, similarity, slop scoring) runs on the redacted text only.</li>
-                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The two-axis scoring engine analyzes the original text in server memory — Authenticity (linguistic, template, spectral) and Validity (evidence quality, hallucination, claim specificity, internal consistency, factual verification). This text is never written to disk or database. When the optional LLM is enabled, the redacted version is sent to the configured AI provider for substance analysis. The final slopScore is derived as authenticity × 0.65 + (100 − validity) × 0.35, with human-writing signals applied post-fusion.</li>
+                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The three-engine composite scorer analyzes the redacted text in server memory — Engine 1 AI Authorship (linguistic, template, spectral), Engine 2 Technical Substance (evidence quality, references, reproducibility, PoC integrity, claim/evidence ratio — or the matching CWE-family rubric when AVRI is enabled), and Engine 3 CWE Coherence. The original (pre-redaction) text is never written to disk or database. When the optional LLM is enabled and the heuristic score is borderline, the redacted version is sent to the configured AI provider for a substance second opinion that blends into Engine 2. The three engines fuse with fixed weights — Substance 55%, Coherence 40%, Authorship 5% — into a single composite, and the legacy <span className="font-mono">slopScore</span> field is mapped from that composite for backward compatibility.</li>
               </ul>
             </div>
           </div>
