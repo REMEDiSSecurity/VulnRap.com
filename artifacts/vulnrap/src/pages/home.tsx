@@ -617,7 +617,6 @@ function Explainer({ text }: { text: string }) {
 
 type ExampleEngineRow = {
   key: "e1" | "e2" | "e3";
-  label: string;
   title: string;
   weight: number;
   rawScore: number;
@@ -630,29 +629,32 @@ type WorkedExample = {
   variant: "slop" | "genuine";
   caseHeadline: string;
   caseSubhead: string;
-  whatsThere: string;
+  whatsThereLines: string[];
   rows: ExampleEngineRow[];
   composite: number;
   triageLabel: string;
   triageSummary: string;
 };
 
-const ENGINE_PALETTE: Record<"e1" | "e2" | "e3", { swatch: string; bar: string; barTrack: string; text: string; chipBorder: string; chipBg: string }> = {
-  e1: { swatch: "bg-amber-400", bar: "bg-amber-400", barTrack: "bg-amber-400/10", text: "text-amber-300", chipBorder: "border-amber-500/40", chipBg: "bg-amber-500/10" },
-  e2: { swatch: "bg-cyan-400", bar: "bg-cyan-400", barTrack: "bg-cyan-400/10", text: "text-cyan-300", chipBorder: "border-cyan-500/40", chipBg: "bg-cyan-500/10" },
-  e3: { swatch: "bg-violet-400", bar: "bg-violet-400", barTrack: "bg-violet-400/10", text: "text-violet-300", chipBorder: "border-violet-500/40", chipBg: "bg-violet-500/10" },
+const ENGINE_HEX: Record<"e1" | "e2" | "e3", { fill: string; faded: string; track: string; ring: string }> = {
+  e1: { fill: "#fbbf24", faded: "rgba(251,191,36,0.35)", track: "rgba(251,191,36,0.10)", ring: "rgba(251,191,36,0.40)" },
+  e2: { fill: "#22d3ee", faded: "rgba(34,211,238,0.35)", track: "rgba(34,211,238,0.10)", ring: "rgba(34,211,238,0.40)" },
+  e3: { fill: "#a78bfa", faded: "rgba(167,139,250,0.35)", track: "rgba(167,139,250,0.10)", ring: "rgba(167,139,250,0.40)" },
 };
 
 const WORKED_EXAMPLES: WorkedExample[] = [
   {
     variant: "slop",
-    caseHeadline: "Slop attempt",
+    caseHeadline: "SLOP ATTEMPT",
     caseSubhead: "CWE-89 cited · no PoC, no payload, no endpoint",
-    whatsThere: "Right CWE number. Generic prose (\"It is important to note that SQL injection vulnerabilities…\"). Zero code blocks. Zero file paths.",
+    whatsThereLines: [
+      "Right CWE number. Generic prose (\u201CIt is important to note that",
+      "SQL injection vulnerabilities\u2026\u201D). Zero code blocks. Zero file paths.",
+    ],
     rows: [
-      { key: "e1", label: "Engine 1", title: "AI Authorship", weight: 5, rawScore: 78, inverted: true },
-      { key: "e2", label: "Engine 2", title: "Technical Substance", weight: 55, rawScore: 14 },
-      { key: "e3", label: "Engine 3", title: "CWE Coherence", weight: 40, rawScore: 78, effectiveScore: 42, gateNote: "E2 < 30 → cap E3 at 42" },
+      { key: "e1", title: "AI Authorship", weight: 5, rawScore: 78, inverted: true },
+      { key: "e2", title: "Technical Substance", weight: 55, rawScore: 14 },
+      { key: "e3", title: "CWE Coherence", weight: 40, rawScore: 78, effectiveScore: 42, gateNote: "E2 < 30 \u2192 cap E3 at 42" },
     ],
     composite: 26,
     triageLabel: "CHALLENGE_REPORTER",
@@ -660,13 +662,16 @@ const WORKED_EXAMPLES: WorkedExample[] = [
   },
   {
     variant: "genuine",
-    caseHeadline: "Genuine report",
+    caseHeadline: "GENUINE REPORT",
     caseSubhead: "CWE-89 cited · full PoC, exact payload, real endpoint",
-    whatsThere: "Right CWE number. Sober technical voice. curl PoC with payload \"' OR 1=1 --\". Exact file path + line number. Real database error in the response.",
+    whatsThereLines: [
+      "Right CWE. Sober technical voice. curl PoC with payload",
+      "\u201C' OR 1=1 --\u201D. Exact file path + line number. Real DB error.",
+    ],
     rows: [
-      { key: "e1", label: "Engine 1", title: "AI Authorship", weight: 5, rawScore: 18, inverted: true },
-      { key: "e2", label: "Engine 2", title: "Technical Substance", weight: 55, rawScore: 76 },
-      { key: "e3", label: "Engine 3", title: "CWE Coherence", weight: 40, rawScore: 82 },
+      { key: "e1", title: "AI Authorship", weight: 5, rawScore: 18, inverted: true },
+      { key: "e2", title: "Technical Substance", weight: 55, rawScore: 76 },
+      { key: "e3", title: "CWE Coherence", weight: 40, rawScore: 82 },
     ],
     composite: 79,
     triageLabel: "PRIORITIZE",
@@ -674,156 +679,237 @@ const WORKED_EXAMPLES: WorkedExample[] = [
   },
 ];
 
-function EngineScoreRow({ row }: { row: ExampleEngineRow }) {
-  const palette = ENGINE_PALETTE[row.key];
+function rowContribution(row: ExampleEngineRow): number {
+  const base = row.inverted ? 100 - row.rawScore : (row.effectiveScore ?? row.rawScore);
+  return Math.round(base * (row.weight / 100) * 10) / 10;
+}
+
+function EngineRowSvg({ row, x, y, width }: { row: ExampleEngineRow; x: number; y: number; width: number }) {
+  const palette = ENGINE_HEX[row.key];
   const gated = typeof row.effectiveScore === "number";
-  const contribution = row.inverted
-    ? Math.round((100 - row.rawScore) * (row.weight / 100) * 10) / 10
-    : Math.round((gated ? row.effectiveScore! : row.rawScore) * (row.weight / 100) * 10) / 10;
+  const barX = x;
+  const barY = y + 28;
+  const barW = width;
+  const barH = 9;
+  const rawW = (row.rawScore / 100) * barW;
+  const effW = gated ? (row.effectiveScore! / 100) * barW : rawW;
+  const contrib = rowContribution(row);
+  const contribText = row.inverted
+    ? `0.05 \u00D7 (100 \u2212 ${row.rawScore}) = ${contrib.toFixed(1)}`
+    : `0.${row.weight.toString().padStart(2, "0")} \u00D7 ${gated ? row.effectiveScore : row.rawScore} = ${contrib.toFixed(1)}`;
+
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="flex items-baseline gap-1.5 min-w-0">
-          <span className={`inline-block w-1.5 h-1.5 rounded-full ${palette.swatch} flex-shrink-0`} aria-hidden />
-          <span className="text-[11px] font-semibold text-foreground truncate">{row.title}</span>
-          <span className="text-[10px] text-muted-foreground font-mono flex-shrink-0">×{row.weight}%</span>
-        </div>
-        <span className={`text-[11px] font-mono font-bold ${palette.text} flex-shrink-0`}>
-          {gated ? (
-            <>
-              <span className="line-through opacity-50 mr-1">{row.rawScore}</span>
-              <span>{row.effectiveScore}</span>
-            </>
-          ) : (
-            row.rawScore
-          )}
-          <span className="text-muted-foreground/60">/100</span>
-        </span>
-      </div>
+    <g>
+      {/* Title row: swatch + name + weight + score */}
+      <circle cx={x + 4} cy={y + 8} r={3.5} fill={palette.fill} />
+      <text x={x + 14} y={y + 12} fontSize={12.5} fontWeight={600} fill="#e2e8f0" fontFamily="ui-sans-serif, system-ui">
+        {row.title}
+      </text>
+      <text x={x + 14 + row.title.length * 6.6 + 8} y={y + 12} fontSize={10.5} fill="#94a3b8" fontFamily="ui-monospace, SFMono-Regular">
+        {`\u00D7${row.weight}%`}
+      </text>
 
-      {/* Score bar — fills to raw score, with effective overlay if gated */}
-      <div className={`relative h-2 rounded-full overflow-hidden ${palette.barTrack}`}>
-        {/* raw score (faded if gated) */}
-        <div
-          className={`absolute left-0 top-0 h-full ${palette.bar} ${gated ? "opacity-30" : ""}`}
-          style={{ width: `${row.rawScore}%` }}
-        />
-        {/* effective score (full opacity, on top) */}
-        {gated && (
-          <div
-            className={`absolute left-0 top-0 h-full ${palette.bar}`}
-            style={{ width: `${row.effectiveScore}%` }}
-          />
-        )}
-        {/* clamp marker at the cap position */}
-        {gated && (
-          <div
-            className="absolute top-0 h-full w-0.5 bg-amber-400"
-            style={{ left: `${row.effectiveScore}%` }}
-            aria-hidden
-          />
-        )}
-      </div>
-
-      {/* Gate note row — only when E3 is clamped */}
-      {gated && row.gateNote && (
-        <div className="flex items-center gap-1.5 pl-3 pt-0.5">
-          <Lock className="w-3 h-3 text-amber-400 flex-shrink-0" />
-          <span className="text-[10px] text-amber-300/90 font-mono">
-            substance gate fires · {row.gateNote}
-          </span>
-        </div>
+      {/* Score (right-aligned). For gated rows: strike-through raw, then effective. */}
+      {gated ? (
+        <>
+          <text
+            x={x + width - 32}
+            y={y + 12}
+            textAnchor="end"
+            fontSize={11}
+            fill={palette.faded}
+            fontFamily="ui-monospace, SFMono-Regular"
+            fontWeight={600}
+            textDecoration="line-through"
+            opacity={0.7}
+          >
+            {row.rawScore}
+          </text>
+          <text x={x + width - 26} y={y + 12} fontSize={12} fontWeight={700} fill={palette.fill} fontFamily="ui-monospace, SFMono-Regular">
+            {row.effectiveScore}
+          </text>
+          <text x={x + width} y={y + 12} textAnchor="end" fontSize={9.5} fill="#64748b" fontFamily="ui-monospace, SFMono-Regular">
+            /100
+          </text>
+        </>
+      ) : (
+        <>
+          <text x={x + width - 22} y={y + 12} textAnchor="end" fontSize={12} fontWeight={700} fill={palette.fill} fontFamily="ui-monospace, SFMono-Regular">
+            {row.rawScore}
+          </text>
+          <text x={x + width} y={y + 12} textAnchor="end" fontSize={9.5} fill="#64748b" fontFamily="ui-monospace, SFMono-Regular">
+            /100
+          </text>
+        </>
       )}
 
-      {/* Contribution math line */}
-      <div className="text-[10px] text-muted-foreground/65 font-mono pl-3">
-        {row.inverted
-          ? `0.05 × (100 − ${row.rawScore}) = ${contribution.toFixed(1)}`
-          : `0.${row.weight.toString().padStart(2, "0")} × ${gated ? row.effectiveScore : row.rawScore} = ${contribution.toFixed(1)}`}
-      </div>
-    </div>
+      {/* Bar — track + raw fill (faded if gated) + effective fill on top */}
+      <rect x={barX} y={barY} width={barW} height={barH} rx={4.5} fill={palette.track} />
+      <rect x={barX} y={barY} width={rawW} height={barH} rx={4.5} fill={palette.fill} opacity={gated ? 0.32 : 1} />
+      {gated && <rect x={barX} y={barY} width={effW} height={barH} rx={4.5} fill={palette.fill} />}
+      {/* Clamp marker — vertical amber line at the cap position */}
+      {gated && (
+        <>
+          <line x1={barX + effW} y1={barY - 3} x2={barX + effW} y2={barY + barH + 3} stroke="#fbbf24" strokeWidth={2} />
+          <polygon
+            points={`${barX + effW - 3.5},${barY - 5} ${barX + effW + 3.5},${barY - 5} ${barX + effW},${barY - 1.5}`}
+            fill="#fbbf24"
+          />
+        </>
+      )}
+
+      {/* Contribution math */}
+      <text x={x + 14} y={barY + barH + 14} fontSize={10} fill="#64748b" fontFamily="ui-monospace, SFMono-Regular">
+        {contribText}
+      </text>
+
+      {/* Gate annotation (only for clamped E3 row) */}
+      {gated && row.gateNote && (
+        <g>
+          <rect x={x + width - 200} y={barY + barH + 22} width={200} height={18} rx={4} fill="rgba(251,191,36,0.10)" stroke="rgba(251,191,36,0.45)" />
+          <text x={x + width - 192} y={barY + barH + 35} fontSize={10} fontWeight={600} fill="#fbbf24" fontFamily="ui-monospace, SFMono-Regular">
+            {`\u{1F512} substance gate \u00B7 ${row.gateNote}`}
+          </text>
+        </g>
+      )}
+    </g>
   );
 }
 
-function WorkedExampleCard({ ex }: { ex: WorkedExample }) {
+function WorkedExampleSvg({ ex, x, y, width, height }: { ex: WorkedExample; x: number; y: number; width: number; height: number }) {
   const isSlop = ex.variant === "slop";
-  const accentBorder = isSlop ? "border-rose-500/30" : "border-emerald-500/30";
-  const accentRing = isSlop
-    ? "shadow-[0_0_0_1px_rgba(244,63,94,0.10)_inset,0_4px_18px_rgba(244,63,94,0.08)]"
-    : "shadow-[0_0_0_1px_rgba(52,211,153,0.10)_inset,0_4px_18px_rgba(52,211,153,0.10)]";
-  const badgeClass = isSlop
-    ? "bg-rose-500/15 text-rose-300 border-rose-500/40"
-    : "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
-  const triageBadgeClass = isSlop
-    ? "bg-amber-500/15 text-amber-300 border-amber-500/45"
-    : "bg-emerald-500/15 text-emerald-300 border-emerald-500/45";
-  const compositeColor = isSlop ? "text-rose-300" : "text-emerald-300";
-  const sumLine = ex.rows
-    .map((r) => {
-      const v = r.inverted
-        ? Math.round((100 - r.rawScore) * (r.weight / 100) * 10) / 10
-        : Math.round(((r.effectiveScore ?? r.rawScore) * r.weight) / 100 * 10) / 10;
-      return v.toFixed(1);
-    })
-    .join(" + ");
+  const accent = isSlop ? "#f43f5e" : "#10b981";
+  const accentSoft = isSlop ? "rgba(244,63,94,0.35)" : "rgba(16,185,129,0.35)";
+  const accentBg = isSlop ? "rgba(244,63,94,0.06)" : "rgba(16,185,129,0.06)";
+  const compositeColor = isSlop ? "#fb7185" : "#34d399";
+  const triageColor = isSlop ? "#fbbf24" : "#34d399";
+  const triageSoft = isSlop ? "rgba(251,191,36,0.45)" : "rgba(16,185,129,0.45)";
+  const triageFill = isSlop ? "rgba(251,191,36,0.12)" : "rgba(16,185,129,0.12)";
+
+  const padX = 18;
+  const innerX = x + padX;
+  const innerW = width - padX * 2;
+
+  // Vertical layout
+  const headerY = y + 28;
+  const subheadY = y + 56;
+  const whatY = y + 76;
+  const dividerY1 = y + 116;
+  // Engine row positions
+  const rowGap = 60;
+  const rowsStartY = y + 138;
+  const rowYs = ex.rows.map((_, i) => rowsStartY + i * rowGap);
+  // Slop card's E3 has the gate annotation, which adds ~20px below the contribution math.
+  // We pad subsequent layout sections accordingly.
+  const lastRowExtra = ex.rows.some((r) => typeof r.effectiveScore === "number") ? 22 : 0;
+  const dividerY2 = rowsStartY + ex.rows.length * rowGap - 20 + lastRowExtra;
+  const sumY = dividerY2 + 18;
+  const compY = dividerY2 + 50;
+
+  // Sum string
+  const sumPieces = ex.rows.map((r) => rowContribution(r).toFixed(1));
+  const sumText = `${sumPieces.join(" + ")} \u2248 ${ex.composite}`;
+
+  // Triage badge sizing
+  const triageW = ex.triageLabel.length * 7 + 18;
 
   return (
-    <div
-      className={`relative rounded-lg border ${accentBorder} ${accentRing} bg-background/55 backdrop-blur p-3 sm:p-4 space-y-3`}
-    >
-      {/* Case header */}
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${badgeClass}`}>
-            {isSlop ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
-            {ex.caseHeadline}
-          </span>
-        </div>
-        <p className="text-[11px] text-muted-foreground leading-snug">{ex.caseSubhead}</p>
-        <p className="text-[10px] text-muted-foreground/75 leading-snug italic">{ex.whatsThere}</p>
-      </div>
+    <g>
+      {/* Card background + border */}
+      <rect x={x} y={y} width={width} height={height} rx={12} fill={accentBg} />
+      <rect x={x} y={y} width={width} height={height} rx={12} fill="none" stroke={accentSoft} strokeWidth={1.25} />
 
-      <div className="border-t border-border/40" />
+      {/* Case headline badge */}
+      <rect x={innerX} y={headerY - 14} width={ex.caseHeadline.length * 7.5 + 14} height={20} rx={4} fill={`${accent}26`} stroke={accentSoft} />
+      <text x={innerX + 8} y={headerY} fontSize={11} fontWeight={800} fill={accent} fontFamily="ui-monospace, SFMono-Regular" letterSpacing={0.8}>
+        {isSlop ? "\u26A0  " : "\u2713  "}{ex.caseHeadline}
+      </text>
+
+      {/* Subhead */}
+      <text x={innerX} y={subheadY} fontSize={11.5} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui">
+        {ex.caseSubhead}
+      </text>
+
+      {/* What's there (multi-line italic) */}
+      {ex.whatsThereLines.map((line, i) => (
+        <text key={i} x={innerX} y={whatY + i * 14} fontSize={10.5} fill="#64748b" fontStyle="italic" fontFamily="ui-sans-serif, system-ui">
+          {line}
+        </text>
+      ))}
+
+      {/* Divider */}
+      <line x1={innerX} y1={dividerY1} x2={innerX + innerW} y2={dividerY1} stroke="rgba(148,163,184,0.18)" />
 
       {/* Engine rows */}
-      <div className="space-y-3">
-        {ex.rows.map((row) => (
-          <EngineScoreRow key={row.key} row={row} />
-        ))}
-      </div>
+      {ex.rows.map((row, i) => (
+        <EngineRowSvg key={row.key} row={row} x={innerX} y={rowYs[i]} width={innerW} />
+      ))}
 
-      <div className="border-t border-border/40" />
+      {/* Divider */}
+      <line x1={innerX} y1={dividerY2} x2={innerX + innerW} y2={dividerY2} stroke="rgba(148,163,184,0.18)" />
 
-      {/* Composite + triage */}
-      <div className="space-y-2">
-        <div className="text-[10px] font-mono text-muted-foreground/75 leading-snug">
-          {sumLine} ≈ <span className="text-foreground font-bold">{ex.composite}</span>
-        </div>
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <div className="text-[9px] uppercase tracking-widest text-muted-foreground">Composite</div>
-            <div className={`text-4xl font-extrabold leading-none ${compositeColor}`}>{ex.composite}</div>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border font-mono ${triageBadgeClass}`}>
-              {ex.triageLabel}
-            </span>
-            <span className="text-[10px] text-muted-foreground/75 text-right max-w-[180px] leading-snug">
-              {ex.triageSummary}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
+      {/* Sum line */}
+      <text x={innerX} y={sumY} fontSize={10.5} fill="#94a3b8" fontFamily="ui-monospace, SFMono-Regular">
+        {sumText}
+      </text>
+
+      {/* Composite label */}
+      <text x={innerX} y={compY - 12} fontSize={9} fontWeight={700} fill="#64748b" fontFamily="ui-sans-serif, system-ui" letterSpacing={1.5}>
+        COMPOSITE
+      </text>
+      {/* Big composite number */}
+      <text x={innerX} y={compY + 28} fontSize={42} fontWeight={800} fill={compositeColor} fontFamily="ui-monospace, SFMono-Regular">
+        {ex.composite}
+      </text>
+
+      {/* Triage badge (right side) */}
+      <rect x={innerX + innerW - triageW} y={compY - 8} width={triageW} height={22} rx={4} fill={triageFill} stroke={triageSoft} />
+      <text
+        x={innerX + innerW - triageW / 2}
+        y={compY + 7}
+        textAnchor="middle"
+        fontSize={11}
+        fontWeight={800}
+        fill={triageColor}
+        fontFamily="ui-monospace, SFMono-Regular"
+        letterSpacing={0.5}
+      >
+        {ex.triageLabel}
+      </text>
+      {/* Triage summary (right side, wraps to two lines if needed; we keep it short) */}
+      <text x={innerX + innerW} y={compY + 28} textAnchor="end" fontSize={10} fill="#64748b" fontFamily="ui-sans-serif, system-ui">
+        {ex.triageSummary}
+      </text>
+    </g>
   );
 }
 
 function ScoringPipelineDiagram() {
+  const VBW = 1000;
+  const VBH = 600;
+  const padX = 24;
+  const innerW = VBW - padX * 2;
+  const cardGap = 24;
+  const cardW = (innerW - cardGap) / 2;
+  const cardY = 56;
+  const cardH = 488;
+  const card1X = padX;
+  const card2X = padX + cardW + cardGap;
+
   const engines = [
-    { key: "e1" as const, label: "Engine 1", title: "AI Authorship", weight: 5 },
-    { key: "e2" as const, label: "Engine 2", title: "Technical Substance", weight: 55 },
-    { key: "e3" as const, label: "Engine 3", title: "CWE Coherence", weight: 40 },
+    { key: "e1" as const, title: "AI Authorship", weight: 5 },
+    { key: "e2" as const, title: "Technical Substance", weight: 55 },
+    { key: "e3" as const, title: "CWE Coherence", weight: 40 },
   ];
+
+  // Legend chip positions (computed left-to-right)
+  let chipX = padX + 230; // after the "3 engines vote · weights" label
+  const chips = engines.map((e) => {
+    const w = e.title.length * 6.6 + 60;
+    const item = { ...e, x: chipX, w };
+    chipX += w + 8;
+    return item;
+  });
 
   return (
     <div
@@ -842,7 +928,7 @@ function ScoringPipelineDiagram() {
         }}
       />
 
-      {/* Screen reader prose description (richer than aria-label allows) */}
+      {/* Screen reader prose walkthrough */}
       <p className="sr-only">
         Worked-example diagram comparing two reports that both cite CWE-89. The slop attempt has no proof of concept,
         no payload, and no endpoint; its engine scores are AI Authorship 78, Technical Substance 14, raw CWE Coherence 78.
@@ -850,54 +936,51 @@ function ScoringPipelineDiagram() {
         triage routes to CHALLENGE_REPORTER. The genuine report has the same CWE number but with a curl proof of concept,
         the exact payload, an endpoint, a file path with line number, and a real database error; its engine scores are
         AI Authorship 18, Technical Substance 76, CWE Coherence 82. The substance gate does not fire, so the composite
-        lands at 79 and triage routes to PRIORITIZE. The contrast shows that citing the right CWE is necessary but not
-        sufficient — Engine 2's substance reading constrains how much Engine 3 can vouch for the report.
+        lands at 79 and triage routes to PRIORITIZE.
       </p>
 
-      <div className="relative space-y-4">
-        {/* Legend strip — names the three engines + weights ONCE */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground/80 font-semibold">
-            3 engines vote · weights sum to 100%
-          </span>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {engines.map((e) => {
-              const palette = ENGINE_PALETTE[e.key];
-              return (
-                <span
-                  key={e.key}
-                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded border ${palette.chipBorder} ${palette.chipBg} text-[10px]`}
-                >
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${palette.swatch}`} aria-hidden />
-                  <span className={`font-semibold ${palette.text}`}>{e.title}</span>
-                  <span className="text-muted-foreground font-mono">{e.weight}%</span>
-                </span>
-              );
-            })}
-          </div>
-        </div>
+      <svg
+        viewBox={`0 0 ${VBW} ${VBH}`}
+        className="relative w-full h-auto"
+        role="img"
+        aria-label="Three-engine composite scoring with two worked examples. Slop attempt: AI Authorship 78, Substance 14, CWE Coherence raw 78 capped at 42 by the substance gate, composite 26, triage CHALLENGE_REPORTER. Genuine report: AI Authorship 18, Substance 76, CWE Coherence 82, composite 79, triage PRIORITIZE."
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {/* Legend strip */}
+        <text x={padX} y={28} fontSize={11} fontWeight={700} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui" letterSpacing={1.2}>
+          {"3 ENGINES VOTE \u00B7 WEIGHTS SUM TO 100%"}
+        </text>
+        {chips.map((c) => {
+          const palette = ENGINE_HEX[c.key];
+          return (
+            <g key={c.key}>
+              <rect x={c.x} y={14} width={c.w} height={20} rx={4} fill={palette.track} stroke={palette.ring} />
+              <circle cx={c.x + 9} cy={24} r={3} fill={palette.fill} />
+              <text x={c.x + 17} y={28} fontSize={10.5} fontWeight={700} fill={palette.fill} fontFamily="ui-sans-serif, system-ui">
+                {c.title}
+              </text>
+              <text x={c.x + c.w - 8} y={28} textAnchor="end" fontSize={10} fill="#94a3b8" fontFamily="ui-monospace, SFMono-Regular">
+                {c.weight}%
+              </text>
+            </g>
+          );
+        })}
 
-        {/* Side-by-side worked examples */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3" aria-hidden>
-          {WORKED_EXAMPLES.map((ex) => (
-            <WorkedExampleCard key={ex.variant} ex={ex} />
-          ))}
-        </div>
+        {/* Two worked-example cards, side-by-side */}
+        <WorkedExampleSvg ex={WORKED_EXAMPLES[0]} x={card1X} y={cardY} width={cardW} height={cardH} />
+        <WorkedExampleSvg ex={WORKED_EXAMPLES[1]} x={card2X} y={cardY} width={cardW} height={cardH} />
 
-        {/* Footer caption — the lesson in one line */}
-        <div className="flex items-start gap-2 px-1">
-          <Info className="w-3.5 h-3.5 text-cyan-400/70 flex-shrink-0 mt-0.5" />
-          <p className="text-[11px] text-muted-foreground/85 leading-snug">
-            <span className="text-foreground font-semibold">Same CWE-89 cited.</span> What separates these reports is{" "}
-            <span className="text-cyan-300 font-mono">substance</span>. When Engine 2 sees no evidence, the substance
-            gate caps Engine 3 — so a report can&apos;t earn 27 composite points just for naming the right CWE number.
-          </p>
-        </div>
-      </div>
+        {/* Footer caption */}
+        <text x={VBW / 2} y={cardY + cardH + 30} textAnchor="middle" fontSize={11.5} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui">
+          <tspan fontWeight={700} fill="#e2e8f0">Same CWE-89 cited.</tspan>
+          {"  "}What separates these reports is{" "}
+          <tspan fill="#22d3ee" fontFamily="ui-monospace, SFMono-Regular">substance</tspan>
+          . When Engine 2 sees no evidence, the substance gate caps Engine 3.
+        </text>
+      </svg>
     </div>
   );
 }
-
 
 export default function Home() {
   const navigate = useNavigate();
