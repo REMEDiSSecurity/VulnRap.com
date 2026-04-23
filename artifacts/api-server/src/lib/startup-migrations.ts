@@ -17,6 +17,13 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
       `CREATE INDEX IF NOT EXISTS idx_reports_avri_family ON reports (avri_family)`,
     ],
   },
+  {
+    id: "2026-04-23-add-lsh-buckets-gin-index",
+    description: "Add GIN index on lsh_buckets JSONB for efficient containment queries",
+    statements: [
+      `CREATE INDEX IF NOT EXISTS idx_reports_lsh_buckets ON reports USING gin (lsh_buckets)`,
+    ],
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

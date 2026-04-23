@@ -227,15 +227,17 @@ async function performAnalysis(
 
   try {
     const userSkippedLlm = opts?.skipLlm === true;
-    const llmAvailable = isLLMAvailable();
-    const callLlm = !userSkippedLlm && llmAvailable;
+
+    const heuristic = await runStage("heuristic_analysis", () => analyzeSloppiness(safeOriginal), diagnostics);
+
+    const heuristicScore = heuristic?.score ?? 50;
+    const callLlm = !userSkippedLlm && shouldCallLLM(heuristicScore, 1.0);
 
     const llmPromise = callLlm
       ? runStage("llm_analysis", () => analyzeSlopWithLLM(safeRedacted), diagnostics)
       : Promise.resolve(null);
 
-    const [heuristic, linguistic, factual, verification] = await Promise.all([
-      runStage("heuristic_analysis", () => analyzeSloppiness(safeOriginal), diagnostics),
+    const [linguistic, factual, verification] = await Promise.all([
       runStage("linguistic_analysis", () => analyzeLinguistic(safeOriginal), diagnostics),
       runStage("factual_verification", () => analyzeFactual(safeOriginal), diagnostics),
       runStage("active_verification", () => {
@@ -255,7 +257,7 @@ async function performAnalysis(
     const safeQuality = heuristic?.qualityScore ?? 50;
 
     logger.info(
-      { llmAvailable, callLlm, userSkippedLlm, llmSucceeded: !!llmResult },
+      { llmAvailable: isLLMAvailable(), callLlm, userSkippedLlm, llmSucceeded: !!llmResult },
       "LLM decision"
     );
 

@@ -101,6 +101,7 @@ export const reportsTable = pgTable("reports", {
   index("idx_reports_slop_score").on(table.slopScore),
   index("idx_reports_template_hash").on(table.templateHash),
   index("idx_reports_avri_family").on(table.avriFamily),
+  index("idx_reports_lsh_buckets").using("gin", table.lshBuckets),
 ]);
 
 export interface SimilarityMatch {

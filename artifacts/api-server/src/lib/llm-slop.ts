@@ -104,10 +104,13 @@ export function isLLMAvailable(): boolean {
 }
 
 export function shouldCallLLM(
-  _heuristicScore: number,
-  _confidence: number,
+  heuristicScore: number,
+  confidence: number,
 ): boolean {
-  return isLLMAvailable();
+  if (!isLLMAvailable()) return false;
+  const borderline = heuristicScore >= COST_GUARD_LOW && heuristicScore <= COST_GUARD_HIGH;
+  const uncertain = confidence < COST_GUARD_CONFIDENCE;
+  return borderline || uncertain;
 }
 
 function getCacheKey(text: string): string {
