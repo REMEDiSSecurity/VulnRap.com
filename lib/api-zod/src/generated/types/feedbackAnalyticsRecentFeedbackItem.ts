@@ -8,7 +8,6 @@
 
 export type FeedbackAnalyticsRecentFeedbackItem = {
   feedbackId: number;
-  reportId?: number | null;
   rating: number;
   helpful: boolean;
   comment?: string | null;

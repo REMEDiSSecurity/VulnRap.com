@@ -2769,9 +2769,6 @@ components:
             properties:
               feedbackId:
                 type: integer
-              reportId:
-                type: integer
-                nullable: true
               rating:
                 type: integer
               helpful:
@@ -2796,9 +2793,6 @@ components:
             properties:
               feedbackId:
                 type: integer
-              reportId:
-                type: integer
-                nullable: true
               rating:
                 type: integer
               helpful:

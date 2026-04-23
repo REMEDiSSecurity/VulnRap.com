@@ -109,7 +109,6 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
     const outliers = await db
       .select({
         feedbackId: userFeedbackTable.id,
-        reportId: userFeedbackTable.reportId,
         rating: userFeedbackTable.rating,
         helpful: userFeedbackTable.helpful,
         comment: userFeedbackTable.comment,
@@ -121,11 +120,14 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
       .from(userFeedbackTable)
       .innerJoin(reportsTable, eq(userFeedbackTable.reportId, reportsTable.id))
       .where(
-        sql`(
-          (${userFeedbackTable.rating} <= 2 AND ${reportsTable.slopScore} >= 60) OR
-          (${userFeedbackTable.rating} >= 4 AND ${reportsTable.slopScore} <= 20) OR
-          (${userFeedbackTable.helpful} = false)
-        )`
+        and(
+          eq(reportsTable.showInFeed, true),
+          sql`(
+            (${userFeedbackTable.rating} <= 2 AND ${reportsTable.slopScore} >= 60) OR
+            (${userFeedbackTable.rating} >= 4 AND ${reportsTable.slopScore} <= 20) OR
+            (${userFeedbackTable.helpful} = false)
+          )`
+        )
       )
       .orderBy(desc(userFeedbackTable.createdAt))
       .limit(50);
@@ -157,7 +159,6 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
     const recentFeedback = await db
       .select({
         feedbackId: userFeedbackTable.id,
-        reportId: userFeedbackTable.reportId,
         rating: userFeedbackTable.rating,
         helpful: userFeedbackTable.helpful,
         comment: userFeedbackTable.comment,
@@ -166,7 +167,10 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
         slopTier: reportsTable.slopTier,
       })
       .from(userFeedbackTable)
-      .leftJoin(reportsTable, eq(userFeedbackTable.reportId, reportsTable.id))
+      .innerJoin(reportsTable, and(
+        eq(userFeedbackTable.reportId, reportsTable.id),
+        eq(reportsTable.showInFeed, true),
+      ))
       .orderBy(desc(userFeedbackTable.createdAt))
       .limit(25);
 
@@ -185,10 +189,18 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
       ratingDistribution: ratingDist,
       dailyTrend,
       scoreCorrelation,
-      outliers,
+      outliers: outliers.map(o => ({
+        feedbackId: o.feedbackId,
+        rating: o.rating,
+        helpful: o.helpful,
+        comment: o.comment,
+        feedbackDate: o.feedbackDate,
+        slopScore: o.slopScore,
+        slopTier: o.slopTier,
+        qualityScore: o.qualityScore,
+      })),
       recentFeedback: recentFeedback.map(f => ({
         feedbackId: f.feedbackId,
-        reportId: f.reportId,
         rating: f.rating,
         helpful: f.helpful,
         comment: f.comment,

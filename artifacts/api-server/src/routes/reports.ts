@@ -1486,6 +1486,7 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
   const [sourceReport, matchedReport] = await Promise.all([
     db.select({
       id: reportsTable.id,
+      showInFeed: reportsTable.showInFeed,
       redactedText: reportsTable.redactedText,
       contentMode: reportsTable.contentMode,
       slopScore: reportsTable.slopScore,
@@ -1496,6 +1497,7 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
     }).from(reportsTable).where(eq(reportsTable.id, params.data.id)),
     db.select({
       id: reportsTable.id,
+      showInFeed: reportsTable.showInFeed,
       redactedText: reportsTable.redactedText,
       contentMode: reportsTable.contentMode,
       slopScore: reportsTable.slopScore,
@@ -1505,11 +1507,11 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
     }).from(reportsTable).where(eq(reportsTable.id, params.data.matchId)),
   ]);
 
-  if (!sourceReport[0]) {
+  if (!sourceReport[0] || !sourceReport[0].showInFeed) {
     res.status(404).json({ error: "Source report not found." });
     return;
   }
-  if (!matchedReport[0]) {
+  if (!matchedReport[0] || !matchedReport[0].showInFeed) {
     res.status(404).json({ error: "Matched report not found." });
     return;
   }
@@ -1604,6 +1606,11 @@ router.get("/reports/:id/verify", async (req, res): Promise<void> => {
     return;
   }
 
+  if (!report.showInFeed) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+
   const matches = (report.similarityMatches as Array<{ reportId: number }>) || [];
   const secMatches = (report.sectionMatches as Array<{ sectionTitle: string }>) || [];
 
@@ -1638,6 +1645,11 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     .where(eq(reportsTable.id, params.data.id));
 
   if (!report) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+
+  if (!report.showInFeed) {
     res.status(404).json({ error: "Report not found." });
     return;
   }
@@ -1805,6 +1817,11 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
     return;
   }
 
+  if (!report.showInFeed) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+
   // Prefer the trace whose correlation_id matches what was stored on the report
   // row (exact pairing). Fall back to the most-recent trace for the report if
   // no correlation_id is set (legacy rows analyzed before the column existed).
@@ -1877,6 +1894,11 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     .where(eq(reportsTable.id, params.data.id));
 
   if (!report) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+
+  if (!report.showInFeed) {
     res.status(404).json({ error: "Report not found." });
     return;
   }

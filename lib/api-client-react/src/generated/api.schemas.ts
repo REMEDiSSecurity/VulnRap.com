@@ -1389,7 +1389,6 @@ export type FeedbackAnalyticsScoreCorrelationItem = {
 
 export type FeedbackAnalyticsOutliersItem = {
   feedbackId: number;
-  reportId?: number | null;
   rating: number;
   helpful: boolean;
   comment?: string | null;
@@ -1401,7 +1400,6 @@ export type FeedbackAnalyticsOutliersItem = {
 
 export type FeedbackAnalyticsRecentFeedbackItem = {
   feedbackId: number;
-  reportId?: number | null;
   rating: number;
   helpful: boolean;
   comment?: string | null;

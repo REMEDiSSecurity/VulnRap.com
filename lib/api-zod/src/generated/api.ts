@@ -2186,7 +2186,6 @@ export const GetFeedbackAnalyticsResponse = zod.object({
   outliers: zod.array(
     zod.object({
       feedbackId: zod.number(),
-      reportId: zod.number().nullish(),
       rating: zod.number(),
       helpful: zod.boolean(),
       comment: zod.string().nullish(),
@@ -2199,7 +2198,6 @@ export const GetFeedbackAnalyticsResponse = zod.object({
   recentFeedback: zod.array(
     zod.object({
       feedbackId: zod.number(),
-      reportId: zod.number().nullish(),
       rating: zod.number(),
       helpful: zod.boolean(),
       comment: zod.string().nullish(),

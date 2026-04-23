@@ -189,7 +189,6 @@ function CorrelationScatter({ data }: {
 function OutlierCard({ outlier }: {
   outlier: {
     feedbackId: number;
-    reportId?: number | null;
     rating: number;
     helpful: boolean;
     comment?: string | null;
@@ -211,11 +210,6 @@ function OutlierCard({ outlier }: {
           <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0" />
           <span className="text-xs font-medium text-orange-400">{mismatch}</span>
         </div>
-        {outlier.reportId && (
-          <Link to={`/results/${outlier.reportId}`} className="text-xs text-primary hover:underline flex items-center gap-1">
-            Report #{outlier.reportId} <ArrowRight className="w-3 h-3" />
-          </Link>
-        )}
       </div>
       <div className="flex flex-wrap gap-3 text-xs">
         <span className="flex items-center gap-1">
@@ -241,7 +235,6 @@ function OutlierCard({ outlier }: {
 function RecentRow({ item }: {
   item: {
     feedbackId: number;
-    reportId?: number | null;
     rating: number;
     helpful: boolean;
     comment?: string | null;
@@ -269,11 +262,6 @@ function RecentRow({ item }: {
       </div>
       {item.slopScore != null && (
         <Badge variant="outline" className="text-[10px] tabular-nums shrink-0">{item.slopScore}%</Badge>
-      )}
-      {item.reportId && (
-        <Link to={`/results/${item.reportId}`} className="text-xs text-primary hover:underline shrink-0">
-          #{item.reportId}
-        </Link>
       )}
       <span className="text-[10px] text-muted-foreground/50 shrink-0 w-16 text-right">
         {new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
