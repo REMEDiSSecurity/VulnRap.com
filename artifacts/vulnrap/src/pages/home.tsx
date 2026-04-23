@@ -419,13 +419,11 @@ function SlopDetectionCard() {
       {expanded && (
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
 
-          <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2.5 space-y-1">
-            <p className="text-[11px] font-bold text-violet-300 uppercase tracking-wide">Three-Engine Composite Scoring (current)</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Every report is scored by three independent engines that each return a 0–100 sub-score, then combined by fixed weights into a single composite (0–100) and triage label. <span className="text-foreground font-mono">Technical Substance (55%)</span> rewards concrete proof — real file paths, line numbers, working commands, sanitizer output, request/response pairs — and penalises vague speculation. <span className="text-foreground font-mono">CWE Coherence (40%)</span> checks that the vulnerability class the report claims actually matches the evidence shown; a stated XSS report whose payload triggers a database error loses heavily here. <span className="text-foreground font-mono">AI Authorship (5%)</span> contributes linguistic, template, and spectral surface signals — kept deliberately small because legitimate analysts often use AI for writing polish. Override rules can then PRIORITIZE a report (e.g. ≥2 gold evidence hits at composite ≥40) or de-prioritise it (e.g. high-volume same-day templated submissions). The legacy <span className="font-mono">slopScore</span> field returned by the API is mapped from this composite for backward compatibility.
-            </p>
-            <p className="text-[11px] text-muted-foreground/80 leading-relaxed pt-1">
-              <span className="text-violet-300 font-semibold">In flight (v3.7.0, behind <span className="font-mono">VULNRAP_USE_AVRI</span> flag):</span> AVRI swaps Engine 2 for a CWE-family-specific rubric — eight families (memory corruption, injection, auth/access, crypto/protocol, DoS/resource, info exposure, request forgery, hardware) each with their own gold signals and absence penalties — plus optional same-day velocity and template-fingerprint signals. The 5/55/40 weights stay the same; only what Engine 2 looks for changes. Default off in production until the calibration battery confirms the score-gap target.
+          <ScoringPipelineDiagram />
+
+          <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2.5">
+            <p className="text-[11px] text-muted-foreground/85 leading-relaxed">
+              <span className="text-violet-300 font-semibold">AVRI (in flight, behind <span className="font-mono">VULNRAP_USE_AVRI</span>):</span> swaps Engine 2's rubric for one of eight CWE-family-specific rubrics (memory corruption, injection, auth/access, crypto/protocol, DoS/resource, info exposure, request forgery, hardware) with family-specific gold signals and absence penalties. Weights stay 5/55/40; only Engine 2's internals change. Default off in production until calibration confirms the score-gap target. The legacy <span className="font-mono">slopScore</span> API field is mapped from the composite for backward compatibility.
             </p>
           </div>
 
@@ -1338,22 +1336,12 @@ export default function Home() {
         <div className="space-y-1">
           <h2 className="text-lg font-bold flex items-center gap-2">
             <BrainCircuit className="w-5 h-5 text-primary" />
-            How We Score Your Report (in plain English)
+            What happens around the engines
           </h2>
           <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-            No black box. Here's exactly what runs against your text, what each piece is looking for, and how much it counts toward the final score.
+            The three engines and their sub-weights live in the <span className="text-foreground font-semibold">Validity Scoring</span> card up top. This section covers everything <em>around</em> them: the live sources we go check, the pieces of evidence that disproportionately move the score, and how we landed on these weights in the first place.
           </p>
         </div>
-
-        <ScoringPipelineDiagram />
-        <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
-          <span className="text-foreground font-semibold">Pipeline at a glance:</span>{" "}
-          your report enters at the top, fans out into three engines whose channel widths above are drawn to match their actual voting weights, and the three sub-scores fuse into a single composite (0&ndash;100) and triage label. <span className="text-violet-300">AVRI</span> (in flight, behind the <span className="font-mono">VULNRAP_USE_AVRI</span> flag) swaps Engine 2's rubric for the matching CWE family without changing the 5/55/40 weights. <span className="italic">Weights and signals are recalibrated against new corpora as we collect them.</span>
-        </p>
-
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          For the deep breakdown of each engine — sub-component weights, what evidence moves the needle, and the AVRI family-rubric upgrade — open the <span className="text-foreground font-semibold">Validity Scoring</span> card near the top of the page. The rest of this section covers what happens <em>around</em> the engines: which sources we hit live, and which pieces of evidence get an outsized effect.
-        </p>
 
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground/90">How we check the claims (validation sources)</h3>
