@@ -581,11 +581,72 @@ function applyOverrideRules(
   return composite + adjustment;
 }
 
+/**
+ * Sprint 12 Part A1 — E3 substance gate.
+ *
+ * The Sprint 11 expanded battery showed that Engine 3 (CWE Coherence) hands
+ * out generous scores (≈68) to slop reports that merely cite the correct CWE
+ * number, even when Engine 2 reports near-zero technical substance. Because
+ * E3 is weighted 0.40, those phantom 68s contribute ~27 composite points to
+ * reports that have no evidence at all, collapsing the slop-vs-legit gap from
+ * E2's clean 18-point separation down to ~4 points.
+ *
+ * The fix: when Engine 2 says "no substance," Engine 3 cannot reward CWE
+ * citation alone. We cap E3 below neutral (42) when E2 < 30, and at moderate
+ * (55) when E2 < 45. When E2 ≥ 45 the report has enough substance for E3 to
+ * speak freely — no cap.
+ *
+ * The cap is gated by VULNRAP_E3_SUBSTANCE_CAP (default ON). Set to "false"
+ * to disable in an emergency without a redeploy.
+ *
+ * Returns { adjusted, applied } where `applied` is null when no cap fired,
+ * or a human-readable note when it did.
+ */
+function adjustE3ForSubstance(
+  e2Score: number,
+  e3Score: number,
+): { adjusted: number; applied: string | null } {
+  const enabled = (process.env.VULNRAP_E3_SUBSTANCE_CAP ?? "true").toLowerCase() !== "false";
+  if (!enabled) return { adjusted: e3Score, applied: null };
+
+  if (e2Score < 30 && e3Score > 42) {
+    return {
+      adjusted: 42,
+      applied: `E3_SUBSTANCE_GATE: Engine 2 substance ${Math.round(e2Score)}<30, capping Engine 3 at 42 (raw was ${Math.round(e3Score)})`,
+    };
+  }
+  if (e2Score < 45 && e3Score > 55) {
+    return {
+      adjusted: 55,
+      applied: `E3_SUBSTANCE_GATE: Engine 2 substance ${Math.round(e2Score)}<45, capping Engine 3 at 55 (raw was ${Math.round(e3Score)})`,
+    };
+  }
+  return { adjusted: e3Score, applied: null };
+}
+
 export function computeComposite(engineResults: EngineResult[]): CompositeResult {
   // Phase 1 always applies the fixed 5/55/40 weighting across all three
   // engines, regardless of per-engine confidence. Confidence is still surfaced
   // in the per-engine result so consumers can de-emphasize uncertain signals
   // in their UI, but the composite math itself is deterministic.
+
+  // Sprint 12 A1: pre-process E3 against E2 before weighting. The original
+  // EngineResult objects are NOT mutated — we only adjust the score we feed
+  // into the weighted sum, so consumers that read engineResults still see
+  // the raw per-engine score. The cap (if any) is recorded in
+  // overridesApplied so it's auditable.
+  const e2 = engineResults.find((r) => r.engine === "Technical Substance Analyzer");
+  const e3 = engineResults.find((r) => r.engine === "CWE Coherence Checker");
+  // Always sanitize the fallback against NaN/undefined so the loop below
+  // never sees a non-finite E3 score even when E2 is missing (prevents
+  // regression of the v3.6.0 §5 NaN hardening for Report 59-style inputs).
+  const e3SafeFallback = e3 && Number.isFinite(e3.score) ? e3.score : 50;
+  let e3Adjustment: { adjusted: number; applied: string | null } = { adjusted: e3SafeFallback, applied: null };
+  if (e2 && e3) {
+    const e2Safe = Number.isFinite(e2.score) ? e2.score : 50;
+    e3Adjustment = adjustE3ForSubstance(e2Safe, e3SafeFallback);
+  }
+
   let weightedSum = 0;
   let totalWeight = 0;
   for (const r of engineResults) {
@@ -595,7 +656,10 @@ export function computeComposite(engineResults: EngineResult[]): CompositeResult
     // an engine that returned no score would propagate NaN through the
     // weighted sum and produce a null composite that downstream consumers
     // (triage matrix, persistence layer) cannot reason about.
-    const safeScore = Number.isFinite(r.score) ? r.score : 50;
+    const rawScore = Number.isFinite(r.score) ? r.score : 50;
+    // Sprint 12 A1: substitute the substance-gated E3 score into the
+    // weighted sum (only — the original EngineResult is untouched).
+    const safeScore = r.engine === "CWE Coherence Checker" ? e3Adjustment.adjusted : rawScore;
     // Engine 1 is "AI authorship likelihood" (high = bad); other engines are
     // already validity-positive (high = good). Convert engine 1 to a quality
     // contribution by inverting it: quality = 100 - aiScore.
@@ -606,6 +670,7 @@ export function computeComposite(engineResults: EngineResult[]): CompositeResult
   const beforeOverride =
     totalWeight > 0 && Number.isFinite(weightedSum) ? weightedSum / totalWeight : 50;
   const applied: string[] = [];
+  if (e3Adjustment.applied) applied.push(e3Adjustment.applied);
   const afterOverride = applyOverrideRules(beforeOverride, engineResults, applied);
   const finalScore = Math.round(clamp(afterOverride));
 

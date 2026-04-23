@@ -412,7 +412,7 @@ function SlopDetectionCard() {
             Validity Scoring
             <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
           </h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">Three-engine composite scoring: Technical Substance (55%), CWE Coherence (40%), and AI Authorship (5%) vote with different weights and fuse into a single composite score and triage label. Tap to see how.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">Three-engine composite scoring: Technical Substance (55%), CWE Coherence (40%), and AI Authorship (5%) vote with different weights and fuse into a single composite score and triage label. CWE Coherence is capped when Substance reports near-zero evidence, so a report can't earn 27 composite points just for naming the right CWE number. Tap to see how.</p>
         </div>
       </button>
 
@@ -489,6 +489,11 @@ function SlopDetectionCard() {
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
               Engine 3 checks that the vulnerability class the report claims (e.g. SQL injection, buffer overflow, SSRF) is consistent with the evidence and PoC actually shown. A claimed XSS whose payload triggers a database error, a stated buffer overflow with no memory-corruption indicators, or a CVE citation that disagrees with NVD's assigned CWE all lower this engine's sub-score sharply. CWE Coherence is the second-largest vote (40%) because mismatched-class reports are one of the most reliable LLM-slop tells.
             </p>
+            <div className="rounded-md bg-violet-500/5 border border-violet-500/15 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground/85 leading-relaxed">
+                <span className="text-violet-300 font-semibold">Substance gate:</span> Engine 3 is cross-referenced against Engine 2 before it votes. When Engine 2 reports near-zero technical substance (<span className="font-mono">&lt;30</span>), Engine 3 is capped at <span className="font-mono">42</span>; when Substance is weak (<span className="font-mono">&lt;45</span>), Engine 3 is capped at <span className="font-mono">55</span>. Citing the right CWE number is necessary but not sufficient — the report still has to show the evidence that goes with that CWE. Reports that pass the Substance bar are unaffected. The cap fires as an <span className="font-mono">E3_SUBSTANCE_GATE</span> override visible on the result page, and can be disabled in an emergency via the <span className="font-mono">VULNRAP_E3_SUBSTANCE_CAP</span> env flag.
+              </p>
+            </div>
           </div>
 
           <div className="space-y-2 border-t border-border/30 pt-4">
@@ -1523,7 +1528,7 @@ function TransparencySection() {
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">1.</span>Your raw text is received over HTTPS. For URLs, we fetch the content server-side (HTTPS only, allowlisted hosts).</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">2.</span>The redaction engine runs immediately — regex patterns strip PII, secrets, credentials, and company names. The raw text is discarded and never stored.</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">3.</span>All analysis (hashing, similarity, slop scoring) runs on the redacted text only.</li>
-                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The three-engine composite scorer analyzes the redacted text in server memory — Engine 1 AI Authorship (linguistic, template, spectral), Engine 2 Technical Substance (evidence quality, references, reproducibility, PoC integrity, claim/evidence ratio — or the matching CWE-family rubric when AVRI is enabled), and Engine 3 CWE Coherence. The original (pre-redaction) text is never written to disk or database. When the optional LLM is enabled and the heuristic score is borderline, the redacted version is sent to the configured AI provider for a substance second opinion that blends into Engine 2. The three engines fuse with fixed weights — Substance 55%, Coherence 40%, Authorship 5% — into a single composite, and the legacy <span className="font-mono">slopScore</span> field is mapped from that composite for backward compatibility.</li>
+                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The three-engine composite scorer analyzes the redacted text in server memory — Engine 1 AI Authorship (linguistic, template, spectral), Engine 2 Technical Substance (evidence quality, references, reproducibility, PoC integrity, claim/evidence ratio — or the matching CWE-family rubric when AVRI is enabled), and Engine 3 CWE Coherence. The original (pre-redaction) text is never written to disk or database. When the optional LLM is enabled and the heuristic score is borderline, the redacted version is sent to the configured AI provider for a substance second opinion that blends into Engine 2. The three engines fuse with fixed weights — Substance 55%, Coherence 40%, Authorship 5% — into a single composite, with Engine 3 capped against Engine 2 so reports without evidence can't earn coherence points for citing the right CWE alone, and the legacy <span className="font-mono">slopScore</span> field is mapped from that composite for backward compatibility.</li>
               </ul>
             </div>
           </div>
