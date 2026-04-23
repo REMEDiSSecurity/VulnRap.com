@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "react-router-dom";
 import logoSrc from "@/assets/logo.png";
+import firstPostHeroImg from "@/assets/blog-first-post-hero.png";
 import { BlogBuildingVulnrap } from "@/components/blog-building-vulnrap";
 import { BlogGradingAi } from "@/components/blog-grading-ai";
 import { BlogDataIsThere } from "@/components/blog-data-is-there";
@@ -29,6 +30,18 @@ function FirstPost() {
       </div>
 
       <Separator className="bg-border/50" />
+
+      <figure className="my-2">
+        <img
+          src={firstPostHeroImg}
+          alt="A cascade of vulnerability reports streaming through a tall glowing prism that splits them into a clean stream of authentic reports and a dim stream of duplicate AI slop dissolving into pixels"
+          loading="lazy"
+          className="w-full rounded-lg border border-border/50 shadow-lg shadow-black/30"
+        />
+        <figcaption className="mt-2 text-xs text-muted-foreground/80 italic text-center">
+          The tool we wished existed: a lens that separates real reports from the slop and duplicates.
+        </figcaption>
+      </figure>
 
       <div className="prose-invert space-y-6 text-sm leading-relaxed text-muted-foreground">
         <div className="space-y-4">

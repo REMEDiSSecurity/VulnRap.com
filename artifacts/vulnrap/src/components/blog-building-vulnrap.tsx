@@ -1,6 +1,7 @@
 import { Calendar, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import heroImg from "@/assets/blog-building-vulnrap-hero.png";
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return <h3 className="text-foreground font-bold text-lg mt-8 mb-3">{children}</h3>;
@@ -71,6 +72,18 @@ export function BlogBuildingVulnrap() {
       <Separator className="bg-border/50" />
 
       <div className="prose-invert space-y-2 text-sm leading-relaxed text-muted-foreground">
+
+        <figure className="my-6">
+          <img
+            src={heroImg}
+            alt="A workbench in a dim engineering lab with a partially-assembled luminous analytical instrument made of four stacked translucent lenses, blueprints and iteration notes pinned behind it"
+            loading="lazy"
+            className="w-full rounded-lg border border-border/50 shadow-lg shadow-black/30"
+          />
+          <figcaption className="mt-2 text-xs text-muted-foreground/80 italic text-center">
+            Four sprints, four scoring axes — the tool got built one lens at a time.
+          </figcaption>
+        </figure>
 
         <P>
           If you run a PSIRT team or maintain an open-source project with a bug bounty program, you already know the problem. AI-generated vulnerability reports &mdash; "slop" &mdash; are flooding inboxes at an accelerating rate. The curl project reports that only about 5% of their 2025 submissions were genuine vulnerabilities, with roughly 20% being identifiable AI slop and a growing chunk being "human slop" that's indistinguishable in origin but equally useless. The Log4j team documented 60+ clear slop examples in their YesWeHack program. Node.js received over 30 AI slop reports during a single holiday period.
