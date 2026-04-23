@@ -20,7 +20,7 @@ import {
   type HandwavyMarker,
 } from "../lib/engines/avri/handwavy-phrases";
 import { TEST_FIXTURE_COHORTS } from "./test-fixtures";
-import { requireCalibrationAuth } from "../middlewares/require-calibration-auth";
+import { requireCalibrationAuth, requireCalibrationAuthStrict } from "../middlewares/require-calibration-auth";
 
 // Task #114 — preview a candidate FLAT hand-wavy phrase against the curated
 // benchmark corpus (the T1–T4 fixture cohorts also used by /api/test/run) so
@@ -571,7 +571,7 @@ router.post("/feedback/calibration/apply", requireCalibrationAuth, async (req, r
 // DELETE removes one. Phrases are normalized to lowercase + collapsed
 // whitespace before storage so reviewers don't have to worry about case or
 // stray spaces matching the engine's matcher.
-router.get("/feedback/calibration/handwavy-phrases", (_req, res) => {
+router.get("/feedback/calibration/handwavy-phrases", requireCalibrationAuthStrict, (_req, res) => {
   try {
     const phrases = getHandwavyPhrases();
     const history = getHandwavyPhraseHistory();

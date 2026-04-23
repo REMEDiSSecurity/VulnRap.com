@@ -11,6 +11,10 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+// Task #163 — GET is now auth-gated (requireCalibrationAuthStrict). Supply a
+// test token so the functional tests remain focused on behavior, not auth.
+const TEST_TOKEN = "handwavy-route-test-token";
+
 let server: http.Server;
 let baseUrl: string;
 let tmpDir: string;
@@ -35,6 +39,9 @@ beforeAll(async () => {
   // Pin the loader to our tmpdir copy so the test cannot accidentally
   // mutate the real shipped phrase list.
   process.env.HANDWAVY_PHRASES_PATH = phrasesPath;
+  // Task #163 — configure the calibration token so requireCalibrationAuthStrict
+  // allows requests through in functional tests.
+  process.env.CALIBRATION_TOKEN = TEST_TOKEN;
 
   const calibrationRouter = (await import("./calibration")).default;
   const handwavy = await import("../lib/engines/avri/handwavy-phrases");
@@ -53,6 +60,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  delete process.env.CALIBRATION_TOKEN;
   try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
 });
 
@@ -77,9 +85,11 @@ function request<T>(method: string, urlPath: string, body?: unknown): Promise<Ht
         hostname: url.hostname,
         port: url.port,
         path: url.pathname,
-        headers: data
-          ? { "Content-Type": "application/json", "Content-Length": String(data.length) }
-          : {},
+        headers: {
+          ...(data ? { "Content-Type": "application/json", "Content-Length": String(data.length) } : {}),
+          // Task #163 — include the calibration token so GET (now strict-auth) works.
+          "X-Calibration-Token": TEST_TOKEN,
+        },
       },
       (res) => {
         const chunks: Buffer[] = [];

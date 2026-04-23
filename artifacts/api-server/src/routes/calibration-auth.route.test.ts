@@ -1,9 +1,9 @@
 // Task #113 — verify the calibration namespace auth gate.
-//
-// Read endpoints (`GET /feedback/calibration/handwavy-phrases`) must stay
-// open even when `CALIBRATION_TOKEN` is set, while every mutation
-// (`POST/DELETE /feedback/calibration/handwavy-phrases`,
-// `POST /feedback/calibration/apply`) must require the same token.
+// Task #163 — GET /feedback/calibration/handwavy-phrases is now also
+// auth-gated (requireCalibrationAuthStrict) to prevent unauthenticated
+// exposure of reviewer-identifying metadata (addedBy, removedBy, rationale,
+// etc.). All calibration endpoints — reads and mutations alike — require the
+// reviewer token when CALIBRATION_TOKEN is set.
 import http from "node:http";
 import path from "node:path";
 import os from "node:os";
@@ -109,10 +109,31 @@ function request<T>(
 }
 
 describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
-  it("GET hand-wavy phrases stays open without a token", async () => {
-    const r = await request<{ phrases: unknown[] }>("GET", "/feedback/calibration/handwavy-phrases");
+  it("GET hand-wavy phrases without a token is rejected with 401 (Task #163 — strict read gate)", async () => {
+    const r = await request<{ error: string }>("GET", "/feedback/calibration/handwavy-phrases");
+    expect(r.status).toBe(401);
+    expect(r.body.error).toMatch(/token/i);
+  });
+
+  it("GET hand-wavy phrases with the correct token returns the phrase list", async () => {
+    const r = await request<{ phrases: unknown[]; total: number }>(
+      "GET",
+      "/feedback/calibration/handwavy-phrases",
+      undefined,
+      { "X-Calibration-Token": TOKEN },
+    );
     expect(r.status).toBe(200);
     expect(Array.isArray(r.body.phrases)).toBe(true);
+  });
+
+  it("GET hand-wavy phrases with the wrong token is rejected with 401", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/handwavy-phrases",
+      undefined,
+      { "X-Calibration-Token": "wrong-token" },
+    );
+    expect(r.status).toBe(401);
   });
 
   it("POST hand-wavy phrases without a token is rejected with 401", async () => {
