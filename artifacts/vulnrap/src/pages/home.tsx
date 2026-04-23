@@ -615,58 +615,222 @@ function Explainer({ text }: { text: string }) {
   );
 }
 
+type ExampleEngineRow = {
+  key: "e1" | "e2" | "e3";
+  label: string;
+  title: string;
+  weight: number;
+  rawScore: number;
+  effectiveScore?: number;
+  gateNote?: string;
+  inverted?: boolean;
+};
+
+type WorkedExample = {
+  variant: "slop" | "genuine";
+  caseHeadline: string;
+  caseSubhead: string;
+  whatsThere: string;
+  rows: ExampleEngineRow[];
+  composite: number;
+  triageLabel: string;
+  triageSummary: string;
+};
+
+const ENGINE_PALETTE: Record<"e1" | "e2" | "e3", { swatch: string; bar: string; barTrack: string; text: string; chipBorder: string; chipBg: string }> = {
+  e1: { swatch: "bg-amber-400", bar: "bg-amber-400", barTrack: "bg-amber-400/10", text: "text-amber-300", chipBorder: "border-amber-500/40", chipBg: "bg-amber-500/10" },
+  e2: { swatch: "bg-cyan-400", bar: "bg-cyan-400", barTrack: "bg-cyan-400/10", text: "text-cyan-300", chipBorder: "border-cyan-500/40", chipBg: "bg-cyan-500/10" },
+  e3: { swatch: "bg-violet-400", bar: "bg-violet-400", barTrack: "bg-violet-400/10", text: "text-violet-300", chipBorder: "border-violet-500/40", chipBg: "bg-violet-500/10" },
+};
+
+const WORKED_EXAMPLES: WorkedExample[] = [
+  {
+    variant: "slop",
+    caseHeadline: "Slop attempt",
+    caseSubhead: "CWE-89 cited · no PoC, no payload, no endpoint",
+    whatsThere: "Right CWE number. Generic prose (\"It is important to note that SQL injection vulnerabilities…\"). Zero code blocks. Zero file paths.",
+    rows: [
+      { key: "e1", label: "Engine 1", title: "AI Authorship", weight: 5, rawScore: 78, inverted: true },
+      { key: "e2", label: "Engine 2", title: "Technical Substance", weight: 55, rawScore: 14 },
+      { key: "e3", label: "Engine 3", title: "CWE Coherence", weight: 40, rawScore: 78, effectiveScore: 42, gateNote: "E2 < 30 → cap E3 at 42" },
+    ],
+    composite: 26,
+    triageLabel: "CHALLENGE_REPORTER",
+    triageSummary: "Auto-generates challenge questions for the reporter.",
+  },
+  {
+    variant: "genuine",
+    caseHeadline: "Genuine report",
+    caseSubhead: "CWE-89 cited · full PoC, exact payload, real endpoint",
+    whatsThere: "Right CWE number. Sober technical voice. curl PoC with payload \"' OR 1=1 --\". Exact file path + line number. Real database error in the response.",
+    rows: [
+      { key: "e1", label: "Engine 1", title: "AI Authorship", weight: 5, rawScore: 18, inverted: true },
+      { key: "e2", label: "Engine 2", title: "Technical Substance", weight: 55, rawScore: 76 },
+      { key: "e3", label: "Engine 3", title: "CWE Coherence", weight: 40, rawScore: 82 },
+    ],
+    composite: 79,
+    triageLabel: "PRIORITIZE",
+    triageSummary: "Routes straight to a senior reviewer.",
+  },
+];
+
+function EngineScoreRow({ row }: { row: ExampleEngineRow }) {
+  const palette = ENGINE_PALETTE[row.key];
+  const gated = typeof row.effectiveScore === "number";
+  const contribution = row.inverted
+    ? Math.round((100 - row.rawScore) * (row.weight / 100) * 10) / 10
+    : Math.round((gated ? row.effectiveScore! : row.rawScore) * (row.weight / 100) * 10) / 10;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className={`inline-block w-1.5 h-1.5 rounded-full ${palette.swatch} flex-shrink-0`} aria-hidden />
+          <span className="text-[11px] font-semibold text-foreground truncate">{row.title}</span>
+          <span className="text-[10px] text-muted-foreground font-mono flex-shrink-0">×{row.weight}%</span>
+        </div>
+        <span className={`text-[11px] font-mono font-bold ${palette.text} flex-shrink-0`}>
+          {gated ? (
+            <>
+              <span className="line-through opacity-50 mr-1">{row.rawScore}</span>
+              <span>{row.effectiveScore}</span>
+            </>
+          ) : (
+            row.rawScore
+          )}
+          <span className="text-muted-foreground/60">/100</span>
+        </span>
+      </div>
+
+      {/* Score bar — fills to raw score, with effective overlay if gated */}
+      <div className={`relative h-2 rounded-full overflow-hidden ${palette.barTrack}`}>
+        {/* raw score (faded if gated) */}
+        <div
+          className={`absolute left-0 top-0 h-full ${palette.bar} ${gated ? "opacity-30" : ""}`}
+          style={{ width: `${row.rawScore}%` }}
+        />
+        {/* effective score (full opacity, on top) */}
+        {gated && (
+          <div
+            className={`absolute left-0 top-0 h-full ${palette.bar}`}
+            style={{ width: `${row.effectiveScore}%` }}
+          />
+        )}
+        {/* clamp marker at the cap position */}
+        {gated && (
+          <div
+            className="absolute top-0 h-full w-0.5 bg-amber-400"
+            style={{ left: `${row.effectiveScore}%` }}
+            aria-hidden
+          />
+        )}
+      </div>
+
+      {/* Gate note row — only when E3 is clamped */}
+      {gated && row.gateNote && (
+        <div className="flex items-center gap-1.5 pl-3 pt-0.5">
+          <Lock className="w-3 h-3 text-amber-400 flex-shrink-0" />
+          <span className="text-[10px] text-amber-300/90 font-mono">
+            substance gate fires · {row.gateNote}
+          </span>
+        </div>
+      )}
+
+      {/* Contribution math line */}
+      <div className="text-[10px] text-muted-foreground/65 font-mono pl-3">
+        {row.inverted
+          ? `0.05 × (100 − ${row.rawScore}) = ${contribution.toFixed(1)}`
+          : `0.${row.weight.toString().padStart(2, "0")} × ${gated ? row.effectiveScore : row.rawScore} = ${contribution.toFixed(1)}`}
+      </div>
+    </div>
+  );
+}
+
+function WorkedExampleCard({ ex }: { ex: WorkedExample }) {
+  const isSlop = ex.variant === "slop";
+  const accentBorder = isSlop ? "border-rose-500/30" : "border-emerald-500/30";
+  const accentRing = isSlop
+    ? "shadow-[0_0_0_1px_rgba(244,63,94,0.10)_inset,0_4px_18px_rgba(244,63,94,0.08)]"
+    : "shadow-[0_0_0_1px_rgba(52,211,153,0.10)_inset,0_4px_18px_rgba(52,211,153,0.10)]";
+  const badgeClass = isSlop
+    ? "bg-rose-500/15 text-rose-300 border-rose-500/40"
+    : "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
+  const triageBadgeClass = isSlop
+    ? "bg-amber-500/15 text-amber-300 border-amber-500/45"
+    : "bg-emerald-500/15 text-emerald-300 border-emerald-500/45";
+  const compositeColor = isSlop ? "text-rose-300" : "text-emerald-300";
+  const sumLine = ex.rows
+    .map((r) => {
+      const v = r.inverted
+        ? Math.round((100 - r.rawScore) * (r.weight / 100) * 10) / 10
+        : Math.round(((r.effectiveScore ?? r.rawScore) * r.weight) / 100 * 10) / 10;
+      return v.toFixed(1);
+    })
+    .join(" + ");
+
+  return (
+    <div
+      className={`relative rounded-lg border ${accentBorder} ${accentRing} bg-background/55 backdrop-blur p-3 sm:p-4 space-y-3`}
+    >
+      {/* Case header */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${badgeClass}`}>
+            {isSlop ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+            {ex.caseHeadline}
+          </span>
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-snug">{ex.caseSubhead}</p>
+        <p className="text-[10px] text-muted-foreground/75 leading-snug italic">{ex.whatsThere}</p>
+      </div>
+
+      <div className="border-t border-border/40" />
+
+      {/* Engine rows */}
+      <div className="space-y-3">
+        {ex.rows.map((row) => (
+          <EngineScoreRow key={row.key} row={row} />
+        ))}
+      </div>
+
+      <div className="border-t border-border/40" />
+
+      {/* Composite + triage */}
+      <div className="space-y-2">
+        <div className="text-[10px] font-mono text-muted-foreground/75 leading-snug">
+          {sumLine} ≈ <span className="text-foreground font-bold">{ex.composite}</span>
+        </div>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground">Composite</div>
+            <div className={`text-4xl font-extrabold leading-none ${compositeColor}`}>{ex.composite}</div>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border font-mono ${triageBadgeClass}`}>
+              {ex.triageLabel}
+            </span>
+            <span className="text-[10px] text-muted-foreground/75 text-right max-w-[180px] leading-snug">
+              {ex.triageSummary}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScoringPipelineDiagram() {
   const engines = [
-    { key: "e1", label: "Engine 1", title: "AI Authorship", weight: 5, fill: "#fbbf24", border: "rgba(251,191,36,0.45)", glow: "rgba(251,191,36,0.25)" },
-    { key: "e2", label: "Engine 2", title: "Technical Substance", weight: 55, fill: "#22d3ee", border: "rgba(34,211,238,0.45)", glow: "rgba(34,211,238,0.30)" },
-    { key: "e3", label: "Engine 3", title: "CWE Coherence", weight: 40, fill: "#a78bfa", border: "rgba(167,139,250,0.45)", glow: "rgba(167,139,250,0.28)" },
+    { key: "e1" as const, label: "Engine 1", title: "AI Authorship", weight: 5 },
+    { key: "e2" as const, label: "Engine 2", title: "Technical Substance", weight: 55 },
+    { key: "e3" as const, label: "Engine 3", title: "CWE Coherence", weight: 40 },
   ];
-
-  const VBW = 1000;
-  const VBH = 440;
-  const padX = 48;
-  const innerW = VBW - padX * 2;
-  const gapPx = 24;
-  const colW = (innerW - gapPx * (engines.length - 1)) / engines.length;
-
-  const cols = engines.map((e, i) => ({
-    ...e,
-    x: padX + i * (colW + gapPx),
-    cx: padX + i * (colW + gapPx) + colW / 2,
-  }));
-
-  const totalWeight = engines.reduce((s, e) => s + e.weight, 0);
-  const minStreamW = 4;
-  const maxStreamW = 56;
-  const streamWidth = (w: number) =>
-    minStreamW + (w / totalWeight) * (maxStreamW - minStreamW) * 1.6;
-
-  const reportY = 28;
-  const reportH = 44;
-  const reportW = 240;
-  const reportX = (VBW - reportW) / 2;
-  const reportCx = VBW / 2;
-  const reportBottom = reportY + reportH;
-
-  const engineY = 168;
-  const engineH = 124;
-  const engineBottom = engineY + engineH;
-
-  const fuseY = engineBottom + 64;
-
-  const compY = fuseY + 18;
-  const compH = 52;
-  const compW = 360;
-  const compX = (VBW - compW) / 2;
 
   return (
     <div
       className="relative rounded-xl border border-cyan-500/15 p-3 sm:p-5 overflow-hidden"
       style={{
-        background:
-          "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%)",
-        boxShadow:
-          "0 0 0 1px rgba(0,255,255,0.04) inset, 0 8px 32px rgba(0,0,0,0.35)",
+        background: "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%)",
+        boxShadow: "0 0 0 1px rgba(0,255,255,0.04) inset, 0 8px 32px rgba(0,0,0,0.35)",
       }}
     >
       <div
@@ -674,294 +838,66 @@ function ScoringPipelineDiagram() {
         className="pointer-events-none absolute inset-0 opacity-[0.18]"
         style={{
           background:
-            "radial-gradient(ellipse 60% 40% at 50% 100%, rgba(34,211,238,0.35), transparent 70%), radial-gradient(ellipse 30% 30% at 18% 60%, rgba(251,191,36,0.18), transparent 70%), radial-gradient(ellipse 35% 35% at 82% 60%, rgba(167,139,250,0.22), transparent 70%)",
+            "radial-gradient(ellipse 60% 40% at 18% 100%, rgba(244,63,94,0.22), transparent 70%), radial-gradient(ellipse 60% 40% at 82% 100%, rgba(52,211,153,0.22), transparent 70%)",
         }}
       />
-      <svg
-        viewBox={`0 0 ${VBW} ${VBH}`}
-        role="img"
-        aria-label="Three-engine composite scoring pipeline. A report flows into three parallel engines: AI Authorship at 5 percent, Technical Substance at 55 percent, and CWE Coherence at 40 percent. Engine 2 has an AVRI variant tag. The three sub-scores fuse into a single composite score from zero to one hundred plus a triage label."
-        className="relative w-full h-auto"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          {cols.map((c) => (
-            <linearGradient id={`stream-${c.key}`} key={`g-${c.key}`} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={c.fill} stopOpacity="0.05" />
-              <stop offset="40%" stopColor={c.fill} stopOpacity="0.45" />
-              <stop offset="100%" stopColor={c.fill} stopOpacity="0.85" />
-            </linearGradient>
+
+      {/* Screen reader prose description (richer than aria-label allows) */}
+      <p className="sr-only">
+        Worked-example diagram comparing two reports that both cite CWE-89. The slop attempt has no proof of concept,
+        no payload, and no endpoint; its engine scores are AI Authorship 78, Technical Substance 14, raw CWE Coherence 78.
+        Because Substance is below 30, the substance gate caps Engine 3 at 42, so the weighted composite lands at 26 and
+        triage routes to CHALLENGE_REPORTER. The genuine report has the same CWE number but with a curl proof of concept,
+        the exact payload, an endpoint, a file path with line number, and a real database error; its engine scores are
+        AI Authorship 18, Technical Substance 76, CWE Coherence 82. The substance gate does not fire, so the composite
+        lands at 79 and triage routes to PRIORITIZE. The contrast shows that citing the right CWE is necessary but not
+        sufficient — Engine 2's substance reading constrains how much Engine 3 can vouch for the report.
+      </p>
+
+      <div className="relative space-y-4">
+        {/* Legend strip — names the three engines + weights ONCE */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground/80 font-semibold">
+            3 engines vote · weights sum to 100%
+          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {engines.map((e) => {
+              const palette = ENGINE_PALETTE[e.key];
+              return (
+                <span
+                  key={e.key}
+                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded border ${palette.chipBorder} ${palette.chipBg} text-[10px]`}
+                >
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${palette.swatch}`} aria-hidden />
+                  <span className={`font-semibold ${palette.text}`}>{e.title}</span>
+                  <span className="text-muted-foreground font-mono">{e.weight}%</span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Side-by-side worked examples */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3" aria-hidden>
+          {WORKED_EXAMPLES.map((ex) => (
+            <WorkedExampleCard key={ex.variant} ex={ex} />
           ))}
-          {cols.map((c) => (
-            <linearGradient id={`stream2-${c.key}`} key={`g2-${c.key}`} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={c.fill} stopOpacity="0.85" />
-              <stop offset="100%" stopColor={c.fill} stopOpacity="0.10" />
-            </linearGradient>
-          ))}
-          <linearGradient id="compGrad" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0%" stopColor="#fbbf24" />
-            <stop offset="50%" stopColor="#22d3ee" />
-            <stop offset="100%" stopColor="#a78bfa" />
-          </linearGradient>
-          <linearGradient id="reportGrad" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0%" stopColor="rgba(148,163,184,0.4)" />
-            <stop offset="100%" stopColor="rgba(34,211,238,0.5)" />
-          </linearGradient>
-          <radialGradient id="compGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(34,211,238,0.18)" />
-            <stop offset="100%" stopColor="rgba(34,211,238,0)" />
-          </radialGradient>
-          <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="6" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
+        </div>
 
-        {/* Incoming report */}
-        <g filter="url(#softGlow)">
-          <rect
-            x={reportX}
-            y={reportY}
-            width={reportW}
-            height={reportH}
-            rx={22}
-            fill="rgba(15,23,42,0.85)"
-            stroke="url(#reportGrad)"
-            strokeWidth="1.25"
-          />
-        </g>
-        <text
-          x={reportCx}
-          y={reportY + reportH / 2 + 5}
-          textAnchor="middle"
-          fontSize="15"
-          fontWeight="600"
-          fill="#e2e8f0"
-          fontFamily="ui-sans-serif, system-ui"
-          letterSpacing="0.3"
-        >
-          Incoming report
-        </text>
-
-        {/* Streams: report → engines (curved, width-proportional to weight) */}
-        {cols.map((c) => {
-          const sw = streamWidth(c.weight);
-          const x1 = reportCx;
-          const y1 = reportBottom;
-          const x2 = c.cx;
-          const y2 = engineY;
-          const midY = (y1 + y2) / 2;
-          const d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
-          return (
-            <path
-              key={`s1-${c.key}`}
-              d={d}
-              fill="none"
-              stroke={`url(#stream-${c.key})`}
-              strokeWidth={sw}
-              strokeLinecap="round"
-              opacity="0.9"
-            />
-          );
-        })}
-
-        {/* Engine cards — equal width, weight shown ONCE as the dominant number */}
-        {cols.map((c) => {
-          const isE2 = c.key === "e2";
-          return (
-            <g key={`eng-${c.key}`}>
-              {/* outer glow */}
-              <rect
-                x={c.x - 2}
-                y={engineY - 2}
-                width={colW + 4}
-                height={engineH + 4}
-                rx={14}
-                fill="none"
-                stroke={c.glow}
-                strokeWidth="1"
-                opacity="0.5"
-              />
-              {/* glass card */}
-              <rect
-                x={c.x}
-                y={engineY}
-                width={colW}
-                height={engineH}
-                rx={12}
-                fill="rgba(15,23,42,0.78)"
-                stroke={c.border}
-                strokeWidth="1.25"
-              />
-              {/* top accent bar */}
-              <rect
-                x={c.x}
-                y={engineY}
-                width={colW}
-                height={3}
-                rx={1.5}
-                fill={c.fill}
-                opacity="0.85"
-              />
-
-              {/* Engine label */}
-              <text
-                x={c.x + 16}
-                y={engineY + 26}
-                fontSize="10"
-                fontWeight="700"
-                fill={c.fill}
-                fontFamily="ui-monospace, SFMono-Regular"
-                letterSpacing="1.5"
-                opacity="0.9"
-              >
-                {c.label.toUpperCase()}
-              </text>
-
-              {/* Title */}
-              <text
-                x={c.x + 16}
-                y={engineY + 50}
-                fontSize="16"
-                fontWeight="600"
-                fill="#e2e8f0"
-                fontFamily="ui-sans-serif, system-ui"
-              >
-                {c.title}
-              </text>
-
-              {/* The single weight readout */}
-              <text
-                x={c.x + colW - 18}
-                y={engineY + engineH - 18}
-                textAnchor="end"
-                fontSize="42"
-                fontWeight="800"
-                fill={c.fill}
-                fontFamily="ui-monospace, SFMono-Regular"
-                style={{ filter: `drop-shadow(0 0 8px ${c.glow})` }}
-              >
-                {c.weight}
-                <tspan fontSize="20" fontWeight="600" fill={c.fill} opacity="0.75" dx="2">%</tspan>
-              </text>
-              <text
-                x={c.x + 16}
-                y={engineY + engineH - 18}
-                fontSize="10"
-                fill="#94a3b8"
-                fontFamily="ui-sans-serif, system-ui"
-                letterSpacing="0.5"
-              >
-                weight in composite
-              </text>
-
-              {/* AVRI variant tag — integrated into Engine 2's header */}
-              {isE2 && (() => {
-                const tagW = 108;
-                const tagX = c.x + colW - tagW - 12;
-                const tagY = engineY + 12;
-                const tagH = 20;
-                return (
-                  <g>
-                    <rect
-                      x={tagX}
-                      y={tagY}
-                      width={tagW}
-                      height={tagH}
-                      rx={10}
-                      fill="rgba(167,139,250,0.14)"
-                      stroke="rgba(167,139,250,0.55)"
-                    />
-                    <circle cx={tagX + 11} cy={tagY + tagH / 2} r="2.5" fill="#c4b5fd" />
-                    <text
-                      x={tagX + tagW / 2 + 6}
-                      y={tagY + tagH / 2 + 3.5}
-                      textAnchor="middle"
-                      fontSize="10"
-                      fontWeight="700"
-                      fill="#c4b5fd"
-                      fontFamily="ui-monospace, SFMono-Regular"
-                      letterSpacing="0.6"
-                    >
-                      AVRI VARIANT
-                    </text>
-                  </g>
-                );
-              })()}
-            </g>
-          );
-        })}
-
-        {/* Streams: engines → composite (curved, weight-proportional, converging) */}
-        {cols.map((c) => {
-          const sw = streamWidth(c.weight);
-          const x1 = c.cx;
-          const y1 = engineBottom;
-          const x2 = VBW / 2;
-          const y2 = fuseY;
-          const midY = (y1 + y2) / 2 + 10;
-          const d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
-          return (
-            <path
-              key={`s2-${c.key}`}
-              d={d}
-              fill="none"
-              stroke={`url(#stream2-${c.key})`}
-              strokeWidth={sw}
-              strokeLinecap="round"
-              opacity="0.9"
-            />
-          );
-        })}
-
-        {/* Composite output — gradient stroke ties the three engine colors together */}
-        <ellipse
-          cx={VBW / 2}
-          cy={compY + compH / 2}
-          rx={compW / 2 + 30}
-          ry={compH / 2 + 24}
-          fill="url(#compGlow)"
-        />
-        <rect
-          x={compX}
-          y={compY}
-          width={compW}
-          height={compH}
-          rx={14}
-          fill="rgba(15,23,42,0.85)"
-          stroke="url(#compGrad)"
-          strokeWidth="1.75"
-        />
-        <text
-          x={VBW / 2}
-          y={compY + 22}
-          textAnchor="middle"
-          fontSize="11"
-          fontWeight="700"
-          fill="#94a3b8"
-          fontFamily="ui-monospace, SFMono-Regular"
-          letterSpacing="2"
-        >
-          COMPOSITE OUTPUT
-        </text>
-        <text
-          x={VBW / 2}
-          y={compY + 42}
-          textAnchor="middle"
-          fontSize="14"
-          fontWeight="600"
-          fill="#e2e8f0"
-          fontFamily="ui-sans-serif, system-ui"
-        >
-          Score 0&ndash;100 &nbsp;·&nbsp; Triage label
-        </text>
-      </svg>
+        {/* Footer caption — the lesson in one line */}
+        <div className="flex items-start gap-2 px-1">
+          <Info className="w-3.5 h-3.5 text-cyan-400/70 flex-shrink-0 mt-0.5" />
+          <p className="text-[11px] text-muted-foreground/85 leading-snug">
+            <span className="text-foreground font-semibold">Same CWE-89 cited.</span> What separates these reports is{" "}
+            <span className="text-cyan-300 font-mono">substance</span>. When Engine 2 sees no evidence, the substance
+            gate caps Engine 3 — so a report can&apos;t earn 27 composite points just for naming the right CWE number.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
+
 
 export default function Home() {
   const navigate = useNavigate();
