@@ -11,6 +11,7 @@ import { BlogDataIsThere } from "@/components/blog-data-is-there";
 import { BlogZeroDetection } from "@/components/blog-zero-detection";
 import { BlogFieldTestV350 } from "@/components/blog-field-test-v350";
 import { BlogAvriSprint11 } from "@/components/blog-avri-sprint11";
+import { BlogSubstanceGate } from "@/components/blog-substance-gate";
 
 function FirstPost() {
   return (
@@ -154,6 +155,12 @@ export default function Blog() {
           Updates, technical deep-dives, and the occasional rant about vulnerability report quality.
         </p>
       </div>
+
+      <Card className="glass-card rounded-xl">
+        <CardContent className="p-8">
+          <BlogSubstanceGate />
+        </CardContent>
+      </Card>
 
       <Card className="glass-card rounded-xl">
         <CardContent className="p-8">

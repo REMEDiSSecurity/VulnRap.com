@@ -3,10 +3,48 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout } from "lucide-react";
 
-export const CURRENT_VERSION = "3.7.0";
-export const RELEASE_DATE = "2026-04-22";
+export const CURRENT_VERSION = "3.7.1";
+export const RELEASE_DATE = "2026-04-23";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.7.1",
+    date: "2026-04-23",
+    label: "Sprint 12 A1 — E3 Substance Gate",
+    labelColor: "border-violet-500 text-violet-300",
+    sections: [
+      {
+        icon: <Crosshair className="w-4 h-4 text-violet-300" />,
+        title: "Engine 3 cross-references Engine 2 before voting",
+        type: "improvement",
+        items: [
+          "New adjustE3ForSubstance step inside computeComposite caps the CWE Coherence score against Technical Substance: E2 < 30 caps E3 at 42, E2 < 45 caps E3 at 55, otherwise no cap",
+          "Closes the Sprint 11 leak where slop reports earned ~27 composite points just for citing the right CWE number while Engine 2 reported near-zero evidence",
+          "Original EngineResult is not mutated — only the score fed into the weighted sum is adjusted, so the per-engine breakdown shown to analysts still reflects the raw E3 verdict",
+          "When the cap fires it is surfaced as an E3_SUBSTANCE_GATE entry in compositeOverrides, visible on the result page alongside the existing override audit trail",
+          "Flows through the AVRI composite path automatically since AVRI calls computeComposite under the hood; no separate wiring needed",
+        ],
+      },
+      {
+        icon: <Wrench className="w-4 h-4 text-amber-400" />,
+        title: "Emergency-disable feature flag",
+        type: "feature",
+        items: [
+          "VULNRAP_E3_SUBSTANCE_CAP environment variable (default on) — set to \"false\" to revert to the legacy Sprint 11 behaviour without a redeploy if the gate ever causes a regression in the field",
+          "Hardened the E3 fallback against NaN and missing-engine inputs to preserve the v3.6.0 §5 Report 59 NaN-defence path",
+        ],
+      },
+      {
+        icon: <FlaskConical className="w-4 h-4 text-emerald-400" />,
+        title: "Calibration harness in CI",
+        type: "feature",
+        items: [
+          "New e3-substance-gate.test.ts re-scores the ten Sprint 11 expanded-battery reports under both gate-off and gate-on settings and asserts the slop/legit gap moves in the right direction (gap closed from 4 to 14, highest slop dropped 44 → 34, lowest legit unchanged at 48)",
+          "Includes an always-passing calibration-summary test that prints the full before/after table to CI logs, so every future scoring change has a one-line view of how it moved the gap",
+        ],
+      },
+    ],
+  },
   {
     version: "3.7.0",
     date: "2026-04-22",
