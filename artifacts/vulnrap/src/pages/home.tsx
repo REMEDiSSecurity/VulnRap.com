@@ -700,13 +700,10 @@ function EngineRowSvg({ row, x, y, width }: { row: ExampleEngineRow; x: number; 
 
   return (
     <g>
-      {/* Title row: swatch + name + weight + score */}
+      {/* Title row: swatch + name + score (weight is in the legend, not repeated here) */}
       <circle cx={x + 4} cy={y + 8} r={3.5} fill={palette.fill} />
       <text x={x + 14} y={y + 12} fontSize={12.5} fontWeight={600} fill="#e2e8f0" fontFamily="ui-sans-serif, system-ui">
         {row.title}
-      </text>
-      <text x={x + 14 + row.title.length * 6.6 + 8} y={y + 12} fontSize={10.5} fill="#94a3b8" fontFamily="ui-monospace, SFMono-Regular">
-        {`\u00D7${row.weight}%`}
       </text>
 
       {/* Score (right-aligned). For gated rows: strike-through raw, then effective. */}
@@ -884,32 +881,97 @@ function WorkedExampleSvg({ ex, x, y, width, height }: { ex: WorkedExample; x: n
   );
 }
 
+const DIAGRAM_ENGINES = [
+  { key: "e1" as const, title: "AI Authorship", weight: 5 },
+  { key: "e2" as const, title: "Technical Substance", weight: 55 },
+  { key: "e3" as const, title: "CWE Coherence", weight: 40 },
+];
+
+function LegendChips({ x, y, layout }: { x: number; y: number; layout: "inline" | "stacked" }) {
+  // inline: label and chips on the same row (wide layout)
+  // stacked: label on its own row above the chips (narrow layout)
+  if (layout === "inline") {
+    let chipX = x + 230;
+    return (
+      <g>
+        <text x={x} y={y + 14} fontSize={11} fontWeight={700} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui" letterSpacing={1.2}>
+          {"3 ENGINES VOTE \u00B7 WEIGHTS SUM TO 100%"}
+        </text>
+        {DIAGRAM_ENGINES.map((e) => {
+          const palette = ENGINE_HEX[e.key];
+          const w = e.title.length * 6.6 + 60;
+          const cx = chipX;
+          chipX += w + 8;
+          return (
+            <g key={e.key}>
+              <rect x={cx} y={y} width={w} height={20} rx={4} fill={palette.track} stroke={palette.ring} />
+              <circle cx={cx + 9} cy={y + 10} r={3} fill={palette.fill} />
+              <text x={cx + 17} y={y + 14} fontSize={10.5} fontWeight={700} fill={palette.fill} fontFamily="ui-sans-serif, system-ui">
+                {e.title}
+              </text>
+              <text x={cx + w - 8} y={y + 14} textAnchor="end" fontSize={10} fill="#94a3b8" fontFamily="ui-monospace, SFMono-Regular">
+                {e.weight}%
+              </text>
+            </g>
+          );
+        })}
+      </g>
+    );
+  }
+  // Stacked layout: label on row 1, chips on row 2
+  let chipX = x;
+  return (
+    <g>
+      <text x={x} y={y + 12} fontSize={10.5} fontWeight={700} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui" letterSpacing={1.2}>
+        {"3 ENGINES VOTE \u00B7 WEIGHTS SUM TO 100%"}
+      </text>
+      {DIAGRAM_ENGINES.map((e) => {
+        const palette = ENGINE_HEX[e.key];
+        const w = e.title.length * 6.6 + 60;
+        const cx = chipX;
+        chipX += w + 8;
+        return (
+          <g key={e.key}>
+            <rect x={cx} y={y + 22} width={w} height={20} rx={4} fill={palette.track} stroke={palette.ring} />
+            <circle cx={cx + 9} cy={y + 32} r={3} fill={palette.fill} />
+            <text x={cx + 17} y={y + 36} fontSize={10.5} fontWeight={700} fill={palette.fill} fontFamily="ui-sans-serif, system-ui">
+              {e.title}
+            </text>
+            <text x={cx + w - 8} y={y + 36} textAnchor="end" fontSize={10} fill="#94a3b8" fontFamily="ui-monospace, SFMono-Regular">
+              {e.weight}%
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+const DIAGRAM_ARIA_LABEL =
+  "Three-engine composite scoring with two worked examples. Slop attempt: AI Authorship 78, Substance 14, CWE Coherence raw 78 capped at 42 by the substance gate, composite 26, triage CHALLENGE_REPORTER. Genuine report: AI Authorship 18, Substance 76, CWE Coherence 82, composite 79, triage PRIORITIZE.";
+
 function ScoringPipelineDiagram() {
-  const VBW = 1000;
-  const VBH = 600;
-  const padX = 24;
-  const innerW = VBW - padX * 2;
-  const cardGap = 24;
-  const cardW = (innerW - cardGap) / 2;
-  const cardY = 56;
-  const cardH = 488;
-  const card1X = padX;
-  const card2X = padX + cardW + cardGap;
+  // ---- Wide (sm and up) layout: cards side-by-side ----
+  const wideVBW = 1000;
+  const wideVBH = 600;
+  const widePadX = 24;
+  const wideInnerW = wideVBW - widePadX * 2;
+  const wideCardGap = 24;
+  const wideCardW = (wideInnerW - wideCardGap) / 2;
+  const wideCardY = 56;
+  const wideCardH = 488;
 
-  const engines = [
-    { key: "e1" as const, title: "AI Authorship", weight: 5 },
-    { key: "e2" as const, title: "Technical Substance", weight: 55 },
-    { key: "e3" as const, title: "CWE Coherence", weight: 40 },
-  ];
-
-  // Legend chip positions (computed left-to-right)
-  let chipX = padX + 230; // after the "3 engines vote · weights" label
-  const chips = engines.map((e) => {
-    const w = e.title.length * 6.6 + 60;
-    const item = { ...e, x: chipX, w };
-    chipX += w + 8;
-    return item;
-  });
+  // ---- Narrow (below sm) layout: cards stacked vertically ----
+  const narrowVBW = 600;
+  const narrowPadX = 20;
+  const narrowInnerW = narrowVBW - narrowPadX * 2;
+  const narrowLegendH = 60;
+  const narrowCardGap = 20;
+  const narrowCardH = 488;
+  const narrowCard1Y = narrowLegendH + 8;
+  const narrowCard2Y = narrowCard1Y + narrowCardH + narrowCardGap;
+  const narrowFooterY = narrowCard2Y + narrowCardH + 12;
+  const narrowVBH = narrowFooterY + 28;
 
   return (
     <div
@@ -928,7 +990,7 @@ function ScoringPipelineDiagram() {
         }}
       />
 
-      {/* Screen reader prose walkthrough */}
+      {/* Screen reader prose walkthrough — read once regardless of which SVG renders. */}
       <p className="sr-only">
         Worked-example diagram comparing two reports that both cite CWE-89. The slop attempt has no proof of concept,
         no payload, and no endpoint; its engine scores are AI Authorship 78, Technical Substance 14, raw CWE Coherence 78.
@@ -939,43 +1001,40 @@ function ScoringPipelineDiagram() {
         lands at 79 and triage routes to PRIORITIZE.
       </p>
 
+      {/* Wide layout: cards side-by-side, shown at sm and up */}
       <svg
-        viewBox={`0 0 ${VBW} ${VBH}`}
-        className="relative w-full h-auto"
+        viewBox={`0 0 ${wideVBW} ${wideVBH}`}
+        className="hidden sm:block relative w-full h-auto"
         role="img"
-        aria-label="Three-engine composite scoring with two worked examples. Slop attempt: AI Authorship 78, Substance 14, CWE Coherence raw 78 capped at 42 by the substance gate, composite 26, triage CHALLENGE_REPORTER. Genuine report: AI Authorship 18, Substance 76, CWE Coherence 82, composite 79, triage PRIORITIZE."
+        aria-label={DIAGRAM_ARIA_LABEL}
         preserveAspectRatio="xMidYMid meet"
       >
-        {/* Legend strip */}
-        <text x={padX} y={28} fontSize={11} fontWeight={700} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui" letterSpacing={1.2}>
-          {"3 ENGINES VOTE \u00B7 WEIGHTS SUM TO 100%"}
-        </text>
-        {chips.map((c) => {
-          const palette = ENGINE_HEX[c.key];
-          return (
-            <g key={c.key}>
-              <rect x={c.x} y={14} width={c.w} height={20} rx={4} fill={palette.track} stroke={palette.ring} />
-              <circle cx={c.x + 9} cy={24} r={3} fill={palette.fill} />
-              <text x={c.x + 17} y={28} fontSize={10.5} fontWeight={700} fill={palette.fill} fontFamily="ui-sans-serif, system-ui">
-                {c.title}
-              </text>
-              <text x={c.x + c.w - 8} y={28} textAnchor="end" fontSize={10} fill="#94a3b8" fontFamily="ui-monospace, SFMono-Regular">
-                {c.weight}%
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Two worked-example cards, side-by-side */}
-        <WorkedExampleSvg ex={WORKED_EXAMPLES[0]} x={card1X} y={cardY} width={cardW} height={cardH} />
-        <WorkedExampleSvg ex={WORKED_EXAMPLES[1]} x={card2X} y={cardY} width={cardW} height={cardH} />
-
-        {/* Footer caption */}
-        <text x={VBW / 2} y={cardY + cardH + 30} textAnchor="middle" fontSize={11.5} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui">
+        <LegendChips x={widePadX} y={14} layout="inline" />
+        <WorkedExampleSvg ex={WORKED_EXAMPLES[0]} x={widePadX} y={wideCardY} width={wideCardW} height={wideCardH} />
+        <WorkedExampleSvg ex={WORKED_EXAMPLES[1]} x={widePadX + wideCardW + wideCardGap} y={wideCardY} width={wideCardW} height={wideCardH} />
+        <text x={wideVBW / 2} y={wideCardY + wideCardH + 30} textAnchor="middle" fontSize={11.5} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui">
           <tspan fontWeight={700} fill="#e2e8f0">Same CWE-89 cited.</tspan>
           {"  "}What separates these reports is{" "}
           <tspan fill="#22d3ee" fontFamily="ui-monospace, SFMono-Regular">substance</tspan>
           . When Engine 2 sees no evidence, the substance gate caps Engine 3.
+        </text>
+      </svg>
+
+      {/* Narrow layout: cards stacked vertically, shown below sm */}
+      <svg
+        viewBox={`0 0 ${narrowVBW} ${narrowVBH}`}
+        className="block sm:hidden relative w-full h-auto"
+        role="img"
+        aria-label={DIAGRAM_ARIA_LABEL}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <LegendChips x={narrowPadX} y={4} layout="stacked" />
+        <WorkedExampleSvg ex={WORKED_EXAMPLES[0]} x={narrowPadX} y={narrowCard1Y} width={narrowInnerW} height={narrowCardH} />
+        <WorkedExampleSvg ex={WORKED_EXAMPLES[1]} x={narrowPadX} y={narrowCard2Y} width={narrowInnerW} height={narrowCardH} />
+        <text x={narrowVBW / 2} y={narrowFooterY + 14} textAnchor="middle" fontSize={11} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui">
+          <tspan fontWeight={700} fill="#e2e8f0">Same CWE-89 cited.</tspan>
+          {"  "}What separates them is{" "}
+          <tspan fill="#22d3ee" fontFamily="ui-monospace, SFMono-Regular">substance</tspan>.
         </text>
       </svg>
     </div>
