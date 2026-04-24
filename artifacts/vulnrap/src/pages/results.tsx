@@ -161,6 +161,30 @@ function AxisBar({ label, score, icon, color }: { label: string; score: number; 
   );
 }
 
+function PolishedRadarFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="relative flex-shrink-0 rounded-xl border border-cyan-500/15 p-3 overflow-hidden"
+      style={{
+        background:
+          "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%)",
+        boxShadow:
+          "0 0 0 1px rgba(0,255,255,0.04) inset, 0 8px 32px rgba(0,0,0,0.35)",
+      }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.18]"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(34,211,238,0.35), transparent 70%), radial-gradient(ellipse 35% 35% at 18% 25%, rgba(251,191,36,0.18), transparent 70%), radial-gradient(ellipse 35% 35% at 82% 75%, rgba(167,139,250,0.22), transparent 70%)",
+        }}
+      />
+      <div className="relative">{children}</div>
+    </div>
+  );
+}
+
 function LlmDimensionBar({ label, score }: { label: string; score: number }) {
   const color = score >= 50 ? "bg-destructive" : score >= 25 ? "bg-yellow-500" : "bg-green-500";
   return (
@@ -1741,7 +1765,7 @@ export default function Results() {
           <CardContent>
             {llmBreakdown.claimSpecificity != null ? (
               <div className="flex flex-col md:flex-row items-center gap-6">
-                <div className="flex-shrink-0">
+                <PolishedRadarFrame>
                   <RadarChart
                     data={[
                       { label: "Claim Specificity", value: (llmBreakdown.claimSpecificity ?? 0) * 4, max: 100 },
@@ -1749,9 +1773,10 @@ export default function Results() {
                       { label: "Consistency", value: (llmBreakdown.internalConsistency ?? 0) * 4, max: 100 },
                       { label: "Hallucination", value: (llmBreakdown.hallucinationSignals ?? 0) * 4, max: 100 },
                     ]}
-                    size={220}
+                    size={240}
+                    ariaLabel="LLM validity assessment radar across Claim Specificity, Evidence Quality, Consistency, and Hallucination."
                   />
-                </div>
+                </PolishedRadarFrame>
                 <div className="flex-1 w-full space-y-3">
                   <LlmDimensionBar label="Claim Specificity" score={(llmBreakdown.claimSpecificity ?? 0) * 4} />
                   <LlmDimensionBar label="Evidence Quality" score={(llmBreakdown.evidenceQuality ?? 0) * 4} />
@@ -1776,7 +1801,7 @@ export default function Results() {
               </div>
             ) : (
               <div className="flex flex-col md:flex-row items-center gap-6">
-                <div className="flex-shrink-0">
+                <PolishedRadarFrame>
                   <RadarChart
                     data={[
                       { label: "Specificity", value: llmBreakdown.specificity ?? 0, max: 100 },
@@ -1785,9 +1810,10 @@ export default function Results() {
                       { label: "Coherence", value: llmBreakdown.coherence ?? 0, max: 100 },
                       { label: "Hallucination", value: llmBreakdown.hallucination ?? 0, max: 100 },
                     ]}
-                    size={220}
+                    size={240}
+                    ariaLabel="LLM validity assessment radar across Specificity, Originality, Voice, Coherence, and Hallucination."
                   />
-                </div>
+                </PolishedRadarFrame>
                 <div className="flex-1 w-full space-y-3">
                   {llmBreakdown.specificity != null && <LlmDimensionBar label="Specificity" score={llmBreakdown.specificity} />}
                   {llmBreakdown.originality != null && <LlmDimensionBar label="Originality" score={llmBreakdown.originality} />}
