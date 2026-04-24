@@ -412,7 +412,7 @@ function SlopDetectionCard() {
             Validity Scoring
             <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
           </h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">Three-engine composite scoring: Technical Substance (55%), CWE Coherence (40%), and AI Authorship (5%) vote with different weights and fuse into a single composite score and triage label. CWE Coherence is capped when Substance reports near-zero evidence, so a report can't earn 27 composite points just for naming the right CWE number. Tap to see how.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">Three-engine composite scoring: Technical Substance (60%), CWE Coherence (35%), and AI Authorship (5%) vote with different weights and fuse into a single composite score and triage label. CWE Coherence is capped when Substance reports near-zero evidence, so a report can't earn 24 composite points just for naming the right CWE number. Tap to see how.</p>
         </div>
       </button>
 
@@ -423,7 +423,7 @@ function SlopDetectionCard() {
 
           <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2.5">
             <p className="text-[11px] text-muted-foreground/85 leading-relaxed">
-              <span className="text-violet-300 font-semibold">AVRI (in flight, behind <span className="font-mono">VULNRAP_USE_AVRI</span>):</span> swaps Engine 2's rubric for one of eight CWE-family-specific rubrics (memory corruption, injection, auth/access, crypto/protocol, DoS/resource, info exposure, request forgery, hardware) with family-specific gold signals and absence penalties. Weights stay 5/55/40; only Engine 2's internals change. Default off in production until calibration confirms the score-gap target. The legacy <span className="font-mono">slopScore</span> API field is mapped from the composite for backward compatibility.
+              <span className="text-violet-300 font-semibold">AVRI (in flight, behind <span className="font-mono">VULNRAP_USE_AVRI</span>):</span> swaps Engine 2's rubric for one of eight CWE-family-specific rubrics (memory corruption, injection, auth/access, crypto/protocol, DoS/resource, info exposure, request forgery, hardware) with family-specific gold signals and absence penalties. Weights stay 5/60/35; only Engine 2's internals change. Default off in production until calibration confirms the score-gap target. The legacy <span className="font-mono">slopScore</span> API field is mapped from the composite for backward compatibility.
             </p>
           </div>
 
@@ -474,7 +474,7 @@ function SlopDetectionCard() {
           <div className="space-y-2 border-t border-border/30 pt-4">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60" />
-              Inside Engine 2 — Technical Substance (55% of composite)
+              Inside Engine 2 — Technical Substance (60% of composite)
             </h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
               In the current production path, Engine 2's 0–100 sub-score is built from five weighted evidence categories: <span className="font-mono text-cyan-300">Code Evidence (35%) + References (30%) + Reproducibility (20%) + PoC Integrity (10%) + Claim/Evidence Ratio (5%)</span>, with up to a +15 point bonus when many strong-evidence signals stack. When LLM analysis is enabled, heuristic and LLM substance scores are blended 50/50; if they disagree by more than 30 points, the lower (more conservative) score is used. <span className="text-violet-300">Under the AVRI flag, this entire rubric is swapped for the matching CWE-family rubric — same Engine 2 slot, family-specific gold signals and absence penalties.</span>
@@ -484,10 +484,10 @@ function SlopDetectionCard() {
           <div className="space-y-2 border-t border-border/30 pt-4">
             <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-violet-400/60" />
-              Inside Engine 3 — CWE Coherence (40% of composite)
+              Inside Engine 3 — CWE Coherence (35% of composite)
             </h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
-              Engine 3 checks that the vulnerability class the report claims (e.g. SQL injection, buffer overflow, SSRF) is consistent with the evidence and PoC actually shown. A claimed XSS whose payload triggers a database error, a stated buffer overflow with no memory-corruption indicators, or a CVE citation that disagrees with NVD's assigned CWE all lower this engine's sub-score sharply. CWE Coherence is the second-largest vote (40%) because mismatched-class reports are one of the most reliable LLM-slop tells.
+              Engine 3 checks that the vulnerability class the report claims (e.g. SQL injection, buffer overflow, SSRF) is consistent with the evidence and PoC actually shown. A claimed XSS whose payload triggers a database error, a stated buffer overflow with no memory-corruption indicators, or a CVE citation that disagrees with NVD's assigned CWE all lower this engine's sub-score sharply. CWE Coherence is the second-largest vote (35%) because mismatched-class reports are one of the most reliable LLM-slop tells.
             </p>
             <div className="rounded-md bg-violet-500/5 border border-violet-500/15 px-3 py-2">
               <p className="text-[11px] text-muted-foreground/85 leading-relaxed">
@@ -653,8 +653,8 @@ const WORKED_EXAMPLES: WorkedExample[] = [
     ],
     rows: [
       { key: "e1", title: "AI Authorship", weight: 5, rawScore: 78, inverted: true },
-      { key: "e2", title: "Technical Substance", weight: 55, rawScore: 14 },
-      { key: "e3", title: "CWE Coherence", weight: 40, rawScore: 78, effectiveScore: 42, gateNote: "E2 < 30 \u2192 cap E3 at 42" },
+      { key: "e2", title: "Technical Substance", weight: 60, rawScore: 17 },
+      { key: "e3", title: "CWE Coherence", weight: 35, rawScore: 78, effectiveScore: 42, gateNote: "E2 < 30 \u2192 cap E3 at 42" },
     ],
     composite: 26,
     triageLabel: "CHALLENGE_REPORTER",
@@ -670,10 +670,10 @@ const WORKED_EXAMPLES: WorkedExample[] = [
     ],
     rows: [
       { key: "e1", title: "AI Authorship", weight: 5, rawScore: 18, inverted: true },
-      { key: "e2", title: "Technical Substance", weight: 55, rawScore: 76 },
-      { key: "e3", title: "CWE Coherence", weight: 40, rawScore: 82 },
+      { key: "e2", title: "Technical Substance", weight: 60, rawScore: 76 },
+      { key: "e3", title: "CWE Coherence", weight: 35, rawScore: 82 },
     ],
-    composite: 79,
+    composite: 78,
     triageLabel: "PRIORITIZE",
     triageSummary: "Routes straight to a senior reviewer.",
   },
@@ -883,8 +883,8 @@ function WorkedExampleSvg({ ex, x, y, width, height }: { ex: WorkedExample; x: n
 
 const DIAGRAM_ENGINES = [
   { key: "e1" as const, title: "AI Authorship", weight: 5 },
-  { key: "e2" as const, title: "Technical Substance", weight: 55 },
-  { key: "e3" as const, title: "CWE Coherence", weight: 40 },
+  { key: "e2" as const, title: "Technical Substance", weight: 60 },
+  { key: "e3" as const, title: "CWE Coherence", weight: 35 },
 ];
 
 function LegendChips({ x, y, layout }: { x: number; y: number; layout: "inline" | "stacked" }) {
@@ -948,7 +948,7 @@ function LegendChips({ x, y, layout }: { x: number; y: number; layout: "inline" 
 }
 
 const DIAGRAM_ARIA_LABEL =
-  "Three-engine composite scoring with two worked examples. Slop attempt: AI Authorship 78, Substance 14, CWE Coherence raw 78 capped at 42 by the substance gate, composite 26, triage CHALLENGE_REPORTER. Genuine report: AI Authorship 18, Substance 76, CWE Coherence 82, composite 79, triage PRIORITIZE.";
+  "Three-engine composite scoring with two worked examples. Slop attempt: AI Authorship 78, Substance 17, CWE Coherence raw 78 capped at 42 by the substance gate, composite 26, triage CHALLENGE_REPORTER. Genuine report: AI Authorship 18, Substance 76, CWE Coherence 82, composite 78, triage PRIORITIZE.";
 
 function ScoringPipelineDiagram() {
   // ---- Wide (sm and up) layout: cards side-by-side ----
@@ -993,12 +993,12 @@ function ScoringPipelineDiagram() {
       {/* Screen reader prose walkthrough — read once regardless of which SVG renders. */}
       <p className="sr-only">
         Worked-example diagram comparing two reports that both cite CWE-89. The slop attempt has no proof of concept,
-        no payload, and no endpoint; its engine scores are AI Authorship 78, Technical Substance 14, raw CWE Coherence 78.
+        no payload, and no endpoint; its engine scores are AI Authorship 78, Technical Substance 17, raw CWE Coherence 78.
         Because Substance is below 30, the substance gate caps Engine 3 at 42, so the weighted composite lands at 26 and
         triage routes to CHALLENGE_REPORTER. The genuine report has the same CWE number but with a curl proof of concept,
         the exact payload, an endpoint, a file path with line number, and a real database error; its engine scores are
         AI Authorship 18, Technical Substance 76, CWE Coherence 82. The substance gate does not fire, so the composite
-        lands at 79 and triage routes to PRIORITIZE.
+        lands at 78 and triage routes to PRIORITIZE.
       </p>
 
       {/* Wide layout: cards side-by-side, shown at sm and up */}
@@ -1677,7 +1677,7 @@ export default function Home() {
             These weights and signals didn't come out of thin air. We worked through a large corpus of real-world vulnerability submissions — a mix of well-known confirmed reports, public bug-bounty disclosures, and the increasingly familiar wave of LLM-generated slop that PSIRT inboxes have been flooded with over the last two years. For each report we recorded what humans ultimately decided about it (real, duplicate, or noise), then tuned the engine weights and the evidence multipliers until the model's verdicts lined up with the human verdicts.
           </p>
           <p>
-            That's how we ended up at the 55% / 40% / 5% split: substance-of-PoC and CWE-coherence were the two signals that consistently separated real submissions from generated ones, while pure linguistic "this sounds like an LLM wrote it" cues turned out to be much noisier than they look in isolation. The blog post on the field test walks through specific examples from that round of calibration if you want to see the receipts.
+            That's how we ended up at the 60% / 35% / 5% split (refined from an earlier 55% / 40% / 5% as the substance-vs-coherence calibration matured through Sprint 12): substance-of-PoC and CWE-coherence were the two signals that consistently separated real submissions from generated ones, while pure linguistic "this sounds like an LLM wrote it" cues turned out to be much noisier than they look in isolation. The blog post on the field test walks through specific examples from that round of calibration if you want to see the receipts.
           </p>
           <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 space-y-3">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
@@ -1788,7 +1788,7 @@ function TransparencySection() {
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">1.</span>Your raw text is received over HTTPS. For URLs, we fetch the content server-side (HTTPS only, allowlisted hosts).</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">2.</span>The redaction engine runs immediately — regex patterns strip PII, secrets, credentials, and company names. The raw text is discarded and never stored.</li>
                 <li className="flex gap-2"><span className="text-violet-400 mt-0.5">3.</span>All analysis (hashing, similarity, slop scoring) runs on the redacted text only.</li>
-                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The three-engine composite scorer analyzes the redacted text in server memory — Engine 1 AI Authorship (linguistic, template, spectral), Engine 2 Technical Substance (evidence quality, references, reproducibility, PoC integrity, claim/evidence ratio — or the matching CWE-family rubric when AVRI is enabled), and Engine 3 CWE Coherence. The original (pre-redaction) text is never written to disk or database. When the optional LLM is enabled and the heuristic score is borderline, the redacted version is sent to the configured AI provider for a substance second opinion that blends into Engine 2. The three engines fuse with fixed weights — Substance 55%, Coherence 40%, Authorship 5% — into a single composite, with Engine 3 capped against Engine 2 so reports without evidence can't earn coherence points for citing the right CWE alone, and the legacy <span className="font-mono">slopScore</span> field is mapped from that composite for backward compatibility.</li>
+                <li className="flex gap-2"><span className="text-violet-400 mt-0.5">4.</span>The three-engine composite scorer analyzes the redacted text in server memory — Engine 1 AI Authorship (linguistic, template, spectral), Engine 2 Technical Substance (evidence quality, references, reproducibility, PoC integrity, claim/evidence ratio — or the matching CWE-family rubric when AVRI is enabled), and Engine 3 CWE Coherence. The original (pre-redaction) text is never written to disk or database. When the optional LLM is enabled and the heuristic score is borderline, the redacted version is sent to the configured AI provider for a substance second opinion that blends into Engine 2. The three engines fuse with fixed weights — Substance 60%, Coherence 35%, Authorship 5% — into a single composite, with Engine 3 capped against Engine 2 so reports without evidence can't earn coherence points for citing the right CWE alone, and the legacy <span className="font-mono">slopScore</span> field is mapped from that composite for backward compatibility.</li>
               </ul>
             </div>
           </div>

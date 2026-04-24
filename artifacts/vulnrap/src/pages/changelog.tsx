@@ -3,10 +3,49 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout } from "lucide-react";
 
-export const CURRENT_VERSION = "3.7.1";
-export const RELEASE_DATE = "2026-04-23";
+export const CURRENT_VERSION = "3.8.0";
+export const RELEASE_DATE = "2026-04-24";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.8.0",
+    date: "2026-04-24",
+    label: "Sprint 12 A2 + A3 — Behavioral-Match Reward & Reweighting",
+    labelColor: "border-cyan-500 text-cyan-300",
+    sections: [
+      {
+        icon: <Target className="w-4 h-4 text-cyan-300" />,
+        title: "A2 — Behavioral-match reward (E2 gold + E3 coherent)",
+        type: "feature",
+        items: [
+          "New BEHAVIORAL_MATCH_REWARD override fires when both substance and coherence engines independently confirm the same finding: Engine 2 surfaces a GOLD_SIGNAL indicator (real crash trace, non-fabricated raw HTTP pair, code diff, etc.) AND Engine 3 ≥ 60 with no negative CWE signals (no TYPE_SWAP, UNKNOWN_CWE, UNDERSPECIFIED, NO_CWE_CLAIMED, VULN_TYPE_NO_CWE)",
+          "Reward is +6 composite points — calibrated to nudge a borderline 60-point report from MANUAL_REVIEW into PRIORITIZE only when the two strongest positive engines agree on the verdict",
+          "Gated by an Engine 1 verdict ≠ RED check so we never reward an AI-authored report just because its template happened to cite a real CWE",
+          "Surfaced as a BEHAVIORAL_MATCH_REWARD entry in compositeOverrides alongside the existing penalty audit trail",
+          "Note: GOLD_SIGNAL is currently an AVRI-only indicator, so the reward is reachable in practice only when VULNRAP_USE_AVRI=true. Legacy Engine 2 will gain its own gold-signal hooks in a follow-up sprint",
+        ],
+      },
+      {
+        icon: <BarChart3 className="w-4 h-4 text-cyan-300" />,
+        title: "A3 — Composite reweighted from 5/55/40 to 5/60/35",
+        type: "improvement",
+        items: [
+          "Engine weights shifted toward Technical Substance (55% → 60%) and away from CWE Coherence (40% → 35%); AI Authorship stays at 5%",
+          "Rebalances the composite to reflect Sprint 11 + 12 A1 evidence that Engine 2 is the strongest single discriminator between slop and legitimate reports while Engine 3 (now also gated by the substance cap) was over-weighted relative to its true predictive power",
+          "Affects all paths through computeComposite (legacy and AVRI). The home page scoring diagram, 404 page joke scorecard, and developer-facing /api/calibration/v3.6.0 weights summary are all updated to match",
+          "Existing e3-substance-gate.test.ts harness re-validates the slop/legit gap with the new weights — slop max stays ≤ 35 and gap stays ≥ 10, no fixture regression",
+        ],
+      },
+      {
+        icon: <Wrench className="w-4 h-4 text-amber-400" />,
+        title: "Operational fixes",
+        type: "fix",
+        items: [
+          "Repaired page_views schema drift — the visitor analytics table was carrying its pre-v3.6.0 (path, count) columns instead of the current (visitor_hash, created_at) shape, silently 500-ing every /api/stats/visit call. Table rebuilt; only one row of stale dev data was lost",
+        ],
+      },
+    ],
+  },
   {
     version: "3.7.1",
     date: "2026-04-23",

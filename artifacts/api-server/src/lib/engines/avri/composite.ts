@@ -75,7 +75,7 @@ export function runAvriComposite(
   const e2 = runEngine2Avri(signals, text, family);
   const e3 = runEngine3Avri(signals, text, family, classification);
 
-  // Run the existing composite (5/55/40 weighting + override rules).
+  // Run the existing composite (5/60/35 weighting + override rules).
   const baseComposite = computeComposite([e1, e2.engine, e3.engine]);
 
   // Apply Sprint 11 behavioral penalties on top, capped by clamp.

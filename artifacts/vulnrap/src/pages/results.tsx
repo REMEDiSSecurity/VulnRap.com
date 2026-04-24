@@ -1479,7 +1479,7 @@ export default function Results() {
               )}
             </CardTitle>
             <CardDescription>
-              Three independent engines (AI Authorship 5%, Technical Substance 55%, CWE Coherence 40%) score this report. Higher composite = stronger evidence of a real, reproducible issue.
+              Three independent engines (AI Authorship 5%, Technical Substance 60%, CWE Coherence 35%) score this report. Higher composite = stronger evidence of a real, reproducible issue.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">

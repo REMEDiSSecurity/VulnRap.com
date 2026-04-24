@@ -535,8 +535,8 @@ export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult 
 
 const ENGINE_WEIGHTS_PHASE1: Record<string, number> = {
   "AI Authorship Detector": 0.05,
-  "Technical Substance Analyzer": 0.55,
-  "CWE Coherence Checker": 0.40,
+  "Technical Substance Analyzer": 0.60,
+  "CWE Coherence Checker": 0.35,
 };
 
 function getCompositeLabel(score: number): string {
@@ -578,6 +578,39 @@ function applyOverrideRules(
     adjustment -= 5;
     applied.push("THIN_LEGITIMATE_REPORT: Low substance but not AI-authored");
   }
+
+  // Sprint 12 A2 — behavioral-match reward.
+  //
+  // When a report's evidence (E2) and CWE coherence (E3) BOTH point at the
+  // same real weakness, that convergence is a stronger positive signal than
+  // either engine alone. Specifically:
+  //   - E2 surfaced a GOLD_SIGNAL (AVRI engine 2 found a high-confidence
+  //     evidence artifact: a real crash trace, a non-fabricated raw HTTP
+  //     pair, a code diff, etc.), AND
+  //   - E3 ≥ 60 with NO negative CWE signals (no TYPE_SWAP, no UNKNOWN_CWE,
+  //     no UNDERSPECIFIED, no NO_CWE_CLAIMED, no VULN_TYPE_NO_CWE), AND
+  //   - E1 verdict is not RED (we never reward an AI-authored report just
+  //     because it happened to cite a real CWE that matched its template).
+  //
+  // The reward (+6) is calibrated to push a borderline 60-point report from
+  // MANUAL_REVIEW into PRIORITIZE territory only when both signals align.
+  // It cannot fire alongside CONVERGENT_NEGATIVE (those require ai.RED).
+  const goldSignal = sub?.triggeredIndicators?.some((i) => i.signal === "GOLD_SIGNAL") ?? false;
+  const cweNegativeSignals = new Set([
+    "TYPE_SWAP",
+    "UNKNOWN_CWE",
+    "UNDERSPECIFIED",
+    "NO_CWE_CLAIMED",
+    "VULN_TYPE_NO_CWE",
+  ]);
+  const cweClean = !(cwe?.triggeredIndicators?.some((i) => cweNegativeSignals.has(i.signal)) ?? false);
+  const cweStrong = (cwe?.score ?? 0) >= 60;
+  const aiNotRed = ai?.verdict !== "RED";
+  if (goldSignal && cweStrong && cweClean && aiNotRed) {
+    adjustment += 6;
+    applied.push("BEHAVIORAL_MATCH_REWARD: Engine 2 gold evidence + Engine 3 coherent CWE match");
+  }
+
   return composite + adjustment;
 }
 
@@ -587,7 +620,7 @@ function applyOverrideRules(
  * The Sprint 11 expanded battery showed that Engine 3 (CWE Coherence) hands
  * out generous scores (≈68) to slop reports that merely cite the correct CWE
  * number, even when Engine 2 reports near-zero technical substance. Because
- * E3 is weighted 0.40, those phantom 68s contribute ~27 composite points to
+ * E3 is weighted 0.35 (was 0.40 pre-Sprint-12-A3), those phantom 68s contribute ~24 composite points to
  * reports that have no evidence at all, collapsing the slop-vs-legit gap from
  * E2's clean 18-point separation down to ~4 points.
  *
@@ -625,7 +658,7 @@ function adjustE3ForSubstance(
 }
 
 export function computeComposite(engineResults: EngineResult[]): CompositeResult {
-  // Phase 1 always applies the fixed 5/55/40 weighting across all three
+  // Phase 1 always applies the fixed 5/60/35 weighting across all three
   // engines, regardless of per-engine confidence. Confidence is still surfaced
   // in the per-engine result so consumers can de-emphasize uncertain signals
   // in their UI, but the composite math itself is deterministic.

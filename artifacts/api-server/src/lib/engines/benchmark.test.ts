@@ -162,7 +162,14 @@ Reject any message containing both Transfer-Encoding and Content-Length with HTT
 
 ## Impact
 Cache poisoning, request hijacking, auth bypass. CVSS 9.0.`,
-    expectMinScore: 55,
+    // Sprint 12 A3: this fixture sat at exactly the old 55 threshold under
+    // the 5/55/40 weighting. The new 5/60/35 weighting drops it ~1 point to
+    // 54 because the fixture's E3 contribution shrank (35% vs 40%) faster
+    // than its E2 contribution grew (the report cites CWE-444 cleanly but
+    // doesn't expose any AVRI GOLD_SIGNAL — no crash trace, no real raw
+    // HTTP pair). 50 stays well inside the REASONABLE band and still
+    // distinguishes this from the slop fixtures (all ≤ 35).
+    expectMinScore: 50,
   },
 ];
 

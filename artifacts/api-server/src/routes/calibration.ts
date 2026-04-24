@@ -397,7 +397,7 @@ router.get("/feedback/calibration", async (_req, res) => {
       // v3.6.0: read-only suggestion field; no auto-apply.
       suggestedAdjustments,
       v3_6_0: {
-        engineWeights: { engine1: 0.05, engine2: 0.55, engine3: 0.40 },
+        engineWeights: { engine1: 0.05, engine2: 0.60, engine3: 0.35 },
         evidenceTypeMultipliers: {
           CRASH_OUTPUT: 2.5, CODE_DIFF: 2.2, STACK_TRACE: 2.0, SHELL_COMMAND: 1.8,
           HTTP_REQUEST: 1.6, MEMORY_ADDRESS: 1.5, LINE_NUMBER: 1.4, FUNCTION_NAME: 1.3,

@@ -91,16 +91,16 @@ export default function NotFound() {
   // Here raw E3 (8) is already below 42, so the gate fires conceptually but
   // produces no visible clamp — we show that honestly in the annotation copy.
   //   E1 contrib: 0.05 * (100 - 87) = 0.65
-  //   E2 contrib: 0.55 * 0          = 0.00
-  //   E3 contrib: 0.40 * 8          = 3.20
-  //   Composite : 3.85              → rounds to 4 (AUTO_CLOSE band, < 25)
+  //   E2 contrib: 0.60 * 0          = 0.00
+  //   E3 contrib: 0.35 * 8          = 2.80
+  //   Composite : 3.45              → rounds to 3 (AUTO_CLOSE band, < 25)
   const e1Raw = 87;
   const e2Raw = 0;
   const e3Raw = 8;
   const e3Eff = 8;
   const e1Contrib = 0.05 * (100 - e1Raw);
-  const e2Contrib = 0.55 * e2Raw;
-  const e3Contrib = 0.40 * e3Eff;
+  const e2Contrib = 0.60 * e2Raw;
+  const e3Contrib = 0.35 * e3Eff;
   const composite = Math.round(e1Contrib + e2Contrib + e3Contrib);
 
   return (
@@ -171,7 +171,7 @@ export default function NotFound() {
                 label="Technical Substance"
                 raw={e2Raw}
                 width={e2Contrib}
-                weight={55}
+                weight={60}
                 hex={E2_HEX}
                 note="Zero evidence. Zero reproduction steps."
               />
@@ -181,7 +181,7 @@ export default function NotFound() {
                   raw={e3Raw}
                   effective={e3Eff}
                   width={e3Contrib}
-                  weight={40}
+                  weight={35}
                   hex={E3_HEX}
                   note="No weakness identified."
                 />
@@ -241,8 +241,8 @@ export default function NotFound() {
             <span className="font-bold text-cyan-400">VulnRap</span> scores vulnerability reports the
             same way we just scored that URL{": "}
             <span className="font-mono text-slate-200">5%</span> AI Authorship,{" "}
-            <span className="font-mono text-slate-200">55%</span> Technical Substance,{" "}
-            <span className="font-mono text-slate-200">40%</span> CWE Coherence{". "}
+            <span className="font-mono text-slate-200">60%</span> Technical Substance,{" "}
+            <span className="font-mono text-slate-200">35%</span> CWE Coherence{". "}
             About <span className="font-bold text-slate-200">78%</span> of submissions PSIRT teams
             see right now look{" "}
             <span className="italic text-slate-400">a lot like the report above</span>{": "}
