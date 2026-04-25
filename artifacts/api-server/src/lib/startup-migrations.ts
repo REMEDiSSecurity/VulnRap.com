@@ -6,6 +6,10 @@ type AdditiveMigration = {
   id: string;
   description: string;
   statements: string[];
+  // When true, the migration is skipped unless NODE_ENV === "production".
+  // Used for migrations that materialize tables which would otherwise create
+  // a dev↔prod schema diff that the Replit deploy validator misinterprets.
+  productionOnly?: boolean;
 };
 
 const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
@@ -25,12 +29,20 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
     ],
   },
   {
-    // page_views was originally provisioned with (path varchar, count int) but the
-    // visitor-analytics rewrite expects (visitor_hash, view_date, created_at).
-    // Idempotent: only drops the table if the legacy "path" column is still present;
-    // otherwise the CREATE IF NOT EXISTS no-ops on already-correct deployments.
+    // page_views is materialized only in production. Replit's deploy validator
+    // performs a live dev↔prod schema diff; if the dev DB had page_views with
+    // the desired shape and production had the historical broken shape, the
+    // validator would generate an uncastable ALTER and refuse to deploy. By
+    // keeping page_views absent from dev (this migration is gated by
+    // productionOnly), the diff has nothing to generate for it. In prod the
+    // migration still runs, drops any pre-existing broken table, and creates
+    // it with the correct shape before the server starts handling requests.
+    // Dev runtime behaviour: the two raw-SQL queries in routes/stats.ts will
+    // 500 in development (table doesn't exist) — this is acceptable because
+    // visitor analytics is a non-critical read/write path.
     id: "2026-04-25-rebuild-page-views-visitor-schema",
-    description: "Rebuild page_views table whenever its column shape doesn't match the expected (visitor_hash varchar(64), view_date date, created_at timestamptz) layout",
+    description: "Rebuild page_views table whenever its column shape doesn't match the expected (visitor_hash varchar(64), view_date date, created_at timestamptz) layout (production only)",
+    productionOnly: true,
     statements: [
       // page_views is owned entirely by this startup migration — it is excluded
       // from drizzle-kit's schema scan (see lib/db/src/schema/index.ts) so the
@@ -98,7 +110,17 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
 ];
 
 export async function runStartupMigrations(): Promise<void> {
+  const isProduction = process.env.NODE_ENV === "production";
+
   for (const migration of ADDITIVE_MIGRATIONS) {
+    if (migration.productionOnly && !isProduction) {
+      logger.info(
+        { migrationId: migration.id },
+        `[startup-migrations] skipped (productionOnly, NODE_ENV=${process.env.NODE_ENV ?? "undefined"}): ${migration.description}`,
+      );
+      continue;
+    }
+
     try {
       for (const stmt of migration.statements) {
         await db.execute(sql.raw(stmt));
