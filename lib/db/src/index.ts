@@ -14,3 +14,6 @@ export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
+// page_views is excluded from the drizzle-kit schema scan (see ./schema/index.ts)
+// but still needs to be importable as a Drizzle table for runtime queries.
+export * from "./schema/page_views";

@@ -30,32 +30,59 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
     // Idempotent: only drops the table if the legacy "path" column is still present;
     // otherwise the CREATE IF NOT EXISTS no-ops on already-correct deployments.
     id: "2026-04-25-rebuild-page-views-visitor-schema",
-    description: "Rebuild page_views table with visitor_hash + view_date schema (handles legacy path-based schema and pre-timestamptz created_at)",
+    description: "Rebuild page_views table whenever its column shape doesn't match the expected (visitor_hash varchar(64), view_date date, created_at timestamptz) layout",
     statements: [
-      // Reconcile any prior shape of page_views in a single idempotent block:
-      //   1. Legacy (path, count) schema → drop entirely so CREATE recreates correctly.
-      //   2. Correct columns but created_at is `timestamp without time zone` → cast
-      //      in place treating the existing values as UTC. This is what Drizzle Kit
-      //      tries to do via `db:push` and fails on, because Postgres won't auto-cast
-      //      timestamp → timestamptz without an explicit USING clause.
+      // page_views is owned entirely by this startup migration — it is excluded
+      // from drizzle-kit's schema scan (see lib/db/src/schema/index.ts) so the
+      // deploy pipeline never tries to ALTER it.
+      //
+      // Across earlier deploys the table has been provisioned in three different
+      // broken shapes (legacy path/count columns, intermediate timestamp without
+      // tz, current varchar created_at + integer visitor_hash). Rather than
+      // try to migrate each variant in place, we verify the table matches the
+      // expected shape exactly and rebuild from scratch otherwise. This is safe
+      // because page_views holds only ephemeral visitor analytics — no user
+      // data lives here — and is empty in production today.
       `DO $$
+       DECLARE
+         needs_rebuild boolean := false;
        BEGIN
-         IF EXISTS (
-           SELECT 1 FROM information_schema.columns
-           WHERE table_name = 'page_views' AND column_name = 'path'
+         IF NOT EXISTS (
+           SELECT 1 FROM information_schema.tables WHERE table_name = 'page_views'
          ) THEN
-           DROP TABLE page_views CASCADE;
+           RETURN;
          END IF;
 
-         IF EXISTS (
+         IF NOT EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'page_views'
+             AND column_name = 'visitor_hash'
+             AND data_type = 'character varying'
+             AND character_maximum_length = 64
+         ) THEN
+           needs_rebuild := true;
+         END IF;
+
+         IF NOT EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'page_views'
+             AND column_name = 'view_date'
+             AND data_type = 'date'
+         ) THEN
+           needs_rebuild := true;
+         END IF;
+
+         IF NOT EXISTS (
            SELECT 1 FROM information_schema.columns
            WHERE table_name = 'page_views'
              AND column_name = 'created_at'
-             AND data_type = 'timestamp without time zone'
+             AND data_type = 'timestamp with time zone'
          ) THEN
-           ALTER TABLE page_views
-             ALTER COLUMN created_at TYPE timestamptz
-             USING created_at AT TIME ZONE 'UTC';
+           needs_rebuild := true;
+         END IF;
+
+         IF needs_rebuild THEN
+           DROP TABLE page_views CASCADE;
          END IF;
        END $$`,
       `CREATE TABLE IF NOT EXISTS page_views (
