@@ -212,7 +212,7 @@ If your team wants both privacy and community matching, you can use the hosted i
 
 ## How Slop Detection Works
 
-Multi-axis score fusion architecture (v3.0):
+Multi-axis evidence collection feeding a three-engine composite (architecture last reweighted in v3.8.0; see [Composite Scoring](#composite-scoring-three-engine-v380) below for how the axes are fused):
 
 ### Axis 1: Linguistic AI Fingerprinting
 Deterministic analysis that checks for:
@@ -254,29 +254,32 @@ The LLM also produces **triage guidance** (reproduction steps, missing informati
 - Detects contractions, terse/informal style, informal abbreviations (btw/fwiw/iirc), commit/PR references, patched version references
 - Human indicators produce negative weights that reduce slop score
 
-### Score Fusion (Noisy-OR)
-- **Noisy-OR combination**: Active axes converted to probabilities, combined via `1 − ∏(1 − pᵢ)` with prior=15, floor=5, ceiling=95
-- **Fabrication boost**: Factual axis probability ×1.3 when fabricated_cve or hallucinated_function detected
-- **Verified reference bonus**: Each verified check provides additional −3 slop reduction
-- **Human indicator reduction**: Applied post-fusion with floor=5
-- **Score spread**: ~85pts (slop→90, legit→5)
+### Composite Scoring (Three-Engine, v3.8.0)
+The signals from Axes 1–5 above are consumed by three independent engines, each producing a 0–100 sub-score. The composite is a weighted blend, where **higher = stronger evidence of a real, reproducible issue** (the inverse of the legacy slop score, which is still exposed via the `slopScore` API field for backward compatibility).
 
-### Score Tiers
-- **0-19**: Clean
-- **20-39**: Likely Human
-- **40-59**: Questionable
-- **60-79**: Likely Slop
-- **80-100**: Slop
+- **Engine 1 — AI Authorship Detector** (5%, *inverted*) — Linguistic + perplexity signals; the engine's raw "AI-likely" score is inverted before being weighted, so legitimate-sounding reports help the composite.
+- **Engine 2 — Technical Substance Analyzer** (60%) — Code evidence, references, reproducibility, PoC integrity, and claim/evidence ratio. When the AVRI feature flag (`VULNRAP_USE_AVRI`) is on, this rubric is swapped for one of nine CWE-family-specific rubrics with family-specific gold signals and absence penalties.
+- **Engine 3 — CWE Coherence Checker** (35%) — Verifies the report's stated vulnerability class is consistent with the evidence and PoC. Capped at 42 when Engine 2 reports near-zero substance (Sprint 12 A1 substance gate).
+
+**Composite overrides** (audit-trailed in `compositeOverrides`): `CONVERGENT_NEGATIVE` (-20), `CWE_TYPE_SWAP` (-15), `CLAIM_EVIDENCE_EXTREME` (-25), `HIGH_REJECTION_CWE_PRIOR` (-5), `THIN_LEGITIMATE_REPORT` (-5), and the new `BEHAVIORAL_MATCH_REWARD` (+6, Sprint 12 A2 — fires when Engine 2 surfaces a `GOLD_SIGNAL` AND Engine 3 ≥ 60 with no negative CWE signals AND Engine 1 verdict ≠ RED).
+
+### Composite Score Labels
+- **0–20**: Likely Invalid
+- **21–35**: High Risk
+- **36–50**: Needs Review
+- **51–65**: Reasonable
+- **66–80**: Promising
+- **81–100**: Strong
 
 ## PSIRT Triage Workflow
 
 ### Triage Recommendations
-Automated decision engine for PSIRT teams:
-- **AUTO_CLOSE** — Score ≥75 + confidence ≥0.7
-- **CHALLENGE_REPORTER** — 2+ references not found in live sources
-- **MANUAL_REVIEW** — Score ≥55
-- **PRIORITIZE** — Score ≤25 + 2+ verified references
-- **STANDARD_TRIAGE** — Default
+Automated decision engine for PSIRT teams. **Triage bands operate on the composite score (high = real, low = slop):**
+- **PRIORITIZE** — Composite ≥65
+- **MANUAL_REVIEW** — Composite ≥55
+- **STANDARD_TRIAGE** — Composite ≥40 (default)
+- **CHALLENGE_REPORTER** — Composite ≥25
+- **AUTO_CLOSE** — Composite <25
 
 Includes challenge questions, temporal signal detection (suspiciously fast CVE turnaround), template reuse detection, and revision tracking.
 
