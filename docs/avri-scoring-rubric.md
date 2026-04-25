@@ -14,7 +14,7 @@ For every submitted report the composite runner does the following, in order:
 2. **Engine 0 — Family classification** (`classify.ts`) picks one of nine families: `MEMORY_CORRUPTION`, `INJECTION`, `WEB_CLIENT`, `AUTHN_AUTHZ`, `CRYPTO`, `DESERIALIZATION`, `RACE_CONCURRENCY`, `REQUEST_SMUGGLING`, or `FLAT`.
 3. **Engine 2 (AVRI substance)** scores gold-signal evidence and applies absence + contradiction penalties for the chosen family, then blends with the legacy substance engine.
 4. **Engine 3 (AVRI coherence)** assigns an explicit base score from the cited-vs-evidence family relationship, then nudges it with behavioural bonuses and coherence penalties.
-5. **Composite** runs the existing 5/55/40 weighting with the v3.6.0 override rules, then layers the Sprint 11 behavioural overrides (velocity, template campaign, no-gold, family contradiction) and the FLAT slop haircut.
+5. **Composite** runs the 5/60/35 weighting (Sprint 12 A3 reweight; was 5/55/40 pre-v3.8.0) with the v3.6.0 override rules, then layers the Sprint 11 behavioural overrides (velocity, template campaign, no-gold, family contradiction), the Sprint 12 A1 substance gate on Engine 3, the Sprint 12 A2 behavioural-match reward, and the FLAT slop haircut.
 
 The ten levers documented below are the knobs that determine the final number after step 1 has run.
 
