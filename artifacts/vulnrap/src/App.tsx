@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Layout } from "@/components/layout";
 import { PageViewTracker } from "@/components/page-view-tracker";
+import { ScrollToTop } from "@/components/scroll-to-top";
 
 function lazyRetry(importFn: () => Promise<{ default: React.ComponentType }>) {
   return lazy(() =>
@@ -55,6 +56,7 @@ function PageLoader() {
 function AppRoutes() {
   return (
     <Layout>
+      <ScrollToTop />
       <PageViewTracker />
       <ErrorBoundary>
         <Suspense fallback={<PageLoader />}>
