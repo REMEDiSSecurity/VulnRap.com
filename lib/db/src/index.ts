@@ -14,6 +14,8 @@ export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
-// page_views is excluded from the drizzle-kit schema scan (see ./schema/index.ts)
-// but still needs to be importable as a Drizzle table for runtime queries.
-export * from "./schema/page_views";
+// NOTE: page_views is NOT defined in this package. It is owned by the
+// api-server (see artifacts/api-server/src/lib/page-views-table.ts and
+// startup-migrations.ts) so that drizzle-kit, which the Replit deploy
+// validator runs against this package, has no reference to it and never
+// generates an ALTER for its columns.

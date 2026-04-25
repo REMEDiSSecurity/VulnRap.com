@@ -3,7 +3,8 @@ import { sql, gte, and, eq } from "drizzle-orm";
 import { createHmac, randomBytes } from "crypto";
 import { logger } from "../lib/logger";
 import { db } from "@workspace/db";
-import { reportsTable, pageViewsTable, userFeedbackTable } from "@workspace/db";
+import { reportsTable, userFeedbackTable } from "@workspace/db";
+import { pageViewsTable } from "../lib/page-views-table";
 import {
   GetStatsResponse,
   GetRecentActivityResponse,

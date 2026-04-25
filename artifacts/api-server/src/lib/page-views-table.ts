@@ -1,5 +1,10 @@
 import { pgTable, serial, varchar, date, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
 
+// page_views is intentionally defined OUTSIDE of @workspace/db so that
+// drizzle-kit (which the Replit deploy validator runs against the lib/db
+// package) cannot see it. The table is owned end-to-end by the api-server's
+// startup migration (see ./startup-migrations.ts) and is queried at runtime
+// using this Drizzle pgTable definition reused directly by routes/stats.ts.
 export const pageViewsTable = pgTable("page_views", {
   id: serial("id").primaryKey(),
   visitorHash: varchar("visitor_hash", { length: 64 }).notNull(),
