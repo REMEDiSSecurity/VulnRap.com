@@ -13,6 +13,11 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Replit's deploy infrastructure terminates TLS and forwards via a single proxy hop,
+// so trust the first X-Forwarded-* header. Required for express-rate-limit to read
+// the real client IP and for any downstream code that uses req.ip / req.protocol.
+app.set("trust proxy", 1);
+
 app.use(compression());
 
 const defaultHelmet = helmet({
