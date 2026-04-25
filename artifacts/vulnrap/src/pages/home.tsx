@@ -1565,34 +1565,51 @@ export default function Home() {
           <Zap className="w-5 h-5 text-primary" />
           How It Works
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          <div className="space-y-1.5 sm:space-y-2 p-3 sm:p-4 rounded-xl glass-card feature-card">
-            <div className="text-2xl sm:text-3xl font-bold step-number">01</div>
-            <h3 className="font-medium text-xs sm:text-sm">Submit</h3>
-            <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-              Upload a file, paste text, or link a URL. We begin processing immediately.
-            </p>
+        {/*
+          Mobile layout (default): each step is a full-width row with the
+          number on the left and the title + description on the right. This
+          gives long descriptions (steps 3 and 4) enough horizontal room to
+          breathe, eliminates the uneven-height issue from the previous 2-col
+          grid, and keeps text at a comfortably readable size.
+          sm (≥640px): switch to the original 2-column vertical card grid.
+          md (≥768px): switch to the 4-column vertical card grid.
+        */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-2 p-4 sm:p-4 rounded-xl glass-card feature-card">
+            <div className="text-3xl sm:text-3xl font-bold step-number leading-none shrink-0 w-10 sm:w-auto">01</div>
+            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
+              <h3 className="font-medium text-sm sm:text-sm">Submit</h3>
+              <p className="text-xs sm:text-xs text-muted-foreground leading-relaxed">
+                Upload a file, paste text, or link a URL. We begin processing immediately.
+              </p>
+            </div>
           </div>
-          <div className="space-y-1.5 sm:space-y-2 p-3 sm:p-4 rounded-xl glass-card feature-card">
-            <div className="text-2xl sm:text-3xl font-bold step-number">02</div>
-            <h3 className="font-medium text-xs sm:text-sm">Auto-Redact</h3>
-            <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-              PII, secrets, and company names are scrubbed automatically before anything is stored.
-            </p>
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-2 p-4 sm:p-4 rounded-xl glass-card feature-card">
+            <div className="text-3xl sm:text-3xl font-bold step-number leading-none shrink-0 w-10 sm:w-auto">02</div>
+            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
+              <h3 className="font-medium text-sm sm:text-sm">Auto-Redact</h3>
+              <p className="text-xs sm:text-xs text-muted-foreground leading-relaxed">
+                PII, secrets, and company names are scrubbed automatically before anything is stored.
+              </p>
+            </div>
           </div>
-          <div className="space-y-1.5 sm:space-y-2 p-3 sm:p-4 rounded-xl glass-card feature-card">
-            <div className="text-2xl sm:text-3xl font-bold step-number">03</div>
-            <h3 className="font-medium text-xs sm:text-sm">Analyze</h3>
-            <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-              Claims are verified against live sources, sections are compared for duplicates, and the report is scored for validity.
-            </p>
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-2 p-4 sm:p-4 rounded-xl glass-card feature-card">
+            <div className="text-3xl sm:text-3xl font-bold step-number leading-none shrink-0 w-10 sm:w-auto">03</div>
+            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
+              <h3 className="font-medium text-sm sm:text-sm">Analyze</h3>
+              <p className="text-xs sm:text-xs text-muted-foreground leading-relaxed">
+                Claims are verified against live sources, sections are compared for duplicates, and the report is scored for validity.
+              </p>
+            </div>
           </div>
-          <div className="space-y-1.5 sm:space-y-2 p-3 sm:p-4 rounded-xl glass-card feature-card">
-            <div className="text-2xl sm:text-3xl font-bold step-number">04</div>
-            <h3 className="font-medium text-xs sm:text-sm">Results</h3>
-            <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-              Get a validity score, similarity matches, verification results, triage recommendation, and redaction summary.
-            </p>
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-2 p-4 sm:p-4 rounded-xl glass-card feature-card">
+            <div className="text-3xl sm:text-3xl font-bold step-number leading-none shrink-0 w-10 sm:w-auto">04</div>
+            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
+              <h3 className="font-medium text-sm sm:text-sm">Results</h3>
+              <p className="text-xs sm:text-xs text-muted-foreground leading-relaxed">
+                Get a validity score, similarity matches, verification results, triage recommendation, and redaction summary.
+              </p>
+            </div>
           </div>
         </div>
       </div>
