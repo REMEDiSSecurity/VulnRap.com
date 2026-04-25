@@ -30,8 +30,14 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
     // Idempotent: only drops the table if the legacy "path" column is still present;
     // otherwise the CREATE IF NOT EXISTS no-ops on already-correct deployments.
     id: "2026-04-25-rebuild-page-views-visitor-schema",
-    description: "Rebuild page_views table with visitor_hash + view_date schema",
+    description: "Rebuild page_views table with visitor_hash + view_date schema (handles legacy path-based schema and pre-timestamptz created_at)",
     statements: [
+      // Reconcile any prior shape of page_views in a single idempotent block:
+      //   1. Legacy (path, count) schema → drop entirely so CREATE recreates correctly.
+      //   2. Correct columns but created_at is `timestamp without time zone` → cast
+      //      in place treating the existing values as UTC. This is what Drizzle Kit
+      //      tries to do via `db:push` and fails on, because Postgres won't auto-cast
+      //      timestamp → timestamptz without an explicit USING clause.
       `DO $$
        BEGIN
          IF EXISTS (
@@ -39,6 +45,17 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
            WHERE table_name = 'page_views' AND column_name = 'path'
          ) THEN
            DROP TABLE page_views CASCADE;
+         END IF;
+
+         IF EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'page_views'
+             AND column_name = 'created_at'
+             AND data_type = 'timestamp without time zone'
+         ) THEN
+           ALTER TABLE page_views
+             ALTER COLUMN created_at TYPE timestamptz
+             USING created_at AT TIME ZONE 'UTC';
          END IF;
        END $$`,
       `CREATE TABLE IF NOT EXISTS page_views (
