@@ -1566,47 +1566,78 @@ export default function Home() {
           How It Works
         </h2>
         {/*
-          Mobile layout (default): each step is a full-width row with the
-          number on the left and the title + description on the right. This
-          gives long descriptions (steps 3 and 4) enough horizontal room to
-          breathe, eliminates the uneven-height issue from the previous 2-col
-          grid, and keeps text at a comfortably readable size.
-          sm (≥640px): switch to the original 2-column vertical card grid.
-          md (≥768px): switch to the 4-column vertical card grid.
+          Each step now leads with a colored icon badge using the same
+          icon-glow vocabulary as the feature cards above (Auto-Redaction,
+          Section Hashing, Slop Detection) so the visuals feel native to the
+          page. On desktop (sm+) the icon sits at the top of a vertical card
+          alongside the big gradient step number; on mobile it acts as the
+          left-hand visual anchor of a horizontal row, with the step label
+          inline with the title on the right.
         */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-2 p-4 sm:p-4 rounded-xl glass-card feature-card">
-            <div className="text-3xl sm:text-3xl font-bold step-number leading-none shrink-0 w-10 sm:w-auto">01</div>
+          {/* Step 01 — Submit */}
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
+            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-cyan flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
+              <UploadCloud className="w-5 h-5 text-cyan-400" />
+            </div>
             <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <h3 className="font-medium text-sm sm:text-sm">Submit</h3>
-              <p className="text-xs sm:text-xs text-muted-foreground leading-relaxed">
+              <div className="hidden sm:block text-3xl font-bold step-number leading-none">01</div>
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-cyan-400/80">STEP 01</span>
+                <h3 className="font-medium text-sm">Submit</h3>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Upload a file, paste text, or link a URL. We begin processing immediately.
               </p>
             </div>
           </div>
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-2 p-4 sm:p-4 rounded-xl glass-card feature-card">
-            <div className="text-3xl sm:text-3xl font-bold step-number leading-none shrink-0 w-10 sm:w-auto">02</div>
+
+          {/* Step 02 — Auto-Redact */}
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
+            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-green flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
+              <ShieldOff className="w-5 h-5 text-green-400" />
+            </div>
             <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <h3 className="font-medium text-sm sm:text-sm">Auto-Redact</h3>
-              <p className="text-xs sm:text-xs text-muted-foreground leading-relaxed">
+              <div className="hidden sm:block text-3xl font-bold step-number leading-none">02</div>
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-green-400/80">STEP 02</span>
+                <h3 className="font-medium text-sm">Auto-Redact</h3>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 PII, secrets, and company names are scrubbed automatically before anything is stored.
               </p>
             </div>
           </div>
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-2 p-4 sm:p-4 rounded-xl glass-card feature-card">
-            <div className="text-3xl sm:text-3xl font-bold step-number leading-none shrink-0 w-10 sm:w-auto">03</div>
+
+          {/* Step 03 — Analyze */}
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
+            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-violet flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
+              <BrainCircuit className="w-5 h-5 text-violet-400" />
+            </div>
             <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <h3 className="font-medium text-sm sm:text-sm">Analyze</h3>
-              <p className="text-xs sm:text-xs text-muted-foreground leading-relaxed">
+              <div className="hidden sm:block text-3xl font-bold step-number leading-none">03</div>
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-violet-400/80">STEP 03</span>
+                <h3 className="font-medium text-sm">Analyze</h3>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Claims are verified against live sources, sections are compared for duplicates, and the report is scored for validity.
               </p>
             </div>
           </div>
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-2 p-4 sm:p-4 rounded-xl glass-card feature-card">
-            <div className="text-3xl sm:text-3xl font-bold step-number leading-none shrink-0 w-10 sm:w-auto">04</div>
+
+          {/* Step 04 — Results */}
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
+            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-amber flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-amber-400" />
+            </div>
             <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <h3 className="font-medium text-sm sm:text-sm">Results</h3>
-              <p className="text-xs sm:text-xs text-muted-foreground leading-relaxed">
+              <div className="hidden sm:block text-3xl font-bold step-number leading-none">04</div>
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-amber-400/80">STEP 04</span>
+                <h3 className="font-medium text-sm">Results</h3>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Get a validity score, similarity matches, verification results, triage recommendation, and redaction summary.
               </p>
             </div>
