@@ -1362,6 +1362,25 @@ function HandwavyPhrasesAdmin() {
     removedAtIso: string;
     data: HandwavyPhraseReinstateBatchDryRunResponse;
   } | null>(null);
+  // Task #180 — the per-row Reinstate button got a confirm dialog in Task #153
+  // but the "Reinstate all N" button on a batch removal entry was still firing
+  // immediately on click. A misclick on the batch button re-enables every
+  // phrase from a batch removal at once, which is a much bigger blast radius
+  // than a single per-row reinstate, so we guard it with the same dialog
+  // pattern. The state holds the full set of inputs the action handler needs
+  // (removedAt + batchSize) plus the list of phrase strings that would
+  // actually become active again so the dialog can list them. `null` = closed.
+  // This dialog is the direct-click gate; the Task #177 dry-run Preview
+  // button next to it is its own (richer) confirm flow and doesn't need
+  // this dialog on top of it.
+  const [reinstateBatchConfirm, setReinstateBatchConfirm] = useState<
+    {
+      removedAtIso: string;
+      removedBy?: string;
+      batchSize: number;
+      phrasesToReinstate: string[];
+    } | null
+  >(null);
   // Task #134 + Task #154 — bulk-remove state. `selected` is the set of
   // currently-checked phrases (keyed by the normalized `phrase` string
   // the server stores). Bulk removal goes through the side-by-side
@@ -4302,7 +4321,35 @@ function HandwavyPhrasesAdmin() {
                               size="sm"
                               className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
                               disabled={busy === batchKey || busy === previewKey}
-                              onClick={() => handleReinstateBatch(group.removedAtIso, group.batchSize)}
+                              onClick={() => {
+                                // Task #180 — gate the direct "Reinstate all"
+                                // click behind a confirmation dialog
+                                // (mirroring Task #153's per-row reinstate
+                                // confirm) so a misclick doesn't re-enable
+                                // every phrase from the batch at once. We
+                                // capture exactly the rows the button would
+                                // actually re-add (skipping ones already
+                                // reinstated or already on the active list)
+                                // so the dialog can list them. The Task
+                                // #177 Preview button next to this is its
+                                // own richer confirm flow and is left as
+                                // an immediate action.
+                                const phrasesToReinstate = group.rows
+                                  .filter(
+                                    (r) =>
+                                      !r.reinstated &&
+                                      !phrases.some(
+                                        (m: { phrase: string }) => m.phrase === r.phrase,
+                                      ),
+                                  )
+                                  .map((r) => r.phrase);
+                                setReinstateBatchConfirm({
+                                  removedAtIso: group.removedAtIso,
+                                  removedBy: group.removedBy,
+                                  batchSize: group.batchSize,
+                                  phrasesToReinstate,
+                                });
+                              }}
                               data-testid="handwavy-reinstate-batch"
                               aria-label={`Reinstate all ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
                             >
@@ -4312,6 +4359,7 @@ function HandwavyPhrasesAdmin() {
                                 : `Reinstate all ${remainingCount}`}
                             </Button>
                           </>
+
                         )}
                       </div>
                       {previewForGroup && (() => {
@@ -4647,6 +4695,95 @@ function HandwavyPhrasesAdmin() {
             }}
           >
             Reinstate phrase
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Task #180 — confirmation prompt before reinstating an entire batch
+        removal entry. Mirrors Task #153's per-row reinstate confirm and
+        Task #146's revert confirm so reviewers get the same blast-radius
+        guard whether they click "Reinstate" on a single row or
+        "Reinstate all N" on the batch header. The dialog spells out how
+        many phrases are about to come back to the active list and lists
+        them so a misclick is obvious before any audit-log mutation
+        happens. */}
+    <AlertDialog
+      open={reinstateBatchConfirm !== null}
+      onOpenChange={(open) => {
+        if (!open) setReinstateBatchConfirm(null);
+      }}
+    >
+      <AlertDialogContent data-testid="handwavy-reinstate-batch-confirm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {reinstateBatchConfirm
+              ? `Reinstate ${reinstateBatchConfirm.phrasesToReinstate.length} phrase${
+                  reinstateBatchConfirm.phrasesToReinstate.length === 1 ? "" : "s"
+                } from this batch?`
+              : "Reinstate batch?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              {reinstateBatchConfirm && (
+                <>
+                  <div>
+                    Restore the{" "}
+                    <strong>
+                      {reinstateBatchConfirm.phrasesToReinstate.length}
+                    </strong>{" "}
+                    remaining phrase
+                    {reinstateBatchConfirm.phrasesToReinstate.length === 1
+                      ? ""
+                      : "s"}{" "}
+                    from the batch removal of{" "}
+                    <strong>{reinstateBatchConfirm.batchSize}</strong>
+                    {" by "}
+                    <span className="text-foreground/80">
+                      {reinstateBatchConfirm.removedBy || "anonymous"}
+                    </span>{" "}
+                    to the active list. New triages will start flagging them
+                    again immediately.
+                  </div>
+                  {reinstateBatchConfirm.phrasesToReinstate.length > 0 && (
+                    <ul
+                      className="list-disc pl-5 space-y-1 text-foreground/80 max-h-48 overflow-y-auto"
+                      data-testid="handwavy-reinstate-batch-confirm-summary"
+                    >
+                      {reinstateBatchConfirm.phrasesToReinstate.map((p) => (
+                        <li key={p}>
+                          <span className="font-mono text-foreground/80">
+                            “{p}”
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="text-xs italic">
+                    The original batch removal entry stays in the history; each
+                    reinstate is recorded as a new audit entry. Cancel leaves
+                    the batch untouched.
+                  </div>
+                </>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="handwavy-reinstate-batch-confirm-cancel">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="handwavy-reinstate-batch-confirm-confirm"
+            onClick={() => {
+              if (reinstateBatchConfirm) {
+                const { removedAtIso, batchSize } = reinstateBatchConfirm;
+                setReinstateBatchConfirm(null);
+                void handleReinstateBatch(removedAtIso, batchSize);
+              }
+            }}
+          >
+            Reinstate batch
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -90,7 +90,23 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
         ).toHaveCount(0);
       }
 
+      // Task #180 — the batch reinstate now goes through a confirm dialog
+      // (mirroring Task #153's per-row reinstate confirm) so a misclick
+      // doesn't re-enable an entire batch removal at once. The actual
+      // reinstate only fires once the reviewer presses the Confirm button
+      // inside that dialog.
       await batchBtn.click();
+      const batchDialog = page.getByTestId("handwavy-reinstate-batch-confirm");
+      await expect(batchDialog).toBeVisible({ timeout: 5_000 });
+      // The dialog should list every phrase that's about to come back so a
+      // misclick is obvious before the reviewer confirms.
+      const summary = batchDialog.getByTestId("handwavy-reinstate-batch-confirm-summary");
+      await expect(summary).toBeVisible();
+      for (const p of phrases) {
+        await expect(summary).toContainText(p);
+      }
+      await batchDialog.getByTestId("handwavy-reinstate-batch-confirm-confirm").click();
+      await expect(batchDialog).toHaveCount(0, { timeout: 5_000 });
 
       // After the round-trip the header swaps to "All reinstated" and the
       // batch button itself is gone.
@@ -159,8 +175,23 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await expect(batchBtn).toHaveText(/Reinstate all 2\b/);
       await expect(group.getByTestId("handwavy-history-batch-reinstated")).toHaveCount(0);
 
-      // Reinstate the remaining two via the batch button.
+      // Reinstate the remaining two via the batch button. Task #180 wraps
+      // this button in the same confirm dialog as the per-row reinstate, so
+      // we have to click through Confirm to actually trigger the reinstate.
       await batchBtn.click();
+      const batchDialog2 = page.getByTestId("handwavy-reinstate-batch-confirm");
+      await expect(batchDialog2).toBeVisible({ timeout: 5_000 });
+      const summary2 = batchDialog2.getByTestId("handwavy-reinstate-batch-confirm-summary");
+      await expect(summary2).toBeVisible();
+      // Only the not-yet-reinstated phrases should be listed; the first
+      // phrase has already been individually reinstated above so it must
+      // NOT appear in the dialog summary.
+      await expect(summary2).not.toContainText(phrases[0]);
+      for (const p of phrases.slice(1)) {
+        await expect(summary2).toContainText(p);
+      }
+      await batchDialog2.getByTestId("handwavy-reinstate-batch-confirm-confirm").click();
+      await expect(batchDialog2).toHaveCount(0, { timeout: 5_000 });
 
       await expect(group.getByTestId("handwavy-history-batch-reinstated")).toBeVisible({
         timeout: 15_000,
