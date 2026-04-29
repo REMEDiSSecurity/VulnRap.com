@@ -371,16 +371,42 @@ const PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE =
 const PROSE_PAYLOAD_PLACEHOLDER_BARE_RE =
   /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)\s+(<[^>\n`]{1,80}>)/gi;
 
+// Same gesture, but with the payload-context word AFTER the inline-code
+// `<...>` slot. Slop authors dodge both the colon-form and the
+// word-then-slot inline form above by flipping the order: "`<inject>`
+// is the payload we sent" or "`<sql payload here>` was the SQLi payload
+// tried" puts the trigger word after the slot. The slot is still an
+// inline-code `<...>` placeholder; the surrounding clause just labels
+// it after the fact instead of before.
+//
+// We require a copula (is/was/were/are/seems/appears) immediately after
+// the closing backtick so we only fire on slot-as-subject phrasings,
+// not on incidental adjacency like "`<x>` and the payload above"
+// where there's no syntactic claim that the slot is the payload. The
+// copula is then followed by up to 25 intermediate characters (letters,
+// spaces, hyphens) leading into the payload noun, which is enough room
+// for natural connectors like "the", "the SQLi", or "used as the SQLi"
+// while still cutting off long wedge clauses like "rejected immediately
+// because the payload was wrong" before they reach the noun.
+//
+// Both backticks are required for the same reason as the inline form:
+// without them, "`<unknown>` was the payload" would expand to bare
+// "<unknown> was the payload" and false-positive on legitimate prose.
+const PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE =
+  /`(<[^>\n`]{1,80}>)`\s+(?:is|was|were|are|seems|appears)[a-zA-Z \-]{1,25}?\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template)\b/gi;
+
 /** Find prose snippets shaped like "Payload: `<sql payload here>`",
- * "the payload `<inject>` was sent", or the no-backticks dodge "the
- * payload <inject> was sent" whose `<...>` slot is itself a placeholder.
+ * "the payload `<inject>` was sent", the no-backticks dodge "the
+ * payload <inject> was sent", or the post-slot dodge "`<inject>` is
+ * the payload" whose `<...>` slot is itself a placeholder.
  *
- * The colon and inline-code forms accept either slop vocabulary or any
- * bare short identifier in the slot (the surrounding `Payload:` label
- * or backtick fence is itself enough of a payload-context tell). The
- * bare-angle form (no colon, no backticks) is stricter and only fires
- * when the slot's inner text is slop vocabulary, so neutral prose like
- * "the payload <unknown> was rejected" is left alone.
+ * The colon, inline-code, and post-slot forms all accept either slop
+ * vocabulary or any bare short identifier in the slot (the surrounding
+ * `Payload:` label, backtick fence, or copula clause is itself enough
+ * of a payload-context tell). The bare-angle form (no colon, no
+ * backticks) is stricter and only fires when the slot's inner text is
+ * slop vocabulary, so neutral prose like "the payload <unknown> was
+ * rejected" is left alone.
  *
  * Returns the byte ranges of the full match so the caller can strip
  * them before re-testing payload-class gold signals. */
@@ -392,6 +418,7 @@ export function findProsePlaceholderPayloadRanges(
     { re: PROSE_PAYLOAD_PLACEHOLDER_RE, requireSlopVocab: false },
     { re: PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE, requireSlopVocab: false },
     { re: PROSE_PAYLOAD_PLACEHOLDER_BARE_RE, requireSlopVocab: true },
+    { re: PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE, requireSlopVocab: false },
   ];
   for (const { re, requireSlopVocab } of cases) {
     re.lastIndex = 0;
@@ -407,12 +434,13 @@ export function findProsePlaceholderPayloadRanges(
       if (!looksPlaceholder) continue;
       const start = m.index;
       const end = m.index + m[0].length;
-      // Dedupe against any range already added (the three regexes are
-      // disjoint by design — one requires `[:=]`, one requires direct
-      // whitespace + backtick, one requires direct whitespace + bare
-      // angle bracket — but a future edit could broaden any of them,
-      // so we still skip exact-overlap or contained ranges to keep
-      // the byte-strip pass idempotent).
+      // Dedupe against any range already added (the four regexes are
+      // disjoint by design — one requires `[:=]`, one requires word +
+      // whitespace + backtick, one requires word + whitespace + bare
+      // angle bracket, and the post-slot one requires backtick + slot
+      // + copula after — but a future edit could broaden any of them,
+      // so we still skip overlapping ranges to keep the byte-strip
+      // pass idempotent).
       const overlaps = ranges.some(
         (r) => start < r.end && end > r.start,
       );

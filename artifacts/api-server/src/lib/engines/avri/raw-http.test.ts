@@ -739,6 +739,45 @@ const SLOP_SQLI_PROSE_PLACEHOLDER_BARE_FIXTURE = [
   "include sensitive rows.",
 ].join("\n");
 
+// SQLi slop fixture using the post-slot dodge: prose puts the slot
+// FIRST and the payload-context word AFTER — "`<sql payload here>`
+// was the SQLi payload tried". Both the colon-form regex and the
+// word-then-slot inline form would miss this; the post-slot regex must
+// still revoke the incidental `concrete_payload` match in the CWE
+// description.
+const SLOP_SQLI_PROSE_PLACEHOLDER_POSTSLOT_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query.",
+  "This is the canonical UNION SELECT class of attacks (CWE-89).",
+  "Severity: Critical. Affects all customers in production.",
+  "",
+  "`<sql payload here>` was the SQLi payload tried against /search,",
+  "and it returned the full user table.",
+  "",
+  "Replay against any modern database backend; the response will",
+  "include sensitive rows.",
+].join("\n");
+
+// Command-injection slop fixture using the post-slot dodge: "`<inject>`
+// is the command we ran against /api/exec". Slot-as-subject phrasing
+// — the trigger word "command" appears after the inline-code slot
+// rather than before it.
+const SLOP_CMDI_PROSE_PLACEHOLDER_POSTSLOT_FIXTURE = [
+  "# Critical command injection on POST /api/exec",
+  "",
+  "The cmd field is passed straight to a shell, allowing arbitrary",
+  "command execution. Per CWE-78, exploitation typically uses",
+  "separators like ; cat /etc/passwd to chain commands.",
+  "Severity: Critical.",
+  "",
+  "`<inject>` is the command we ran against /api/exec to confirm.",
+  "",
+  "Any modern shell will exhibit this. Severe risk to the production",
+  "fleet — please prioritize.",
+].join("\n");
+
+
 describe("findProsePlaceholderPayloadRanges", () => {
   it("flags Payload:/Inject:/Exec:/Run: <slot> in prose", () => {
     expect(
@@ -916,6 +955,98 @@ describe("findProsePlaceholderPayloadRanges", () => {
     );
     expect(ranges.length).toBe(1);
   });
+
+  it("flags inline-code <slot> when the payload-context word comes AFTER the slot", () => {
+    // Slop dodge: flip the order so the trigger word follows the slot.
+    // "`<inject>` is the payload" / "`<sql payload here>` was the SQLi
+    // payload tried" both put the payload-context word after the slot
+    // and would otherwise slip past the colon-form and the
+    // word-then-slot inline form.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<inject>` is the payload we sent",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<sql payload here>` was the SQLi payload tried",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<sql payload here>` was the payload tried",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<command here>` is the command we ran",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<inject>` was used as the SQLi payload",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag post-slot phrasings without a payload-context noun", () => {
+    // Copula after the slot is necessary but not sufficient — the
+    // sentence must actually label the slot as a payload/inject/command/
+    // etc. Generic "is the value" / "was rejected" / "is the username"
+    // sentences do not get flagged.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<unknown>` is the username they tried",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<x>` was rejected because the field was empty",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<value>` is the response code we got back",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("does not flag post-slot phrasings where the payload word is too far away", () => {
+    // The connector window between the copula and the payload noun is
+    // capped at 25 characters of letters/spaces/hyphens. A trailing
+    // mention later in the sentence ("...rejected immediately because
+    // the payload was wrong") sits past that window and must not be
+    // swept in.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<x>` was rejected immediately because the payload was wrong",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("also catches the bare copula+noun form (no article between)", () => {
+    // The connector window {1,25} of letters/spaces/hyphens is satisfied
+    // by the single separating space between "is" and "payload", so the
+    // stripped-down form is also caught. This is intentional broadening:
+    // it makes the dodge surface smaller without obviously expanding
+    // false positives, since the slot must still be wrapped in
+    // backticks and immediately followed by a copula.
+    expect(
+      findProsePlaceholderPayloadRanges("`<inject>` is payload").length,
+    ).toBe(1);
+  });
+
+  it("requires backticks around the slot in the post-slot form", () => {
+    // Without the backticks, "`<unknown>` is the payload" would expand
+    // to bare "<unknown> is the payload" and false-positive on
+    // legitimate prose like "the missing field <unknown> is the
+    // payload-related setting" — same safety rationale as the
+    // word-then-slot inline form.
+    expect(
+      findProsePlaceholderPayloadRanges("<inject> is the payload we sent")
+        .length,
+    ).toBe(0);
+  });
 });
 
 describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
@@ -1008,5 +1139,39 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
       (i) => i.signal === "FAKE_RAW_HTTP",
     );
     expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+  });
+
+  it("revokes concrete_payload when prose flips the order to '`<...>` was the SQLi payload tried'", () => {
+    // Post-slot dodge: the slot comes first and the payload-context
+    // word comes after. The colon-form and the word-then-slot inline
+    // form both miss this, but the post-slot regex must still revoke
+    // the incidental UNION SELECT match in the CWE description.
+    const sig = extractSignals(SLOP_SQLI_PROSE_PLACEHOLDER_POSTSLOT_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_SQLI_PROSE_PLACEHOLDER_POSTSLOT_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+  });
+
+  it("revokes concrete_payload when prose flips the order to '`<inject>` is the command we ran'", () => {
+    const sig = extractSignals(SLOP_CMDI_PROSE_PLACEHOLDER_POSTSLOT_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_CMDI_PROSE_PLACEHOLDER_POSTSLOT_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
   });
 });
