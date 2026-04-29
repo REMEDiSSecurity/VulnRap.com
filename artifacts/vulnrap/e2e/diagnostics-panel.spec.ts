@@ -43,6 +43,11 @@ test.describe("DiagnosticsPanel — live api-server smoke test", () => {
         rawText: SAMPLE_REPORT_TEXT,
         skipLlm: "true",
         skipRedaction: "true",
+        // The diagnostics endpoint (and the /results/:id page) 404s when
+        // showInFeed is false (see GET /reports/:id/diagnostics in
+        // artifacts/api-server/src/routes/reports.ts), so opt the seed
+        // report into the feed explicitly.
+        showInFeed: "true",
       },
     });
     expect(submitRes.ok(), `POST /api/reports failed: ${submitRes.status()}`)

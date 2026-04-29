@@ -64,16 +64,25 @@ export default defineConfig({
     ? undefined
     : [
         {
+          // Run the bundled production api-server (dist/index.mjs via `start`),
+          // not `dev`. We rebuild first so any source change since the last
+          // build is exercised, mirroring what ships in the
+          // [services.production] block of artifacts/api-server/.replit-artifact/artifact.toml.
           command:
-            "pnpm --filter @workspace/api-server run dev",
+            "pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/api-server run start",
           url: `http://127.0.0.1:${API_PORT}/api/healthz`,
           reuseExistingServer: true,
-          timeout: 120_000,
+          timeout: 240_000,
           stdout: "pipe",
           stderr: "pipe",
           env: {
             VULNRAP_USE_NEW_COMPOSITE: "true",
             PORT: String(API_PORT),
+            // Match the runtime env the deployed api-server runs under (see
+            // [services.production.run.env] in
+            // artifacts/api-server/.replit-artifact/artifact.toml) so any
+            // NODE_ENV-gated behaviour is exercised by the smoke test.
+            NODE_ENV: "production",
             // Required for the hand-wavy phrase panel's GET (strict auth).
             CALIBRATION_TOKEN,
             // Pin the archetype-history file to its canonical workspace
@@ -83,15 +92,22 @@ export default defineConfig({
           },
         },
         {
-          command: "pnpm --filter @workspace/vulnrap run dev",
+          // Build the production vite bundle and serve it via `vite preview`,
+          // not `vite` (dev). The preview server proxies /api to the bundled
+          // api-server above (see preview.proxy in vite.config.ts), so a
+          // base-path or bundle regression will surface here.
+          command:
+            "pnpm --filter @workspace/vulnrap run build:no-prerender && pnpm --filter @workspace/vulnrap run serve",
           url: BASE_URL,
           reuseExistingServer: true,
-          timeout: 120_000,
+          timeout: 240_000,
           stdout: "pipe",
           stderr: "pipe",
           env: {
             PORT: String(VULNRAP_PORT),
             BASE_PATH: "/",
+            NODE_ENV: "production",
+            PREVIEW_API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}`,
             // Bake the same token into the Vite bundle so the page's own
             // calls (POST/PATCH/DELETE) carry it automatically too.
             VITE_CALIBRATION_TOKEN: CALIBRATION_TOKEN,
