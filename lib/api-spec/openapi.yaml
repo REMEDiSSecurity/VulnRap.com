@@ -640,6 +640,11 @@ paths:
         Task #145 — when the batch body has `dryRun: true`, the server
         returns a preview (corpus impact + per-phrase outcomes) and does
         NOT mutate the active list, history, or cache.
+
+        Task #155 — the single-phrase body also accepts `dryRun: true`
+        and returns the same corpus + production removal-impact summary
+        (with `batch: false`) so the in-UI Trash flow can warn reviewers
+        before a one-click removal lands.
       requestBody:
         required: true
         content:
@@ -653,7 +658,8 @@ paths:
           description: |
             Phrase removed (single path), batch processed and at least one
             phrase was removed (batch path; see `batch: true` and `results`),
-            OR batch dry-run preview (`dryRun: true`).
+            single-phrase dry-run preview (`dryRun: true`, `batch: false`),
+            OR batch dry-run preview (`dryRun: true`, `batch: true`).
           content:
             application/json:
               schema:
@@ -661,6 +667,7 @@ paths:
                   - $ref: "#/components/schemas/HandwavyPhraseMutationResponse"
                   - $ref: "#/components/schemas/HandwavyPhraseBatchRemoveResponse"
                   - $ref: "#/components/schemas/HandwavyPhraseBatchRemoveDryRunResponse"
+                  - $ref: "#/components/schemas/HandwavyPhraseSingleRemoveDryRunResponse"
         "400":
           description: Invalid phrase / batch body
           content:
@@ -3416,11 +3423,18 @@ components:
         dryRun:
           type: boolean
           description: |
-            Task #114 — when true, the server does NOT persist the phrase. It runs the
+            Task #114 — when true on POST, the server does NOT persist the phrase. It runs the
             candidate phrase against the curated benchmark corpus (T1 LEGIT / T2 BORDERLINE
             / T3 SLOP / T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so
             reviewers can see how many GREEN / YELLOW reports the phrase would have hit
-            before they confirm the add. Defaults to false (write-through behavior).
+            before they confirm the add.
+
+            Task #155 — when true on DELETE for a single phrase, the server does NOT
+            mutate the active list, history, or cache and instead returns a
+            `HandwavyPhraseSingleRemoveDryRunResponse` (the same corpus + production
+            removal-impact summary as the batch dry-run, with `batch: false`).
+
+            Defaults to false (write-through behavior).
         reviewer:
           type: string
           description: Reviewer name or email recorded in the audit trail. Optional.
@@ -3606,6 +3620,77 @@ components:
             $ref: "#/components/schemas/HandwavyMarker"
           description: Active list (unchanged because this is a dry run).
       required: [dryRun, batch, wouldRemove, notFound, duplicateInBatch, total, projectedTotal, results, dryRunImpact, phrases]
+
+    HandwavyPhraseSingleRemoveDryRunResponse:
+      type: object
+      description: |
+        Task #155 — preview response returned when DELETE
+        /feedback/calibration/handwavy-phrases is called with `dryRun: true`
+        on the SINGLE-phrase path. Mirrors the batch dry-run shape (with
+        `batch: false`) so the in-UI Trash flow can show the same corpus +
+        production removal-impact warning before a one-click removal,
+        without mutating the active list, history, or cache.
+      properties:
+        dryRun:
+          type: boolean
+          enum: [true]
+        batch:
+          type: boolean
+          enum: [false]
+        wouldRemove:
+          type: integer
+          description: 0 if the phrase is not on the active list, 1 otherwise.
+        notFound:
+          type: integer
+        duplicateInBatch:
+          type: integer
+        phrase:
+          type: string
+          description: Normalized form actually compared against the active list.
+        raw:
+          type: string
+          description: Original (raw) phrase as supplied by the client.
+        removed:
+          type: boolean
+          description: Whether the phrase WOULD be removed if the call were not a dry run.
+        reason:
+          oneOf:
+            - type: string
+              enum: [not-found, duplicate-in-batch]
+            - type: "null"
+        total:
+          type: integer
+          description: Active list size BEFORE the removal (no mutation occurred).
+        projectedTotal:
+          type: integer
+          description: Projected active list size AFTER the removal would be applied.
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyPhraseBatchRemoveResultEntry"
+          description: Single-element array mirroring the batch dry-run results shape.
+        dryRunImpact:
+          type: object
+          properties:
+            corpus:
+              $ref: "#/components/schemas/HandwavyPhraseBatchRemoveDryRunImpact"
+            production:
+              oneOf:
+                - $ref: "#/components/schemas/HandwavyPhraseBatchRemoveDryRunImpact"
+                - type: "null"
+            productionError:
+              oneOf:
+                - type: string
+                - type: "null"
+            productionLimit:
+              type: integer
+          required: [corpus, productionError, productionLimit]
+        phrases:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyMarker"
+          description: Active list (unchanged because this is a dry run).
+      required: [dryRun, batch, wouldRemove, notFound, duplicateInBatch, phrase, raw, removed, total, projectedTotal, results, dryRunImpact, phrases]
 
     HandwavyPhraseBatchRemoveResultEntry:
       type: object

@@ -1805,11 +1805,18 @@ export interface HandwavyPhraseBody {
   /** Marker phrase (case-insensitive substring match against report text after whitespace collapsing). */
   phrase: string;
   category?: HandwavyCategory;
-  /** Task #114 — when true, the server does NOT persist the phrase. It runs the
+  /** Task #114 — when true on POST, the server does NOT persist the phrase. It runs the
 candidate phrase against the curated benchmark corpus (T1 LEGIT / T2 BORDERLINE
 / T3 SLOP / T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so
 reviewers can see how many GREEN / YELLOW reports the phrase would have hit
-before they confirm the add. Defaults to false (write-through behavior).
+before they confirm the add.
+
+Task #155 — when true on DELETE for a single phrase, the server does NOT
+mutate the active list, history, or cache and instead returns a
+`HandwavyPhraseSingleRemoveDryRunResponse` (the same corpus + production
+removal-impact summary as the batch dry-run, with `batch: false`).
+
+Defaults to false (write-through behavior).
  */
   dryRun?: boolean;
   /** Reviewer name or email recorded in the audit trail. Optional. */
@@ -1981,6 +1988,47 @@ export interface HandwavyPhraseBatchRemoveDryRunResponse {
   projectedTotal: number;
   results: HandwavyPhraseBatchRemoveResultEntry[];
   dryRunImpact: HandwavyPhraseBatchRemoveDryRunResponseDryRunImpact;
+  /** Active list (unchanged because this is a dry run). */
+  phrases: HandwavyMarker[];
+}
+
+export type HandwavyPhraseSingleRemoveDryRunResponseDryRunImpact = {
+  corpus: HandwavyPhraseBatchRemoveDryRunImpact;
+  production?: HandwavyPhraseBatchRemoveDryRunImpact | null;
+  productionError: string | null;
+  productionLimit: number;
+};
+
+/**
+ * Task #155 — preview response returned when DELETE
+/feedback/calibration/handwavy-phrases is called with `dryRun: true`
+on the SINGLE-phrase path. Mirrors the batch dry-run shape (with
+`batch: false`) so the in-UI Trash flow can show the same corpus +
+production removal-impact warning before a one-click removal,
+without mutating the active list, history, or cache.
+
+ */
+export interface HandwavyPhraseSingleRemoveDryRunResponse {
+  dryRun: boolean;
+  batch: boolean;
+  /** 0 if the phrase is not on the active list, 1 otherwise. */
+  wouldRemove: number;
+  notFound: number;
+  duplicateInBatch: number;
+  /** Normalized form actually compared against the active list. */
+  phrase: string;
+  /** Original (raw) phrase as supplied by the client. */
+  raw: string;
+  /** Whether the phrase WOULD be removed if the call were not a dry run. */
+  removed: boolean;
+  reason?: "not-found" | "duplicate-in-batch" | null;
+  /** Active list size BEFORE the removal (no mutation occurred). */
+  total: number;
+  /** Projected active list size AFTER the removal would be applied. */
+  projectedTotal: number;
+  /** Single-element array mirroring the batch dry-run results shape. */
+  results: HandwavyPhraseBatchRemoveResultEntry[];
+  dryRunImpact: HandwavyPhraseSingleRemoveDryRunResponseDryRunImpact;
   /** Active list (unchanged because this is a dry run). */
   phrases: HandwavyMarker[];
 }

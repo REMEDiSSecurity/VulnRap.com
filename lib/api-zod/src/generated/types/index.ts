@@ -102,6 +102,8 @@ export * from "./handwavyPhraseReinstateBody";
 export * from "./handwavyPhraseRemovalBatchesList";
 export * from "./handwavyPhraseRemovalBatchSummary";
 export * from "./handwavyPhraseRevertEditBody";
+export * from "./handwavyPhraseSingleRemoveDryRunResponse";
+export * from "./handwavyPhraseSingleRemoveDryRunResponseDryRunImpact";
 export * from "./handwavyPhrasesList";
 export * from "./handwavyPhraseUndoBody";
 export * from "./hardwareComponent";

@@ -45,6 +45,7 @@ import type {
   HandwavyPhraseReinstateBody,
   HandwavyPhraseRemovalBatchesList,
   HandwavyPhraseRevertEditBody,
+  HandwavyPhraseSingleRemoveDryRunResponse,
   HandwavyPhraseUndoBody,
   HandwavyPhrasesList,
   HashLookupResult,
@@ -1933,6 +1934,11 @@ Task #145 — when the batch body has `dryRun: true`, the server
 returns a preview (corpus impact + per-phrase outcomes) and does
 NOT mutate the active list, history, or cache.
 
+Task #155 — the single-phrase body also accepts `dryRun: true`
+and returns the same corpus + production removal-impact summary
+(with `batch: false`) so the in-UI Trash flow can warn reviewers
+before a one-click removal lands.
+
  * @summary Remove one or many FLAT hand-wavy marker phrases
  */
 export const getRemoveHandwavyPhraseUrl = () => {
@@ -1948,11 +1954,13 @@ export const removeHandwavyPhrase = async (
   | HandwavyPhraseMutationResponse
   | HandwavyPhraseBatchRemoveResponse
   | HandwavyPhraseBatchRemoveDryRunResponse
+  | HandwavyPhraseSingleRemoveDryRunResponse
 > => {
   return customFetch<
     | HandwavyPhraseMutationResponse
     | HandwavyPhraseBatchRemoveResponse
     | HandwavyPhraseBatchRemoveDryRunResponse
+    | HandwavyPhraseSingleRemoveDryRunResponse
   >(getRemoveHandwavyPhraseUrl(), {
     ...options,
     method: "DELETE",

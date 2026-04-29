@@ -11,11 +11,18 @@ export interface HandwavyPhraseBody {
   /** Marker phrase (case-insensitive substring match against report text after whitespace collapsing). */
   phrase: string;
   category?: HandwavyCategory;
-  /** Task #114 — when true, the server does NOT persist the phrase. It runs the
+  /** Task #114 — when true on POST, the server does NOT persist the phrase. It runs the
 candidate phrase against the curated benchmark corpus (T1 LEGIT / T2 BORDERLINE
 / T3 SLOP / T4 HALLUCINATED fixtures) and returns a `dryRunMatches` block so
 reviewers can see how many GREEN / YELLOW reports the phrase would have hit
-before they confirm the add. Defaults to false (write-through behavior).
+before they confirm the add.
+
+Task #155 — when true on DELETE for a single phrase, the server does NOT
+mutate the active list, history, or cache and instead returns a
+`HandwavyPhraseSingleRemoveDryRunResponse` (the same corpus + production
+removal-impact summary as the batch dry-run, with `batch: false`).
+
+Defaults to false (write-through behavior).
  */
   dryRun?: boolean;
   /** Reviewer name or email recorded in the audit trail. Optional. */

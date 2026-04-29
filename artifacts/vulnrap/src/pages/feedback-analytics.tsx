@@ -20,6 +20,7 @@ import {
   type HandwavyPhraseRemovalBatchSummary,
   type HandwavyPhraseReinstateBatchDryRunResponse,
   type HandwavyPhraseReinstateBatchEntryResult,
+  type HandwavyPhraseSingleRemoveDryRunResponse,
   type HandwavyHistoryEntry,
   type HandwavyEditEntry,
   type HandwavyCategory,
@@ -1424,6 +1425,20 @@ function HandwavyPhrasesAdmin() {
     data: HandwavyPhraseBatchRemoveDryRunResponse;
     acknowledged: boolean;
   } | null>(null);
+  // Task #173 — single-phrase removal-impact preview state. The per-row
+  // Trash button now first issues `DELETE {phrase, dryRun: true}` (Task
+  // #155). When `validDetectionsLost === 0` we fire the live DELETE in
+  // the same click, preserving the one-click affordance for safe
+  // removals. When valid hand-wavy detections WOULD be lost, we hold the
+  // dry-run response here and surface the same corpus + production
+  // impact renderer (`BulkRemovalImpactBlock`) used by the batch
+  // confirmation step, gating the destructive removal behind an explicit
+  // acknowledgment checkbox.
+  const [removePreview, setRemovePreview] = useState<{
+    phrase: string;
+    data: HandwavyPhraseSingleRemoveDryRunResponse;
+    acknowledged: boolean;
+  } | null>(null);
   // Task #114 — corpus-impact preview state. After the reviewer presses
   // "Add phrase" we first issue a dry-run POST and surface the GREEN/YELLOW
   // false-positive count. The actual add only persists after the reviewer
@@ -1769,15 +1784,69 @@ function HandwavyPhrasesAdmin() {
     }
   };
 
+  // Task #173 — single-phrase removal-impact preview. Issues a
+  // `DELETE {phrase, dryRun: true}` (Task #155) and either fires the live
+  // DELETE immediately (zero-impact phrases keep the one-click affordance)
+  // or surfaces the same corpus + production impact renderer used by the
+  // batch flow, gated behind an explicit acknowledgment checkbox when
+  // valid hand-wavy detections would be un-flagged.
+  const requestRemoveWithImpactPreview = async (phrase: string) => {
+    setBusy(`rm-preview:${phrase}`);
+    try {
+      const resp = await removeHandwavyPhrase({ phrase, dryRun: true });
+      // Defensive: the DELETE response is a union and the server might
+      // theoretically respond with the live shape if it ignored dryRun.
+      // Fail closed by surfacing an error rather than a silent live
+      // removal.
+      if (
+        !("dryRun" in resp) ||
+        resp.dryRun !== true ||
+        !("dryRunImpact" in resp) ||
+        // Single-phrase preview must carry `batch: false`; the batch
+        // shape is structurally similar but reviewers asked for the
+        // single-phrase preview to be the only one rendered here.
+        ("batch" in resp && resp.batch !== false)
+      ) {
+        toast({
+          title: "Preview unavailable",
+          description:
+            "The server did not return a removal preview. The phrase was not removed — please retry.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const single = resp as HandwavyPhraseSingleRemoveDryRunResponse;
+      const corpusLost = single.dryRunImpact.corpus.validDetectionsLost;
+      const productionLost = single.dryRunImpact.production?.validDetectionsLost ?? 0;
+      const totalValidLost = corpusLost + productionLost;
+      // Zero-impact removals stay one-click: no extra confirmation
+      // friction for phrases that aren't doing real work in either
+      // corpus right now.
+      if (totalValidLost === 0) {
+        await handleRemove(phrase);
+        return;
+      }
+      setRemovePreview({ phrase, data: single, acknowledged: false });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to preview removal.";
+      toast({ title: "Preview failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Task #139 — gate the per-row trash button so phrases with >=2 completed
   // remove+reinstate cycles route through a confirm panel before the DELETE
-  // fires. Lower-thrash phrases still go straight to `handleRemove`.
+  // fires. Lower-thrash phrases skip the thrash gate but still go through
+  // the Task #173 dry-run impact preview, which short-circuits to the live
+  // DELETE when no valid detections would be lost so a clean trash click
+  // stays one click.
   const requestRemove = (phrase: string, cycles: RemoveConfirmCycle[]) => {
     if (cycles.length >= 2) {
       setRemoveConfirm({ phrase, cycles });
       return;
     }
-    handleRemove(phrase);
+    void requestRemoveWithImpactPreview(phrase);
   };
   const cancelRemoveConfirm = () => {
     setRemoveConfirm(null);
@@ -1786,6 +1855,24 @@ function HandwavyPhrasesAdmin() {
     if (!removeConfirm) return;
     const { phrase } = removeConfirm;
     setRemoveConfirm(null);
+    // After the high-thrash gate, still route through the Task #173
+    // impact preview so the reviewer also sees the corpus / production
+    // un-flag warning if there is one (zero-impact still fires the DELETE
+    // in one click).
+    await requestRemoveWithImpactPreview(phrase);
+  };
+
+  // Task #173 — preview-panel handlers.
+  const cancelRemovePreview = () => {
+    setRemovePreview(null);
+  };
+  const setRemovePreviewAcknowledged = (ack: boolean) => {
+    setRemovePreview((prev) => (prev ? { ...prev, acknowledged: ack } : prev));
+  };
+  const confirmRemoveFromPreview = async () => {
+    if (!removePreview) return;
+    const { phrase } = removePreview;
+    setRemovePreview(null);
     await handleRemove(phrase);
   };
 
@@ -3115,7 +3202,10 @@ function HandwavyPhrasesAdmin() {
                 size="sm"
                 variant="destructive"
                 onClick={confirmRemoveAnyway}
-                disabled={busy === `rm:${removeConfirm.phrase}`}
+                disabled={
+                  busy === `rm:${removeConfirm.phrase}` ||
+                  busy === `rm-preview:${removeConfirm.phrase}`
+                }
                 data-testid="handwavy-remove-confirm-go"
               >
                 Remove anyway
@@ -3123,6 +3213,139 @@ function HandwavyPhrasesAdmin() {
             </div>
           </div>
         )}
+        {/* Task #173 — single-phrase removal-impact preview panel. Shown
+            after the per-row Trash button issues a `DELETE {phrase,
+            dryRun: true}` and the response indicates that valid
+            hand-wavy detections WOULD be lost in the curated and/or
+            production corpus. Reuses the same `BulkRemovalImpactBlock`
+            renderer the batch confirm step uses so reviewers see one
+            consistent impact summary, and gates the destructive removal
+            behind an explicit acknowledgment checkbox. Zero-impact
+            removals never reach this panel — they are fired in one
+            click from `requestRemoveWithImpactPreview`. */}
+        {removePreview && (() => {
+          const { phrase, data, acknowledged } = removePreview;
+          const corpus = data.dryRunImpact.corpus;
+          const production = data.dryRunImpact.production ?? null;
+          const productionError = data.dryRunImpact.productionError;
+          const productionLimit = data.dryRunImpact.productionLimit;
+          const corpusLost = corpus.validDetectionsLost;
+          const productionLost = production?.validDetectionsLost ?? 0;
+          const totalValidLost = corpusLost + productionLost;
+          const requireAck = totalValidLost > 0;
+          const inFlight =
+            busy === `rm:${phrase}` || busy === `rm-preview:${phrase}`;
+          return (
+            <div
+              className="rounded-md border border-red-500/40 bg-red-500/5 p-3 space-y-3 text-xs"
+              data-testid="handwavy-remove-preview"
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+                <div className="flex-1">
+                  <div className="font-semibold text-foreground">
+                    Remove "{phrase}"?
+                  </div>
+                  <div
+                    className="text-[10px] text-muted-foreground mt-0.5"
+                    data-testid="handwavy-remove-preview-summary"
+                  >
+                    Removing this phrase would un-flag{" "}
+                    <span className="text-red-300 font-semibold">
+                      {totalValidLost}
+                    </span>{" "}
+                    valid hand-wavy detection{totalValidLost === 1 ? "" : "s"}
+                    {corpusLost > 0 && productionLost > 0
+                      ? ` (${corpusLost} curated + ${productionLost} production)`
+                      : corpusLost > 0
+                        ? " in the curated benchmark"
+                        : " in the production archive"}
+                    . Review the impact below before confirming.
+                  </div>
+                </div>
+              </div>
+              <div
+                className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                data-testid="handwavy-remove-preview-impact"
+              >
+                <BulkRemovalImpactBlock
+                  kind="curated"
+                  title="Curated benchmark"
+                  subtitle={`${corpus.corpusSize} fixtures`}
+                  impact={corpus}
+                  emptyHint="No curated detections would be lost"
+                />
+                {production ? (
+                  <BulkRemovalImpactBlock
+                    kind="production"
+                    title="Production archive"
+                    subtitle={
+                      productionLimit != null
+                        ? `last ${production.corpusSize} of up to ${productionLimit} reports`
+                        : `last ${production.corpusSize} reports`
+                    }
+                    impact={production}
+                    emptyHint="No production detections would be lost"
+                  />
+                ) : (
+                  <div
+                    className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
+                    data-testid="handwavy-remove-preview-production-error"
+                  >
+                    <div className="font-semibold flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Production archive scan unavailable
+                    </div>
+                    <div className="mt-1 text-amber-100/80">
+                      {productionError ??
+                        "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {requireAck && (
+                <label
+                  className="flex items-start gap-2 text-[11px] text-foreground/90 cursor-pointer select-none"
+                  data-testid="handwavy-remove-preview-ack-label"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={acknowledged}
+                    onChange={(e) => setRemovePreviewAcknowledged(e.target.checked)}
+                    disabled={inFlight}
+                    data-testid="handwavy-remove-preview-ack"
+                  />
+                  <span>
+                    I understand this will un-flag {totalValidLost} valid
+                    hand-wavy detection{totalValidLost === 1 ? "" : "s"} and
+                    want to remove "{phrase}" anyway.
+                  </span>
+                </label>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={cancelRemovePreview}
+                  disabled={inFlight}
+                  data-testid="handwavy-remove-preview-cancel"
+                >
+                  Back out
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={confirmRemoveFromPreview}
+                  disabled={inFlight || (requireAck && !acknowledged)}
+                  data-testid="handwavy-remove-preview-confirm"
+                >
+                  Remove anyway
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
         {/* Task #134 — per-phrase results banner shown after a bulk batch
             finishes, mirroring the CLI's per-phrase outcome summary.
             Task #142 — the same banner is reused for the "Undo this batch"
@@ -3586,7 +3809,12 @@ function HandwavyPhrasesAdmin() {
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-muted-foreground hover:text-primary"
-                          disabled={editing !== null || busy === `rm:${m.phrase}` || bulkBusy}
+                          disabled={
+                            editing !== null ||
+                            busy === `rm:${m.phrase}` ||
+                            busy === `rm-preview:${m.phrase}` ||
+                            bulkBusy
+                          }
                           onClick={() => handleStartEdit(m.phrase, m.category, m.rationale)}
                           data-testid="handwavy-edit"
                           aria-label={`Edit phrase ${m.phrase}`}
@@ -3597,7 +3825,12 @@ function HandwavyPhrasesAdmin() {
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-muted-foreground hover:text-red-400"
-                          disabled={editing !== null || busy === `rm:${m.phrase}` || bulkBusy}
+                          disabled={
+                            editing !== null ||
+                            busy === `rm:${m.phrase}` ||
+                            busy === `rm-preview:${m.phrase}` ||
+                            bulkBusy
+                          }
                           onClick={() => requestRemove(m.phrase, cycles)}
                           data-testid="handwavy-remove"
                           aria-label={`Remove phrase ${m.phrase}`}
