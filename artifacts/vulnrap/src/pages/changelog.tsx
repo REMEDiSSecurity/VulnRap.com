@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout } from "lucide-react";
+import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout, Link2 } from "lucide-react";
+import { useEffect } from "react";
 
 export const CURRENT_VERSION = "3.8.0";
 export const RELEASE_DATE = "2026-04-24";
@@ -995,6 +996,20 @@ const TYPE_COLORS: Record<SectionType, string> = {
 };
 
 export default function Changelog() {
+  // Scroll the named section into view when navigated to via /changelog#fragment
+  // (e.g. from the Active Verification panel "Learn more" link).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) return;
+    const el = document.getElementById(hash);
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, []);
+
   return (
     <div className="max-w-3xl mx-auto space-y-8 py-4">
       <div className="space-y-2">
@@ -1003,6 +1018,82 @@ export default function Changelog() {
           A complete record of every feature, fix, and improvement shipped to VulnRap.
         </p>
       </div>
+
+      <Card
+        id="verification-sources"
+        className="bg-card/40 backdrop-blur border-border scroll-mt-24"
+      >
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <CardTitle className="text-xl font-mono font-bold text-primary glow-text-sm flex items-center gap-2">
+              <Link2 className="w-4 h-4" />
+              Docs · Active Verification sources
+            </CardTitle>
+            <Badge variant="outline" className="border-cyan-500/40 text-cyan-300/80">
+              referenced vs. search-fallback
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5 text-sm text-muted-foreground leading-relaxed">
+          <p>
+            Every Active Verification check is tagged with one of two sources. The
+            Active Verification panel surfaces the split as
+            <span className="mx-1 font-mono text-foreground/90">verified X/Y · referenced: A · search-fallback: B</span>
+            and the same line appears in the triage-report markdown export.
+          </p>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold text-primary">referenced</h3>
+            <p>
+              The repository, package, or CVE was <span className="text-foreground/90">explicitly named in your report</span>,
+              so VulnRap is checking something you actually pointed at. These checks
+              count toward your verification ratio &mdash; passing them helps your
+              score, and missing files or wrong CVE IDs can lower it.
+            </p>
+            <p className="text-xs text-muted-foreground/80">
+              A check is tagged <span className="font-mono">referenced</span> when any of these is true:
+            </p>
+            <ul className="space-y-1 text-xs text-muted-foreground/80 list-disc pl-5">
+              <li>You included a full GitHub or GitLab repo URL (e.g. <span className="font-mono text-foreground/80">https://github.com/owner/repo</span>).</li>
+              <li>You named a known package <em>and</em> a concrete version within ~80 characters (e.g. <span className="font-mono text-foreground/80">lodash 4.17.21</span>, <span className="font-mono text-foreground/80">django==4.2.7</span>, <span className="font-mono text-foreground/80">v1.2.0&ndash;1.3.4</span>).</li>
+              <li>The check came from a non-guessing source like an NVD CVE lookup, npm, or PyPI registry resolved from a URL or versioned reference.</li>
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold text-orange-400">search-fallback</h3>
+            <p>
+              The repository was <span className="text-foreground/90">guessed</span> from a project keyword
+              VulnRap recognized (e.g. you wrote "lodash" with no version or URL
+              and we picked the canonical repo). These checks show up in the
+              Active Verification panel and the diagnostics export so you can
+              see what we tried, but because we can't be certain we picked the
+              right repo, <span className="text-foreground/90">they don't influence your score or triage outcome</span> &mdash;
+              the verification ratio, the score path, and CHALLENGE_REPORTER
+              questions all skip search-fallback checks entirely.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold text-cyan-300">How to avoid search-fallback in your reports</h3>
+            <p className="text-xs text-muted-foreground/80">
+              The fastest way to make every relevant check count is to give
+              VulnRap unambiguous references:
+            </p>
+            <ul className="space-y-1 text-xs text-muted-foreground/80 list-disc pl-5">
+              <li>Paste the <span className="text-foreground/90">full repo URL</span> for the affected project (GitHub, GitLab, or a permalink to the affected file/commit).</li>
+              <li>When you mention a package by name, include a <span className="text-foreground/90">concrete version</span> &mdash; <span className="font-mono text-foreground/80">openssl 3.0.7</span>, <span className="font-mono text-foreground/80">requests==2.31.0</span>, <span className="font-mono text-foreground/80">v18.16.0</span>, or a range like <span className="font-mono text-foreground/80">1.2.0 – 1.3.4</span>.</li>
+              <li>Cite the <span className="text-foreground/90">CVE ID</span> (e.g. <span className="font-mono text-foreground/80">CVE-2024-3094</span>) so the NVD lookup runs against your actual claim instead of a guess.</li>
+              <li>Reference <span className="text-foreground/90">file paths</span> as they appear in the repo (e.g. <span className="font-mono text-foreground/80">src/auth/session.ts</span>) so file-existence checks resolve under the right tree.</li>
+            </ul>
+            <p className="text-xs text-muted-foreground/70">
+              If a fallback check still fires, it's not a deduction &mdash; it's a hint
+              that adding the URL or version above would let VulnRap verify
+              against the exact thing you meant.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {CHANGELOG.map((entry) => (
         <Card key={entry.version} className="bg-card/40 backdrop-blur border-border">

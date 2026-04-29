@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type TriageMatrixInputs, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type TriageAssistant, type ReproGuidance, type GapItem, type DontMissItem, type ReporterFeedbackItem, type LLMTriageGuidance, type ReproRecipe, type HardwareComponent } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -229,13 +229,20 @@ function VerificationPanel({ checks, summary }: { checks: VerificationCheck[]; s
             </div>
           )}
           {hasSourceBreakdown && (
-            <div className="flex items-center gap-2 mb-3 text-[11px] font-mono text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 mb-3 text-[11px] font-mono text-muted-foreground">
               <span>verified {verifiedReferenced}/{referencedChecks.length}</span>
               <span>·</span>
               <span>referenced: {referencedChecks.length}</span>
               <span>·</span>
               <span>search-fallback: {fallbackChecks.length}</span>
               <Hint text="Referenced = checks against repos you explicitly cited (GitHub/GitLab URLs, versioned package names). Search-fallback = checks against repos VulnRap guessed from a project keyword. Fallback checks inform diagnostics but do not lower your score." />
+              <Link
+                to="/changelog#verification-sources"
+                className="ml-1 text-primary/80 hover:text-primary hover:underline normal-case font-sans"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Learn more &rarr;
+              </Link>
             </div>
           )}
           {checks.map((check, i) => {
