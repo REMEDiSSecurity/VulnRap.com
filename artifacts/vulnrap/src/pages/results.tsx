@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu, GitCompare, ChevronDown, ChevronUp, Download, BarChart3, Target, Eye, Gauge, Leaf, Shield, MessageSquareWarning, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, FlaskConical, Terminal } from "lucide-react";
+import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu, GitCompare, ChevronDown, ChevronUp, Download, BarChart3, Target, Eye, Gauge, Leaf, Shield, MessageSquareWarning, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, FlaskConical, Terminal, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
@@ -1085,6 +1085,7 @@ export default function Results() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [expandedCompare, setExpandedCompare] = useState<number | null>(null);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
+  const [exporting, setExporting] = useState<"json" | "txt" | null>(null);
   const [sensitivity, setSensitivity] = useState<SensitivityPreset>(() => getSettings().sensitivityPreset);
   const handleSensitivityChange = (preset: SensitivityPreset) => {
     setSensitivity(preset);
@@ -1126,24 +1127,31 @@ export default function Results() {
   };
 
   const exportJSON = async () => {
-    if (!report) return;
-    const diagnostics = await loadDiagnosticsForExport();
-    const payload = { ...report, diagnostics };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `vulnrap-report-${anonymizeId(id)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({
-      title: "Exported",
-      description: diagnostics ? "JSON report downloaded with diagnostics." : "JSON report downloaded (diagnostics omitted).",
-    });
+    if (!report || exporting) return;
+    setExporting("json");
+    try {
+      const diagnostics = await loadDiagnosticsForExport();
+      const payload = { ...report, diagnostics };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vulnrap-report-${anonymizeId(id)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Exported",
+        description: diagnostics ? "JSON report downloaded with diagnostics." : "JSON report downloaded (diagnostics omitted).",
+      });
+    } finally {
+      setExporting(null);
+    }
   };
 
   const exportText = async () => {
-    if (!report) return;
+    if (!report || exporting) return;
+    setExporting("txt");
+    try {
     const bd = report.breakdown as { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number } | undefined;
     const ev = report.evidence as Array<{ type: string; description: string; weight: number; matched?: string | null }> | undefined;
     const llmBd = report.llmBreakdown as { claimSpecificity?: number; evidenceQuality?: number; internalConsistency?: number; hallucinationSignals?: number; validityScore?: number; verdict?: string; specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number } | undefined;
@@ -1245,6 +1253,9 @@ export default function Results() {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: "Exported", description: "Text report downloaded." });
+    } finally {
+      setExporting(null);
+    }
   };
 
   const { data: report, isLoading, isError } = useGetReport(id, {
@@ -1383,13 +1394,13 @@ export default function Results() {
             <Copy className="w-4 h-4" />
             Share Link
           </Button>
-          <Button variant="outline" onClick={exportJSON} className="gap-2 glass-card hover:border-primary/30">
-            <Download className="w-4 h-4" />
-            JSON
+          <Button variant="outline" onClick={exportJSON} disabled={exporting !== null} className="gap-2 glass-card hover:border-primary/30">
+            {exporting === "json" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {exporting === "json" ? "Exporting..." : "JSON"}
           </Button>
-          <Button variant="outline" onClick={exportText} className="gap-2 glass-card hover:border-primary/30">
-            <Download className="w-4 h-4" />
-            TXT
+          <Button variant="outline" onClick={exportText} disabled={exporting !== null} className="gap-2 glass-card hover:border-primary/30">
+            {exporting === "txt" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {exporting === "txt" ? "Exporting..." : "TXT"}
           </Button>
           {deleteToken && (
             <Button
