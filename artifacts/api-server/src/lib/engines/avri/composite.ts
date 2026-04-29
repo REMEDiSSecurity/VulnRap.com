@@ -76,7 +76,9 @@ export function runAvriComposite(
   const e3 = runEngine3Avri(signals, text, family, classification);
 
   // Run the existing composite (5/60/35 weighting + override rules).
-  const baseComposite = computeComposite([e1, e2.engine, e3.engine]);
+  // Task #48 — pass `text` so the composite hallucination penalty fires
+  // for fabricated reports on the AVRI scoring path too.
+  const baseComposite = computeComposite([e1, e2.engine, e3.engine], text);
 
   // Apply Sprint 11 behavioral penalties on top, capped by clamp.
   const velocityPenalty = Math.min(0, opts.velocityPenalty ?? 0);

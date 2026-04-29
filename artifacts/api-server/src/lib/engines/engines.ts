@@ -6,6 +6,7 @@ import { detectVulnerabilityType } from "./extractors";
 import { CWE_FINGERPRINTS, HIGH_REJECTION_CWES } from "./cwe-fingerprints";
 import { evaluateCrashTrace } from "./avri/crash-trace";
 import { evaluateRawHttpRequest } from "./avri/raw-http";
+import { detectHallucinationSignals, type HallucinationResult } from "../hallucination-detector";
 
 export type Verdict = "GREEN" | "YELLOW" | "RED" | "GREY";
 export type Confidence = "HIGH" | "MEDIUM" | "LOW";
@@ -606,10 +607,78 @@ function getCompositeLabel(score: number): string {
   return "STRONG";
 }
 
+// Task #48 — fabricated-evidence composite penalty.
+//
+// `detectHallucinationSignals` already flags round/sequential addresses,
+// repeated stack frames, phantom functions, fabricated PIDs, empty
+// responsible-disclosure boilerplate, etc., but historically those signals
+// only landed in score-fusion's heuristic path and never reached the
+// 3-engine composite. Real hallucinated reports with substantial fake
+// evidence could therefore still hit Engine 3's strong-fit floor (68/78)
+// and score in the 50s — well above the LIKELY-INVALID band where they
+// belong.
+//
+// Two of the detector's signals — `incomplete_asan` and `fabricated_pid`
+// — fire on real reports too (legit ASan excerpts truncate the SUMMARY
+// line, and the textbook example PID `12345` is widely used in real bug
+// reports). We treat them as CORROBORATING signals only: their weight
+// counts toward the tier, but they cannot single-handedly trigger the
+// penalty. At least one PRIMARY fabrication signal (anything other than
+// the corroborating set) must be present.
+//
+// The composite penalty is tiered on `totalWeight` so that:
+//   - 12+ totalWeight (≈ two corroborating signals) → -10
+//   - 20+ totalWeight (≈ a strong-fabrication cluster) → -15
+//   - 30+ totalWeight (overwhelming fabrication evidence) → -25
+//
+// The chosen tier is recorded in `applied` so the triage UI can surface
+// the override note alongside CONVERGENT_NEGATIVE etc.
+const CORROBORATING_HALLUCINATION_TYPES = new Set([
+  "incomplete_asan",
+  "fabricated_pid",
+]);
+
+function hallucinationOverridePoints(
+  result: HallucinationResult,
+): { points: number; note: string | null } {
+  // Require at least one PRIMARY (non-corroborating) fabrication signal so
+  // a truncated-ASan-only or magic-PID-only legit report does not get
+  // penalized. This guards T1 fixtures (T1-01-uaf-libfoo,
+  // T1-AVRI-firefox-uaf, T1-AVRI-cve-2025-0725-curl) which only carry
+  // corroborating signals while still catching every T4 fabrication
+  // fixture that pairs the noisy signals with a real one.
+  const hasPrimary = result.signals.some(
+    (s) => !CORROBORATING_HALLUCINATION_TYPES.has(s.type),
+  );
+  if (!hasPrimary) return { points: 0, note: null };
+
+  const w = result.totalWeight;
+  if (w >= 30) {
+    return {
+      points: -25,
+      note: `HALLUCINATION_FABRICATED_EVIDENCE: overwhelming fabrication signals (totalWeight=${w}, ${result.signals.length} signal(s))`,
+    };
+  }
+  if (w >= 20) {
+    return {
+      points: -15,
+      note: `HALLUCINATION_FABRICATED_EVIDENCE: strong fabrication signals (totalWeight=${w}, ${result.signals.length} signal(s))`,
+    };
+  }
+  if (w >= 12) {
+    return {
+      points: -10,
+      note: `HALLUCINATION_FABRICATED_EVIDENCE: moderate fabrication signals (totalWeight=${w}, ${result.signals.length} signal(s))`,
+    };
+  }
+  return { points: 0, note: null };
+}
+
 function applyOverrideRules(
   composite: number,
   results: EngineResult[],
   applied: string[],
+  hallucination?: HallucinationResult,
 ): number {
   let adjustment = 0;
   const ai = results.find(r => r.engine === "AI Authorship Detector");
@@ -669,6 +738,16 @@ function applyOverrideRules(
     applied.push("BEHAVIORAL_MATCH_REWARD: Engine 2 gold evidence + Engine 3 coherent CWE match");
   }
 
+  // Task #48 — fabricated-evidence composite penalty. See
+  // hallucinationOverridePoints() above for the tier rationale.
+  if (hallucination) {
+    const hp = hallucinationOverridePoints(hallucination);
+    if (hp.points !== 0 && hp.note) {
+      adjustment += hp.points;
+      applied.push(hp.note);
+    }
+  }
+
   return composite + adjustment;
 }
 
@@ -715,7 +794,10 @@ function adjustE3ForSubstance(
   return { adjusted: e3Score, applied: null };
 }
 
-export function computeComposite(engineResults: EngineResult[]): CompositeResult {
+export function computeComposite(
+  engineResults: EngineResult[],
+  text?: string,
+): CompositeResult {
   // Phase 1 always applies the fixed 5/60/35 weighting across all three
   // engines, regardless of per-engine confidence. Confidence is still surfaced
   // in the per-engine result so consumers can de-emphasize uncertain signals
@@ -762,7 +844,17 @@ export function computeComposite(engineResults: EngineResult[]): CompositeResult
     totalWeight > 0 && Number.isFinite(weightedSum) ? weightedSum / totalWeight : 50;
   const applied: string[] = [];
   if (e3Adjustment.applied) applied.push(e3Adjustment.applied);
-  const afterOverride = applyOverrideRules(beforeOverride, engineResults, applied);
+  // Task #48 — only run hallucination detection when caller passed the
+  // original report text. Callers without text (e.g. backfill paths that
+  // only have cached engine signals) skip the penalty rather than
+  // silently misattributing it.
+  const hallucination = text ? detectHallucinationSignals(text) : undefined;
+  const afterOverride = applyOverrideRules(
+    beforeOverride,
+    engineResults,
+    applied,
+    hallucination,
+  );
   const finalScore = Math.round(clamp(afterOverride));
 
   const warnings: string[] = [];
