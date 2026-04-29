@@ -114,17 +114,23 @@ export function detectSoftCitation(text: string): SoftCitation | null {
   return { name, cweId };
 }
 
-const KNOWN_ALLOCATOR_ADDRS = new Set([
-  "0x60200000", "0x7fff0000", "0x602000000000",
-  "0x10000000", "0x00400000", "0x7f0000000000",
-]);
+// Task #206 (Sprint 13B-1): the previous allowlist hard-coded broad
+// allocator base ranges (0x60200000, 0x10000000, …) that have no citable
+// provenance — they're "places real allocators tend to map", not addresses
+// real ASan output ever prints verbatim. Sprint 12 Report 82 used
+// 0x000060400000 (one hex digit away from the allowlisted 0x60200000 base)
+// and slipped past the heuristic. The allowlist is now intentionally
+// empty, and the trailing-zero threshold drops from ≥5 to ≥3 so 12-digit
+// fabricated heap addresses with 4–5 trailing zeros get classified as
+// suspicious. Mirrors the same change in `hallucination-detector.ts`.
+const KNOWN_ALLOCATOR_ADDRS = new Set<string>([]);
 
 export function classifyMemoryAddress(addr: string): "likely_real" | "suspicious" {
   const lower = addr.toLowerCase();
   if (KNOWN_ALLOCATOR_ADDRS.has(lower)) return "likely_real";
   const hex = lower.replace(/^0x/, "");
   const trailingZeros = hex.match(/0+$/)?.[0]?.length || 0;
-  return trailingZeros >= 5 ? "suspicious" : "likely_real";
+  return trailingZeros >= 3 ? "suspicious" : "likely_real";
 }
 
 export interface ExtractedSignals {

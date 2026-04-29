@@ -26,16 +26,21 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     }
   }
 
-  // v3.6.0 §6: Allowlist of known ASAN/allocator sentinel addresses that look
-  // round but are commonly seen in real crash output. Plus require >=5
-  // trailing zeros (was 4) to reduce false positives like 0x60200000.
-  const KNOWN_ALLOCATOR_ADDRESSES = new Set([
-    "0x60200000",
-    "0x7fff0000",
-    "0x602000000000",
-    "0x10000000",
-    "0x00400000",
-    "0x7f0000000000",
+  // Task #206 (Sprint 13B-1): tightened round-address detector. The
+  // previous v3.6.0 allowlist exempted broad allocator base ranges
+  // (`0x60200000`, `0x10000000`, `0x7f0000000000`, …) that have no
+  // citable provenance — they are merely "places real allocators tend to
+  // map", not addresses real ASan output ever prints verbatim. Sprint 12
+  // Report 82 used `0x000060400000` — one hex digit away from a previously
+  // allowlisted base — and slipped past detection. The trailing-zero
+  // threshold is also lowered from ≥5 to ≥3 so 12-digit fabricated heap
+  // addresses with 4–5 trailing zeros (the typical "looks plausible but
+  // is round" shape) get caught. The two outer guards are unchanged
+  // (`roundAddresses / addresses > 50%` and `!hasRealCrashIndicators`),
+  // so legit ASan dumps that incidentally include a page-aligned address
+  // are still safe.
+  const KNOWN_ALLOCATOR_ADDRESSES = new Set<string>([
+    // Intentionally empty: no entry survived the Sprint 13B-1 audit.
   ]);
   const addresses = text.match(/0x[0-9a-f]{8,16}/gi) || [];
   const roundAddresses = addresses.filter(a => {
@@ -44,7 +49,7 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     const hex = lower.replace("0x", "");
     const trailing = hex.match(/0+$/)?.[0].length || 0;
     const sequential = /(?:1234|5678|9abc|abcd|dead|beef|cafe|face)/.test(hex);
-    return trailing >= 5 || sequential;
+    return trailing >= 3 || sequential;
   });
   // v3.6.0 §6: Real ASan/gdb crash dumps frequently include some round-looking
   // addresses (allocator boundaries, page-aligned regions). Only flag the
@@ -79,33 +84,48 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     });
   }
 
-  // v3.8.0 (Task #192): incomplete_asan used to fire on any report that
-  // mentioned "AddressSanitizer" but didn't include the trailing
-  // `SUMMARY: AddressSanitizer ...` line. Real bug reports routinely excerpt
-  // only the lines around the bug (the ERROR header, the offending stack
-  // frames, the freed-by/previously-allocated trailers) and drop the SUMMARY
-  // line, so the rule produced false positives on legit T1 reports
-  // (T1-01-uaf-libfoo, T1-AVRI-firefox-uaf, T1-AVRI-cve-2025-0725-curl).
-  // We now suppress it whenever the text shows other authentic ASan-context
-  // markers that hand-rolled fabrications almost never include verbatim:
-  //   - the "==N==ERROR: AddressSanitizer:" header line
-  //   - resolved stack frames with file:line (`#0 0x... in foo bar/baz.c:42`)
-  //   - the "READ/WRITE of size N at 0x..." access-size header
-  //   - the "freed by thread T0 here" / "previously allocated by thread"
-  //     trailers ASan emits between dump sections
+  // Task #206 (Sprint 13B-1): `incomplete_asan` now requires positive
+  // evidence of structural inconsistency, not just a missing trailing
+  // `SUMMARY: AddressSanitizer ...` line. The earlier v3.8.0 (Task #192)
+  // pass already suppressed the rule when the excerpt showed any of the
+  // authentic ASan-context markers (ERROR header, resolved frames, read/
+  // write size header, freed-by trailer, previously-allocated trailer).
+  // That removed most false positives, but the rule still fired on a
+  // bare prose mention of "AddressSanitizer" without a specific bug-class
+  // claim — which is exactly the shape of an honest one-liner like
+  // "I tested under AddressSanitizer." The new contract is:
+  //   1. The text must claim a specific ASan-detected bug class
+  //      (heap-buffer-overflow, use-after-free, stack-buffer-overflow,
+  //      double-free, global-buffer-overflow, heap/stack overflow), AND
+  //   2. None of the structural anchors that real ASan output emits are
+  //      present (SUMMARY line, shadow-bytes section, ERROR header,
+  //      resolved file:line frames, READ/WRITE access-size header,
+  //      freed-by/previously-allocated trailers).
+  // This matches the task description's example: "claims an overflow
+  // but shows no shadow bytes." Real bug reports either show one of the
+  // structural anchors or describe the bug in their own prose without
+  // citing a specific ASan classifier.
   const hasAsan = /AddressSanitizer/i.test(text);
+  const claimsAsanBugClass = /(?:heap[-\s]buffer[-\s]overflow|stack[-\s]buffer[-\s]overflow|global[-\s]buffer[-\s]overflow|heap[-\s]use[-\s]after[-\s]free|use[-\s]after[-\s]free|double[-\s]free|heap\s+overflow|stack\s+overflow)/i.test(text);
   const hasAsanDetails = /SUMMARY:\s*AddressSanitizer/i.test(text);
+  const hasShadowBytes = /Shadow\s+bytes\s+around/i.test(text);
   const hasAsanErrorHeader = /==\d+==\s*ERROR:\s*AddressSanitizer\s*:/i.test(text);
   const hasResolvedFrame = /#\d+\s+0x[0-9a-f]+\s+in\s+\S[^\n]*\.[A-Za-z0-9_+-]+:\d+/i.test(text);
   const hasReadWriteSize = /(?:READ|WRITE)\s+of\s+size\s+\d+\s+at\s+0x[0-9a-f]+/i.test(text);
   const hasFreedBy = /freed\s+by\s+thread\s+T\d+\s+here/i.test(text);
   const hasPrevAllocated = /previously\s+allocated\s+by\s+thread/i.test(text);
   const hasRealAsanContext =
-    hasAsanErrorHeader || hasResolvedFrame || hasReadWriteSize || hasFreedBy || hasPrevAllocated;
-  if (hasAsan && !hasAsanDetails && !hasRealAsanContext) {
+    hasAsanDetails ||
+    hasShadowBytes ||
+    hasAsanErrorHeader ||
+    hasResolvedFrame ||
+    hasReadWriteSize ||
+    hasFreedBy ||
+    hasPrevAllocated;
+  if (hasAsan && claimsAsanBugClass && !hasRealAsanContext) {
     signals.push({
       type: "incomplete_asan",
-      description: "ASan output appears truncated/fabricated — missing SUMMARY section AND no ERROR header, resolved frames, or freed-by trailer that real ASan produces",
+      description: "ASan excerpt is structurally inconsistent — claims a specific bug class but shows no shadow bytes, ERROR header, resolved frames, READ/WRITE size header, or freed-by trailer that real ASan produces",
       weight: 12,
     });
   }

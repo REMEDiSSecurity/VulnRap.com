@@ -38,8 +38,17 @@ export const HALLUCINATION_TRIGGER_SNIPPETS: Record<string, string> = {
   fabricated_addresses:
     "Faulting addresses 0x70000000 0x80000000 0x90000000 0xa0000000 0xb0000000 0xc0000000",
   phantom_exploit_script: "Reproduce by running exploit.py against the target.",
-  incomplete_asan: "Reporter pasted an AddressSanitizer trace (truncated).",
-  fabricated_pid: "Crash report header was ==12345==.",
+  // Task #206: incomplete_asan now requires a specific bug-class claim
+  // alongside the missing-structure indicator, so the snippet has to name
+  // the bug class explicitly (e.g. "heap-buffer-overflow") to re-fire the
+  // detector at backfill time.
+  incomplete_asan:
+    "Reporter pasted an AddressSanitizer heap-buffer-overflow trace (truncated).",
+  // Task #206: fabricated_pid no longer fires on a single magic PID when
+  // no other fabrication marker is present. The snippet now seeds two
+  // distinct magic PIDs so the rule fires in isolation (per-signal
+  // purity) without depending on cross-talk from other snippets.
+  fabricated_pid: "Crash report headers were ==12345== and ==54321==.",
   phantom_functions:
     "Mentions fab_alpha(), fab_beta(), and fab_gamma() but ships no source.",
   implausible_version: "Affects version 1.2.999 of the library.",

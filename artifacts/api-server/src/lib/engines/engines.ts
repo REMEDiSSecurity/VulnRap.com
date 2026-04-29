@@ -677,18 +677,36 @@ function getCompositeLabel(score: number): string {
 //   - 20+ totalWeight (≈ a strong-fabrication cluster) → -15
 //   - 30+ totalWeight (overwhelming fabrication evidence) → -25
 //
-// v3.8.0 (Task #192): the previous CORROBORATING_HALLUCINATION_TYPES
-// allowlist (which exempted `incomplete_asan` and `fabricated_pid` from
-// being able to trigger the penalty on their own) was removed once those
-// two signals were tightened at the detector layer to stop false-positive
-// firing on real bug reports. Both rules now require a real fabrication
-// context to fire, so totalWeight tiers can speak for themselves.
-//
+// v3.8.0 (Task #192) removed the CORROBORATING_HALLUCINATION_TYPES
+// allowlist after the detector itself was tightened, on the theory that
+// `incomplete_asan` and `fabricated_pid` could no longer false-fire on
+// legit reports. Task #206 (Sprint 13B-1) tightens the detector even
+// further, but the safeguard is reintroduced for one specific reason:
+// the backfill path (`backfill-vulnrap-helpers.ts`) recomputes the
+// composite for legacy reports whose raw text was not retained, by
+// synthesising trigger snippets from the `evidence` jsonb. Those legacy
+// rows can contain `incomplete_asan` / `fabricated_pid` entries cached
+// by the *old* loose detector — replaying them through reconstructed
+// synthetic text would otherwise drag a legitimate legacy report into
+// the -10 override band purely on the strength of two soft signals.
+// We therefore require at least one PRIMARY (non-corroborating) signal
+// before the composite override fires; any T4 fabrication that pairs a
+// magic PID with a real fabrication marker still trips the threshold,
+// because that pairing is itself the primary signal.
+const CORROBORATING_HALLUCINATION_TYPES = new Set([
+  "incomplete_asan",
+  "fabricated_pid",
+]);
+
 // The chosen tier is recorded in `applied` so the triage UI can surface
 // the override note alongside CONVERGENT_NEGATIVE etc.
 function hallucinationOverridePoints(
   result: HallucinationResult,
 ): { points: number; note: string | null } {
+  const hasPrimary = result.signals.some(
+    (s) => !CORROBORATING_HALLUCINATION_TYPES.has(s.type),
+  );
+  if (!hasPrimary) return { points: 0, note: null };
   const w = result.totalWeight;
   if (w >= 30) {
     return {

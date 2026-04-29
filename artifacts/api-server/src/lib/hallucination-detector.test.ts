@@ -132,3 +132,70 @@ fake_helper_two() before being finalized in fake_helper_three().`;
     });
   });
 });
+
+describe("Task #206 (Sprint 13B-1): tightened round-address detector", () => {
+  // Sprint 12 Report 82 used `0x000060400000`, which slipped past the
+  // v3.6.0 detector for two reasons:
+  //   1. The round-trailing-zero threshold was ≥5; this address has only
+  //      4 trailing hex zeros, so it didn't classify as round.
+  //   2. The KNOWN_ALLOCATOR_ADDRESSES allowlist contained `0x60200000`
+  //      (one hex digit away), nudging reviewers toward "well, allocator
+  //      bases sometimes look like that, must be real".
+  // Sprint 13B-1 lowers the trailing-zero threshold to ≥3 and empties
+  // the allowlist entirely. These tests pin the new behavior.
+
+  it("flags 0x000060400000 (Sprint 12 Report 82) as a round address", () => {
+    // Five distinct round-looking addresses, no real-crash anchors → the
+    // detector should fire `fabricated_addresses`.
+    const text = `Reviewer notes: the report cites these addresses as the
+heap regions involved in the alleged corruption:
+  0x000060400000 — claimed allocator base
+  0x000060500000 — claimed adjacent chunk
+  0x000060600000 — claimed third chunk
+  0x000060700000 — claimed fourth chunk
+  0x000060800000 — claimed fifth chunk
+No SUMMARY line, no shadow bytes, no resolved frames.`;
+    const r = detectHallucinationSignals(text);
+    expect(r.signals.map((s) => s.type)).toContain("fabricated_addresses");
+  });
+
+  it("flags 12-digit addresses with exactly 3 trailing zeros", () => {
+    // Threshold is ≥3, so an address ending in `...000` is the boundary
+    // case that previously slipped through under the ≥5 rule.
+    const text = `Suspicious bases: 0x7f1234567000 and 0x7f1234568000 and
+0x7f1234569000 and 0x7f123456a000.`;
+    const r = detectHallucinationSignals(text);
+    expect(r.signals.map((s) => s.type)).toContain("fabricated_addresses");
+  });
+
+  it("does NOT exempt a previously-allowlisted base like 0x60200000", () => {
+    // Even an address that exactly matches a former allowlist entry must
+    // now be evaluated by the trailing-zero rule. `0x60200000` has 5
+    // trailing zeros, so it counts as round.
+    const text = `Bases: 0x60200000, 0x60300000, 0x60400000, 0x60500000.`;
+    const r = detectHallucinationSignals(text);
+    expect(r.signals.map((s) => s.type)).toContain("fabricated_addresses");
+  });
+
+  it("still spares legit ASan dumps via the structural-anchor guard", () => {
+    // A legit dump with a `SUMMARY: AddressSanitizer` line trips
+    // `hasRealCrashIndicators` regardless of how round any quoted base
+    // looks, so the round-address rule must NOT fire.
+    const text = `==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x000060400000
+READ of size 4 at 0x000060400000 thread T0
+    #0 0x55c1aa11 in foo_parse src/parse.c:120
+    #1 0x55c1aa22 in main src/main.c:42
+SUMMARY: AddressSanitizer: heap-buffer-overflow src/parse.c:120 in foo_parse`;
+    const r = detectHallucinationSignals(text);
+    expect(r.signals.map((s) => s.type)).not.toContain("fabricated_addresses");
+  });
+
+  it("still spares legit non-round addresses (T1-AVRI-cve-2025-0725-curl)", () => {
+    // Pin the cohort guarantee: tightening the threshold from ≥5 to ≥3
+    // must not regress the canonical legit fixture.
+    const r = detectHallucinationSignals(
+      findFixture("T1-AVRI-cve-2025-0725-curl").text,
+    );
+    expect(r.signals.map((s) => s.type)).not.toContain("fabricated_addresses");
+  });
+});
