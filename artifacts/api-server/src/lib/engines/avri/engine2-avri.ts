@@ -85,7 +85,7 @@ export function runEngine2Avri(
   fullText: string,
   family: FamilyRubric,
 ): AvriEngine2Result {
-  const legacy = runEngine2Legacy(signals);
+  const legacy = runEngine2Legacy(signals, fullText);
   // FLAT family: legacy passes through, but apply a hand-wavy haircut when
   // the report explicitly admits to having no reproducer / private PoC /
   // structural-only evidence. These markers are diagnostic of slop reports

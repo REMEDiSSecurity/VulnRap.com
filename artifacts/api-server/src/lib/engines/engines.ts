@@ -4,6 +4,8 @@
 import type { ExtractedSignals } from "./extractors";
 import { detectVulnerabilityType } from "./extractors";
 import { CWE_FINGERPRINTS, HIGH_REJECTION_CWES } from "./cwe-fingerprints";
+import { evaluateCrashTrace } from "./avri/crash-trace";
+import { evaluateRawHttpRequest } from "./avri/raw-http";
 
 export type Verdict = "GREEN" | "YELLOW" | "RED" | "GREY";
 export type Confidence = "HIGH" | "MEDIUM" | "LOW";
@@ -247,7 +249,7 @@ function analyzeClaimEvidenceRatio(s: ExtractedSignals): { ratio: number; ratioS
   return { ratio, ratioScore };
 }
 
-export function runEngine2(s: ExtractedSignals): EngineResult {
+export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult {
   const codeScore = computeCodeEvidenceScore(s);
   const refScore = computeReferenceScore(s);
   const reproScore = computeReproducibilityScore(s);
@@ -347,6 +349,62 @@ export function runEngine2(s: ExtractedSignals): EngineResult {
       signal: "SPECIFIC_ENDPOINTS", value: 0, threshold: 4.08, strength: "MEDIUM",
       explanation: "No specific endpoints referenced; expert reports average 4.08 (8.9x slop ratio).",
     });
+  }
+
+  // Sprint 12 A2 (Task #170) — emit GOLD_SIGNAL indicators for the same
+  // evidence categories the AVRI Engine 2 family rubrics reward, so the
+  // BEHAVIORAL_MATCH_REWARD composite override can fire on the default
+  // (AVRI-off) scoring path. Categories mirrored from the AVRI rubric:
+  //   - real_crash_trace (asan/valgrind/tsan + non-stripped frames)
+  //   - real_raw_http    (HTTP/1.x bytes that aren't fabricated)
+  //   - code_diff        (unified diff hunk; CODE_DIFF already requires
+  //                       ≥2 distinct DIFF_PATTERNS to register, so it's
+  //                       intrinsically validated by extractSignals)
+  // The crash-trace and raw-HTTP gates use the same shared validators
+  // AVRI uses to revoke fabricated evidence (avri/crash-trace.ts,
+  // avri/raw-http.ts), so a slop report whose only "evidence" is a fake
+  // sanitizer trace or placeholder HTTP block does NOT earn a gold signal.
+  // Without `fullText` we can only emit code_diff (the other categories
+  // require text to validate); the in-tree callers all pass it.
+  if (s.evidenceSignals && s.evidenceSignals.length > 0) {
+    const evTypes = new Set(s.evidenceSignals.map((es) => es.type));
+
+    if (evTypes.has("CODE_DIFF")) {
+      indicators.push({
+        signal: "GOLD_SIGNAL",
+        value: "code_diff",
+        strength: "MEDIUM",
+        explanation: "Unified code diff present (multi-pattern hunk + file header).",
+      });
+    }
+
+    if (fullText && (evTypes.has("CRASH_OUTPUT") || evTypes.has("STACK_TRACE"))) {
+      const traceEval = evaluateCrashTrace(fullText);
+      // Require at least 3 frames AND validator says not stripped.
+      // (framesAnalyzed=0 means the AVRI frame regex didn't match even
+      // though the legacy crash-pattern regex did — be conservative
+      // and don't fire in that case.)
+      if (traceEval.framesAnalyzed >= 3 && !traceEval.isStripped && traceEval.goodFrames > 0) {
+        indicators.push({
+          signal: "GOLD_SIGNAL",
+          value: "real_crash_trace",
+          strength: "HIGH",
+          explanation: `Crash/stack trace with ${traceEval.goodFrames}/${traceEval.framesAnalyzed} resolved frames.`,
+        });
+      }
+    }
+
+    if (fullText && evTypes.has("HTTP_REQUEST")) {
+      const httpEval = evaluateRawHttpRequest(fullText);
+      if (httpEval.requestsAnalyzed > 0 && !httpEval.isFake) {
+        indicators.push({
+          signal: "GOLD_SIGNAL",
+          value: "real_raw_http",
+          strength: "HIGH",
+          explanation: `Raw HTTP request bytes (${httpEval.requestsAnalyzed} block(s), headers not fabricated).`,
+        });
+      }
+    }
   }
 
   return {

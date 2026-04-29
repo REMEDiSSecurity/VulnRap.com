@@ -178,7 +178,7 @@ export function analyzeWithEnginesTraced(
       },
     },
   };
-  const e2 = stage("engine2_substance", () => runEngine2(signals));
+  const e2 = stage("engine2_substance", () => runEngine2(signals, text));
   const e3 = stage("engine3_cwe_coherence", () => runEngine3(signals, text));
   const composite = stage("composite", () => computeComposite([e1, e2, e3]));
 

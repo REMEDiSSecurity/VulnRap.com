@@ -8,7 +8,8 @@
 // existing slop fixtures (which carry no GOLD_SIGNAL by construction).
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { computeComposite, type EngineResult, type TriggeredIndicator } from "./engines";
+import { computeComposite, runEngine2, type EngineResult, type TriggeredIndicator } from "./engines";
+import { extractSignals } from "./extractors";
 
 type PartialEngine = {
   engine: string;
@@ -147,6 +148,138 @@ describe("Sprint 12 A2: behavioral-match reward", () => {
     ];
     const r = computeComposite(engines);
     expect(r.overridesApplied).toContain("THIN_LEGITIMATE_REPORT: Low substance but not AI-authored");
+    expect(r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(true);
+  });
+
+  it("legacy Engine 2 emits GOLD_SIGNAL=code_diff for a unified diff hunk", () => {
+    const text = [
+      "# Patch",
+      "```diff",
+      "--- a/src/parser.c",
+      "+++ b/src/parser.c",
+      "@@ -42,7 +42,7 @@ int parse_token(const char *buf, size_t len) {",
+      "-    memcpy(out, buf, len);",
+      "+    memcpy(out, buf, MIN(len, sizeof(out)));",
+      "```",
+    ].join("\n");
+    const signals = extractSignals(text);
+    const e2 = runEngine2(signals, text);
+    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    expect(golds.some((g) => g.value === "code_diff")).toBe(true);
+  });
+
+  it("legacy Engine 2 emits GOLD_SIGNAL=real_crash_trace for a non-stripped sanitizer trace", () => {
+    const text = `
+# Memory corruption in CommandEncoder::Finalize
+
+==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60200000eff0 at pc 0x000000401234 bp 0x7ffd00000000 sp 0x7ffd00000010
+READ of size 8 at 0x60200000eff0 thread T0
+    #0 0x401234 in mozilla::webgpu::CommandEncoder::Finalize() src/webgpu/CommandEncoder.cpp:418
+    #1 0x401abc in mozilla::webgpu::Device::Submit(JSContext*) src/webgpu/Device.cpp:202
+    #2 0x40299a in WebGPU_FrameLoop_Tick() src/webgpu/FrameLoop.cpp:88
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow src/webgpu/CommandEncoder.cpp:418 in Finalize()
+`;
+    const signals = extractSignals(text);
+    const e2 = runEngine2(signals, text);
+    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    expect(golds.some((g) => g.value === "real_crash_trace")).toBe(true);
+  });
+
+  it("legacy Engine 2 does NOT emit real_crash_trace for a stripped/placeholder trace", () => {
+    const text = `
+==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0xZZZZZZZZ at pc 0xZZZZ bp 0xZZZZ sp 0xZZZZ
+READ of size 8 at 0xZZZZZZZZ thread T0
+    #0 0xZZZZ in <symbol stripped> ??(??:0)
+    #1 0xZZZZ in <symbol stripped> ??(??:0)
+    #2 0xZZZZ in <symbol stripped> ??(??:0)
+    #3 0xZZZZ in <symbol stripped> ??(??:0)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow
+`;
+    const signals = extractSignals(text);
+    const e2 = runEngine2(signals, text);
+    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    expect(golds.some((g) => g.value === "real_crash_trace")).toBe(false);
+  });
+
+  it("legacy Engine 2 emits GOLD_SIGNAL=real_raw_http for non-fabricated HTTP request bytes", () => {
+    const text = `
+# IDOR via /api/orders
+
+The first session sends:
+\`\`\`
+GET /api/orders/4815 HTTP/1.1\r
+Host: api.example.com\r
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEifQ.M2y7fT_kQpL9Ztq8RxYbN3wVcGdHaJoP5sB1uEiKxzA\r
+User-Agent: curl/8.4.0\r
+Accept: application/json\r
+\r
+\`\`\`
+
+…and the second account using a different bearer token receives the same body.
+`;
+    const signals = extractSignals(text);
+    const e2 = runEngine2(signals, text);
+    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    expect(golds.some((g) => g.value === "real_raw_http")).toBe(true);
+  });
+
+  it("legacy Engine 2 does NOT emit real_raw_http for placeholder header values", () => {
+    const text = `
+\`\`\`
+POST /<endpoint> HTTP/1.1
+Host: <target>
+Content-Length: XX
+Transfer-Encoding: <chunked>
+
+<payload here>
+\`\`\`
+`;
+    const signals = extractSignals(text);
+    const e2 = runEngine2(signals, text);
+    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    expect(golds.some((g) => g.value === "real_raw_http")).toBe(false);
+  });
+
+  it("BEHAVIORAL_MATCH_REWARD fires end-to-end via legacy Engine 2 (AVRI off)", () => {
+    // Build a small but well-evidenced report that should produce E2 GOLD_SIGNAL
+    // under the legacy path. E3 is supplied directly via a stub so this test
+    // doesn't depend on the CWE coherence engine's tuning curve.
+    const text = `
+# Heap-buffer-overflow in mozilla::webgpu::CommandEncoder::Finalize (CWE-122)
+
+## Steps to reproduce
+1. Build Firefox with ASan: \`MOZ_DEBUG=1 ./mach build\`
+2. Open the attached HTML at https://bug-attach.example.com/repro.html
+3. Observe the ASan crash below.
+
+\`\`\`
+==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60200000eff0 at pc 0x000000401234 bp 0x7ffd00000000 sp 0x7ffd00000010
+READ of size 8 at 0x60200000eff0 thread T0
+    #0 0x401234 in mozilla::webgpu::CommandEncoder::Finalize() src/webgpu/CommandEncoder.cpp:418
+    #1 0x401abc in mozilla::webgpu::Device::Submit(JSContext*) src/webgpu/Device.cpp:202
+    #2 0x40299a in WebGPU_FrameLoop_Tick() src/webgpu/FrameLoop.cpp:88
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow src/webgpu/CommandEncoder.cpp:418 in Finalize()
+\`\`\`
+
+## Patch
+\`\`\`diff
+--- a/src/webgpu/CommandEncoder.cpp
++++ b/src/webgpu/CommandEncoder.cpp
+@@ -415,7 +415,7 @@ void CommandEncoder::Finalize() {
+-  memcpy(out_, buf_, len_);
++  memcpy(out_, buf_, std::min(len_, sizeof(out_)));
+\`\`\`
+`;
+    const signals = extractSignals(text, ["CWE-122"]);
+    const e2 = runEngine2(signals, text);
+    expect(e2.triggeredIndicators.some((i) => i.signal === "GOLD_SIGNAL")).toBe(true);
+
+    const e1 = mk({ engine: "AI Authorship Detector", score: 25, verdict: "GREEN" });
+    const e3 = mk({ engine: "CWE Coherence Checker", score: 70, verdict: "GREEN" });
+    const r = computeComposite([e1, e2, e3]);
     expect(r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(true);
   });
 
