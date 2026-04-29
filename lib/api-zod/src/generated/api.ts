@@ -2888,7 +2888,7 @@ export const AddHandwavyPhraseBody = zod.object({
     .max(addHandwavyPhraseBodyProductionScanLimitMax)
     .optional()
     .describe(
-      "Task #125 — optional override for the upper bound on the production-archive\nscan that backs the dry-run preview. Only consulted on the dry-run path\n(the only place the production scan runs). Heavy-user installs can widen\nthe window for a stronger false-positive signal; small installs can tighten\nit to focus on recent reporter behavior. Defaults to 2000 when omitted so\nexisting reviewers see no behavior change. The chosen value is echoed back\nin `dryRunMatchesProductionLimit` so the UI can label the second signal\naccurately.\n",
+      "Task #125 — optional override for the upper bound on the production-archive\nscan that backs the dry-run preview. Only consulted on the dry-run path\n(the only place the production scan runs). Heavy-user installs can widen\nthe window for a stronger false-positive signal; small installs can tighten\nit to focus on recent reporter behavior. Defaults to 2000 when omitted so\nexisting reviewers see no behavior change. The chosen value is echoed back\nin `dryRunMatchesProductionLimit` so the UI can label the second signal\naccurately.\n\nTask #230 — also accepted on the DELETE single-phrase dry-run path\nvia `HandwavyPhraseBody`, which shares this body schema, so the\nsame reviewer-chosen window drives the single-phrase removal preview\ntoo. The chosen value is echoed back in\n`HandwavyPhraseSingleRemoveDryRunResponse.dryRunImpact.productionLimit`.\n",
     ),
 });
 
@@ -4658,7 +4658,7 @@ export const RemoveHandwavyPhraseBody = zod.union([
       .max(removeHandwavyPhraseBodyOneProductionScanLimitMax)
       .optional()
       .describe(
-        "Task #125 — optional override for the upper bound on the production-archive\nscan that backs the dry-run preview. Only consulted on the dry-run path\n(the only place the production scan runs). Heavy-user installs can widen\nthe window for a stronger false-positive signal; small installs can tighten\nit to focus on recent reporter behavior. Defaults to 2000 when omitted so\nexisting reviewers see no behavior change. The chosen value is echoed back\nin `dryRunMatchesProductionLimit` so the UI can label the second signal\naccurately.\n",
+        "Task #125 — optional override for the upper bound on the production-archive\nscan that backs the dry-run preview. Only consulted on the dry-run path\n(the only place the production scan runs). Heavy-user installs can widen\nthe window for a stronger false-positive signal; small installs can tighten\nit to focus on recent reporter behavior. Defaults to 2000 when omitted so\nexisting reviewers see no behavior change. The chosen value is echoed back\nin `dryRunMatchesProductionLimit` so the UI can label the second signal\naccurately.\n\nTask #230 — also accepted on the DELETE single-phrase dry-run path\nvia `HandwavyPhraseBody`, which shares this body schema, so the\nsame reviewer-chosen window drives the single-phrase removal preview\ntoo. The chosen value is echoed back in\n`HandwavyPhraseSingleRemoveDryRunResponse.dryRunImpact.productionLimit`.\n",
       ),
   }),
   zod
@@ -4686,7 +4686,7 @@ export const RemoveHandwavyPhraseBody = zod.union([
         .max(removeHandwavyPhraseBodyTwoProductionScanLimitMax)
         .optional()
         .describe(
-          "Task #229 — optional override for the upper bound on the production-archive\nscan that backs the bulk-removal dry-run preview. Mirrors the add path\n(Task #125): only consulted on the dry-run path (the only place the\nproduction scan runs for removals), but validated on every DELETE so a\nmalformed value never silently slips into a real bulk delete. Heavy-user\ninstalls can widen the window for a stronger removal-impact signal; small\ninstalls can tighten it to focus on recent reporter behavior. Defaults to\n2000 when omitted so existing reviewers see no behavior change. The\nchosen value is echoed back in `dryRunImpact.productionLimit` so the UI\ncan label the production block accurately.\n",
+          'Task #229 \/ #230 — optional override for the upper bound on the\nproduction-archive scan that backs the bulk-removal dry-run. Mirrors the\nsame field on `HandwavyPhraseBody` (Task #125) so the reviewer-chosen scan\nwindow persisted in the calibration UI applies to every production-archive\nscan, not just the add-phrase preview. Only consulted on the dry-run path,\nbut validated on every DELETE so a malformed value never silently slips into\na real bulk delete. Heavy-user installs can widen the window for a sharper\n\"valid detections lost\" signal; small installs can tighten it. Defaults to\n2000 when omitted so existing reviewers see no behavior change. The chosen\nvalue is echoed back in\n`HandwavyPhraseBatchRemoveDryRunResponse.dryRunImpact.productionLimit`.\n',
         ),
     })
     .describe(

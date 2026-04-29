@@ -941,10 +941,60 @@ const HANDWAVY_SORT_THRASH_KEY = "vulnrap.handwavy.sortByThrash";
 // Task #125 — persist the reviewer-chosen production-scan window between
 // sessions. Stored as a stringified integer; missing/invalid falls back to
 // the server-side default (2000) so existing reviewers see no behavior change.
-const HANDWAVY_PRODUCTION_SCAN_LIMIT_KEY = "vulnrap.handwavy.productionScanLimit";
-const HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT = 2000;
-const HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN = 100;
-const HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX = 10000;
+//
+// Task #230 — the same window now drives every calibration tool that runs a
+// production-archive scan (add-phrase preview, single-phrase removal preview,
+// and bulk-removal preview), so the storage key is namespaced under
+// `vulnrap.calibration.*` rather than `vulnrap.handwavy.*` to reflect the
+// broader scope. The legacy `vulnrap.handwavy.productionScanLimit` key is
+// migrated once at first read so reviewers who tuned the window before this
+// change keep their tuned value automatically.
+const CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY = "vulnrap.calibration.productionScanLimit";
+const CALIBRATION_PRODUCTION_SCAN_LIMIT_LEGACY_KEY = "vulnrap.handwavy.productionScanLimit";
+const CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT = 2000;
+const CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN = 100;
+const CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX = 10000;
+// Read the persisted window from localStorage, migrating the Task #125 key
+// on first read. Returns the validated integer when present and in range,
+// otherwise null so callers can fall back to the documented default.
+function readPersistedProductionScanLimit(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    let stored = window.localStorage.getItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY);
+    if (stored == null) {
+      // One-time migration from the pre-#230 handwavy-namespaced key. We
+      // copy the value across (so the next write under the new key keeps
+      // it) and clear the legacy entry so we don't keep re-reading it.
+      const legacy = window.localStorage.getItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_LEGACY_KEY);
+      if (legacy != null) {
+        try {
+          window.localStorage.setItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY, legacy);
+        } catch {
+          // ignore write failures (private mode, quota); we'll still
+          // return the legacy value below so the session honors it.
+        }
+        try {
+          window.localStorage.removeItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_LEGACY_KEY);
+        } catch {
+          // ignore
+        }
+        stored = legacy;
+      }
+    }
+    if (stored == null) return null;
+    const parsed = Number.parseInt(stored, 10);
+    if (
+      !Number.isFinite(parsed) ||
+      parsed < CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN ||
+      parsed > CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 // Task #140 — render the remaining undo window for the inline countdown on
 // the Undo button (e.g. "4m 12s", "45s"). Math.ceil keeps the displayed
@@ -1817,22 +1867,8 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   // focus on recent reporter behavior. Defaults to 2000, matching the
   // server-side default so existing reviewers see no behavior change.
   const [productionScanLimitInput, setProductionScanLimitInput] = useState<string>(() => {
-    if (typeof window === "undefined") return String(HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT);
-    try {
-      const stored = window.localStorage.getItem(HANDWAVY_PRODUCTION_SCAN_LIMIT_KEY);
-      if (stored == null) return String(HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT);
-      const parsed = Number.parseInt(stored, 10);
-      if (
-        !Number.isFinite(parsed) ||
-        parsed < HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN ||
-        parsed > HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX
-      ) {
-        return String(HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT);
-      }
-      return String(parsed);
-    } catch {
-      return String(HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT);
-    }
+    const persisted = readPersistedProductionScanLimit();
+    return String(persisted ?? CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT);
   });
   const [busy, setBusy] = useState<string | null>(null);
   // Task #146 — confirmation prompt for the per-edit Revert button. We hold
@@ -2032,24 +2068,26 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   })();
   const productionScanLimitValid =
     productionScanLimitParsed !== null &&
-    productionScanLimitParsed >= HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN &&
-    productionScanLimitParsed <= HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX;
+    productionScanLimitParsed >= CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN &&
+    productionScanLimitParsed <= CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX;
   const effectiveProductionScanLimit = productionScanLimitValid
     ? (productionScanLimitParsed as number)
-    : HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT;
+    : CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT;
   // Mirror only the validated value into localStorage, never a mid-edit
   // string. Default value is removed from storage (rather than written
   // explicitly) so first-time users and anyone who clears browser storage
-  // cleanly fall back to the documented default.
+  // cleanly fall back to the documented default. Task #230 — writes go to
+  // the calibration-namespaced key shared across all production-archive
+  // scan tools.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!productionScanLimitValid) return;
     try {
-      if (effectiveProductionScanLimit === HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT) {
-        window.localStorage.removeItem(HANDWAVY_PRODUCTION_SCAN_LIMIT_KEY);
+      if (effectiveProductionScanLimit === CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT) {
+        window.localStorage.removeItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY);
       } else {
         window.localStorage.setItem(
-          HANDWAVY_PRODUCTION_SCAN_LIMIT_KEY,
+          CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY,
           String(effectiveProductionScanLimit),
         );
       }
@@ -2216,7 +2254,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         phrase,
         category: draftCategory,
         dryRun: true,
-        ...(effectiveProductionScanLimit !== HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
           ? { productionScanLimit: effectiveProductionScanLimit }
           : {}),
       });
@@ -2391,7 +2429,18 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     if (bailOnCooldown("Removal preview")) return;
     setBusy(`rm-preview:${phrase}`);
     try {
-      const resp = await removeHandwavyPhrase({ phrase, dryRun: true });
+      // Task #230 — honor the reviewer-chosen production-scan window
+      // (shared across every calibration tool). Mirror the add-phrase
+      // flow's "omit when default" treatment so the request body stays
+      // identical to the legacy shape unless the reviewer actually
+      // tuned the window.
+      const resp = await removeHandwavyPhrase({
+        phrase,
+        dryRun: true,
+        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+          ? { productionScanLimit: effectiveProductionScanLimit }
+          : {}),
+      });
       // Defensive: the DELETE response is a union and the server might
       // theoretically respond with the live shape if it ignored dryRun.
       // Fail closed by surfacing an error rather than a silent live
@@ -2617,15 +2666,15 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     setBulkResults(null);
     setBusy("bulk-preview");
     try {
-      // Task #229 — pass the reviewer-chosen production-scan window so heavy
-      // installs can widen / small installs can tighten the bulk-removal
-      // production-archive signal, mirroring the add-time preview (Task #125).
-      // Omit the field entirely when the reviewer left the default in place
-      // so the request body stays identical to the legacy shape.
+      // Task #229 / #230 — honor the reviewer-chosen production-scan window
+      // (shared across every calibration tool — add, single remove, bulk
+      // preview). Mirror the add-phrase flow's "omit when default" treatment
+      // so the request body stays identical to the legacy shape unless the
+      // reviewer actually tuned the window.
       const resp = await removeHandwavyPhrase({
         phrases: phrasesToPreview,
         dryRun: true,
-        ...(effectiveProductionScanLimit !== HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
           ? { productionScanLimit: effectiveProductionScanLimit }
           : {}),
       });
@@ -3531,20 +3580,27 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
               positive signal; small installs can tighten it to focus on
               recent reporter behavior. The chosen value is also surfaced in
               the production-block subtitle below so reviewers know exactly
-              how deep the second signal went. */}
+              how deep the second signal went.
+              Task #230 — the same window now drives every calibration tool
+              that runs a production-archive scan (add-phrase preview,
+              single-phrase removal preview, and bulk-removal preview), so
+              the input lives in one place and the helper text calls out the
+              broader scope. The reviewer's value is persisted under
+              `vulnrap.calibration.productionScanLimit` and is echoed back
+              in each consumer's "last X of up to Y reports" subtitle. */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-[11px] text-muted-foreground">
             <label
               htmlFor="handwavy-production-scan-limit"
               className="shrink-0"
             >
-              Production scan window:
+              Production scan window (shared):
             </label>
             <input
               id="handwavy-production-scan-limit"
               type="number"
               inputMode="numeric"
-              min={HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN}
-              max={HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX}
+              min={CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}
+              max={CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}
               step={100}
               value={productionScanLimitInput}
               onChange={(e) => setProductionScanLimitInput(e.target.value)}
@@ -3555,13 +3611,14 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   : "border-red-500/60 focus:ring-red-500/60",
               )}
               data-testid="handwavy-production-scan-limit"
-              aria-label="Production scan window (most recent N reports)"
+              aria-label="Production scan window (most recent N reports). Applies to add-phrase, single-phrase removal, and bulk-removal previews."
               disabled={busy === "preview" || busy === "confirm" || preview !== null}
             />
             <span className="text-muted-foreground/70">
-              most recent reports ({HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN}–
-              {HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
-              {HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT})
+              most recent reports ({CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
+              {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
+              {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT}) — applies to add,
+              single-phrase removal, and bulk-removal previews
             </span>
             {!productionScanLimitValid && productionScanLimitInput.trim() !== "" && (
               <span
@@ -3569,7 +3626,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                 data-testid="handwavy-production-scan-limit-warning"
               >
                 Out of range — the next preview will use{" "}
-                {HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT} until you fix this.
+                {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT} until you fix this.
               </span>
             )}
           </div>
@@ -4578,8 +4635,8 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   id="handwavy-bulk-production-scan-limit"
                   type="number"
                   inputMode="numeric"
-                  min={HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN}
-                  max={HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX}
+                  min={CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}
+                  max={CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}
                   step={100}
                   value={productionScanLimitInput}
                   onChange={(e) => setProductionScanLimitInput(e.target.value)}
@@ -4590,13 +4647,13 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                       : "border-red-500/60 focus:ring-red-500/60",
                   )}
                   data-testid="handwavy-bulk-production-scan-limit"
-                  aria-label="Production scan window for bulk removal preview (most recent N reports)"
+                  aria-label="Production scan window for bulk removal preview (most recent N reports) — shared with the add-phrase and single-remove previews."
                   disabled={busy === "bulk-preview" || busy === "bulk-remove" || bulkPreview !== null}
                 />
                 <span className="text-muted-foreground/70">
-                  most recent reports ({HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN}–
-                  {HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
-                  {HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT})
+                  most recent reports ({CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
+                  {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
+                  {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT})
                 </span>
                 {!productionScanLimitValid && productionScanLimitInput.trim() !== "" && (
                   <span
@@ -4604,7 +4661,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                     data-testid="handwavy-bulk-production-scan-limit-warning"
                   >
                     Out of range — the next preview will use{" "}
-                    {HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT} until you fix this.
+                    {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT} until you fix this.
                   </span>
                 )}
               </div>

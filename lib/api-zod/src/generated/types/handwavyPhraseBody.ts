@@ -39,6 +39,12 @@ existing reviewers see no behavior change. The chosen value is echoed back
 in `dryRunMatchesProductionLimit` so the UI can label the second signal
 accurately.
 
+Task #230 — also accepted on the DELETE single-phrase dry-run path
+via `HandwavyPhraseBody`, which shares this body schema, so the
+same reviewer-chosen window drives the single-phrase removal preview
+too. The chosen value is echoed back in
+`HandwavyPhraseSingleRemoveDryRunResponse.dryRunImpact.productionLimit`.
+
    * @minimum 100
    * @maximum 10000
    */

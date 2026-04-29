@@ -153,9 +153,39 @@ function productionLabelToTier(label: string | null): CorpusTier | null {
 // false-positive signal; small installs can tighten it (down to
 // PRODUCTION_PREVIEW_LIMIT_MIN) to focus on recent reporter behavior. The
 // default is unchanged so existing reviewers see no behavior change.
+//
+// Task #230 — the same `productionScanLimit` field is also accepted on the
+// DELETE single-phrase and batch dry-run paths so the reviewer-chosen scan
+// window persisted in the calibration UI flows through every production
+// archive scan, not just the add-phrase preview.
 const PRODUCTION_PREVIEW_LIMIT = 2000;
 const PRODUCTION_PREVIEW_LIMIT_MIN = 100;
 const PRODUCTION_PREVIEW_LIMIT_MAX = 10000;
+
+// Task #230 — shared parser/validator for the optional `productionScanLimit`
+// body field. Returns the resolved limit (defaulting to PRODUCTION_PREVIEW_LIMIT
+// when the field is absent) on success, or an `error` string when the value is
+// present but malformed/out-of-range. Centralized here so the POST add-phrase
+// and DELETE single/batch routes reject identical bad inputs with identical
+// error messages.
+function parseProductionScanLimit(
+  raw: unknown,
+): { ok: true; limit: number } | { ok: false; error: string } {
+  if (raw === undefined) return { ok: true, limit: PRODUCTION_PREVIEW_LIMIT };
+  const v = Number(raw);
+  if (
+    !Number.isFinite(v) ||
+    !Number.isInteger(v) ||
+    v < PRODUCTION_PREVIEW_LIMIT_MIN ||
+    v > PRODUCTION_PREVIEW_LIMIT_MAX
+  ) {
+    return {
+      ok: false,
+      error: `productionScanLimit must be an integer between ${PRODUCTION_PREVIEW_LIMIT_MIN} and ${PRODUCTION_PREVIEW_LIMIT_MAX}.`,
+    };
+  }
+  return { ok: true, limit: v };
+}
 
 // Pure scoring step (no DB) so it can be unit-tested independently of the
 // drizzle layer.
@@ -1009,22 +1039,15 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, as
     // Only meaningful on the dry-run path (the only place the production
     // scan runs), but we validate it on every POST so a malformed value
     // never makes it past the input layer.
-    let effectiveProductionLimit = PRODUCTION_PREVIEW_LIMIT;
-    if (productionScanLimit !== undefined) {
-      const v = Number(productionScanLimit);
-      if (
-        !Number.isFinite(v) ||
-        !Number.isInteger(v) ||
-        v < PRODUCTION_PREVIEW_LIMIT_MIN ||
-        v > PRODUCTION_PREVIEW_LIMIT_MAX
-      ) {
-        res.status(400).json({
-          error: `productionScanLimit must be an integer between ${PRODUCTION_PREVIEW_LIMIT_MIN} and ${PRODUCTION_PREVIEW_LIMIT_MAX}.`,
-        });
-        return;
-      }
-      effectiveProductionLimit = v;
+    // Task #230 — validation lives in the shared `parseProductionScanLimit`
+    // helper so the DELETE single/batch dry-run paths reject identical bad
+    // inputs with identical error messages.
+    const productionLimitParse = parseProductionScanLimit(productionScanLimit);
+    if (!productionLimitParse.ok) {
+      res.status(400).json({ error: productionLimitParse.error });
+      return;
     }
+    const effectiveProductionLimit = productionLimitParse.limit;
     // Task #114 — dry-run mode: validate length the same way as a real add so
     // reviewers see the same "too short / too long" errors before committing,
     // then return a corpus-match preview without persisting anything.
@@ -1511,6 +1534,19 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
       return;
     }
     const reviewerStr = typeof reviewer === "string" ? reviewer : undefined;
+    // Task #230 — optional reviewer override for the production-scan window,
+    // honored on both the single and batch dry-run paths so the
+    // reviewer-chosen window persisted in the calibration UI applies to every
+    // production-archive scan, not just the add-phrase preview. We validate
+    // on every DELETE (not just dryRun) so a malformed value never makes it
+    // past the input layer; non-dry-run paths simply ignore the resolved
+    // limit since they don't probe production.
+    const productionLimitParse = parseProductionScanLimit(productionScanLimit);
+    if (!productionLimitParse.ok) {
+      res.status(400).json({ error: productionLimitParse.error });
+      return;
+    }
+    const effectiveProductionLimit = productionLimitParse.limit;
 
     // Task #229 — optional reviewer override for the production-scan window
     // on the bulk DELETE dry-run, mirroring the add path (Task #125). The
@@ -1603,13 +1639,14 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
           };
         } else {
           try {
-            // Task #229 — honor the reviewer-supplied scan window if any
-            // (already validated above), otherwise the legacy 2000-row
-            // default. Mirrors the add-time preview (Task #125).
+            // Task #229 / #230 — honor the reviewer-supplied scan window
+            // from the shared calibration preference (already validated
+            // above), falling back to the legacy 2000-row default when
+            // omitted. Mirrors the add-time preview (Task #125).
             productionImpact = await previewRemovalAgainstProduction(
               removedNormalized,
               remainingNormalized,
-              effectiveBulkProductionLimit,
+              effectiveProductionLimit,
             );
           } catch (err) {
             req.log?.error(err, "Production removal dry-run scan failed");
@@ -1634,11 +1671,11 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
             corpus: corpusImpact,
             production: productionImpact,
             productionError,
-            // Task #229 — echo the reviewer-chosen window so the UI can label
-            // the production-block subtitle accurately ("last N of up to M
-            // reports"). Falls back to the documented default when the
-            // request omitted the field.
-            productionLimit: effectiveBulkProductionLimit,
+            // Task #229 / #230 — echo the reviewer-chosen window (or default)
+            // so the UI can label the production block ("last N of up to M
+            // reports") with the window it actually scanned, matching the
+            // add-phrase preview's behavior.
+            productionLimit: effectiveProductionLimit,
           },
           phrases: getHandwavyPhrases(),
         });
@@ -1702,9 +1739,13 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
         };
       } else {
         try {
+          // Task #230 — honor the reviewer-supplied scan window from the
+          // shared calibration preference, falling back to the legacy
+          // 2000-row default when omitted.
           productionImpact = await previewRemovalAgainstProduction(
             removedNormalized,
             remainingNormalized,
+            effectiveProductionLimit,
           );
         } catch (err) {
           req.log?.error(err, "Production removal dry-run scan failed");
@@ -1733,7 +1774,10 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
           corpus: corpusImpact,
           production: productionImpact,
           productionError,
-          productionLimit: PRODUCTION_PREVIEW_LIMIT,
+          // Task #230 — echo the reviewer-chosen window (or default) so the
+          // UI can label the production block with the window it actually
+          // scanned, matching the add-phrase preview's behavior.
+          productionLimit: effectiveProductionLimit,
         },
         phrases: getHandwavyPhrases(),
       });

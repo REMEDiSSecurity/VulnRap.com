@@ -362,6 +362,75 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       );
       expect(r.status).toBe(400);
     });
+
+    // Task #230 — the reviewer-tunable production-scan window persisted in
+    // the calibration UI must drive the single-phrase DELETE dry-run too,
+    // not just the add-phrase preview. We accept the same `productionScanLimit`
+    // body field, validate it identically, and echo the resolved value back
+    // in `dryRunImpact.productionLimit` so the UI subtitle ("last X of up to
+    // Y reports") matches the window the server actually scanned.
+    describe("Task #230 productionScanLimit on single-phrase DELETE dry-run", () => {
+      it("echoes the reviewer-supplied limit back in dryRunImpact.productionLimit", async () => {
+        const r = await request<SingleDryRunBody>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrase: "seed phrase one", dryRun: true, productionScanLimit: 500 },
+        );
+        expect(r.status).toBe(200);
+        expect(r.body.dryRun).toBe(true);
+        expect(r.body.batch).toBe(false);
+        expect(r.body.dryRunImpact.productionLimit).toBe(500);
+      });
+
+      it("falls back to the 2000-row default when the field is omitted", async () => {
+        const r = await request<SingleDryRunBody>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrase: "seed phrase one", dryRun: true },
+        );
+        expect(r.status).toBe(200);
+        expect(r.body.dryRunImpact.productionLimit).toBe(2000);
+      });
+
+      it("accepts the documented bounds (100 and 10000)", async () => {
+        const lo = await request<SingleDryRunBody>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrase: "seed phrase one", dryRun: true, productionScanLimit: 100 },
+        );
+        expect(lo.status).toBe(200);
+        expect(lo.body.dryRunImpact.productionLimit).toBe(100);
+        const hi = await request<SingleDryRunBody>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrase: "seed phrase one", dryRun: true, productionScanLimit: 10000 },
+        );
+        expect(hi.status).toBe(200);
+        expect(hi.body.dryRunImpact.productionLimit).toBe(10000);
+      });
+
+      it("rejects out-of-range / non-integer / non-numeric values with 400", async () => {
+        for (const bad of [50, 50000, 1500.5, "lots"] as const) {
+          const r = await request<{ error: string }>(
+            "DELETE",
+            "/feedback/calibration/handwavy-phrases",
+            { phrase: "seed phrase one", dryRun: true, productionScanLimit: bad },
+          );
+          expect(r.status).toBe(400);
+          expect(r.body.error).toMatch(/productionScanLimit/);
+        }
+      });
+
+      it("validates productionScanLimit even when dryRun is omitted (so the bad value never silently slips into a real removal)", async () => {
+        const r = await request<{ error: string }>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrase: "seed phrase one", productionScanLimit: 50000 },
+        );
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+      });
+    });
   });
 
   // Task #114 — dry-run preview: the route must report a corpus-match summary
@@ -1527,18 +1596,25 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       }
     });
 
-    // Task #229 — bulk-removal copy of the productionScanLimit knob (Task #125
-    // brought it to the add path). The bulk path runs a separate production
-    // archive scan inside `previewRemovalAgainstProduction`, so reviewers
-    // need the same window override here. We validate it on every DELETE
-    // (not just dry-run) so a malformed value can't silently slip into a
-    // real removal, but the field is only meaningful on the dry-run path.
-    describe("Task #229 — productionScanLimit on bulk DELETE", () => {
+    // Task #229 / #230 — productionScanLimit on the bulk DELETE path.
+    // Task #229 added the per-call knob to the bulk dry-run; Task #230
+    // generalized it into the shared calibration window that the
+    // add-phrase, single-remove, and bulk-remove paths all consult, with
+    // a single shared parser/validator at the top of the DELETE handler.
+    // We validate the field on every DELETE (not just dry-run) so a
+    // malformed value cannot silently slip into a real removal, but the
+    // resolved limit is only consumed on the dry-run path. The single-
+    // phrase echo case lives in its own describe block earlier in this
+    // file (Task #230 productionScanLimit on single-phrase DELETE
+    // dry-run); the cases below cover the batch path plus cross-path
+    // validator behavior.
+    describe("Task #229 / #230 — productionScanLimit on bulk DELETE", () => {
       it("DELETE batch dry-run echoes the reviewer-supplied productionScanLimit", async () => {
         await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit echo a" });
         await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit echo b" });
         const r = await request<{
           dryRun: boolean;
+          batch: boolean;
           dryRunImpact: { productionLimit: number };
         }>("DELETE", "/feedback/calibration/handwavy-phrases", {
           phrases: ["bulk plimit echo a", "bulk plimit echo b"],
@@ -1547,6 +1623,7 @@ describe("/feedback/calibration/handwavy-phrases", () => {
         });
         expect(r.status).toBe(200);
         expect(r.body.dryRun).toBe(true);
+        expect(r.body.batch).toBe(true);
         expect(r.body.dryRunImpact.productionLimit).toBe(5000);
       });
 
@@ -1560,6 +1637,25 @@ describe("/feedback/calibration/handwavy-phrases", () => {
         });
         expect(r.status).toBe(200);
         expect(r.body.dryRunImpact.productionLimit).toBe(2000);
+      });
+
+      it("DELETE batch dry-run accepts the documented bounds (100 and 10000)", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit bounds a" });
+        const lo = await request<{ dryRunImpact: { productionLimit: number } }>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrases: ["bulk plimit bounds a"], dryRun: true, productionScanLimit: 100 },
+        );
+        expect(lo.status).toBe(200);
+        expect(lo.body.dryRunImpact.productionLimit).toBe(100);
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit bounds b" });
+        const hi = await request<{ dryRunImpact: { productionLimit: number } }>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrases: ["bulk plimit bounds b"], dryRun: true, productionScanLimit: 10000 },
+        );
+        expect(hi.status).toBe(200);
+        expect(hi.body.dryRunImpact.productionLimit).toBe(10000);
       });
 
       it("DELETE batch rejects productionScanLimit below the floor with 400", async () => {
@@ -1670,6 +1766,24 @@ describe("/feedback/calibration/handwavy-phrases", () => {
         // the up-front validator blocks bad values before any state change.
         const after = await request<{ phrases: Marker[] }>("GET", "/feedback/calibration/handwavy-phrases");
         expect(after.body.phrases.map((m) => m.phrase)).toContain("single plimit bad");
+      });
+
+      // Task #230 — the bounds-acceptance and broad bad-value rejection
+      // cases above already cover the dry-run path; this one closes the
+      // loop on the real (non-dry-run) batch path by asserting the
+      // shared validator still rejects malformed values when `dryRun`
+      // is omitted entirely. Without this guarantee a malformed window
+      // could silently slip into a destructive call (the dry-run-only
+      // tests above don't catch that regression).
+      it("DELETE batch validates productionScanLimit even when dryRun is omitted (so a bad value never silently slips into a real batch removal)", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit no-dryrun a" });
+        const r = await request<{ error: string }>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrases: ["bulk plimit no-dryrun a"], productionScanLimit: 50000 },
+        );
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
       });
     });
 
