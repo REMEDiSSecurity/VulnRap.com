@@ -1,5 +1,11 @@
-import { test, expect, request, type APIRequestContext, type Page, type Locator } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { test, expect, type Page, type Locator } from "@playwright/test";
+import {
+  addPhrase,
+  batchRemove,
+  cleanup,
+  newApiContext,
+  uniquePhrases,
+} from "./helpers/handwavy";
 
 // Task #156 — End-to-end coverage for the FLAT hand-wavy phrase audit panel's
 // "Reinstate all N" batch button. The backend helper + route already have
@@ -14,74 +20,8 @@ import { randomUUID } from "node:crypto";
 // attribute, and verifies the button + badge swaps before/after clicking
 // "Reinstate all".
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-// Mirror playwright.config.ts default so the strict-auth gate on the
-// hand-wavy phrase routes (Task #163 + Task #152's CALIBRATION_TOKEN setup)
-// accepts our direct API calls in seed/cleanup. CI overrides via
-// E2E_CALIBRATION_TOKEN.
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
-
-function newApiContext() {
-  return request.newContext({
-    baseURL: API_BASE,
-    extraHTTPHeaders: { "X-Calibration-Token": CALIBRATION_TOKEN },
-  });
-}
-
-interface BatchRemovalResponse {
-  batch: true;
-  removed: number;
-  total: number;
-  historyEntry?: { removedAt: string } | null;
-}
-
-function uniquePhrases(count: number): string[] {
-  // Using randomUUID keeps each test run independent of any data left over
-  // in the dev DB / handwavy-phrases.json from prior runs or manual usage.
-  // The "task156" prefix just makes them easy to spot during debugging.
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return Array.from({ length: count }, (_, i) => `task156 batch ${id} phrase ${i + 1}`);
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    data: { phrase, category: "hedging", reviewer: "e2e-task156" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function batchRemove(
-  api: APIRequestContext,
-  phrases: string[],
-): Promise<BatchRemovalResponse> {
-  const res = await api.delete("/api/feedback/calibration/handwavy-phrases", {
-    data: { phrases, reviewer: "e2e-task156" },
-  });
-  expect(
-    res.ok(),
-    `DELETE handwavy-phrases (batch) failed: ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-  const body = (await res.json()) as BatchRemovalResponse;
-  expect(body.batch).toBe(true);
-  expect(body.removed).toBe(phrases.length);
-  expect(body.historyEntry?.removedAt, "batch removal should produce a history entry").toBeTruthy();
-  return body;
-}
-
-// Cleans up anything we left behind so a re-run doesn't accumulate audit
-// rows. We try to remove every phrase the test added; not-found is fine.
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      data: { phrases, reviewer: "e2e-task156-cleanup" },
-    })
-    .catch(() => undefined);
-}
+const REVIEWER = "e2e-task156";
+const REVIEWER_OPTS = { reviewer: REVIEWER };
 
 async function openHistoryAndFindBatch(
   page: Page,
@@ -114,11 +54,11 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
     page,
   }) => {
     const apiCtx = await newApiContext();
-    const phrases = uniquePhrases(3);
+    const phrases = uniquePhrases(3, "task156 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
-      const batch = await batchRemove(apiCtx, phrases);
+      for (const p of phrases) await addPhrase(apiCtx, p, REVIEWER_OPTS);
+      const batch = await batchRemove(apiCtx, phrases, REVIEWER_OPTS);
       const removedAt = batch.historyEntry!.removedAt;
 
       const group = await openHistoryAndFindBatch(page, removedAt);
@@ -168,7 +108,7 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
         ).toHaveCount(1, { timeout: 15_000 });
       }
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -177,11 +117,11 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
     page,
   }) => {
     const apiCtx = await newApiContext();
-    const phrases = uniquePhrases(3);
+    const phrases = uniquePhrases(3, "task156 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
-      const batch = await batchRemove(apiCtx, phrases);
+      for (const p of phrases) await addPhrase(apiCtx, p, REVIEWER_OPTS);
+      const batch = await batchRemove(apiCtx, phrases, REVIEWER_OPTS);
       const removedAt = batch.historyEntry!.removedAt;
 
       const group = await openHistoryAndFindBatch(page, removedAt);
@@ -237,7 +177,7 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
         ).toHaveCount(1, { timeout: 15_000 });
       }
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });

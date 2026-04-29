@@ -1,5 +1,10 @@
-import { test, expect, request, type APIRequestContext } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { test, expect } from "@playwright/test";
+import {
+  addPhraseViaUi,
+  cleanup,
+  newApiContext,
+  uniquePhrase,
+} from "./helpers/handwavy";
 
 // Task #158 — End-to-end coverage for the FLAT hand-wavy phrase panel's
 // add + undo path. The "Undo" affordance appears on every phrase added
@@ -11,74 +16,14 @@ import { randomUUID } from "node:crypto";
 // removal. This spec drives the real UI through the full preview ->
 // confirm add -> undo flow and asserts both halves of that contract.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-// Mirror playwright.config.ts default so the strict-auth gate on the
-// hand-wavy phrase routes (Task #163 + Task #152's CALIBRATION_TOKEN setup)
-// accepts our direct API calls in seed/cleanup. CI overrides via
-// E2E_CALIBRATION_TOKEN.
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
-
-function newApiContext() {
-  return request.newContext({
-    baseURL: API_BASE,
-    extraHTTPHeaders: { "X-Calibration-Token": CALIBRATION_TOKEN },
-  });
-}
-
-function uniquePhrase(suffix = "phrase"): string {
-  // randomUUID keeps each run independent of leftover data in the dev DB /
-  // handwavy-phrases.json. The "task158" prefix makes it easy to spot
-  // during debugging.
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return `task158 undo ${id} ${suffix}`;
-}
-
-// Helper for the two-step add (type + Preview impact + Confirm add). The
-// add flow is identical for every phrase the spec creates so we factor it
-// out to keep the test bodies focused on the undo contract.
-async function addPhrase(
-  page: import("@playwright/test").Page,
-  phrase: string,
-): Promise<void> {
-  const input = page.getByTestId("handwavy-input");
-  await input.fill(phrase);
-  await page.getByTestId("handwavy-category").selectOption("hedging");
-  await page.getByTestId("handwavy-add").click();
-  const confirmBtn = page.getByTestId("handwavy-preview-confirm");
-  await expect(confirmBtn).toBeVisible({ timeout: 15_000 });
-  await expect(confirmBtn).toBeEnabled();
-  await confirmBtn.click();
-  // Wait for the row to appear so subsequent typing in the input field
-  // doesn't race against the refresh cycle.
-  await expect(
-    page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
-  ).toHaveCount(1, { timeout: 15_000 });
-}
-
-// Cleans up anything we left behind so a re-run doesn't accumulate audit
-// rows. We try to remove the phrase via the bulk DELETE endpoint;
-// not-found is fine.
-async function cleanup(
-  api: APIRequestContext,
-  phrases: string | string[],
-): Promise<void> {
-  const list = Array.isArray(phrases) ? phrases : [phrases];
-  if (list.length === 0) return;
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      data: { phrases: list, reviewer: "e2e-task158-cleanup" },
-    })
-    .catch(() => undefined);
-}
+const REVIEWER = "e2e-task158";
 
 test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
   test("adding a phrase shows the Undo button on its row, and clicking it logs an 'Undone' history entry instead of a manual removal", async ({
     page,
   }) => {
     const apiCtx = await newApiContext();
-    const phrase = uniquePhrase();
+    const phrase = uniquePhrase("task158 undo", "phrase");
 
     try {
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -89,11 +34,11 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       // specs and the manual review flow.
       const reviewer = page.getByTestId("handwavy-reviewer");
       await expect(reviewer).toBeVisible({ timeout: 15_000 });
-      await reviewer.fill("e2e-task158");
+      await reviewer.fill(REVIEWER);
 
       // Add flow is two-step: type the phrase, click "Preview impact",
       // wait for the preview banner, then click "Confirm add".
-      await addPhrase(page, phrase);
+      await addPhraseViaUi(page, phrase);
 
       // The "Undo" button should be visible on the new row because it
       // was just added and is well within the 5-minute UNDO_WINDOW_MS.
@@ -154,7 +99,7 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await expect(historyRow).toHaveAttribute("data-history-kind", "undone");
       await expect(historyRow.getByTestId("handwavy-history-undone")).toBeVisible();
     } finally {
-      await cleanup(apiCtx, phrase);
+      await cleanup(apiCtx, phrase, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -171,8 +116,8 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
     page,
   }) => {
     const apiCtx = await newApiContext();
-    const olderPhrase = uniquePhrase("older");
-    const newerPhrase = uniquePhrase("newer");
+    const olderPhrase = uniquePhrase("task158 undo", "older");
+    const newerPhrase = uniquePhrase("task158 undo", "newer");
 
     try {
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -181,8 +126,8 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await expect(reviewer).toBeVisible({ timeout: 15_000 });
       await reviewer.fill("e2e-task141");
 
-      await addPhrase(page, olderPhrase);
-      await addPhrase(page, newerPhrase);
+      await addPhraseViaUi(page, olderPhrase);
+      await addPhraseViaUi(page, newerPhrase);
 
       const olderRow = page
         .locator(`[data-testid="handwavy-row"]`)
@@ -240,7 +185,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await expect(historyRow).toHaveAttribute("data-history-kind", "undone");
       await expect(historyRow.getByTestId("handwavy-history-undone")).toBeVisible();
     } finally {
-      await cleanup(apiCtx, [olderPhrase, newerPhrase]);
+      await cleanup(apiCtx, [olderPhrase, newerPhrase], {
+        reviewer: "e2e-task141-cleanup",
+      });
       await apiCtx.dispose();
     }
   });

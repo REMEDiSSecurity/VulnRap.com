@@ -1,11 +1,11 @@
+import { test, expect, type Request } from "@playwright/test";
 import {
-  test,
-  expect,
-  request,
-  type APIRequestContext,
-  type Request,
-} from "@playwright/test";
-import { randomUUID } from "node:crypto";
+  addPhrase,
+  cleanup,
+  newApiContext,
+  seedCycles,
+  uniquePhrase,
+} from "./helpers/handwavy";
 
 // Task #152 — End-to-end coverage for the high-thrash single-remove
 // confirmation panel introduced in Task #139. The trash button on a phrase
@@ -23,116 +23,18 @@ import { randomUUID } from "node:crypto";
 //      and the phrase stays on the active list.
 //   3. 0 cycles → trash fires the DELETE immediately with no confirm panel.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-// Same default as playwright.config.ts — the strict-auth GET on the
-// hand-wavy phrase panel and (when CALIBRATION_TOKEN is set on the API
-// server) every mutation requires this header. Direct test API calls
-// always send it so seed/cleanup work regardless of which dev mode is up.
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
-
-function newApiContext() {
-  return request.newContext({
-    baseURL: API_BASE,
-    extraHTTPHeaders: { "X-Calibration-Token": CALIBRATION_TOKEN },
-  });
-}
-
-interface SingleRemovalResponse {
-  removed: boolean;
-  phrase: string;
-  total: number;
-  historyEntry?: { removedAt: string } | null;
-}
-
-function uniquePhrase(label: string): string {
-  // randomUUID keeps each test run independent of phrases left behind in the
-  // dev DB / handwavy-phrases.json. The "task152" prefix makes the seeded
-  // entries easy to spot during debugging.
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return `task152 ${label} ${id} phrase`;
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    data: { phrase, category: "hedging", reviewer: "e2e-task152" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function removeSingle(api: APIRequestContext, phrase: string): Promise<string> {
-  const res = await api.delete("/api/feedback/calibration/handwavy-phrases", {
-    data: { phrase, reviewer: "e2e-task152" },
-  });
-  expect(
-    res.ok(),
-    `DELETE handwavy-phrases (single) failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-  const body = (await res.json()) as SingleRemovalResponse;
-  const removedAt = body.historyEntry?.removedAt;
-  expect(
-    typeof removedAt,
-    "single removal should produce a history entry with a removedAt timestamp",
-  ).toBe("string");
-  return removedAt as string;
-}
-
-async function reinstate(
-  api: APIRequestContext,
-  phrase: string,
-  removedAt: string,
-): Promise<void> {
-  const res = await api.post(
-    "/api/feedback/calibration/handwavy-phrases/reinstate",
-    {
-      data: { phrase, removedAt, reviewer: "e2e-task152" },
-    },
-  );
-  expect(
-    res.ok(),
-    `POST reinstate failed for "${phrase}" @ ${removedAt}: ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-// Run `cycles` complete remove+reinstate round-trips on `phrase` so it ends
-// up in the active list with `cycles` reinstated rows in the history log.
-// Each reinstated row counts as one completed cycle for the purposes of the
-// thrash gate in feedback-analytics.tsx.
-async function seedCycles(
-  api: APIRequestContext,
-  phrase: string,
-  cycles: number,
-): Promise<void> {
-  await addPhrase(api, phrase);
-  for (let i = 0; i < cycles; i++) {
-    const removedAt = await removeSingle(api, phrase);
-    await reinstate(api, phrase, removedAt);
-  }
-}
-
-// Cleans up anything we left behind so a re-run doesn't accumulate audit
-// rows. We try to remove every phrase the test added; not-found is fine.
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      data: { phrases, reviewer: "e2e-task152-cleanup" },
-    })
-    .catch(() => undefined);
-}
+const REVIEWER = "e2e-task152";
+const REVIEWER_OPTS = { reviewer: REVIEWER };
 
 test.describe("FLAT hand-wavy phrase panel — high-thrash remove confirmation (Task #139)", () => {
   test("phrase with >=2 completed cycles shows the confirm panel and 'Remove anyway' deletes it", async ({
     page,
   }) => {
     const apiCtx = await newApiContext();
-    const phrase = uniquePhrase("thrashed");
+    const phrase = uniquePhrase("task152 thrashed", "phrase");
 
     try {
-      await seedCycles(apiCtx, phrase, 2);
+      await seedCycles(apiCtx, phrase, 2, REVIEWER_OPTS);
 
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
@@ -175,7 +77,7 @@ test.describe("FLAT hand-wavy phrase panel — high-thrash remove confirmation (
         page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
       ).toHaveCount(0, { timeout: 15_000 });
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -184,10 +86,10 @@ test.describe("FLAT hand-wavy phrase panel — high-thrash remove confirmation (
     page,
   }) => {
     const apiCtx = await newApiContext();
-    const phrase = uniquePhrase("backout");
+    const phrase = uniquePhrase("task152 backout", "phrase");
 
     try {
-      await seedCycles(apiCtx, phrase, 2);
+      await seedCycles(apiCtx, phrase, 2, REVIEWER_OPTS);
 
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
@@ -233,7 +135,7 @@ test.describe("FLAT hand-wavy phrase panel — high-thrash remove confirmation (
         `Back out must not fire a DELETE; saw: ${deleteCalls.join(", ")}`,
       ).toEqual([]);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -242,13 +144,13 @@ test.describe("FLAT hand-wavy phrase panel — high-thrash remove confirmation (
     page,
   }) => {
     const apiCtx = await newApiContext();
-    const phrase = uniquePhrase("control");
+    const phrase = uniquePhrase("task152 control", "phrase");
 
     try {
       // Control case: a freshly-added phrase has 0 completed cycles, so the
       // trash button must fire the DELETE immediately without showing the
       // confirm panel at all.
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, REVIEWER_OPTS);
 
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
@@ -281,7 +183,7 @@ test.describe("FLAT hand-wavy phrase panel — high-thrash remove confirmation (
       ).toBe(false);
       await expect(page.getByTestId("handwavy-remove-confirm")).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
