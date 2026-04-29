@@ -30,4 +30,20 @@ export interface HandwavyPhraseBatchRemoveBody {
   reviewer?: string;
   /** When true, return a removal preview (corpus impact + per-phrase outcomes) without mutating the active list. */
   dryRun?: boolean;
+  /**
+   * Task #229 — optional override for the upper bound on the production-archive
+scan that backs the bulk-removal dry-run preview. Mirrors the add path
+(Task #125): only consulted on the dry-run path (the only place the
+production scan runs for removals), but validated on every DELETE so a
+malformed value never silently slips into a real bulk delete. Heavy-user
+installs can widen the window for a stronger removal-impact signal; small
+installs can tighten it to focus on recent reporter behavior. Defaults to
+2000 when omitted so existing reviewers see no behavior change. The
+chosen value is echoed back in `dryRunImpact.productionLimit` so the UI
+can label the production block accurately.
+
+   * @minimum 100
+   * @maximum 10000
+   */
+  productionScanLimit?: number;
 }

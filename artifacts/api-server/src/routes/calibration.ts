@@ -1479,13 +1479,44 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
       phrases?: unknown;
       reviewer?: unknown;
       dryRun?: unknown;
+      productionScanLimit?: unknown;
     };
-    const { phrase, phrases, reviewer, dryRun } = body;
+    const { phrase, phrases, reviewer, dryRun, productionScanLimit } = body;
     if (reviewer !== undefined && typeof reviewer !== "string") {
       res.status(400).json({ error: "reviewer must be a string when provided." });
       return;
     }
     const reviewerStr = typeof reviewer === "string" ? reviewer : undefined;
+
+    // Task #229 — optional reviewer override for the production-scan window
+    // on the bulk DELETE dry-run, mirroring the add path (Task #125). The
+    // field is only consumed on the bulk dry-run path (the only place the
+    // production scan currently runs for removals), but we run the
+    // validator at the TOP of the handler — before the single-vs-batch
+    // branch — so:
+    //   1. A malformed value is rejected on EVERY DELETE (single or bulk,
+    //      dry-run or real), guaranteeing bad input cannot slip past the
+    //      validator into a state-mutating call.
+    //   2. The single-phrase path accepts a well-formed value but does
+    //      not consume it; its dry-run still uses the legacy 2000-row
+    //      default. Wiring the single-phrase preview through this knob
+    //      is tracked as a follow-up task.
+    let effectiveBulkProductionLimit = PRODUCTION_PREVIEW_LIMIT;
+    if (productionScanLimit !== undefined) {
+      const v = Number(productionScanLimit);
+      if (
+        !Number.isFinite(v) ||
+        !Number.isInteger(v) ||
+        v < PRODUCTION_PREVIEW_LIMIT_MIN ||
+        v > PRODUCTION_PREVIEW_LIMIT_MAX
+      ) {
+        res.status(400).json({
+          error: `productionScanLimit must be an integer between ${PRODUCTION_PREVIEW_LIMIT_MIN} and ${PRODUCTION_PREVIEW_LIMIT_MAX}.`,
+        });
+        return;
+      }
+      effectiveBulkProductionLimit = v;
+    }
 
     // Batch path — `{phrases: string[]}`. Mutually exclusive with `phrase`.
     if (phrases !== undefined) {
@@ -1548,9 +1579,13 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
           };
         } else {
           try {
+            // Task #229 — honor the reviewer-supplied scan window if any
+            // (already validated above), otherwise the legacy 2000-row
+            // default. Mirrors the add-time preview (Task #125).
             productionImpact = await previewRemovalAgainstProduction(
               removedNormalized,
               remainingNormalized,
+              effectiveBulkProductionLimit,
             );
           } catch (err) {
             req.log?.error(err, "Production removal dry-run scan failed");
@@ -1575,7 +1610,11 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
             corpus: corpusImpact,
             production: productionImpact,
             productionError,
-            productionLimit: PRODUCTION_PREVIEW_LIMIT,
+            // Task #229 — echo the reviewer-chosen window so the UI can label
+            // the production-block subtitle accurately ("last N of up to M
+            // reports"). Falls back to the documented default when the
+            // request omitted the field.
+            productionLimit: effectiveBulkProductionLimit,
           },
           phrases: getHandwavyPhrases(),
         });

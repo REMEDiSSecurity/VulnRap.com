@@ -2461,9 +2461,17 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     setBulkResults(null);
     setBusy("bulk-preview");
     try {
+      // Task #229 — pass the reviewer-chosen production-scan window so heavy
+      // installs can widen / small installs can tighten the bulk-removal
+      // production-archive signal, mirroring the add-time preview (Task #125).
+      // Omit the field entirely when the reviewer left the default in place
+      // so the request body stays identical to the legacy shape.
       const resp = await removeHandwavyPhrase({
         phrases: phrasesToPreview,
         dryRun: true,
+        ...(effectiveProductionScanLimit !== HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT
+          ? { productionScanLimit: effectiveProductionScanLimit }
+          : {}),
       });
       // Defensive: the union response could be a non-dry-run shape if the
       // server somehow ignored dryRun. Fail closed rather than silently
@@ -4085,89 +4093,145 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
             {/* Task #134 — bulk-action toolbar. Sticky so the "Remove
                 selected" button stays in view while the reviewer scrolls a
                 long list. Indeterminate select-all checkbox toggles the
-                whole visible list at once. */}
+                whole visible list at once.
+                Task #229 — also hosts the bulk-removal copy of the
+                production scan-window control so reviewers can tune the
+                window before opening the preview. The state is shared
+                with the add-time input above so changes here propagate
+                to both flows. */}
             <div
-              className="sticky top-0 z-10 bg-background/95 backdrop-blur flex items-center gap-3 px-3 py-2 border-b border-border/30 text-xs"
+              className="sticky top-0 z-10 bg-background/95 backdrop-blur px-3 py-2 border-b border-border/30 text-xs"
               data-testid="handwavy-bulk-toolbar"
             >
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 cursor-pointer accent-primary"
-                checked={allSelected}
-                ref={(el) => {
-                  if (el) el.indeterminate = someSelected;
-                }}
-                onChange={toggleSelectAll}
-                aria-label={allSelected ? "Deselect all phrases" : "Select all phrases"}
-                data-testid="handwavy-select-all"
-              />
-              <span className="text-muted-foreground">
-                {selectedInList.length > 0
-                  ? `${selectedInList.length} selected`
-                  : "Select phrases to remove in bulk"}
-              </span>
-              {/* Task #138 — "Most contentious first" toggle. Sits inside
-                  the sticky toolbar so reviewers can flip the ordering at
-                  any scroll depth. Disabled when there are no thrashed
-                  phrases at all so the affordance doesn't promise an order
-                  change that wouldn't visibly happen. */}
-              <label
-                className={cn(
-                  "ml-auto inline-flex items-center gap-1.5 text-[11px] select-none",
-                  contentiousCount === 0
-                    ? "text-muted-foreground/60 cursor-not-allowed"
-                    : "text-muted-foreground cursor-pointer",
-                )}
-                title={
-                  contentiousCount === 0
-                    ? "No phrases have been removed and reinstated yet"
-                    : `Sort the ${contentiousCount} thrashed phrase${contentiousCount === 1 ? "" : "s"} to the top`
-                }
-                data-testid="handwavy-sort-thrash-label"
-              >
+              <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
-                  className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
-                  checked={sortByThrash && contentiousCount > 0}
-                  disabled={contentiousCount === 0}
-                  onChange={(e) => setSortByThrash(e.target.checked)}
-                  aria-label="Show most contentious phrases first"
-                  data-testid="handwavy-sort-thrash"
+                  className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                  checked={allSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someSelected;
+                  }}
+                  onChange={toggleSelectAll}
+                  aria-label={allSelected ? "Deselect all phrases" : "Select all phrases"}
+                  data-testid="handwavy-select-all"
                 />
-                <RotateCcw className="w-3 h-3" />
-                <span>Most contentious first</span>
-              </label>
-              {/* Task #154 — sole bulk-remove entry point. The reviewer
-                  is always routed through the side-by-side preview panel
-                  (`handwavy-bulk-preview`) before any DELETE fires. The
-                  preview panel itself owns the destructive confirm + the
-                  acknowledgment checkbox when valid detections would be
-                  lost. */}
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-7 px-2 text-xs gap-1"
-                disabled={
-                  selectedInList.length === 0 ||
-                  busy === "bulk-remove" ||
-                  busy === "bulk-preview" ||
-                  bulkPreview !== null ||
-                  !mutationsAllowed
-                }
-                onClick={handlePreviewBulkRemove}
-                data-testid="handwavy-bulk-remove"
-                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                title={
-                  !mutationsAllowed
-                    ? MUTATIONS_BLOCKED_TITLE
-                    : "Open the side-by-side removal preview. You'll see how many active phrases would be removed, plus how many flagged reports would lose their flag, before anything is committed."
-                }
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                {busy === "bulk-preview"
-                  ? "Previewing…"
-                  : `Remove selected${selectedInList.length > 0 ? ` (${selectedInList.length})` : ""}`}
-              </Button>
+                <span className="text-muted-foreground">
+                  {selectedInList.length > 0
+                    ? `${selectedInList.length} selected`
+                    : "Select phrases to remove in bulk"}
+                </span>
+                {/* Task #138 — "Most contentious first" toggle. Sits inside
+                    the sticky toolbar so reviewers can flip the ordering at
+                    any scroll depth. Disabled when there are no thrashed
+                    phrases at all so the affordance doesn't promise an order
+                    change that wouldn't visibly happen. */}
+                <label
+                  className={cn(
+                    "ml-auto inline-flex items-center gap-1.5 text-[11px] select-none",
+                    contentiousCount === 0
+                      ? "text-muted-foreground/60 cursor-not-allowed"
+                      : "text-muted-foreground cursor-pointer",
+                  )}
+                  title={
+                    contentiousCount === 0
+                      ? "No phrases have been removed and reinstated yet"
+                      : `Sort the ${contentiousCount} thrashed phrase${contentiousCount === 1 ? "" : "s"} to the top`
+                  }
+                  data-testid="handwavy-sort-thrash-label"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                    checked={sortByThrash && contentiousCount > 0}
+                    disabled={contentiousCount === 0}
+                    onChange={(e) => setSortByThrash(e.target.checked)}
+                    aria-label="Show most contentious phrases first"
+                    data-testid="handwavy-sort-thrash"
+                  />
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Most contentious first</span>
+                </label>
+                {/* Task #154 — sole bulk-remove entry point. The reviewer
+                    is always routed through the side-by-side preview panel
+                    (`handwavy-bulk-preview`) before any DELETE fires. The
+                    preview panel itself owns the destructive confirm + the
+                    acknowledgment checkbox when valid detections would be
+                    lost. */}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1"
+                  disabled={
+                    selectedInList.length === 0 ||
+                    busy === "bulk-remove" ||
+                    busy === "bulk-preview" ||
+                    bulkPreview !== null ||
+                    !mutationsAllowed
+                  }
+                  onClick={handlePreviewBulkRemove}
+                  data-testid="handwavy-bulk-remove"
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                  title={
+                    !mutationsAllowed
+                      ? MUTATIONS_BLOCKED_TITLE
+                      : "Open the side-by-side removal preview. You'll see how many active phrases would be removed, plus how many flagged reports would lose their flag, before anything is committed."
+                  }
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {busy === "bulk-preview"
+                    ? "Previewing…"
+                    : `Remove selected${selectedInList.length > 0 ? ` (${selectedInList.length})` : ""}`}
+                </Button>
+              </div>
+              {/* Task #229 — production scan-window control for the bulk
+                  removal preview. Mirrors the add-time control above and
+                  shares the same `productionScanLimitInput` state so
+                  reviewers only ever have to tune the value once per
+                  session (and the localStorage-persisted value applies
+                  to both flows). Disabled while a preview is in flight or
+                  open so changes don't desynchronize from the in-flight
+                  request. */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2 text-[11px] text-muted-foreground">
+                <label
+                  htmlFor="handwavy-bulk-production-scan-limit"
+                  className="shrink-0"
+                >
+                  Production scan window:
+                </label>
+                <input
+                  id="handwavy-bulk-production-scan-limit"
+                  type="number"
+                  inputMode="numeric"
+                  min={HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN}
+                  max={HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX}
+                  step={100}
+                  value={productionScanLimitInput}
+                  onChange={(e) => setProductionScanLimitInput(e.target.value)}
+                  className={cn(
+                    "h-7 w-24 px-2 rounded-md border bg-background/40 text-xs focus:outline-none focus:ring-1",
+                    productionScanLimitValid || productionScanLimitInput.trim() === ""
+                      ? "border-border/40 focus:ring-primary/40"
+                      : "border-red-500/60 focus:ring-red-500/60",
+                  )}
+                  data-testid="handwavy-bulk-production-scan-limit"
+                  aria-label="Production scan window for bulk removal preview (most recent N reports)"
+                  disabled={busy === "bulk-preview" || busy === "bulk-remove" || bulkPreview !== null}
+                />
+                <span className="text-muted-foreground/70">
+                  most recent reports ({HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN}–
+                  {HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
+                  {HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT})
+                </span>
+                {!productionScanLimitValid && productionScanLimitInput.trim() !== "" && (
+                  <span
+                    className="text-red-400"
+                    data-testid="handwavy-bulk-production-scan-limit-warning"
+                  >
+                    Out of range — the next preview will use{" "}
+                    {HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT} until you fix this.
+                  </span>
+                )}
+              </div>
             </div>
             <div className="divide-y divide-border/20">
             {displayPhrases.map((m) => {

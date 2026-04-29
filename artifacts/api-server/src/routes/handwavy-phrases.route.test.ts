@@ -1461,6 +1461,152 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       }
     });
 
+    // Task #229 — bulk-removal copy of the productionScanLimit knob (Task #125
+    // brought it to the add path). The bulk path runs a separate production
+    // archive scan inside `previewRemovalAgainstProduction`, so reviewers
+    // need the same window override here. We validate it on every DELETE
+    // (not just dry-run) so a malformed value can't silently slip into a
+    // real removal, but the field is only meaningful on the dry-run path.
+    describe("Task #229 — productionScanLimit on bulk DELETE", () => {
+      it("DELETE batch dry-run echoes the reviewer-supplied productionScanLimit", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit echo a" });
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit echo b" });
+        const r = await request<{
+          dryRun: boolean;
+          dryRunImpact: { productionLimit: number };
+        }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrases: ["bulk plimit echo a", "bulk plimit echo b"],
+          dryRun: true,
+          productionScanLimit: 5000,
+        });
+        expect(r.status).toBe(200);
+        expect(r.body.dryRun).toBe(true);
+        expect(r.body.dryRunImpact.productionLimit).toBe(5000);
+      });
+
+      it("DELETE batch dry-run defaults productionLimit to 2000 when omitted", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit default a" });
+        const r = await request<{
+          dryRunImpact: { productionLimit: number };
+        }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrases: ["bulk plimit default a"],
+          dryRun: true,
+        });
+        expect(r.status).toBe(200);
+        expect(r.body.dryRunImpact.productionLimit).toBe(2000);
+      });
+
+      it("DELETE batch rejects productionScanLimit below the floor with 400", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit low a" });
+        const r = await request<{ error: string }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrases: ["bulk plimit low a"],
+          dryRun: true,
+          productionScanLimit: 50,
+        });
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+      });
+
+      it("DELETE batch rejects productionScanLimit above the ceiling with 400", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit high a" });
+        const r = await request<{ error: string }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrases: ["bulk plimit high a"],
+          dryRun: true,
+          productionScanLimit: 99999,
+        });
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+      });
+
+      it("DELETE batch rejects non-integer productionScanLimit with 400", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit frac a" });
+        const r = await request<{ error: string }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrases: ["bulk plimit frac a"],
+          dryRun: true,
+          productionScanLimit: 1500.5,
+        });
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+      });
+
+      it("DELETE batch rejects non-numeric productionScanLimit with 400", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit str a" });
+        const r = await request<{ error: string }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrases: ["bulk plimit str a"],
+          dryRun: true,
+          productionScanLimit: "lots",
+        });
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+      });
+
+      // Real (non-dry-run) bulk DELETE: the field is meaningless because the
+      // production-scan only runs on the dry-run preview, but a malformed
+      // value must STILL be rejected so we never silently accept rubbish on
+      // a destructive call. A well-formed value is silently accepted (and
+      // ignored, since the real DELETE doesn't consult it).
+      it("DELETE batch real removal rejects an out-of-range productionScanLimit even though it is unused", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit real bad" });
+        const before = await request<{ phrases: Marker[] }>("GET", "/feedback/calibration/handwavy-phrases");
+        const beforeCount = before.body.phrases.length;
+        const r = await request<{ error: string }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrases: ["bulk plimit real bad"],
+          productionScanLimit: 1, // out of range
+        });
+        expect(r.status).toBe(400);
+        // Mutation must NOT have occurred — bad inputs cannot leak past the
+        // validator into a real removal.
+        const after = await request<{ phrases: Marker[] }>("GET", "/feedback/calibration/handwavy-phrases");
+        expect(after.body.phrases.length).toBe(beforeCount);
+        expect(after.body.phrases.map((m) => m.phrase)).toContain("bulk plimit real bad");
+      });
+
+      it("DELETE batch real removal accepts a well-formed productionScanLimit and removes the phrases", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "bulk plimit real ok" });
+        const r = await request<{ removed: number }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrases: ["bulk plimit real ok"],
+          productionScanLimit: 3000,
+        });
+        expect(r.status).toBe(200);
+        expect(r.body.removed).toBe(1);
+        const after = await request<{ phrases: Marker[] }>("GET", "/feedback/calibration/handwavy-phrases");
+        expect(after.body.phrases.map((m) => m.phrase)).not.toContain("bulk plimit real ok");
+      });
+
+      it("DELETE single-phrase path accepts but does not consume productionScanLimit (validator still runs)", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "single plimit accepted" });
+        // The single-phrase removal path is out of scope for Task #229 —
+        // its dry-run preview still uses the legacy 2000-row default and
+        // does not surface a per-call window override. But because the
+        // productionScanLimit validator runs at the TOP of the DELETE
+        // handler (before the single-vs-batch branch), a well-formed
+        // value is accepted on the single path too; it is simply not
+        // consumed. This guarantees that a malformed value cannot slip
+        // past the validator on ANY DELETE — see the bad-value test
+        // below for the symmetric rejection case.
+        const r = await request<{ removed: boolean }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrase: "single plimit accepted",
+          productionScanLimit: 4000,
+        });
+        expect(r.status).toBe(200);
+        expect(r.body.removed).toBe(true);
+      });
+
+      it("DELETE single-phrase path rejects an out-of-range productionScanLimit with 400 (no mutation)", async () => {
+        await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "single plimit bad" });
+        const r = await request<{ error: string }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+          phrase: "single plimit bad",
+          productionScanLimit: 1, // out of range
+        });
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+        // Mutation must NOT have occurred — even on the single-phrase path
+        // the up-front validator blocks bad values before any state change.
+        const after = await request<{ phrases: Marker[] }>("GET", "/feedback/calibration/handwavy-phrases");
+        expect(after.body.phrases.map((m) => m.phrase)).toContain("single plimit bad");
+      });
+    });
+
     it("DELETE batch supports per-phrase reinstate via the existing /reinstate endpoint", async () => {
       await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "batch reinstate route a" });
       await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "batch reinstate route b" });

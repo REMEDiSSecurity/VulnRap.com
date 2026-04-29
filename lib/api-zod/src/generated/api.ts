@@ -4618,6 +4618,9 @@ export const removeHandwavyPhraseBodyOneProductionScanLimitMax = 10000;
 
 export const removeHandwavyPhraseBodyTwoPhrasesMax = 200;
 
+export const removeHandwavyPhraseBodyTwoProductionScanLimitMin = 100;
+export const removeHandwavyPhraseBodyTwoProductionScanLimitMax = 10000;
+
 export const RemoveHandwavyPhraseBody = zod.union([
   zod.object({
     phrase: zod
@@ -4676,6 +4679,14 @@ export const RemoveHandwavyPhraseBody = zod.union([
         .optional()
         .describe(
           "When true, return a removal preview (corpus impact + per-phrase outcomes) without mutating the active list.",
+        ),
+      productionScanLimit: zod
+        .number()
+        .min(removeHandwavyPhraseBodyTwoProductionScanLimitMin)
+        .max(removeHandwavyPhraseBodyTwoProductionScanLimitMax)
+        .optional()
+        .describe(
+          "Task #229 — optional override for the upper bound on the production-archive\nscan that backs the bulk-removal dry-run preview. Mirrors the add path\n(Task #125): only consulted on the dry-run path (the only place the\nproduction scan runs for removals), but validated on every DELETE so a\nmalformed value never silently slips into a real bulk delete. Heavy-user\ninstalls can widen the window for a stronger removal-impact signal; small\ninstalls can tighten it to focus on recent reporter behavior. Defaults to\n2000 when omitted so existing reviewers see no behavior change. The\nchosen value is echoed back in `dryRunImpact.productionLimit` so the UI\ncan label the production block accurately.\n",
         ),
     })
     .describe(
