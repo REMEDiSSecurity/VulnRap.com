@@ -1414,6 +1414,13 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       contentMode: reportsTable.contentMode,
       createdAt: reportsTable.createdAt,
       avriFamily: reportsTable.avriFamily,
+      // Task #198 — pull the AVRI engine blob so we can derive
+      // fakeRawHttp / strippedCrashTrace booleans on the feed row.
+      // Reviewers triaging the queue need to spot fabricated-raw-HTTP
+      // and stripped-trace reports without opening the diagnostics
+      // panel for each one. The blob is JSONB so this is a single
+      // column read; we extract just the AVRI sub-block client-side.
+      vulnrapEngineResults: reportsTable.vulnrapEngineResults,
     })
     .from(reportsTable)
     .where(whereClause)
@@ -1423,6 +1430,26 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
 
   const mapped = feedReports.map((r) => {
     const matches = r.similarityMatches as Array<{ reportId: number }>;
+    // Task #198 — Walk the engines list to find the Engine 2 (Technical
+    // Substance Analyzer) AVRI breakdown, then extract the two boolean
+    // flags. Defaults to false for legacy rows / non-AVRI runs / shapes
+    // that don't include the sub-block. Mirrors the path the diagnostics
+    // panel already reads (engines[].signalBreakdown.avri.{rawHttp,crashTrace}).
+    const engines = ((r.vulnrapEngineResults ?? {}) as {
+      engines?: Array<{
+        engine?: string;
+        signalBreakdown?: {
+          avri?: {
+            rawHttp?: { isFake?: boolean } | null;
+            crashTrace?: { isStripped?: boolean } | null;
+          };
+        };
+      }>;
+    }).engines ?? [];
+    const e2Avri = engines.find((e) => /Technical Substance/i.test(e?.engine ?? ""))
+      ?.signalBreakdown?.avri;
+    const fakeRawHttp = e2Avri?.rawHttp?.isFake === true;
+    const strippedCrashTrace = e2Avri?.crashTrace?.isStripped === true;
     return {
       id: r.id,
       reportCode: anonymizeId(r.id),
@@ -1432,6 +1459,8 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       contentMode: r.contentMode,
       createdAt: r.createdAt,
       avriFamily: r.avriFamily ?? null,
+      fakeRawHttp,
+      strippedCrashTrace,
     };
   });
 

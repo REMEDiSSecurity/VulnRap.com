@@ -1211,6 +1211,17 @@ export type ReportFeedReportsItem = {
    * @nullable
    */
   avriFamily?: string | null;
+  /** True when AVRI Engine 2 flagged the report's raw HTTP request bytes as fabricated
+(signalBreakdown.avri.rawHttp.isFake = true). Lets the reports feed display a
+FAKE_RAW_HTTP indicator on the row so reviewers triaging the queue can spot
+fabricated-raw-HTTP REQUEST_SMUGGLING reports without opening each one.
+ */
+  fakeRawHttp: boolean;
+  /** True when AVRI Engine 2 flagged the report's crash/race trace as stripped
+(signalBreakdown.avri.crashTrace.isStripped = true). Paired with fakeRawHttp so
+the two block types stay symmetric in the feed UI.
+ */
+  strippedCrashTrace: boolean;
 };
 
 export type ReportFeedSummaryTierCounts = { [key: string]: number };

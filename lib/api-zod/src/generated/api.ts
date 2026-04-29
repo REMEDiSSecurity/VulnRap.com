@@ -2076,6 +2076,9 @@ export const GetReportFeedQueryParams = zod.object({
     .default(getReportFeedQuerySortDefault),
 });
 
+export const getReportFeedResponseReportsItemFakeRawHttpDefault = false;
+export const getReportFeedResponseReportsItemStrippedCrashTraceDefault = false;
+
 export const GetReportFeedResponse = zod.object({
   reports: zod.array(
     zod.object({
@@ -2091,6 +2094,18 @@ export const GetReportFeedResponse = zod.object({
         .nullish()
         .describe(
           "Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Null for legacy rows submitted before the family was persisted.",
+        ),
+      fakeRawHttp: zod
+        .boolean()
+        .default(getReportFeedResponseReportsItemFakeRawHttpDefault)
+        .describe(
+          "True when AVRI Engine 2 flagged the report's raw HTTP request bytes as fabricated\n(signalBreakdown.avri.rawHttp.isFake = true). Lets the reports feed display a\nFAKE_RAW_HTTP indicator on the row so reviewers triaging the queue can spot\nfabricated-raw-HTTP REQUEST_SMUGGLING reports without opening each one.\n",
+        ),
+      strippedCrashTrace: zod
+        .boolean()
+        .default(getReportFeedResponseReportsItemStrippedCrashTraceDefault)
+        .describe(
+          "True when AVRI Engine 2 flagged the report's crash\/race trace as stripped\n(signalBreakdown.avri.crashTrace.isStripped = true). Paired with fakeRawHttp so\nthe two block types stay symmetric in the feed UI.\n",
         ),
     }),
   ),

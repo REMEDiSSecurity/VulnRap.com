@@ -492,6 +492,31 @@ export default function Reports() {
                     </Badge>
                   );
                 })()}
+                {/* Task #198 — Surface AVRI Engine 2's revoke-trigger blocks
+                    on the feed row so reviewers triaging the queue can spot
+                    fabricated-raw-HTTP and stripped-trace reports without
+                    opening each diagnostics panel. The two badges are paired
+                    in style/placement to keep them visually symmetric. */}
+                {report.strippedCrashTrace && (
+                  <Badge
+                    variant="outline"
+                    data-testid="badge-stripped-crash-trace"
+                    className="text-[10px] hidden md:inline-flex font-mono text-red-400 border-red-500/40 bg-red-500/5"
+                    title="AVRI Engine 2 flagged this report's crash/race trace as stripped (placeholder symbols/offsets); trace gold signals were revoked."
+                  >
+                    STRIPPED_CRASH_TRACE
+                  </Badge>
+                )}
+                {report.fakeRawHttp && (
+                  <Badge
+                    variant="outline"
+                    data-testid="badge-fake-raw-http"
+                    className="text-[10px] hidden md:inline-flex font-mono text-red-400 border-red-500/40 bg-red-500/5"
+                    title="AVRI Engine 2 flagged this report's raw HTTP request as fabricated (placeholder header values, no CRLFs, or incoherent TE/CL conflict); smuggling gold signals were revoked."
+                  >
+                    FAKE_RAW_HTTP
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
                 <div className="flex items-center gap-2">
