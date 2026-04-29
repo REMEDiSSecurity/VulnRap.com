@@ -6,6 +6,7 @@ import { detectVulnerabilityType } from "./extractors";
 import { CWE_FINGERPRINTS, HIGH_REJECTION_CWES } from "./cwe-fingerprints";
 import { evaluateCrashTrace } from "./avri/crash-trace";
 import { evaluateRawHttpRequest } from "./avri/raw-http";
+import { detectAdditionalGoldSignals } from "./gold-signals";
 import { detectHallucinationSignals, type HallucinationResult } from "../hallucination-detector";
 
 export type Verdict = "GREEN" | "YELLOW" | "RED" | "GREY";
@@ -403,6 +404,31 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
           value: "real_raw_http",
           strength: "HIGH",
           explanation: `Raw HTTP request bytes (${httpEval.requestsAnalyzed} block(s), headers not fabricated).`,
+        });
+      }
+    }
+
+    // Task #174: bring additional category-specific strong-evidence
+    // categories from the AVRI family rubrics into the default path.
+    // Each detector runs its own placeholder/fabrication validator (see
+    // gold-signals.ts), so a slop report whose only "evidence" is a
+    // `<sql payload>` slot or a `<!ENTITY xxe SYSTEM "<placeholder>">`
+    // does NOT earn a gold signal. We dedupe against any GOLD_SIGNAL
+    // value already emitted above so the new detectors never overwrite
+    // the curated three (real_crash_trace / real_raw_http / code_diff).
+    if (fullText) {
+      const alreadyEmitted = new Set(
+        indicators
+          .filter((i) => i.signal === "GOLD_SIGNAL")
+          .map((i) => String(i.value)),
+      );
+      for (const extra of detectAdditionalGoldSignals(fullText)) {
+        if (alreadyEmitted.has(extra.id)) continue;
+        indicators.push({
+          signal: "GOLD_SIGNAL",
+          value: extra.id,
+          strength: extra.strength,
+          explanation: extra.explanation,
         });
       }
     }
