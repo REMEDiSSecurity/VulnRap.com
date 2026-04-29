@@ -138,7 +138,7 @@ function AutoRedactionCard() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer group/card"
+        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer group/card rounded-xl ring-1 ring-transparent hover:ring-green-400/30 focus-visible:ring-green-400/50 focus-visible:outline-none transition-all duration-200"
         aria-expanded={expanded}
       >
         <div className="p-2 sm:p-2.5 rounded-lg icon-glow-green flex-shrink-0">
@@ -147,7 +147,7 @@ function AutoRedactionCard() {
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
             Auto-Redaction
-            <ChevronDown className={`w-4 h-4 text-green-400/50 group-hover/card:text-green-400 transition-all duration-200 ${expanded ? "rotate-180 text-green-400" : ""}`} />
+            <ChevronDown className={`w-5 h-5 text-green-400/60 group-hover/card:text-green-400 transition-all duration-200 ${expanded ? "rotate-180 text-green-400" : ""}`} />
           </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">PII, secrets, and company names are scrubbed from submitted reports before storage or comparison. Tap to see exactly what gets caught.</p>
         </div>
@@ -261,7 +261,7 @@ function SectionHashingCard() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer group/card"
+        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer group/card rounded-xl ring-1 ring-transparent hover:ring-cyan-400/30 focus-visible:ring-cyan-400/50 focus-visible:outline-none transition-all duration-200"
         aria-expanded={expanded}
       >
         <div className="p-2 sm:p-2.5 rounded-lg icon-glow-cyan flex-shrink-0">
@@ -270,7 +270,7 @@ function SectionHashingCard() {
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
             Section Hashing
-            <ChevronDown className={`w-4 h-4 text-cyan-400/50 group-hover/card:text-cyan-400 transition-all duration-200 ${expanded ? "rotate-180 text-cyan-400" : ""}`} />
+            <ChevronDown className={`w-5 h-5 text-cyan-400/60 group-hover/card:text-cyan-400 transition-all duration-200 ${expanded ? "rotate-180 text-cyan-400" : ""}`} />
           </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">Each section is hashed independently, detecting partial matches across reports your team has received. Tap to see how.</p>
         </div>
@@ -405,7 +405,7 @@ function SlopDetectionCard() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer group/card"
+        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer group/card rounded-xl ring-1 ring-transparent hover:ring-violet-400/30 focus-visible:ring-violet-400/50 focus-visible:outline-none transition-all duration-200"
         aria-expanded={expanded}
       >
         <div className="p-2 sm:p-2.5 rounded-lg icon-glow-violet flex-shrink-0">
@@ -414,7 +414,7 @@ function SlopDetectionCard() {
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
             Validity Scoring
-            <ChevronDown className={`w-4 h-4 text-violet-400/50 group-hover/card:text-violet-400 transition-all duration-200 ${expanded ? "rotate-180 text-violet-400" : ""}`} />
+            <ChevronDown className={`w-5 h-5 text-violet-400/60 group-hover/card:text-violet-400 transition-all duration-200 ${expanded ? "rotate-180 text-violet-400" : ""}`} />
           </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">Three-engine composite scoring: Technical Substance (60%), CWE Coherence (35%), and AI Authorship (5%) vote with different weights and fuse into a single composite score and triage label. CWE Coherence is capped when Substance reports near-zero evidence, so a report can't earn 24 composite points just for naming the right CWE number. Tap to see how.</p>
         </div>
@@ -465,7 +465,7 @@ function SlopDetectionCard() {
                             <span className="text-[10px] font-medium text-foreground">{check.what}</span>
                             <span className="text-[9px] text-orange-400/80 font-mono whitespace-nowrap">{check.points}</span>
                           </div>
-                          <p className="text-[9px] text-muted-foreground mt-0.5">{check.example}</p>
+                          <p className="text-[10px] sm:text-[9px] text-muted-foreground mt-0.5 leading-snug">{check.example}</p>
                         </div>
                       ))}
                     </div>
@@ -1873,7 +1873,7 @@ function TransparencySection() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 sm:p-6 flex items-center justify-between text-left cursor-pointer group/card"
+        className="w-full p-4 sm:p-6 flex items-center justify-between text-left cursor-pointer group/card rounded-xl ring-1 ring-transparent hover:ring-cyan-400/30 focus-visible:ring-cyan-400/50 focus-visible:outline-none transition-all duration-200"
         aria-expanded={expanded}
       >
         <div className="space-y-1">
@@ -1883,7 +1883,7 @@ function TransparencySection() {
             Transparency: Where Your Data Goes
           </h2>
         </div>
-        <ChevronDown className={`w-5 h-5 text-cyan-400/50 group-hover/card:text-cyan-400 transition-all duration-200 ${expanded ? "rotate-180 text-cyan-400" : ""}`} />
+        <ChevronDown className={`w-5 h-5 text-cyan-400/60 group-hover/card:text-cyan-400 transition-all duration-200 flex-shrink-0 ${expanded ? "rotate-180 text-cyan-400" : ""}`} />
       </button>
 
       {expanded && (
