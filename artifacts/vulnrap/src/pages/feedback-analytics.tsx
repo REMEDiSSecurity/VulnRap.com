@@ -950,6 +950,14 @@ function HandwavyPhrasesAdmin() {
   const [revertConfirm, setRevertConfirm] = useState<
     { phrase: string; entry: HandwavyEditEntry } | null
   >(null);
+  // Task #153 — same shape of confirmation prompt for the per-row Reinstate
+  // button on the removal-history list. Reinstating restores a phrase to
+  // active use, so we hold the row the reviewer clicked and summarize the
+  // phrase, category, and original rationale before calling the server.
+  // `null` = closed.
+  const [reinstateConfirm, setReinstateConfirm] = useState<
+    DisplayHistoryRow | null
+  >(null);
   // Task #134 + Task #154 — bulk-remove state. `selected` is the set of
   // currently-checked phrases (keyed by the normalized `phrase` string
   // the server stores). Bulk removal goes through the side-by-side
@@ -2760,7 +2768,7 @@ function HandwavyPhrasesAdmin() {
                               size="sm"
                               className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
                               disabled={busy === reinstateKey}
-                              onClick={() => handleReinstate(h)}
+                              onClick={() => setReinstateConfirm(h)}
                               data-testid="handwavy-reinstate"
                               aria-label={`Reinstate phrase ${h.phrase}`}
                             >
@@ -2982,6 +2990,80 @@ function HandwavyPhrasesAdmin() {
             }}
           >
             Revert edit
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Task #153 — confirmation prompt before reinstating a removed phrase.
+        The dialog summarizes the phrase, its category, and the original
+        rationale so reviewers can spot a misclick before the phrase is
+        re-enabled on the active list. */}
+    <AlertDialog
+      open={reinstateConfirm !== null}
+      onOpenChange={(open) => {
+        if (!open) setReinstateConfirm(null);
+      }}
+    >
+      <AlertDialogContent data-testid="handwavy-reinstate-confirm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Reinstate this phrase?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              {reinstateConfirm && (
+                <>
+                  <div>
+                    Restore{" "}
+                    <span className="font-mono text-foreground/80">
+                      “{reinstateConfirm.phrase}”
+                    </span>{" "}
+                    to the active list. New triages will start flagging it
+                    again immediately.
+                  </div>
+                  <ul
+                    className="list-disc pl-5 space-y-1 text-foreground/80"
+                    data-testid="handwavy-reinstate-confirm-summary"
+                  >
+                    <li>
+                      category{" "}
+                      <span className="text-foreground capitalize">
+                        {CATEGORY_LABELS[
+                          reinstateConfirm.category as keyof typeof CATEGORY_LABELS
+                        ] ?? reinstateConfirm.category ?? "absence"}
+                      </span>
+                    </li>
+                    <li>
+                      rationale{" "}
+                      <span className="text-foreground">
+                        {reinstateConfirm.rationale && reinstateConfirm.rationale.length > 0
+                          ? `“${reinstateConfirm.rationale}”`
+                          : "(none recorded)"}
+                      </span>
+                    </li>
+                  </ul>
+                  <div className="text-xs italic">
+                    The original removal entry stays in the history; the reinstate is recorded as a new audit entry.
+                  </div>
+                </>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="handwavy-reinstate-confirm-cancel">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="handwavy-reinstate-confirm-confirm"
+            onClick={() => {
+              if (reinstateConfirm) {
+                const entry = reinstateConfirm;
+                setReinstateConfirm(null);
+                void handleReinstate(entry);
+              }
+            }}
+          >
+            Reinstate phrase
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
