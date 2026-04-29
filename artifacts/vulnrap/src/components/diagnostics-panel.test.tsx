@@ -414,6 +414,181 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/tsan_or_helgrind_header/)).toBeInTheDocument();
   });
 
+  it("renders the FAKE_RAW_HTTP block with reason, request counters, and revoked smuggling gold signals", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "REQUEST_SMUGGLING",
+          familyName: "HTTP request smuggling / desync",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-444",
+            evidence: ["CWE-444"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 22,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "REQUEST_SMUGGLING",
+                  familyName: "HTTP request smuggling / desync",
+                  baseScore: 18,
+                  goldHitCount: 0,
+                  goldTotalCount: 6,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  rawHttp: {
+                    requestsAnalyzed: 1,
+                    totalHeaders: 7,
+                    placeholderHeaders: 4,
+                    crlfPresent: false,
+                    teClConflicts: 1,
+                    teClBroken: 1,
+                    isFake: true,
+                    reason:
+                      "Fabricated raw HTTP request (no CRLFs, placeholder header values)",
+                    revokedGoldHits: [
+                      { id: "raw_http_te_cl_conflict", points: 22 },
+                      { id: "raw_http_request_with_headers", points: 14 },
+                    ],
+                    penalty: -18,
+                  },
+                  rawAvriScore: 0,
+                  legacyScore: 30,
+                  blendedScore: 22,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("FAKE_RAW_HTTP")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/raw HTTP downgraded \(-18\)/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Fabricated raw HTTP request \(no CRLFs, placeholder header values\)/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/requests:\s*1/i)).toBeInTheDocument();
+    expect(screen.getByText(/headers:\s*3\/7 good/i)).toBeInTheDocument();
+    expect(screen.getByText(/placeholder:\s*4/i)).toBeInTheDocument();
+    expect(screen.getByText(/CRLF:\s*no/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/TE\/CL conflicts:\s*1\s*\(broken\s*1\)/i),
+    ).toBeInTheDocument();
+
+    expect(screen.getByText(/Smuggling Gold Signals Revoked/i)).toBeInTheDocument();
+    expect(screen.getByText(/raw_http_te_cl_conflict/)).toBeInTheDocument();
+    expect(screen.getByText(/raw_http_request_with_headers/)).toBeInTheDocument();
+  });
+
+  it("does not render the FAKE_RAW_HTTP block when rawHttp.isFake is false", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "REQUEST_SMUGGLING",
+          familyName: "HTTP request smuggling / desync",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-444",
+            evidence: ["CWE-444"],
+            technology: null,
+          },
+          goldHitCount: 1,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 30,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 30,
+              verdict: "AMBER" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "REQUEST_SMUGGLING",
+                  familyName: "HTTP request smuggling / desync",
+                  baseScore: 30,
+                  goldHitCount: 1,
+                  goldTotalCount: 6,
+                  goldHits: [
+                    {
+                      id: "raw_http_request_with_headers",
+                      description: "Raw HTTP request bytes shown",
+                      points: 14,
+                    },
+                  ],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  rawHttp: {
+                    requestsAnalyzed: 1,
+                    totalHeaders: 7,
+                    placeholderHeaders: 0,
+                    crlfPresent: true,
+                    teClConflicts: 0,
+                    teClBroken: 0,
+                    isFake: false,
+                    reason: null,
+                    revokedGoldHits: [],
+                    penalty: 0,
+                  },
+                  rawAvriScore: 30,
+                  legacyScore: 30,
+                  blendedScore: 30,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/AVRI Family Rubric/i)).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("FAKE_RAW_HTTP")).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw HTTP downgraded/i)).not.toBeInTheDocument();
+  });
+
   it("groups the FLAT hand-wavy phrase entries by category in the diagnostics panel", async () => {
     fetchSpy.mockImplementationOnce(async () => new Response(
       JSON.stringify({

@@ -623,6 +623,7 @@ function AvriFamilySection({
   const goldHitCount = e2Avri?.goldHitCount ?? avri?.goldHitCount ?? 0;
   const goldTotalCount = e2Avri?.goldTotalCount ?? goldHits.length + goldMisses.length;
   const crashTrace = e2Avri?.crashTrace ?? null;
+  const rawHttp = e2Avri?.rawHttp ?? null;
   // Sprint 11 / Task 85: the same stripped-trace validator runs for both
   // MEMORY_CORRUPTION (crash traces) and RACE_CONCURRENCY (TSan/Helgrind/DRD
   // tool traces). Pick wording that reads naturally for whichever family
@@ -859,6 +860,65 @@ function AvriFamilySection({
                     </div>
                     <ul className="space-y-0.5">
                       {crashTrace.revokedGoldHits.map((r) => (
+                        <li
+                          key={r.id}
+                          className="text-[11px] font-mono text-red-400/90 flex items-baseline gap-1"
+                        >
+                          <span>−{r.points}</span>
+                          <span className="text-foreground/80">{r.id}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/*
+              Sprint 12 / Task 104: mirror the FAKE_RAW_HTTP block from the
+              printable markdown export inside the live panel UI. Reviewers
+              should see why a REQUEST_SMUGGLING report's smuggling-gold hits
+              were revoked without having to dig into the generic Triggered
+              Indicators table.
+            */}
+            {rawHttp?.isFake && (
+              <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-5 font-mono text-red-400 border-red-500/40"
+                  >
+                    FAKE_RAW_HTTP
+                  </Badge>
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    raw HTTP downgraded ({rawHttp.penalty})
+                  </span>
+                </div>
+                {rawHttp.reason && (
+                  <p className="text-[11px] text-red-300/90 leading-relaxed">
+                    {rawHttp.reason}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-3 text-[11px] font-mono text-muted-foreground">
+                  <span>requests: {rawHttp.requestsAnalyzed}</span>
+                  <span className="text-green-400/80">
+                    headers: {Math.max(0, rawHttp.totalHeaders - rawHttp.placeholderHeaders)}/{rawHttp.totalHeaders} good
+                  </span>
+                  <span className="text-red-400/80">placeholder: {rawHttp.placeholderHeaders}</span>
+                  <span className={rawHttp.crlfPresent ? "text-green-400/80" : "text-red-400/80"}>
+                    CRLF: {rawHttp.crlfPresent ? "yes" : "no"}
+                  </span>
+                  <span className="text-red-400/80">
+                    TE/CL conflicts: {rawHttp.teClConflicts} (broken {rawHttp.teClBroken})
+                  </span>
+                </div>
+                {rawHttp.revokedGoldHits.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                      Smuggling Gold Signals Revoked
+                    </div>
+                    <ul className="space-y-0.5">
+                      {rawHttp.revokedGoldHits.map((r) => (
                         <li
                           key={r.id}
                           className="text-[11px] font-mono text-red-400/90 flex items-baseline gap-1"
