@@ -4979,7 +4979,7 @@ interface TestRunResponse {
   datasetSamples?: DatasetSamples;
 }
 
-interface ArchetypeHistorySnapshot {
+export interface ArchetypeHistorySnapshot {
   timestamp: string;
   archetype: string;
   count: number;
@@ -5007,7 +5007,7 @@ interface ArchetypeHistoryResponse {
  * regardless of local timezone. Otherwise reviewers in negative-UTC
  * timezones would see the day label slip backwards by one.
  */
-function formatHistoryRange(
+export function formatHistoryRange(
   snapshots: ArchetypeHistorySnapshot[],
 ): { startLabel: string; endLabel: string; days: number; label: string } | null {
   if (snapshots.length === 0) return null;
