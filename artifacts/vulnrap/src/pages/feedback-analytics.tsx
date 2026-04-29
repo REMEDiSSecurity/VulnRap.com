@@ -1579,10 +1579,7 @@ function renderHandwavyEditEntries({
     .map((entry, idx) => ({ entry, idx }))
     .reverse()
     .map(({ entry, idx }) => {
-      const editedAtKey =
-        entry.editedAt instanceof Date
-          ? entry.editedAt.toISOString()
-          : String(entry.editedAt);
+      const editedAtKey = String(entry.editedAt);
       const revertKey = `revert:${phrase}:${editedAtKey}`;
       const editedAtLabel = formatAuditTimestamp(entry.editedAt);
       // Task #148 — disable Revert when the entry's "from" values already
@@ -2231,8 +2228,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   // toast so the reviewer doesn't think the click was lost.
   const handleRevertEdit = async (phrase: string, entry: HandwavyEditEntry) => {
     if (bailOnCooldown("Revert edit")) return;
-    const editedAt =
-      entry.editedAt instanceof Date ? entry.editedAt.toISOString() : String(entry.editedAt);
+    const editedAt = String(entry.editedAt);
     const key = `revert:${phrase}:${editedAt}`;
     setBusy(key);
     try {
@@ -2642,11 +2638,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         const resp = await removeHandwavyPhrase({ phrase, reviewer: reviewerName });
         const removedAtRaw =
           ("historyEntry" in resp && resp.historyEntry?.removedAt) || undefined;
-        const removedAt = removedAtRaw
-          ? removedAtRaw instanceof Date
-            ? removedAtRaw.toISOString()
-            : String(removedAtRaw)
-          : undefined;
+        const removedAt = removedAtRaw ? String(removedAtRaw) : undefined;
         results.push({ phrase, status: "removed", removedAt });
       } catch (err) {
         const status = (err as { status?: number } | null)?.status;
@@ -2719,10 +2711,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     const key = `reinstate:${entry.phrase}:${entry.removedAt}`;
     setBusy(key);
     try {
-      const removedAt =
-        entry.removedAt instanceof Date
-          ? entry.removedAt.toISOString()
-          : String(entry.removedAt);
+      const removedAt = String(entry.removedAt);
       await reinstateHandwavyPhrase({
         phrase: entry.phrase,
         removedAt,
@@ -3003,8 +2992,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         reinstatedAt: inner.reinstatedAt,
         batchSize: h.phrases!.length,
       }));
-      const removedAtIso =
-        h.removedAt instanceof Date ? h.removedAt.toISOString() : String(h.removedAt);
+      const removedAtIso = String(h.removedAt);
       const reinstatedCount = rows.filter((r) => r.reinstated).length;
       historyGroups.push({
         kind: "batch",
@@ -3072,6 +3060,10 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   >();
   for (const h of history) {
     if (!h.reinstated) continue;
+    // Task #135 batch-removal entries leave `phrase` empty in favor of a
+    // `phrases[]` list — those don't have a single phrase identity, so
+    // they're not part of the per-phrase thrash counter.
+    if (!h.phrase) continue;
     const removedAt = h.removedAt ? String(h.removedAt) : "";
     const reinstatedAt = h.reinstatedAt ? String(h.reinstatedAt) : undefined;
     const list = thrashByPhrase.get(h.phrase) ?? [];
@@ -4883,10 +4875,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                     rowIdx: number,
                     opts: { insideBatch?: boolean } = {},
                   ) => {
-                    const removedAtKey =
-                      h.removedAt instanceof Date
-                        ? h.removedAt.toISOString()
-                        : String(h.removedAt);
+                    const removedAtKey = String(h.removedAt);
                     const reinstateKey = `reinstate:${h.phrase}:${removedAtKey}`;
                     const isActive = phrases.some(
                       (m: { phrase: string }) => m.phrase === h.phrase,
