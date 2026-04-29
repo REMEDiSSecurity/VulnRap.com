@@ -63,6 +63,16 @@ export interface AddPhraseOptions extends ReviewerOptions {
    * was using hedging so this keeps the seeded data uniform.
    */
   category?: string;
+  /**
+   * Task #223 — test-only override for the marker's `addedAt` ISO
+   * timestamp. The api-server only honors this when
+   * `HANDWAVY_ALLOW_TEST_BACKDATE=1` is set on its process (the
+   * Playwright config sets this for the bundled api-server webserver),
+   * so production deployments cannot be tricked into rewriting the
+   * audit timestamp. Used by the urgent-state undo spec to seed a
+   * phrase whose 5-minute undo window is ~25s from elapsing.
+   */
+  addedAt?: string;
 }
 
 export interface SingleRemovalResponse {
@@ -119,8 +129,14 @@ export async function addPhrase(
 ): Promise<void> {
   const reviewer = opts.reviewer ?? DEFAULT_REVIEWER;
   const category = opts.category ?? "hedging";
+  // Task #223 — only include `addedAt` in the POST body when the caller
+  // explicitly asked for a backdated timestamp. The api-server silently
+  // drops this field unless HANDWAVY_ALLOW_TEST_BACKDATE=1 is set on its
+  // process (the Playwright config sets it for the e2e webserver).
+  const data: Record<string, unknown> = { phrase, category, reviewer };
+  if (opts.addedAt) data.addedAt = opts.addedAt;
   const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    data: { phrase, category, reviewer },
+    data,
   });
   expect(
     res.ok(),

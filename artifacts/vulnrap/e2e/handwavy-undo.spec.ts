@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import {
+  addPhrase,
   addPhraseViaUi,
   cleanup,
   newApiContext,
@@ -188,6 +189,125 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await cleanup(apiCtx, [olderPhrase, newerPhrase], {
         reviewer: "e2e-task141-cleanup",
       });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #223 — Task #140's existing spec only exercises the "wide-open
+  // window" branch of the per-row Undo button (urgent=false, amber
+  // styling). The urgent branch — text-red-400 + animate-pulse +
+  // data-undo-urgent="true" + the live "Undo (Xs)" countdown — only
+  // kicks in inside the last 30s of the 5-minute window, which is far
+  // too long to wait in real wall-clock time inside a Playwright spec.
+  // We seed the marker via the API with a backdated `addedAt` so only
+  // ~25s remain in the window (the api-server only honors that field
+  // when HANDWAVY_ALLOW_TEST_BACKDATE=1, set by playwright.config.ts),
+  // then drive the page through the full add-detected-by-page flow and
+  // assert the urgent visual state. Finally we wait for the button to
+  // vanish at the true 0-mark and assert no "0s" text ever flashes on
+  // the way out (formatUndoRemaining uses Math.ceil + the
+  // undoCandidates Map drops entries the moment remainingMs <= 0, so
+  // rendering "0s" would be a regression of either guard).
+  test("the per-row Undo button switches to the urgent (red + pulse) state inside the last ~30s of the window and vanishes cleanly without any '0s' flash", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task223 urgent", "phrase");
+
+    try {
+      // 5-minute UNDO_WINDOW_MS - 25s leaves the row inside the urgent
+      // band (UNDO_URGENT_MS = 30s) but not so close to 0 that the
+      // window elapses before the page even renders. Using 25s gives
+      // ~5s of headroom for page navigation + the initial render.
+      const UNDO_WINDOW_MS = 5 * 60 * 1000;
+      const TARGET_REMAINING_MS = 25_000;
+      const addedAtIso = new Date(
+        Date.now() - (UNDO_WINDOW_MS - TARGET_REMAINING_MS),
+      ).toISOString();
+
+      await addPhrase(apiCtx, phrase, {
+        reviewer: "e2e-task223",
+        addedAt: addedAtIso,
+      });
+
+      // Visit the panel AFTER the seed POST so the initial fetch picks
+      // up the backdated marker. There's no auto-poll on the handwavy
+      // phrase query so we don't need to race a refresh.
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const newRow = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      const undoBtn = newRow.getByTestId("handwavy-undo");
+      await expect(undoBtn).toBeVisible({ timeout: 15_000 });
+
+      // The urgent branch must be active because remainingMs starts
+      // well below UNDO_URGENT_MS (30s). All three signals (the data
+      // attribute the existing spec asserts, plus the two utility
+      // classes the existing spec does NOT cover) must flip together.
+      await expect(undoBtn).toHaveAttribute("data-undo-urgent", "true");
+      await expect(undoBtn).toHaveClass(/text-red-400/);
+      await expect(undoBtn).toHaveClass(/animate-pulse/);
+
+      // The remaining-ms data attribute must reflect the urgent band
+      // (≤ 30s) and must be strictly positive — anything else means
+      // we either missed the window or rendered after the entry was
+      // dropped from undoCandidates.
+      const remainingAttr = await undoBtn.getAttribute(
+        "data-undo-remaining-ms",
+      );
+      expect(remainingAttr).not.toBeNull();
+      const remainingMs = Number(remainingAttr);
+      expect(Number.isFinite(remainingMs)).toBe(true);
+      expect(remainingMs).toBeGreaterThan(0);
+      expect(remainingMs).toBeLessThanOrEqual(30_000);
+
+      // Countdown text in the urgent band is the "Xs" form (no minutes),
+      // not the "Xm YYs" form covered by the wide-open spec above.
+      await expect(undoBtn).toHaveText(/^Undo \(\d+s\)$/);
+
+      // Wait for the button to vanish at the true 0-mark and assert
+      // that "0s" never appears in its text along the way. Math.ceil
+      // in formatUndoRemaining + the `if (remainingMs <= 0) continue;`
+      // guard in undoCandidates together guarantee the button hides
+      // BEFORE its text would render "(0s)"; if either regresses this
+      // poll throws inside the page (and surfaces as a Playwright
+      // failure) instead of silently passing on a UI flicker.
+      await page.waitForFunction(
+        ({ phraseToFind }) => {
+          const rows = Array.from(
+            document.querySelectorAll('[data-testid="handwavy-row"]'),
+          );
+          let btn: Element | null = null;
+          for (const row of rows) {
+            if (row.textContent?.includes(phraseToFind)) {
+              btn = row.querySelector('[data-testid="handwavy-undo"]');
+              break;
+            }
+          }
+          if (!btn) return true; // gone — success
+          const text = btn.textContent ?? "";
+          if (/\(0s\)/.test(text)) {
+            throw new Error(
+              `Saw '0s' flash on Undo button before it vanished: ${text}`,
+            );
+          }
+          return false;
+        },
+        { phraseToFind: phrase },
+        // 30s urgent band + a generous safety margin. The button must
+        // disappear well within this window even on a slow runner —
+        // the seed put the marker ~25s from elapsing.
+        { timeout: 35_000, polling: 100 },
+      );
+
+      // Sanity check: the row itself stays put (the marker was never
+      // removed — the undo affordance just retired). Without this we'd
+      // also pass if the whole row vanished for an unrelated reason.
+      await expect(newRow).toHaveCount(1);
+      await expect(newRow.getByTestId("handwavy-undo")).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, phrase, { reviewer: "e2e-task223-cleanup" });
       await apiCtx.dispose();
     }
   });

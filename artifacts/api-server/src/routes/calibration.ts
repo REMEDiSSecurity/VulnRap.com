@@ -967,13 +967,22 @@ router.get(
 
 router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, async (req, res) => {
   try {
-    const { phrase, category, dryRun, reviewer, rationale, productionScanLimit } = (req.body ?? {}) as {
+    const { phrase, category, dryRun, reviewer, rationale, productionScanLimit, addedAt } = (req.body ?? {}) as {
       phrase?: unknown;
       category?: unknown;
       dryRun?: unknown;
       reviewer?: unknown;
       rationale?: unknown;
       productionScanLimit?: unknown;
+      // Task #223 — test-only override for the marker's `addedAt` ISO
+      // timestamp. Lets the e2e suite seed a phrase whose 5-minute undo
+      // window is about to elapse so the urgent-state styling
+      // (text-red-400 + animate-pulse + data-undo-urgent="true") can be
+      // exercised without the spec having to wait 4m 30s of real wall-
+      // clock time. Only honored when HANDWAVY_ALLOW_TEST_BACKDATE=1 is
+      // set on the api-server process so a production deployment cannot
+      // be tricked into rewriting the audit timestamp.
+      addedAt?: unknown;
     };
     if (typeof phrase !== "string" || phrase.trim().length === 0) {
       res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
@@ -1074,9 +1083,24 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, as
       });
       return;
     }
+    // Task #223 — only honor a caller-supplied addedAt when the api-server
+    // process has explicitly opted in via HANDWAVY_ALLOW_TEST_BACKDATE=1.
+    // The e2e suite sets this in playwright.config.ts so the urgent-state
+    // styling on the per-row Undo button can be tested without 4m 30s of
+    // real wait. Production deployments leave the env var unset, so this
+    // path is a no-op there: the addedAt body field is silently dropped
+    // and addHandwavyPhrase falls back to its default `new Date()` clock.
+    let now: string | undefined;
+    if (process.env.HANDWAVY_ALLOW_TEST_BACKDATE === "1" && typeof addedAt === "string") {
+      const trimmed = addedAt.trim();
+      if (trimmed.length > 0 && Number.isFinite(Date.parse(trimmed))) {
+        now = trimmed;
+      }
+    }
     const result = addHandwavyPhrase(phrase, category, {
       reviewer: typeof reviewer === "string" ? reviewer : undefined,
       rationale: typeof rationale === "string" ? rationale : undefined,
+      now,
     });
     res.status(result.added ? 201 : 200).json({
       added: result.added,

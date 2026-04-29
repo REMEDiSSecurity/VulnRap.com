@@ -93,6 +93,15 @@ export default defineConfig({
             // path so a non-root webserver cwd doesn't create a stray
             // nested artifacts/api-server/ directory.
             ARCHETYPE_HISTORY_PATH,
+            // Task #223 — opt the api-server into honoring a caller-
+            // supplied `addedAt` on POST /handwavy-phrases. The undo
+            // urgent-state spec uses this to seed a phrase whose
+            // 5-minute undo window is ~25s from elapsing, so the
+            // `text-red-400` / `animate-pulse` / `data-undo-urgent="true"`
+            // branch can be exercised without 4m 30s of real wall-clock
+            // wait. Production leaves this unset, so the field is silently
+            // dropped and the audit timestamp comes from `new Date()`.
+            HANDWAVY_ALLOW_TEST_BACKDATE: "1",
           },
         },
         {

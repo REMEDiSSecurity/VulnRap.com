@@ -740,6 +740,72 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     expect(found?.rationale).toMatch(/duplicate reports/);
   });
 
+  // Task #223 — the e2e suite needs a way to seed a marker with a backdated
+  // `addedAt` so the urgent-state styling on the per-row Undo button can be
+  // exercised without 4m 30s of real wall-clock wait. The api-server gates
+  // that behavior on `HANDWAVY_ALLOW_TEST_BACKDATE=1` so a public deployment
+  // cannot be tricked into rewriting the audit timestamp. The two tests
+  // below pin the contract: opt-in honors the field, opt-out silently drops
+  // it (no 400 — old reviewers POSTing through stale clients should not
+  // start failing just because the field is unrecognised).
+  describe("Task #223 addedAt backdating gate", () => {
+    it("POST honors a caller-supplied addedAt when HANDWAVY_ALLOW_TEST_BACKDATE=1", async () => {
+      const original = process.env.HANDWAVY_ALLOW_TEST_BACKDATE;
+      process.env.HANDWAVY_ALLOW_TEST_BACKDATE = "1";
+      try {
+        const backdated = "2026-01-02T03:04:05.000Z";
+        const add = await request<{
+          added: boolean;
+          marker: { phrase: string; addedAt?: string };
+        }>("POST", "/feedback/calibration/handwavy-phrases", {
+          phrase: "task223 backdated marker honored",
+          category: "hedging",
+          reviewer: "task223-tester",
+          addedAt: backdated,
+        });
+        expect(add.status).toBe(201);
+        expect(add.body.marker.addedAt).toBe(backdated);
+      } finally {
+        if (original === undefined) {
+          delete process.env.HANDWAVY_ALLOW_TEST_BACKDATE;
+        } else {
+          process.env.HANDWAVY_ALLOW_TEST_BACKDATE = original;
+        }
+      }
+    });
+
+    it("POST silently ignores addedAt when HANDWAVY_ALLOW_TEST_BACKDATE is unset (server clock wins)", async () => {
+      const original = process.env.HANDWAVY_ALLOW_TEST_BACKDATE;
+      delete process.env.HANDWAVY_ALLOW_TEST_BACKDATE;
+      try {
+        const before = Date.now();
+        const add = await request<{
+          added: boolean;
+          marker: { phrase: string; addedAt?: string };
+        }>("POST", "/feedback/calibration/handwavy-phrases", {
+          phrase: "task223 backdated marker ignored",
+          category: "hedging",
+          reviewer: "task223-tester",
+          addedAt: "2020-01-01T00:00:00.000Z",
+        });
+        const after = Date.now();
+        expect(add.status).toBe(201);
+        // The supplied addedAt is dropped — the server stamps `new Date()`
+        // and the marker's addedAt must fall inside the request window.
+        expect(add.body.marker.addedAt).toBeTypeOf("string");
+        const stamped = Date.parse(add.body.marker.addedAt!);
+        expect(stamped).toBeGreaterThanOrEqual(before);
+        expect(stamped).toBeLessThanOrEqual(after);
+      } finally {
+        if (original === undefined) {
+          delete process.env.HANDWAVY_ALLOW_TEST_BACKDATE;
+        } else {
+          process.env.HANDWAVY_ALLOW_TEST_BACKDATE = original;
+        }
+      }
+    });
+  });
+
   it("POST rejects non-string reviewer/rationale with 400", async () => {
     const r = await request<{ error: string }>(
       "POST",
