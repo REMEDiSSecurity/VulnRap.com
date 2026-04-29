@@ -2228,34 +2228,117 @@ interface DatasetCohortRow {
   engine2Mean: number | null;
 }
 
-// Cache the raw sampled reports across requests so we don't re-read and
-// re-parse the ~1.5K-entry JSON every call. Engine analysis is still
-// re-run on each request so calibration drift remains observable.
+// Task #185 — rotate which curated dataset reports get sampled across runs
+// while keeping the slice stable inside a single calendar day, so a single
+// calibration session is comparable but drift detection isn't biased to
+// whichever 25 reports per label happen to sit at the top of the file.
+//
+// We cache two layers separately:
+//   1. `datasetSampleCache` — the per-label grouping of every curated report
+//      with a recognised label. This is computed once per source path
+//      because the file content doesn't change between requests.
+//   2. `dailySampleCache` — the post-shuffle per-label slice for a given
+//      (sourcePath, dateKey, perLabel). Reused across requests within the
+//      same UTC day so a calibration session sees identical samples.
 let datasetSampleCache: {
   sourcePath: string;
+  byLabel: Record<string, CuratedReport[]>;
+} | null = null;
+
+let dailySampleCache: {
+  sourcePath: string;
+  dateKey: string;
+  perLabel: number;
   samples: CuratedReport[];
 } | null = null;
 
+// `YYYY-MM-DD` in UTC. UTC (rather than local time) means the rotation
+// flips at the same instant for every reviewer regardless of timezone, so
+// two sessions started at midnight in different regions still see the
+// same daily slice.
+export function datasetSampleDateKey(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+// FNV-1a 32-bit string hash → seed. Used to derive a per-(date,label) seed
+// so the shuffle order varies independently across labels — otherwise two
+// labels with similar lengths would rotate through identical positions.
+export function datasetSampleSeed(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// Mulberry32: small, fast, deterministic PRNG. Quality is good enough for
+// a sample-rotation use case (we only need uniform-ish coverage over time,
+// not cryptographic randomness).
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Fisher–Yates shuffle driven by a seeded PRNG so the order is identical
+// for the same seed across runs.
+export function seededShuffle<T>(arr: readonly T[], rand: () => number): T[] {
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const tmp = out[i]!;
+    out[i] = out[j]!;
+    out[j] = tmp;
+  }
+  return out;
+}
+
 async function loadDatasetSamples(
   perLabel: number,
+  dateKey: string = datasetSampleDateKey(),
 ): Promise<{ sourcePath: string | null; samples: CuratedReport[] }> {
   const sourcePath = discoverDatasets().curatedV2;
   if (!sourcePath) return { sourcePath: null, samples: [] };
-  if (datasetSampleCache && datasetSampleCache.sourcePath === sourcePath) {
-    return { sourcePath, samples: datasetSampleCache.samples };
+
+  // Reuse the post-shuffle slice if we already computed it for this day.
+  if (
+    dailySampleCache &&
+    dailySampleCache.sourcePath === sourcePath &&
+    dailySampleCache.dateKey === dateKey &&
+    dailySampleCache.perLabel === perLabel
+  ) {
+    return { sourcePath, samples: dailySampleCache.samples };
   }
-  const counts: Record<string, number> = {};
+
+  // Group every curated report by its label exactly once per source path —
+  // we need the full pool so the daily shuffle can rotate across all
+  // candidates rather than just the head of the file.
+  if (!datasetSampleCache || datasetSampleCache.sourcePath !== sourcePath) {
+    const byLabel: Record<string, CuratedReport[]> = {};
+    for await (const r of iterateCuratedV2()) {
+      const label = r.label ?? "borderline";
+      if (!(label in DATASET_LABEL_TO_TIER)) continue;
+      (byLabel[label] ??= []).push(r);
+    }
+    datasetSampleCache = { sourcePath, byLabel };
+  }
+
   const collected: CuratedReport[] = [];
-  const labels = Object.keys(DATASET_LABEL_TO_TIER);
-  for await (const r of iterateCuratedV2()) {
-    const label = r.label ?? "borderline";
-    if (!(label in DATASET_LABEL_TO_TIER)) continue;
-    if ((counts[label] ?? 0) >= perLabel) continue;
-    counts[label] = (counts[label] ?? 0) + 1;
-    collected.push(r);
-    if (labels.every(l => (counts[l] ?? 0) >= perLabel)) break;
+  for (const label of Object.keys(DATASET_LABEL_TO_TIER)) {
+    const pool = datasetSampleCache.byLabel[label] ?? [];
+    if (pool.length === 0) continue;
+    const seed = datasetSampleSeed(`${dateKey}|${label}`);
+    const shuffled = seededShuffle(pool, mulberry32(seed));
+    for (const r of shuffled.slice(0, perLabel)) collected.push(r);
   }
-  datasetSampleCache = { sourcePath, samples: collected };
+
+  dailySampleCache = { sourcePath, dateKey, perLabel, samples: collected };
   return { sourcePath, samples: collected };
 }
 
