@@ -1,3 +1,5 @@
+import { detectStructuralFabrication } from "./engines/avri/crash-trace";
+
 export interface HallucinationSignal {
   type: string;
   description: string;
@@ -12,6 +14,29 @@ export interface HallucinationResult {
 
 export function detectHallucinationSignals(text: string): HallucinationResult {
   const signals: HallucinationSignal[] = [];
+
+  // Sprint 13B-2: structural-fabrication tells against ASan/TSan-style traces.
+  // The shared `detectStructuralFabrication` validator runs four predicates
+  // (round function offsets, frame-numbering gaps, thread-id inconsistency,
+  // round heap region size). When ≥2 fire the trace is internally inconsistent
+  // in ways a real sanitizer never produces — strong fabrication evidence even
+  // when the prose claims well-resolved frames.
+  //
+  // The signal weight scales with the number of markers so a 2-marker hit
+  // lands on the moderate (-10) tier alone while a 4-marker hit (every
+  // structural tell firing at once) clears the overwhelming (-25) tier on
+  // its own. Per-marker weight 8 was chosen so:
+  //   2 markers → 16 (moderate -10)
+  //   3 markers → 24 (strong -15)
+  //   4 markers → 32 (overwhelming -25)
+  const structuralMarkers = detectStructuralFabrication(text);
+  if (structuralMarkers.length >= 2) {
+    signals.push({
+      type: "structural_fabrication",
+      description: `Crash trace has ${structuralMarkers.length} structural fabrication markers — ${structuralMarkers.map((m) => m.id).join(", ")}`,
+      weight: structuralMarkers.length * 8,
+    });
+  }
 
   const stackFrames = text.match(/#\d+\s+0x[0-9a-f]+\s+in\s+\S+/gi) || [];
   if (stackFrames.length >= 3) {
@@ -167,6 +192,10 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     "fabricated_addresses",
     "phantom_exploit_script",
     "phantom_functions",
+    // Sprint 13B-2: structural-fabrication tells (round offsets, frame gaps,
+    // missing PID anchor, hex/round region size) corroborate magic PIDs the
+    // same way fabricated stacks/addresses do.
+    "structural_fabrication",
   ]);
   const pidMatches = text.match(/==(\d+)==/g) || [];
   const distinctMagicPids = new Set(

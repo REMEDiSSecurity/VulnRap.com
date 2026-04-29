@@ -53,6 +53,39 @@ const SLOP_FIXTURES: Fixture[] = [
     expectMaxScore: 35,
     claimedCwes: ["CWE-352"],
   },
+  {
+    // Sprint 13B-2 (Task #207). Padded crash report whose ASAN block looks
+    // well-symbolised on first read but is internally inconsistent in four
+    // ways: round/zero function offsets (`+0x0`, `+0x100`, `+0x1000`),
+    // a frame-numbering gap (`#2 ... #4`), thread-id mention without a
+    // ==PID== anchor, and a hex-formatted region size (`0x100`). Each of
+    // these is a real-world tell that an LLM (or hand editor) produced the
+    // trace rather than a sanitizer. The ≥2-marker rule revokes the AVRI
+    // crash-trace gold signal AND the hallucination detector adds a
+    // `structural_fabrication` signal that the composite override picks up.
+    name: "slop-09-fabricated-asan-structure",
+    text: `Heap-use-after-free crash in libserver. The AddressSanitizer output
+captured during testing is reproduced below, and shows the dangling
+pointer being dereferenced inside the request handler path.
+
+ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 by thread T0
+    #0 0x4001000 in handle_request+0x0
+    #1 0x4001100 in worker_loop+0x100
+    #2 0x4001200 in dispatch+0x1000
+    #4 0x4001300 in main+0x100
+0x60200000a000 is located 0 bytes inside of region size: 0x100
+freed by thread T1 here:
+    #0 0x4002000 in __interceptor_free+0x0
+    #1 0x4002100 in destroy_request+0x100
+
+Severity: Critical. Use-after-free, sanitizer crash, segmentation fault.
+The crash is reproducible against the shipped binary which is the
+realistic attack surface; rebuilding with debug symbols is left as an
+exercise. CVSS 9.8.`,
+    expectMaxScore: 35,
+    claimedCwes: ["CWE-416"],
+  },
 ];
 
 // Sprint 13B Task 204: real-world curl HackerOne slop corpus.

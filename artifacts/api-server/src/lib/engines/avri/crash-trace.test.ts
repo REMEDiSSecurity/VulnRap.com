@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { evaluateCrashTrace } from "./crash-trace.js";
+import { evaluateCrashTrace, detectStructuralFabrication } from "./crash-trace.js";
 import { runEngine2Avri } from "./engine2-avri.js";
 import { FAMILIES_BY_ID } from "./families.js";
 import { extractSignals } from "../extractors.js";
@@ -166,5 +166,155 @@ describe("runEngine2Avri — stripped RACE_CONCURRENCY trace integration", () =>
     const survivingIds = result.detail.goldHits.map((g) => g.id);
     expect(survivingIds).not.toContain("tsan_or_helgrind");
     expect(result.detail.rawAvriScore).toBeLessThan(40);
+  });
+});
+
+// --- Sprint 13B-2: structural fabrication detector tests ----------------------
+
+describe("detectStructuralFabrication — individual predicates", () => {
+  it("flags ≥2 round/zero function offsets (round_function_offsets)", () => {
+    const trace = `==99999==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0xdeadbeef thread T0
+    #0 0x4001000 in foo+0x0 src/foo.c:42
+    #1 0x4001100 in bar+0x100 src/bar.c:88
+    #2 0x4001200 in baz+0x1000 src/baz.c:99`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("round_function_offsets");
+  });
+
+  it("does NOT flag a single round offset (one round offset is allowed)", () => {
+    const trace = `==1234==ERROR: AddressSanitizer: heap-use-after-free
+    #0 0x4001000 in foo+0x0 src/foo.c:42
+    #1 0x4001100 in bar+0x4abf1a src/bar.c:88
+    #2 0x4001200 in baz+0x1c4d3 src/baz.c:99`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("round_function_offsets");
+  });
+
+  it("flags frame-numbering gaps (frame_numbering_gaps)", () => {
+    const trace = `==99999==ERROR: AddressSanitizer
+    #0 0x123 in foo src/foo.c:1
+    #1 0x456 in bar src/bar.c:2
+    #3 0x789 in baz src/baz.c:3`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("frame_numbering_gaps");
+  });
+
+  it("does NOT flag a clean #0,#1,#2 then reset to #0,#1 (multi-block ASan)", () => {
+    const trace = `==1234==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0xa1c0 thread T0
+    #0 0x123 in foo src/foo.c:1
+    #1 0x456 in bar src/bar.c:2
+    #2 0x789 in baz src/baz.c:3
+freed by thread T0 here:
+    #0 0xabc in __interceptor_free
+    #1 0xdef in destroy src/foo.c:99`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("frame_numbering_gaps");
+  });
+
+  it("flags thread-id mention without ==PID== anchor (thread_id_inconsistency)", () => {
+    const trace = `WARNING: ThreadSanitizer: data race
+  Read of size 4 by thread T1:
+    #0 0x123 in foo src/foo.c:1
+    #1 0x456 in bar src/bar.c:2`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("thread_id_inconsistency");
+  });
+
+  it("does NOT flag thread mention WITH ==PID== anchor", () => {
+    const trace = `==12345==WARNING: ThreadSanitizer: data race
+  Read of size 4 by thread T1:
+    #0 0x123 in foo src/foo.c:1
+    #1 0x456 in bar src/bar.c:2`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("thread_id_inconsistency");
+  });
+
+  it("flags hex-formatted region size (round_heap_region_size)", () => {
+    const trace = `==99999==ERROR: AddressSanitizer
+    #0 0x123 in foo src/foo.c:1
+0x60200000 is located 0 bytes inside of region size: 0x100`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("round_heap_region_size");
+  });
+
+  it("flags textbook-power-of-two decimal region size with no bracketed range", () => {
+    const trace = `==99999==ERROR: AddressSanitizer
+    #0 0x123 in foo src/foo.c:1
+allocated by thread T0; region size: 4096`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("round_heap_region_size");
+  });
+
+  it("does NOT flag a real ASan-style bracketed region", () => {
+    const trace = `==12345==ERROR: AddressSanitizer
+    #0 0x123 in foo src/foo.c:1
+0x602000000010 is located 0 bytes inside of 8-byte region [0x602000000010,0x602000000018)`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("round_heap_region_size");
+  });
+});
+
+describe("evaluateCrashTrace — structural fabrication aggregation", () => {
+  it("hasStructuralFabrication is true only when ≥2 markers fire", () => {
+    // Only round_function_offsets should fire here.
+    const oneMarker = `    #0 0x123 in foo+0x0 src/foo.c:1
+    #1 0x456 in bar+0x100 src/bar.c:2
+    #2 0x789 in baz src/baz.c:3`;
+    const r1 = evaluateCrashTrace(oneMarker);
+    expect(r1.structuralMarkers.length).toBeGreaterThanOrEqual(1);
+    expect(r1.hasStructuralFabrication).toBe(false);
+
+    // round_function_offsets + frame_numbering_gaps = 2 markers → fab.
+    const twoMarkers = `    #0 0x123 in foo+0x0 src/foo.c:1
+    #1 0x456 in bar+0x100 src/bar.c:2
+    #3 0x789 in baz src/baz.c:3`;
+    const r2 = evaluateCrashTrace(twoMarkers);
+    expect(r2.structuralMarkers.length).toBeGreaterThanOrEqual(2);
+    expect(r2.hasStructuralFabrication).toBe(true);
+  });
+
+  it("legit symbol-rich trace does not trigger structural fabrication", () => {
+    const r = evaluateCrashTrace(SYMBOL_RICH_TRACE);
+    expect(r.hasStructuralFabrication).toBe(false);
+  });
+
+  it("legit symbol-rich TSan trace does not trigger structural fabrication", () => {
+    const r = evaluateCrashTrace(SYMBOL_RICH_TSAN_TRACE);
+    expect(r.hasStructuralFabrication).toBe(false);
+  });
+});
+
+const FABRICATED_ASAN_TRACE = `# Heap-use-after-free in libserver request handler
+\`\`\`asan
+ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 by thread T0
+    #0 0x4001000 in handle_request+0x0 src/server.c:412
+    #1 0x4001100 in worker_loop+0x100 src/worker.c:88
+    #2 0x4001200 in dispatch+0x1000 src/dispatch.c:42
+    #4 0x4001300 in main+0x100 src/main.c:99
+0x60200000a000 is located 0 bytes inside of region size: 0x100
+\`\`\`
+The crash is reproducible against the shipped binary which is the realistic
+attack surface; rebuilding with debug symbols is left as an exercise.`;
+
+describe("runEngine2Avri — structural fabrication integration", () => {
+  it("revokes trace gold signal and emits STRUCTURAL_FABRICATION indicator", () => {
+    const sig = extractSignals(FABRICATED_ASAN_TRACE);
+    const result = runEngine2Avri(sig, FABRICATED_ASAN_TRACE, MEM);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("STRUCTURAL_FABRICATION");
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("asan_or_sanitizer");
+    expect(survivingIds).not.toContain("stack_trace_with_offset");
+    expect(result.detail.rawAvriScore).toBeLessThan(40);
+  });
+
+  it("does NOT emit STRUCTURAL_FABRICATION for the symbol-rich legit trace", () => {
+    const sig = extractSignals(SYMBOL_RICH_TRACE);
+    const result = runEngine2Avri(sig, SYMBOL_RICH_TRACE, MEM);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).not.toContain("STRUCTURAL_FABRICATION");
   });
 });

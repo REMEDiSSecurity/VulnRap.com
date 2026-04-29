@@ -26,6 +26,11 @@ const ABSENCE_PENALTY_CAP = 12;
  * trace is stripped/placeholder. Sized to push a slop report whose only
  * substance is a fake sanitizer/TSan trace below the AVRI YELLOW threshold. */
 const STRIPPED_TRACE_PENALTY = 18;
+/** Sprint 13B-2: out-of-cap penalty for crash traces whose structural details
+ * (function offsets, frame numbering, thread ids, heap region size) are
+ * internally inconsistent in ways a real sanitizer never produces. Sized like
+ * STRIPPED_TRACE_PENALTY because the same revocation path fires either way. */
+const STRUCTURAL_FAB_PENALTY = 18;
 /** Out-of-cap penalty applied to REQUEST_SMUGGLING reports whose pasted
  * raw HTTP bytes are fabricated (placeholder header values, no CRLFs, or
  * incoherent TE/CL conflict). Sized like STRIPPED_TRACE_PENALTY so a slop
@@ -200,7 +205,11 @@ export function runEngine2Avri(
   const traceGoldIds = crashTraceGoldSignalIdsFor(family.id);
   if (traceGoldIds) {
     crashTrace = evaluateCrashTrace(fullText);
-    if (crashTrace.isStripped) {
+    // Sprint 13B-2: structural fabrication takes the same revocation path as
+    // a stripped trace — both indicate the trace itself is unreliable, so any
+    // gold points the family awarded for the trace must come back.
+    const traceFabricated = crashTrace.isStripped || crashTrace.hasStructuralFabrication;
+    if (traceFabricated) {
       const remaining: typeof goldHits = [];
       for (const hit of goldHits) {
         if (traceGoldIds.has(hit.id)) {
@@ -339,12 +348,30 @@ export function runEngine2Avri(
   // cap budget. Only fires when the validator detected a placeholder trace.
   const strippedTracePenalty = crashTrace?.isStripped ? STRIPPED_TRACE_PENALTY : 0;
 
+  // 3b'. Sprint 13B-2 — structural-fabrication penalty (out-of-cap). Fires
+  // when ≥2 of the structural detectors (round function offsets, frame-number
+  // gaps, thread-id inconsistency, round heap region size) match. Mutually
+  // exclusive with `strippedTracePenalty` (we never charge twice for the same
+  // unreliable trace) — when both conditions hold we keep the stripped-trace
+  // charge and surface STRUCTURAL_FABRICATION as a separate diagnostic only.
+  const structuralFabPenalty =
+    !strippedTracePenalty && crashTrace?.hasStructuralFabrication
+      ? STRUCTURAL_FAB_PENALTY
+      : 0;
+
   // 3c. Fake-raw-HTTP penalty (out-of-cap), same shape as the stripped
   // trace penalty so a slop smuggling report whose only substance is
   // fabricated bytes lands below the AVRI YELLOW threshold.
   const fakeRawHttpPenalty = rawHttp?.isFake ? FAKE_RAW_HTTP_PENALTY : 0;
 
-  const rawAvriScore = clamp(baseScore - totalAbsencePenalty - contradictionPenalty - strippedTracePenalty - fakeRawHttpPenalty);
+  const rawAvriScore = clamp(
+    baseScore -
+      totalAbsencePenalty -
+      contradictionPenalty -
+      strippedTracePenalty -
+      structuralFabPenalty -
+      fakeRawHttpPenalty,
+  );
 
   // 4. Blend with legacy substance. Default 50/50, but when the AVRI rubric
   //    crater-scores a report that the legacy substance engine considers
@@ -367,6 +394,7 @@ export function runEngine2Avri(
     !contradictionsAnywhere &&
     goldHits.length >= 1 &&
     !crashTrace?.isStripped &&
+    !crashTrace?.hasStructuralFabrication &&
     !rawHttp?.isFake
   ) {
     avriWeight = 0.25;
@@ -405,6 +433,26 @@ export function runEngine2Avri(
       value: `${crashTrace.framesAnalyzed}f/${crashTrace.goodFrames}g/${crashTrace.placeholderFrames}p`,
       strength: "HIGH",
       explanation: `${crashTrace.reason ?? "Stripped crash trace"} (-${STRIPPED_TRACE_PENALTY}; revoked ${revokedTraceHits.length} trace gold signal(s))`,
+    });
+  }
+  if (crashTrace?.hasStructuralFabrication) {
+    // Sprint 13B-2: surface the markers in their own indicator so the
+    // diagnostics panel can show reviewers exactly which structural tells
+    // fired (round offsets, frame gaps, missing PID anchor, hex region size).
+    // The indicator fires whether or not STRIPPED_CRASH_TRACE also fired so
+    // reviewers can see all the fabrication evidence at a glance.
+    const ids = crashTrace.structuralMarkers.map((m) => m.id).join(", ");
+    const penaltyNote = structuralFabPenalty > 0
+      ? ` (-${structuralFabPenalty}`
+      : ` (penalty subsumed by stripped-trace`;
+    const revokedNote = !strippedTracePenalty && revokedTraceHits.length > 0
+      ? `; revoked ${revokedTraceHits.length} trace gold signal(s)`
+      : "";
+    indicators.push({
+      signal: "STRUCTURAL_FABRICATION",
+      value: ids,
+      strength: "HIGH",
+      explanation: `${crashTrace.structuralMarkers.length} structural fabrication marker(s) — ${crashTrace.structuralMarkers.map((m) => m.description).join("; ")}${penaltyNote}${revokedNote})`,
     });
   }
   if (rawHttp?.isFake) {
@@ -465,6 +513,16 @@ export function runEngine2Avri(
               reason: crashTrace.reason,
               revokedGoldHits: revokedTraceHits.map((r) => ({ id: r.id, points: r.points })),
               penalty: -strippedTracePenalty,
+              // Sprint 13B-2: list of structural-fabrication markers that
+              // fired against this trace (each with id + description), so the
+              // diagnostics panel can render a "Structural fabrication" sub
+              // -section without re-running detectors.
+              structuralMarkers: crashTrace.structuralMarkers.map((m) => ({
+                id: m.id,
+                description: m.description,
+              })),
+              hasStructuralFabrication: crashTrace.hasStructuralFabrication,
+              structuralFabricationPenalty: -structuralFabPenalty,
             }
           : null,
         rawHttp: rawHttp
@@ -486,7 +544,7 @@ export function runEngine2Avri(
         blendedScore,
       },
     },
-    note: `AVRI ${family.displayName}: ${goldHits.length} gold signal(s) (+${goldTotal}), -${totalAbsencePenalty} absence, -${contradictionPenalty} contradiction${strippedTracePenalty ? `, -${strippedTracePenalty} stripped-trace` : ""}${fakeRawHttpPenalty ? `, -${fakeRawHttpPenalty} fake-raw-http` : ""}. Blended with legacy substance: ${blendedScore}.`,
+    note: `AVRI ${family.displayName}: ${goldHits.length} gold signal(s) (+${goldTotal}), -${totalAbsencePenalty} absence, -${contradictionPenalty} contradiction${strippedTracePenalty ? `, -${strippedTracePenalty} stripped-trace` : ""}${structuralFabPenalty ? `, -${structuralFabPenalty} structural-fabrication` : ""}${fakeRawHttpPenalty ? `, -${fakeRawHttpPenalty} fake-raw-http` : ""}. Blended with legacy substance: ${blendedScore}.`,
   };
 
   return {
