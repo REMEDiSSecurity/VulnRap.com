@@ -124,7 +124,16 @@ function productionLabelToTier(label: string | null): CorpusTier | null {
 // with a persisted composite label. That gives a much sharper false-positive
 // signal than the ~50-fixture curated corpus alone without turning a phrase
 // preview into a full table scan.
+//
+// Task #125 — reviewers can override the cap per-request via the optional
+// `productionScanLimit` body field on the dry-run POST. Heavy-user installs
+// can widen the window (up to PRODUCTION_PREVIEW_LIMIT_MAX) for a stronger
+// false-positive signal; small installs can tighten it (down to
+// PRODUCTION_PREVIEW_LIMIT_MIN) to focus on recent reporter behavior. The
+// default is unchanged so existing reviewers see no behavior change.
 const PRODUCTION_PREVIEW_LIMIT = 2000;
+const PRODUCTION_PREVIEW_LIMIT_MIN = 100;
+const PRODUCTION_PREVIEW_LIMIT_MAX = 10000;
 
 // Pure scoring step (no DB) so it can be unit-tested independently of the
 // drizzle layer.
@@ -351,6 +360,8 @@ export const __testing = {
   computeRemovalImpactOnRows,
   previewRemovalAgainstCorpus,
   PRODUCTION_PREVIEW_LIMIT,
+  PRODUCTION_PREVIEW_LIMIT_MIN,
+  PRODUCTION_PREVIEW_LIMIT_MAX,
 };
 
 const router: IRouter = Router();
@@ -705,12 +716,13 @@ router.get(
 
 router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, async (req, res) => {
   try {
-    const { phrase, category, dryRun, reviewer, rationale } = (req.body ?? {}) as {
+    const { phrase, category, dryRun, reviewer, rationale, productionScanLimit } = (req.body ?? {}) as {
       phrase?: unknown;
       category?: unknown;
       dryRun?: unknown;
       reviewer?: unknown;
       rationale?: unknown;
+      productionScanLimit?: unknown;
     };
     if (typeof phrase !== "string" || phrase.trim().length === 0) {
       res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
@@ -732,6 +744,26 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, as
     if (rationale !== undefined && typeof rationale !== "string") {
       res.status(400).json({ error: "rationale must be a string when provided." });
       return;
+    }
+    // Task #125 — optional reviewer override for the production-scan window.
+    // Only meaningful on the dry-run path (the only place the production
+    // scan runs), but we validate it on every POST so a malformed value
+    // never makes it past the input layer.
+    let effectiveProductionLimit = PRODUCTION_PREVIEW_LIMIT;
+    if (productionScanLimit !== undefined) {
+      const v = Number(productionScanLimit);
+      if (
+        !Number.isFinite(v) ||
+        !Number.isInteger(v) ||
+        v < PRODUCTION_PREVIEW_LIMIT_MIN ||
+        v > PRODUCTION_PREVIEW_LIMIT_MAX
+      ) {
+        res.status(400).json({
+          error: `productionScanLimit must be an integer between ${PRODUCTION_PREVIEW_LIMIT_MIN} and ${PRODUCTION_PREVIEW_LIMIT_MAX}.`,
+        });
+        return;
+      }
+      effectiveProductionLimit = v;
     }
     // Task #114 — dry-run mode: validate length the same way as a real add so
     // reviewers see the same "too short / too long" errors before committing,
@@ -759,7 +791,12 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, as
       let productionMatches: DryRunMatches | null = null;
       let productionError: string | null = null;
       try {
-        productionMatches = await previewHandwavyPhraseAgainstProduction(normalized);
+        // Task #125 — honor the reviewer-supplied scan window if any (already
+        // validated above), otherwise the legacy 2000-row default.
+        productionMatches = await previewHandwavyPhraseAgainstProduction(
+          normalized,
+          effectiveProductionLimit,
+        );
       } catch (err) {
         req.log?.error(err, "Production dry-run scan failed");
         productionError = "Production archive scan failed; only curated-corpus signal is shown.";
@@ -779,7 +816,9 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, as
         dryRunMatches: matches,
         dryRunMatchesProduction: productionMatches,
         dryRunMatchesProductionError: productionError,
-        dryRunMatchesProductionLimit: PRODUCTION_PREVIEW_LIMIT,
+        // Task #125 — echo the effective limit (default or reviewer override)
+        // so the UI can render "scanned the last N reports" accurately.
+        dryRunMatchesProductionLimit: effectiveProductionLimit,
         dryRunOverlaps: overlaps,
       });
       return;

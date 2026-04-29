@@ -650,6 +650,13 @@ const HANDWAVY_REVIEWER_KEY = "vulnrap.handwavy.reviewer";
 // every visit. Stored as the literal string "1" when ON; missing/anything
 // else defaults to OFF, preserving the original first-time experience.
 const HANDWAVY_SORT_THRASH_KEY = "vulnrap.handwavy.sortByThrash";
+// Task #125 — persist the reviewer-chosen production-scan window between
+// sessions. Stored as a stringified integer; missing/invalid falls back to
+// the server-side default (2000) so existing reviewers see no behavior change.
+const HANDWAVY_PRODUCTION_SCAN_LIMIT_KEY = "vulnrap.handwavy.productionScanLimit";
+const HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT = 2000;
+const HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN = 100;
+const HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX = 10000;
 
 function formatAuditTimestamp(iso: string | undefined | null): string | null {
   if (!iso) return null;
@@ -1134,6 +1141,31 @@ function HandwavyPhrasesAdmin() {
       return "";
     }
   });
+  // Task #125 — reviewer-chosen production-scan window for the dry-run
+  // preview. Stored as a string so the input can be temporarily empty /
+  // mid-edit; we coerce + clamp to an integer in the Min..Max range when
+  // sending it to the server. Heavy-user installs can dial this up for a
+  // sharper false-positive signal; small installs can dial it down to
+  // focus on recent reporter behavior. Defaults to 2000, matching the
+  // server-side default so existing reviewers see no behavior change.
+  const [productionScanLimitInput, setProductionScanLimitInput] = useState<string>(() => {
+    if (typeof window === "undefined") return String(HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT);
+    try {
+      const stored = window.localStorage.getItem(HANDWAVY_PRODUCTION_SCAN_LIMIT_KEY);
+      if (stored == null) return String(HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT);
+      const parsed = Number.parseInt(stored, 10);
+      if (
+        !Number.isFinite(parsed) ||
+        parsed < HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN ||
+        parsed > HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX
+      ) {
+        return String(HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT);
+      }
+      return String(parsed);
+    } catch {
+      return String(HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT);
+    }
+  });
   const [busy, setBusy] = useState<string | null>(null);
   // Task #146 — confirmation prompt for the per-edit Revert button. We hold
   // the (phrase, entry) pair the reviewer clicked so the dialog can summarize
@@ -1255,6 +1287,44 @@ function HandwavyPhrasesAdmin() {
       // ignore storage failures (private mode, quota)
     }
   }, [sortByThrash]);
+  // Task #125 — derive the validated production-scan limit from the input
+  // string. Empty / mid-edit / out-of-range values fall back to the default
+  // so the actual API call is always well-formed; the UI surfaces a hint
+  // separately so reviewers know when their typed value was clamped.
+  const productionScanLimitParsed = (() => {
+    const trimmed = productionScanLimitInput.trim();
+    if (trimmed === "") return null;
+    const v = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(v)) return null;
+    return v;
+  })();
+  const productionScanLimitValid =
+    productionScanLimitParsed !== null &&
+    productionScanLimitParsed >= HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN &&
+    productionScanLimitParsed <= HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX;
+  const effectiveProductionScanLimit = productionScanLimitValid
+    ? (productionScanLimitParsed as number)
+    : HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT;
+  // Mirror only the validated value into localStorage, never a mid-edit
+  // string. Default value is removed from storage (rather than written
+  // explicitly) so first-time users and anyone who clears browser storage
+  // cleanly fall back to the documented default.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!productionScanLimitValid) return;
+    try {
+      if (effectiveProductionScanLimit === HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT) {
+        window.localStorage.removeItem(HANDWAVY_PRODUCTION_SCAN_LIMIT_KEY);
+      } else {
+        window.localStorage.setItem(
+          HANDWAVY_PRODUCTION_SCAN_LIMIT_KEY,
+          String(effectiveProductionScanLimit),
+        );
+      }
+    } catch {
+      // ignore storage failures (private mode, quota)
+    }
+  }, [productionScanLimitValid, effectiveProductionScanLimit]);
   // Task #120 — in-place edit state. Only one row can be in edit mode at a
   // time so the audit-trail save button doesn't get visually ambiguous.
   const [editing, setEditing] = useState<{
@@ -1305,7 +1375,18 @@ function HandwavyPhrasesAdmin() {
       // (normalized) plus a per-tier match summary. Reviewer/rationale
       // (Task #112) are deferred to the confirm step so the audit trail
       // only records phrases the reviewer actually committed to.
-      const dry = await addHandwavyPhrase({ phrase, category: draftCategory, dryRun: true });
+      // Task #125: pass the reviewer-chosen production-scan window so heavy
+      // installs can widen / small installs can tighten the second signal.
+      // Omit the field entirely when the reviewer left the default in place
+      // so the request body stays identical to the legacy shape.
+      const dry = await addHandwavyPhrase({
+        phrase,
+        category: draftCategory,
+        dryRun: true,
+        ...(effectiveProductionScanLimit !== HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT
+          ? { productionScanLimit: effectiveProductionScanLimit }
+          : {}),
+      });
       if (!dry.dryRunMatches) {
         // Fail closed: if the server's response is missing the preview block
         // we do NOT silently fall through to a real add. The whole point of
@@ -2055,6 +2136,55 @@ function HandwavyPhrasesAdmin() {
             data-testid="handwavy-rationale"
             disabled={busy === "preview" || busy === "confirm" || preview !== null}
           />
+          {/* Task #125 — reviewer-tunable production-scan window. The dry-run
+              preview's second signal scores the candidate against the most
+              recent N production reports (capped server-side at 10000).
+              Heavy-user installs can widen the window for a sharper false-
+              positive signal; small installs can tighten it to focus on
+              recent reporter behavior. The chosen value is also surfaced in
+              the production-block subtitle below so reviewers know exactly
+              how deep the second signal went. */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-[11px] text-muted-foreground">
+            <label
+              htmlFor="handwavy-production-scan-limit"
+              className="shrink-0"
+            >
+              Production scan window:
+            </label>
+            <input
+              id="handwavy-production-scan-limit"
+              type="number"
+              inputMode="numeric"
+              min={HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN}
+              max={HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX}
+              step={100}
+              value={productionScanLimitInput}
+              onChange={(e) => setProductionScanLimitInput(e.target.value)}
+              className={cn(
+                "h-7 w-24 px-2 rounded-md border bg-background/40 text-xs focus:outline-none focus:ring-1",
+                productionScanLimitValid || productionScanLimitInput.trim() === ""
+                  ? "border-border/40 focus:ring-primary/40"
+                  : "border-red-500/60 focus:ring-red-500/60",
+              )}
+              data-testid="handwavy-production-scan-limit"
+              aria-label="Production scan window (most recent N reports)"
+              disabled={busy === "preview" || busy === "confirm" || preview !== null}
+            />
+            <span className="text-muted-foreground/70">
+              most recent reports ({HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN}–
+              {HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
+              {HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT})
+            </span>
+            {!productionScanLimitValid && productionScanLimitInput.trim() !== "" && (
+              <span
+                className="text-red-400"
+                data-testid="handwavy-production-scan-limit-warning"
+              >
+                Out of range — the next preview will use{" "}
+                {HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT} until you fix this.
+              </span>
+            )}
+          </div>
         </form>
         {preview && (() => {
           // Task #119 — combined false-positive count across BOTH the curated

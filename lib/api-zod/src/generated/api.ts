@@ -2693,6 +2693,9 @@ triages pick the new phrase up immediately — no redeploy required.
 
  * @summary Append a new FLAT hand-wavy marker phrase
  */
+export const addHandwavyPhraseBodyProductionScanLimitMin = 100;
+export const addHandwavyPhraseBodyProductionScanLimitMax = 10000;
+
 export const AddHandwavyPhraseBody = zod.object({
   phrase: zod
     .string()
@@ -2720,6 +2723,14 @@ export const AddHandwavyPhraseBody = zod.object({
     .optional()
     .describe(
       "Free-text justification recorded with the phrase. Only consulted on POST.",
+    ),
+  productionScanLimit: zod
+    .number()
+    .min(addHandwavyPhraseBodyProductionScanLimitMin)
+    .max(addHandwavyPhraseBodyProductionScanLimitMax)
+    .optional()
+    .describe(
+      "Task #125 — optional override for the upper bound on the production-archive\nscan that backs the dry-run preview. Only consulted on the dry-run path\n(the only place the production scan runs). Heavy-user installs can widen\nthe window for a stronger false-positive signal; small installs can tighten\nit to focus on recent reporter behavior. Defaults to 2000 when omitted so\nexisting reviewers see no behavior change. The chosen value is echoed back\nin `dryRunMatchesProductionLimit` so the UI can label the second signal\naccurately.\n",
     ),
 });
 
@@ -4391,6 +4402,9 @@ NOT mutate the active list, history, or cache.
 
  * @summary Remove one or many FLAT hand-wavy marker phrases
  */
+export const removeHandwavyPhraseBodyOneProductionScanLimitMin = 100;
+export const removeHandwavyPhraseBodyOneProductionScanLimitMax = 10000;
+
 export const removeHandwavyPhraseBodyTwoPhrasesMax = 200;
 
 export const RemoveHandwavyPhraseBody = zod.union([
@@ -4423,6 +4437,14 @@ export const RemoveHandwavyPhraseBody = zod.union([
       .optional()
       .describe(
         "Free-text justification recorded with the phrase. Only consulted on POST.",
+      ),
+    productionScanLimit: zod
+      .number()
+      .min(removeHandwavyPhraseBodyOneProductionScanLimitMin)
+      .max(removeHandwavyPhraseBodyOneProductionScanLimitMax)
+      .optional()
+      .describe(
+        "Task #125 — optional override for the upper bound on the production-archive\nscan that backs the dry-run preview. Only consulted on the dry-run path\n(the only place the production scan runs). Heavy-user installs can widen\nthe window for a stronger false-positive signal; small installs can tighten\nit to focus on recent reporter behavior. Defaults to 2000 when omitted so\nexisting reviewers see no behavior change. The chosen value is echoed back\nin `dryRunMatchesProductionLimit` so the UI can label the second signal\naccurately.\n",
       ),
   }),
   zod

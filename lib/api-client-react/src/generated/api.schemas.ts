@@ -1816,6 +1816,20 @@ before they confirm the add. Defaults to false (write-through behavior).
   reviewer?: string;
   /** Free-text justification recorded with the phrase. Only consulted on POST. */
   rationale?: string;
+  /**
+   * Task #125 — optional override for the upper bound on the production-archive
+scan that backs the dry-run preview. Only consulted on the dry-run path
+(the only place the production scan runs). Heavy-user installs can widen
+the window for a stronger false-positive signal; small installs can tighten
+it to focus on recent reporter behavior. Defaults to 2000 when omitted so
+existing reviewers see no behavior change. The chosen value is echoed back
+in `dryRunMatchesProductionLimit` so the UI can label the second signal
+accurately.
+
+   * @minimum 100
+   * @maximum 10000
+   */
+  productionScanLimit?: number;
 }
 
 /**

@@ -461,6 +461,140 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       expect(r.body.error).toMatch(/at least/);
     });
 
+    // Task #125 — reviewer-tunable production-scan window. The optional
+    // `productionScanLimit` body field bounds the production archive scan
+    // (the second signal alongside the curated benchmark) so heavy-user
+    // installs can widen for sharper false-positive detection and small
+    // installs can tighten to focus on recent reporter behavior. Default
+    // remains 2000 when the field is omitted.
+    describe("Task #125 productionScanLimit", () => {
+      it("echoes the reviewer-supplied limit back in dryRunMatchesProductionLimit", async () => {
+        const r = await request<{
+          dryRun: boolean;
+          dryRunMatchesProductionLimit: number;
+        }>("POST", "/feedback/calibration/handwavy-phrases", {
+          phrase: "totally novel phrase that no fixture mentions xyzzy",
+          dryRun: true,
+          productionScanLimit: 500,
+        });
+        expect(r.status).toBe(200);
+        expect(r.body.dryRun).toBe(true);
+        expect(r.body.dryRunMatchesProductionLimit).toBe(500);
+      });
+
+      it("falls back to the 2000-row default when the field is omitted", async () => {
+        const r = await request<{ dryRunMatchesProductionLimit: number }>(
+          "POST",
+          "/feedback/calibration/handwavy-phrases",
+          {
+            phrase: "totally novel phrase that no fixture mentions xyzzy",
+            dryRun: true,
+          },
+        );
+        expect(r.status).toBe(200);
+        expect(r.body.dryRunMatchesProductionLimit).toBe(2000);
+      });
+
+      it("accepts the documented lower bound (100)", async () => {
+        const r = await request<{ dryRunMatchesProductionLimit: number }>(
+          "POST",
+          "/feedback/calibration/handwavy-phrases",
+          {
+            phrase: "totally novel phrase that no fixture mentions xyzzy",
+            dryRun: true,
+            productionScanLimit: 100,
+          },
+        );
+        expect(r.status).toBe(200);
+        expect(r.body.dryRunMatchesProductionLimit).toBe(100);
+      });
+
+      it("accepts the documented upper bound (10000)", async () => {
+        const r = await request<{ dryRunMatchesProductionLimit: number }>(
+          "POST",
+          "/feedback/calibration/handwavy-phrases",
+          {
+            phrase: "totally novel phrase that no fixture mentions xyzzy",
+            dryRun: true,
+            productionScanLimit: 10000,
+          },
+        );
+        expect(r.status).toBe(200);
+        expect(r.body.dryRunMatchesProductionLimit).toBe(10000);
+      });
+
+      it("rejects values below the lower bound with 400", async () => {
+        const r = await request<{ error: string }>(
+          "POST",
+          "/feedback/calibration/handwavy-phrases",
+          {
+            phrase: "totally novel phrase that no fixture mentions xyzzy",
+            dryRun: true,
+            productionScanLimit: 50,
+          },
+        );
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+        expect(r.body.error).toMatch(/100/);
+        expect(r.body.error).toMatch(/10000/);
+      });
+
+      it("rejects values above the upper bound with 400", async () => {
+        const r = await request<{ error: string }>(
+          "POST",
+          "/feedback/calibration/handwavy-phrases",
+          {
+            phrase: "totally novel phrase that no fixture mentions xyzzy",
+            dryRun: true,
+            productionScanLimit: 50000,
+          },
+        );
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+      });
+
+      it("rejects non-integer values with 400", async () => {
+        const r = await request<{ error: string }>(
+          "POST",
+          "/feedback/calibration/handwavy-phrases",
+          {
+            phrase: "totally novel phrase that no fixture mentions xyzzy",
+            dryRun: true,
+            productionScanLimit: 1500.5,
+          },
+        );
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+      });
+
+      it("rejects non-numeric values with 400", async () => {
+        const r = await request<{ error: string }>(
+          "POST",
+          "/feedback/calibration/handwavy-phrases",
+          {
+            phrase: "totally novel phrase that no fixture mentions xyzzy",
+            dryRun: true,
+            productionScanLimit: "lots",
+          },
+        );
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+      });
+
+      it("validates productionScanLimit even when dryRun is omitted (so the bad value never silently slips into a real add)", async () => {
+        const r = await request<{ error: string }>(
+          "POST",
+          "/feedback/calibration/handwavy-phrases",
+          {
+            phrase: "totally novel phrase that no fixture mentions xyzzy",
+            productionScanLimit: 50000,
+          },
+        );
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/productionScanLimit/);
+      });
+    });
+
     // Task #123 — overlap with the existing curated phrase list.
     it("dryRun=true reports overlap with existing curated entries", async () => {
       // Seed list contains "seed phrase one" and "seed phrase two".
