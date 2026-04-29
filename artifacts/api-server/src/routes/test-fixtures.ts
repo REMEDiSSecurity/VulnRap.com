@@ -10,6 +10,11 @@ import { analyzeWithEnginesTraced } from "../lib/engines";
 import { generateTriageRecommendation } from "../lib/triage-recommendation";
 import { performActiveVerification } from "../lib/active-verification";
 import { classifyReport } from "../lib/engines/avri";
+import { analyzeSloppiness } from "../lib/sloppiness";
+import { analyzeLinguistic } from "../lib/linguistic-analysis";
+import { analyzeFactual } from "../lib/factual-verification";
+import { analyzeSlopWithLLM, evaluateLlmGate, isLLMAvailable, type LlmGateReason } from "../lib/llm-slop";
+import { fuseScores, type ValidityFusionAudit } from "../lib/score-fusion";
 import {
   appendArchetypeSnapshots,
   readArchetypeHistory,
@@ -2409,11 +2414,93 @@ function summarizeDatasetCohorts(rows: DatasetSampleRow[]): DatasetCohortRow[] {
   });
 }
 
-router.get("/test/run", async (_req, res) => {
+// Task #209 — observation-only audit pass over the fixture battery so
+// reviewers can see how often the LLM cost gate skips substance scoring,
+// and (when ?withLlm=1 fires the actual LLM) how often the validity-fusion
+// disagreement floor clips the blended score down to Math.min(heuristic,
+// llmRaw). Returned as the `auditTelemetry` block on /api/test/run. No
+// scoring or thresholds are changed by this code.
+interface AuditAggregateRow {
+  fixtureId: string;
+  tier: string;
+  heuristicScore: number;
+  gateReason: LlmGateReason;
+  gateShouldCall: boolean;
+  validity: ValidityFusionAudit | null;
+}
+
+async function buildAuditAggregate(
+  rows: AuditAggregateRow[],
+  llmRequested: boolean,
+): Promise<{
+  llmGating: {
+    fixtureCount: number;
+    shouldCallCount: number;
+    shouldCallRate: number;
+    byReason: Record<LlmGateReason, number>;
+  };
+  validityFusion: {
+    sampledCount: number;
+    floorAppliedCount: number;
+    floorAppliedRate: number;
+    meanDeltaWhenApplied: number | null;
+    higherSideWhenApplied: { heuristic: number; llm: number; tied: number };
+    note: string;
+  };
+}> {
+  const byReason = rows.reduce<Record<string, number>>((acc, r) => {
+    acc[r.gateReason] = (acc[r.gateReason] ?? 0) + 1;
+    return acc;
+  }, {});
+  const shouldCallCount = rows.filter(r => r.gateShouldCall).length;
+
+  const sampledValidity = rows.map(r => r.validity).filter((v): v is ValidityFusionAudit => v !== null);
+  const floorRows = sampledValidity.filter(v => v.conservativeFloorApplied);
+  const meanDelta = floorRows.length === 0
+    ? null
+    : Number(
+        (floorRows.reduce((acc, v) => acc + (v.delta ?? 0), 0) / floorRows.length).toFixed(1),
+      );
+  const higherSideWhenApplied = { heuristic: 0, llm: 0, tied: 0 };
+  for (const v of floorRows) {
+    if (v.higherSide && v.higherSide in higherSideWhenApplied) {
+      higherSideWhenApplied[v.higherSide as "heuristic" | "llm" | "tied"]++;
+    }
+  }
+
+  return {
+    llmGating: {
+      fixtureCount: rows.length,
+      shouldCallCount,
+      shouldCallRate: rows.length === 0 ? 0 : Number((shouldCallCount / rows.length).toFixed(2)),
+      byReason: byReason as Record<LlmGateReason, number>,
+    },
+    validityFusion: {
+      sampledCount: sampledValidity.length,
+      floorAppliedCount: floorRows.length,
+      floorAppliedRate: sampledValidity.length === 0
+        ? 0
+        : Number((floorRows.length / sampledValidity.length).toFixed(2)),
+      meanDeltaWhenApplied: meanDelta,
+      higherSideWhenApplied,
+      note: llmRequested
+        ? "Sampled with live LLM calls (?withLlm=1). floorAppliedCount is observation-only."
+        : "LLM not invoked — validityFusion sample skipped. Pass ?withLlm=1 to populate disagreement counters (warning: 1 LLM call per fixture).",
+    },
+  };
+}
+
+router.get("/test/run", async (req, res) => {
   if (process.env.NODE_ENV === "production") {
     res.status(404).json({ error: "Not available in production." });
     return;
   }
+  // Task #209 — opt-in flag to actually fire the LLM for every fixture so
+  // the validity-fusion disagreement counters can be populated. Off by
+  // default because firing LLM x N fixtures is expensive on every smoke
+  // run; the gate-decision counters are still populated either way.
+  const llmRequested = String(req.query.withLlm ?? "").toLowerCase() === "1"
+    && isLLMAvailable();
 
   // v3.6.0 §10: exercise the *live* report pipeline (active verification +
   // 3-engine composite + matrix triage) rather than just the engine layer.
@@ -2466,6 +2553,26 @@ router.get("/test/run", async (_req, res) => {
     const triageOk = f.expectedTriage.includes(triage.action as TriageAction);
     const passed = compositeOk && e2Ok && triageOk;
 
+    // Task #209 — observation-only audit telemetry per fixture. The
+    // analyzeSloppiness call is local + cheap; LLM substance + fuseScores
+    // only run when the caller passes ?withLlm=1.
+    const heuristicAudit = analyzeSloppiness(f.text);
+    const gateDecision = evaluateLlmGate(heuristicAudit.score, 1.0);
+    let validityAudit: ValidityFusionAudit | null = null;
+    if (llmRequested) {
+      try {
+        const ling = analyzeLinguistic(f.text);
+        const fact = analyzeFactual(f.text);
+        const llm = await analyzeSlopWithLLM(f.text);
+        const fused = fuseScores(ling, fact, llm, 50, f.text, undefined, verification);
+        validityAudit = fused.validityFusion;
+      } catch {
+        // LLM/fusion failure is non-fatal for the smoke endpoint; the
+        // counters just report a smaller sampledCount than fixtureCount.
+        validityAudit = null;
+      }
+    }
+
     return {
       id: f.id, tier: f.tier,
       archetype: f.archetype ?? null,
@@ -2482,8 +2589,21 @@ router.get("/test/run", async (_req, res) => {
       expectedEngine2: f.expectedEngine2,
       expectedTriage: f.expectedTriage,
       compositeOk, e2Ok, triageOk, passed,
+      _audit: {
+        fixtureId: f.id,
+        tier: f.tier,
+        heuristicScore: heuristicAudit.score,
+        gateReason: gateDecision.reason,
+        gateShouldCall: gateDecision.shouldCall,
+        validity: validityAudit,
+      } satisfies AuditAggregateRow,
     };
   }));
+
+  // Task #209 — collect per-fixture audit rows from the smoke loop into the
+  // single counters block returned alongside the existing summary.
+  const auditRows = results.map(r => r._audit);
+  const auditTelemetry = await buildAuditAggregate(auditRows, llmRequested);
 
   const tiers: Tier[] = ["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP", "T4_HALLUCINATED"];
   const summary = tiers.map(tier => {
@@ -2674,10 +2794,15 @@ router.get("/test/run", async (_req, res) => {
     datasetSamples = { available: false };
   }
 
+  // Task #209 — strip the per-fixture `_audit` blob before serializing
+  // results back to the dashboard. The aggregated counters live in
+  // `auditTelemetry` below; per-fixture audit data is internal.
+  const sanitizedResults = results.map(({ _audit, ...rest }) => rest);
+
   res.json({
     fixtureCount: FIXTURES.length,
     passed: allFixturesPassed && gap >= 25,
-    results,
+    results: sanitizedResults,
     summary,
     archetypes,
     archetypeSnapshotTimestamp: snapshotTimestamp,
@@ -2691,6 +2816,7 @@ router.get("/test/run", async (_req, res) => {
     },
     avriComparison,
     datasetSamples,
+    auditTelemetry,
   });
 });
 

@@ -62,6 +62,17 @@ vi.mock("../lib/active-verification", () => ({
 vi.mock("../lib/llm-slop", () => ({
   isLLMAvailable: () => false,
   shouldCallLLM: () => false,
+  // Task #209 — performAnalysis pulls a structured gate decision through
+  // evaluateLlmGate so it can flow into the audit telemetry block. Mirror
+  // the "skipped, LLM unavailable" shape the real fn returns when the
+  // provider is off.
+  evaluateLlmGate: () => ({
+    shouldCall: false,
+    reason: "skipped_unavailable",
+    heuristicScore: 0,
+    confidence: 1,
+    costGuard: { low: 25, high: 60, confidence: 0.5 },
+  }),
   analyzeSlopWithLLM: vi.fn(async () => null),
 }));
 

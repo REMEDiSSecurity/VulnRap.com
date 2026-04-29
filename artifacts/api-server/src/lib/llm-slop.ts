@@ -71,9 +71,14 @@ export interface LLMBreakdown {
 
 const LLM_TIMEOUT_MS = 30_000;
 
-const COST_GUARD_LOW = 25;
-const COST_GUARD_HIGH = 60;
-const COST_GUARD_CONFIDENCE = 0.5;
+// Task #209 — exported so the audit instrumentation in /api/test/run and the
+// per-report diagnostics panel can render the *exact* gate the production
+// pipeline applied. Keep these the single source of truth: any future change
+// to the cost-gate must update this constant rather than open-coding the
+// thresholds elsewhere.
+export const COST_GUARD_LOW = 25;
+export const COST_GUARD_HIGH = 60;
+export const COST_GUARD_CONFIDENCE = 0.5;
 
 const resultCache = new Map<string, { result: LLMSlopResult; ts: number }>();
 const CACHE_TTL_MS = 60 * 60 * 1000;
@@ -107,10 +112,65 @@ export function shouldCallLLM(
   heuristicScore: number,
   confidence: number,
 ): boolean {
-  if (!isLLMAvailable()) return false;
+  return evaluateLlmGate(heuristicScore, confidence).shouldCall;
+}
+
+// Task #209 — structured gate decision so the diagnostics panel and the
+// /api/test/run audit can show *why* the LLM substance pass fired (or didn't)
+// for a given report rather than just a boolean. This is observation-only:
+// the underlying thresholds are unchanged, we just expose the reason string
+// keyed off the same checks.
+export type LlmGateReason =
+  | "fired_borderline"
+  | "fired_low_confidence"
+  | "fired_borderline_and_low_confidence"
+  | "skipped_above_borderline"
+  | "skipped_below_borderline"
+  | "skipped_high_confidence_outside_borderline"
+  | "skipped_unavailable";
+
+export interface LlmGateDecision {
+  shouldCall: boolean;
+  reason: LlmGateReason;
+  heuristicScore: number;
+  confidence: number;
+  costGuard: {
+    low: number;
+    high: number;
+    confidence: number;
+  };
+}
+
+export function evaluateLlmGate(
+  heuristicScore: number,
+  confidence: number,
+): LlmGateDecision {
+  const costGuard = {
+    low: COST_GUARD_LOW,
+    high: COST_GUARD_HIGH,
+    confidence: COST_GUARD_CONFIDENCE,
+  };
+  if (!isLLMAvailable()) {
+    return { shouldCall: false, reason: "skipped_unavailable", heuristicScore, confidence, costGuard };
+  }
   const borderline = heuristicScore >= COST_GUARD_LOW && heuristicScore <= COST_GUARD_HIGH;
   const uncertain = confidence < COST_GUARD_CONFIDENCE;
-  return borderline || uncertain;
+  if (borderline && uncertain) {
+    return { shouldCall: true, reason: "fired_borderline_and_low_confidence", heuristicScore, confidence, costGuard };
+  }
+  if (borderline) {
+    return { shouldCall: true, reason: "fired_borderline", heuristicScore, confidence, costGuard };
+  }
+  if (uncertain) {
+    return { shouldCall: true, reason: "fired_low_confidence", heuristicScore, confidence, costGuard };
+  }
+  if (heuristicScore > COST_GUARD_HIGH) {
+    return { shouldCall: false, reason: "skipped_above_borderline", heuristicScore, confidence, costGuard };
+  }
+  if (heuristicScore < COST_GUARD_LOW) {
+    return { shouldCall: false, reason: "skipped_below_borderline", heuristicScore, confidence, costGuard };
+  }
+  return { shouldCall: false, reason: "skipped_high_confidence_outside_borderline", heuristicScore, confidence, costGuard };
 }
 
 function getCacheKey(text: string): string {

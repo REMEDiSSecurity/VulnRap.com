@@ -229,6 +229,66 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
   }, 60_000);
 });
 
+describe("GET /api/test/run — Task #209 auditTelemetry contract", () => {
+  interface AuditTelemetry {
+    llmGating: {
+      fixtureCount: number;
+      shouldCallCount: number;
+      shouldCallRate: number;
+      byReason: Record<string, number>;
+    };
+    validityFusion: {
+      sampledCount: number;
+      floorAppliedCount: number;
+      floorAppliedRate: number;
+      meanDeltaWhenApplied: number | null;
+      higherSideWhenApplied: { heuristic: number; llm: number; tied: number };
+      note: string;
+    };
+  }
+
+  it("exposes the auditTelemetry block with the documented shape (default run, no LLM)", async () => {
+    const body = await fetchJson<{ auditTelemetry: AuditTelemetry }>("/api/test/run");
+    expect(body.auditTelemetry).toBeDefined();
+
+    const gating = body.auditTelemetry.llmGating;
+    expect(typeof gating.fixtureCount).toBe("number");
+    expect(gating.fixtureCount).toBeGreaterThan(0);
+    expect(typeof gating.shouldCallCount).toBe("number");
+    expect(gating.shouldCallCount).toBeGreaterThanOrEqual(0);
+    expect(gating.shouldCallCount).toBeLessThanOrEqual(gating.fixtureCount);
+    expect(gating.shouldCallRate).toBeGreaterThanOrEqual(0);
+    expect(gating.shouldCallRate).toBeLessThanOrEqual(1);
+    expect(typeof gating.byReason).toBe("object");
+    const reasonSum = Object.values(gating.byReason).reduce((a, b) => a + b, 0);
+    expect(reasonSum).toBe(gating.fixtureCount);
+
+    const fusion = body.auditTelemetry.validityFusion;
+    expect(typeof fusion.sampledCount).toBe("number");
+    expect(typeof fusion.floorAppliedCount).toBe("number");
+    expect(fusion.floorAppliedCount).toBeLessThanOrEqual(fusion.sampledCount);
+    expect(typeof fusion.floorAppliedRate).toBe("number");
+    expect(fusion.floorAppliedRate).toBeGreaterThanOrEqual(0);
+    expect(fusion.floorAppliedRate).toBeLessThanOrEqual(1);
+    expect(fusion.higherSideWhenApplied).toEqual({
+      heuristic: expect.any(Number),
+      llm: expect.any(Number),
+      tied: expect.any(Number),
+    });
+    const sideSum =
+      fusion.higherSideWhenApplied.heuristic +
+      fusion.higherSideWhenApplied.llm +
+      fusion.higherSideWhenApplied.tied;
+    expect(sideSum).toBe(fusion.floorAppliedCount);
+    expect(typeof fusion.note).toBe("string");
+    expect(fusion.note.length).toBeGreaterThan(0);
+    expect(fusion.sampledCount).toBe(0);
+    expect(fusion.floorAppliedCount).toBe(0);
+    expect(fusion.meanDeltaWhenApplied).toBeNull();
+    expect(fusion.note).toMatch(/withLlm=1/);
+  }, 60_000);
+});
+
 describe("GET /api/test/archetype-history — Sprint 13 trend persistence", () => {
   interface HistoryRow {
     timestamp: string;

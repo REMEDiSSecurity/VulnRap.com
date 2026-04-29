@@ -20,7 +20,7 @@ import {
 } from "@workspace/api-zod";
 import { computeMinHash, computeSimhash, computeContentHash, computeLSHBuckets, findSimilarReports } from "../lib/similarity";
 import { analyzeSloppiness } from "../lib/sloppiness";
-import { analyzeSlopWithLLM, shouldCallLLM, isLLMAvailable, type LLMSlopResult } from "../lib/llm-slop";
+import { analyzeSlopWithLLM, shouldCallLLM, evaluateLlmGate, isLLMAvailable, type LLMSlopResult, type LlmGateDecision } from "../lib/llm-slop";
 import { analyzeLinguistic } from "../lib/linguistic-analysis";
 import { analyzeFactual } from "../lib/factual-verification";
 import { fuseScores, recomputeSlopScoreWithoutLlm, type FusionResult, type EvidenceItem, type Quadrant, type Archetype, type AnalysisMode } from "../lib/score-fusion";
@@ -158,6 +158,25 @@ interface AnalysisDiagnostics {
   crashInfo: CrashInfo | null;
 }
 
+// Task #209 — observation-only telemetry for the LLM cost-gate firing rate
+// and the conservative-on-disagreement validity floor. Persisted on the
+// vulnrapEngineResults blob and surfaced by GET /reports/:id/diagnostics so
+// the calibration UI + /api/test/run aggregates can monitor both rules
+// without re-running analysis. Pure data: no scoring decisions read it back.
+export interface AuditTelemetry {
+  llmGating: {
+    shouldCall: boolean;
+    reason: import("../lib/llm-slop").LlmGateReason;
+    heuristicScore: number;
+    confidenceUsed: number;
+    costGuard: { low: number; high: number; confidence: number };
+    userSkipped: boolean;
+    actuallyFired: boolean;
+    llmAvailable: boolean;
+  };
+  validityFusion: import("../lib/score-fusion").ValidityFusionAudit;
+}
+
 interface AnalysisResult extends FusionResult {
   feedback: string[];
   llmResult: Awaited<ReturnType<typeof analyzeSlopWithLLM>>;
@@ -172,6 +191,7 @@ interface AnalysisResult extends FusionResult {
   // engines.
   vulnrapComposite: VulnrapComposite | null;
   vulnrapTrace: PipelineTrace | null;
+  auditTelemetry: AuditTelemetry;
 }
 
 async function runStage<T>(
@@ -236,7 +256,12 @@ async function performAnalysis(
     const heuristic = await runStage("heuristic_analysis", () => analyzeSloppiness(safeOriginal), diagnostics);
 
     const heuristicScore = heuristic?.score ?? 50;
-    const callLlm = !userSkippedLlm && shouldCallLLM(heuristicScore, 1.0);
+    // Task #209 — capture the structured gate decision (with reason) so it can
+    // flow into auditTelemetry below. Whether the LLM actually fires still
+    // honors the user-skip flag, but the gate decision tracks what the cost
+    // gate alone would do — that's the signal the audit panel + counters need.
+    const gateDecision: LlmGateDecision = evaluateLlmGate(heuristicScore, 1.0);
+    const callLlm = !userSkippedLlm && gateDecision.shouldCall;
 
     const llmPromise = callLlm
       ? runStage("llm_analysis", () => analyzeSlopWithLLM(safeRedacted), diagnostics)
@@ -278,6 +303,40 @@ async function performAnalysis(
       authenticityScore: 50, validityScore: 50, quadrant: "WEAK_HUMAN" as const,
       archetype: "REQUEST_DETAILS" as const, analysisMode: "heuristic_only" as const, confidenceNote: null,
       claims: null, substance: null,
+      // Task #209 — fallback validityFusion when fuseScores itself crashed.
+      // The audit panel will render "—" for the missing components.
+      validityFusion: {
+        finalApplied: 50,
+        heuristic: 50,
+        llmRaw: null,
+        blended: null,
+        conservativeFloorApplied: false,
+        delta: null,
+        disagreementThreshold: 30,
+        higherSide: null,
+      },
+    };
+
+    // Task #209 — bundle the LLM cost-gate decision and the validity-fusion
+    // audit so the diagnostics panel (and /api/test/run aggregate counters)
+    // can render them without re-running the analysis. Persisted on the
+    // vulnrapEngineResults JSONB blob below; surfaced by GET
+    // /reports/:id/diagnostics as `auditTelemetry`.
+    const auditTelemetry: AuditTelemetry = {
+      llmGating: {
+        shouldCall: gateDecision.shouldCall,
+        reason: gateDecision.reason,
+        heuristicScore: gateDecision.heuristicScore,
+        // shouldCallLLM is currently called with confidence=1.0 always; surface
+        // the literal value so a future change to use the real confidence is
+        // self-documenting in the audit payload.
+        confidenceUsed: gateDecision.confidence,
+        costGuard: gateDecision.costGuard,
+        userSkipped: userSkippedLlm,
+        actuallyFired: callLlm && !!llmResult,
+        llmAvailable: isLLMAvailable(),
+      },
+      validityFusion: safeFusion.validityFusion,
     };
 
     // v3.6.0 §4: Compute the engine-composite up-front so the triage call below
@@ -357,6 +416,7 @@ async function performAnalysis(
       diagnostics,
       vulnrapComposite,
       vulnrapTrace,
+      auditTelemetry,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -390,6 +450,18 @@ async function performAnalysis(
       confidenceNote: "Analysis ran in degraded mode due to an internal error. Scores may be unreliable.",
       claims: null,
       substance: null,
+      // Task #209 — degraded-mode validityFusion: heuristic 0 / no LLM /
+      // floor never applied so the audit panel renders "n/a" cleanly.
+      validityFusion: {
+        finalApplied: 0,
+        heuristic: 0,
+        llmRaw: null,
+        blended: null,
+        conservativeFloorApplied: false,
+        delta: null,
+        disagreementThreshold: 30,
+        higherSide: null,
+      },
       feedback: [],
       llmResult: null,
       verification: null,
@@ -398,6 +470,31 @@ async function performAnalysis(
       diagnostics,
       vulnrapComposite: null,
       vulnrapTrace: null,
+      // Task #209 — degraded-mode audit payload: gate "skipped_unavailable"
+      // matches what the gate would say when the LLM client crashed; the
+      // validity floor obviously didn't fire because no fusion happened.
+      auditTelemetry: {
+        llmGating: {
+          shouldCall: false,
+          reason: "skipped_unavailable",
+          heuristicScore: 0,
+          confidenceUsed: 0,
+          costGuard: { low: 0, high: 0, confidence: 0 },
+          userSkipped: opts?.skipLlm === true,
+          actuallyFired: false,
+          llmAvailable: isLLMAvailable(),
+        },
+        validityFusion: {
+          finalApplied: 0,
+          heuristic: 0,
+          llmRaw: null,
+          blended: null,
+          conservativeFloorApplied: false,
+          delta: null,
+          disagreementThreshold: 30,
+          higherSide: null,
+        },
+      },
     };
   }
 }
@@ -859,8 +956,16 @@ router.post("/reports", async (req, res): Promise<void> => {
               ...((vulnrapComposite as VulnrapComposite & { avri?: unknown }).avri
                 ? { avri: (vulnrapComposite as VulnrapComposite & { avri?: unknown }).avri }
                 : {}),
+              // Task #209 — observation-only audit telemetry. Stored on the
+              // existing engines blob (rather than its own column) so we don't
+              // need a schema migration for an instrumentation-only pass.
+              auditTelemetry: analysisResult.auditTelemetry,
             }
-          : null,
+          : {
+              // No engine composite (feature flag off) but we still want to keep
+              // the audit telemetry available to the diagnostics endpoint.
+              auditTelemetry: analysisResult.auditTelemetry,
+            },
         vulnrapOverridesApplied: vulnrapComposite?.overridesApplied ?? null,
         vulnrapCorrelationId: vulnrapTrace?.correlationId ?? null,
         vulnrapDurationMs: vulnrapTrace?.totalDurationMs ?? null,
@@ -1888,8 +1993,15 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
   // behavioural penalties) so the "Why this score?" panel can render the
   // family rubric used and any composite overrides. Stored on the engines
   // blob by POST /reports above when AVRI is enabled.
-  const vulnrapBlob = (report.vulnrapEngineResults ?? {}) as { avri?: unknown };
+  const vulnrapBlob = (report.vulnrapEngineResults ?? {}) as {
+    avri?: unknown;
+    auditTelemetry?: AuditTelemetry;
+  };
   const avriBlock = vulnrapBlob.avri ?? null;
+  // Task #209 — surface the cost-gate decision and validity-fusion floor so
+  // the diagnostics panel can render them. null for legacy reports analyzed
+  // before this audit pass shipped.
+  const auditTelemetry = vulnrapBlob.auditTelemetry ?? null;
 
   res.json({
     reportId: report.id,
@@ -1918,6 +2030,7 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
     },
     trace: traceRow?.trace ?? null,
     engines: report.vulnrapEngineResults ?? null,
+    auditTelemetry,
   });
 });
 

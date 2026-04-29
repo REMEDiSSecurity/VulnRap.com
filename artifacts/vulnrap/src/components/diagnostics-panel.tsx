@@ -134,6 +134,44 @@ export interface DiagnosticsResponse {
     warnings?: string[];
     engineCount?: number;
   } | null;
+  /**
+   * Task #209 — observation-only audit telemetry. `null` for legacy reports
+   * analyzed before this audit pass shipped.
+   */
+  auditTelemetry?: AuditTelemetryBlock | null;
+}
+
+// Task #209 — these mirror the server types in routes/reports.ts and
+// lib/score-fusion.ts. Kept as a structural copy here (rather than importing)
+// to keep the vulnrap web artifact decoupled from the api-server's TS source.
+export type AuditLlmGateReason =
+  | "fired_borderline"
+  | "fired_low_confidence"
+  | "skipped_above_borderline"
+  | "skipped_below_borderline"
+  | "skipped_unavailable";
+
+export interface AuditTelemetryBlock {
+  llmGating: {
+    shouldCall: boolean;
+    reason: AuditLlmGateReason | string;
+    heuristicScore: number;
+    confidenceUsed: number;
+    costGuard: { low: number; high: number; confidence: number };
+    userSkipped: boolean;
+    actuallyFired: boolean;
+    llmAvailable: boolean;
+  };
+  validityFusion: {
+    finalApplied: number;
+    heuristic: number;
+    llmRaw: number | null;
+    blended: number | null;
+    conservativeFloorApplied: boolean;
+    delta: number | null;
+    disagreementThreshold: number;
+    higherSide: "heuristic" | "llm" | "tied" | null;
+  };
 }
 
 const VERDICT_COLOR: Record<string, string> = {
@@ -293,6 +331,13 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
                     )}
                   </div>
                 </section>
+              )}
+
+              {data.auditTelemetry && (
+                <>
+                  <Separator className="bg-border/30" />
+                  <AuditTelemetrySection audit={data.auditTelemetry} />
+                </>
               )}
 
               {data.engines?.engines && data.engines.engines.length > 0 && (
@@ -982,6 +1027,91 @@ function AvriFamilySection({
   );
 }
 
+// Task #209 — observation-only audit panel that surfaces (1) whether the
+// LLM substance gate fired or was cost-skipped (and which side of the
+// borderline drove the skip), and (2) whether the validity-fusion
+// disagreement floor (Math.min when |heuristic - llm| > 30) was applied.
+// Pure read-only display: clicking these stats has no side effects, and
+// the underlying scoring rules are unchanged by this audit pass.
+function AuditTelemetrySection({ audit }: { audit: AuditTelemetryBlock }) {
+  const { llmGating, validityFusion } = audit;
+
+  // Plain-English summary of the cost-gate decision so reviewers don't
+  // have to memorize the LlmGateReason enum or recompute thresholds.
+  const gateSummary = (() => {
+    const cg = llmGating.costGuard;
+    switch (llmGating.reason) {
+      case "fired_borderline":
+        return `Fired (heuristic ${llmGating.heuristicScore} in borderline band ${cg.low}–${cg.high})`;
+      case "fired_low_confidence":
+        return `Fired (low confidence ${llmGating.confidenceUsed.toFixed(2)} < ${cg.confidence})`;
+      case "skipped_above_borderline":
+        return `Skipped (heuristic ${llmGating.heuristicScore} above ${cg.high} — clearly slop)`;
+      case "skipped_below_borderline":
+        return `Skipped (heuristic ${llmGating.heuristicScore} below ${cg.low} — clearly clean)`;
+      case "skipped_unavailable":
+        return llmGating.llmAvailable
+          ? "Skipped (degraded analysis — LLM not invoked)"
+          : "Skipped (LLM provider unavailable)";
+      default:
+        return `${llmGating.shouldCall ? "Fired" : "Skipped"} (${llmGating.reason})`;
+    }
+  })();
+  const userOverride = llmGating.userSkipped
+    ? " · user opted out"
+    : llmGating.shouldCall && !llmGating.actuallyFired
+      ? " · LLM call did not return"
+      : "";
+
+  // Validity-fusion floor summary — only meaningful when both signals were
+  // present. When only the heuristic ran, render a neutral note instead of
+  // a misleading "blend used" line.
+  const floorSummary = (() => {
+    const v = validityFusion;
+    if (v.llmRaw === null) {
+      return `LLM-substance not present — validity = heuristic ${v.heuristic} (no blending, no floor)`;
+    }
+    if (v.conservativeFloorApplied) {
+      const winner =
+        v.higherSide === "heuristic"
+          ? "heuristic"
+          : v.higherSide === "llm"
+            ? "LLM"
+            : "either side (tied)";
+      return `Lower-of fallback (Δ = ${v.delta?.toFixed(0) ?? "?"} > ${v.disagreementThreshold}; heuristic ${v.heuristic}, LLM ${v.llmRaw} → used ${v.finalApplied}, ${winner} was higher)`;
+    }
+    return `Blend used (Δ = ${v.delta?.toFixed(0) ?? "0"} ≤ ${v.disagreementThreshold}; heuristic ${v.heuristic}, LLM ${v.llmRaw} → blended ${v.blended ?? "—"})`;
+  })();
+
+  return (
+    <section className="space-y-2" data-testid="audit-telemetry-section">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">
+        Score Audit (observation-only)
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-baseline gap-2 text-[11px] font-mono">
+          <Badge
+            variant="outline"
+            className={`text-[10px] px-1.5 py-0 h-5 font-mono ${llmGating.actuallyFired ? "text-green-400 border-green-500/40" : "text-muted-foreground border-muted-foreground/30"}`}
+          >
+            LLM gate
+          </Badge>
+          <span className="text-foreground/90">{gateSummary}{userOverride}</span>
+        </div>
+        <div className="flex flex-wrap items-baseline gap-2 text-[11px] font-mono">
+          <Badge
+            variant="outline"
+            className={`text-[10px] px-1.5 py-0 h-5 font-mono ${validityFusion.conservativeFloorApplied ? "text-orange-400 border-orange-500/40" : "text-muted-foreground border-muted-foreground/30"}`}
+          >
+            Validity floor
+          </Badge>
+          <span className="text-foreground/90">{floorSummary}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // v3.6.0 §9: Surface Engine 2 evidence-type signals (multipliers) and active
 // verification source breakdown when present in signalBreakdown.
 function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
@@ -1208,6 +1338,38 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     lines.push(`- Legacy Slop Score: ${data.legacyMapping.slopScore} (0 = clean, 100 = pure slop)`);
     lines.push(`- Display Mode: ${data.legacyMapping.displayMode}`);
     lines.push(`- Note: ${data.legacyMapping.note}`);
+    lines.push("");
+  }
+
+  // Task #209 — observation-only audit telemetry block in the markdown
+  // export so reviewers can paste a single summary into a triage thread.
+  // Mirrors the panel's "Score Audit" section line-for-line.
+  if (data.auditTelemetry) {
+    const { llmGating, validityFusion } = data.auditTelemetry;
+    lines.push("## Score Audit (observation-only)");
+    lines.push(
+      `- LLM gate: **${llmGating.actuallyFired ? "fired" : "skipped"}** — \`${llmGating.reason}\` ` +
+        `(heuristic ${llmGating.heuristicScore}, confidence ${llmGating.confidenceUsed.toFixed(2)}, ` +
+        `cost guard ${llmGating.costGuard.low}–${llmGating.costGuard.high})` +
+        (llmGating.userSkipped ? " · user opted out" : "") +
+        (llmGating.shouldCall && !llmGating.actuallyFired ? " · LLM call did not return" : ""),
+    );
+    if (validityFusion.llmRaw === null) {
+      lines.push(
+        `- Validity floor: **n/a** — LLM-substance not present; validity = heuristic ${validityFusion.heuristic}`,
+      );
+    } else if (validityFusion.conservativeFloorApplied) {
+      lines.push(
+        `- Validity floor: **lower-of fallback applied** (Δ = ${validityFusion.delta?.toFixed(0) ?? "?"} > ${validityFusion.disagreementThreshold}; ` +
+          `heuristic ${validityFusion.heuristic}, LLM ${validityFusion.llmRaw} → used ${validityFusion.finalApplied}; ` +
+          `${validityFusion.higherSide ?? "n/a"} was higher)`,
+      );
+    } else {
+      lines.push(
+        `- Validity floor: **blend used** (Δ = ${validityFusion.delta?.toFixed(0) ?? "0"} ≤ ${validityFusion.disagreementThreshold}; ` +
+          `heuristic ${validityFusion.heuristic}, LLM ${validityFusion.llmRaw} → blended ${validityFusion.blended ?? "—"})`,
+      );
+    }
     lines.push("");
   }
 

@@ -52,6 +52,31 @@ export interface TwoAxisResult {
 
 export type AnalysisMode = "heuristic_only" | "llm_enhanced";
 
+// Task #209 — observation-only audit of the score-fusion validity blend
+// (heuristic vs LLM-substance vs blended) and the conservative-on-disagreement
+// floor (`Math.min(heuristic, llmRaw)` when they differ by >30 points). Surfaced
+// to the diagnostics panel + /api/test/run aggregate counters so we can decide
+// whether the disagreement threshold is silently clipping legit reports
+// before changing the rule.
+export interface ValidityFusionAudit {
+  /** Final validity score actually used downstream (after the floor, if any). */
+  finalApplied: number;
+  /** Pure-heuristic validity score, before any LLM blending. */
+  heuristic: number;
+  /** LLM-derived raw validity score (after substance/coherence modifiers); null when LLM didn't run or returned no breakdown. */
+  llmRaw: number | null;
+  /** Naive 50/50 blend of heuristic + LLM (what would be used absent the disagreement floor); null when no LLM signal. */
+  blended: number | null;
+  /** True when |heuristic - llmRaw| > disagreementThreshold and Math.min was applied instead of the blend. */
+  conservativeFloorApplied: boolean;
+  /** |heuristic - llmRaw| when both are present; null otherwise. */
+  delta: number | null;
+  /** Threshold above which the floor activates (currently 30). */
+  disagreementThreshold: number;
+  /** Which side scored higher when both signals are present; null when only one side ran. */
+  higherSide: "heuristic" | "llm" | "tied" | null;
+}
+
 export interface FusionResult {
   slopScore: number;
   qualityScore: number;
@@ -68,6 +93,7 @@ export interface FusionResult {
   confidenceNote: string | null;
   claims: LLMClaims | null;
   substance: LLMSubstanceScores | null;
+  validityFusion: ValidityFusionAudit;
 }
 
 export interface TierThresholds {
@@ -348,15 +374,39 @@ export function fuseScores(
     factual, llm, evidenceQuality, hallucination, claimSpec, consistency, verification ?? null,
   );
 
-  let scoreConflict: { conflict: boolean; heuristic: number; llm: number; difference: number } | null = null;
+  // Task #209 — disagreementThreshold is named so the audit telemetry can
+  // surface the same number the diagnostics panel renders. Don't change it
+  // here: the threshold tweak is a follow-up after the audit data lands.
+  const disagreementThreshold = 30;
+  let conservativeFloorApplied = false;
   let finalValidityScore = validityResult.final;
   if (validityResult.llmRaw !== null) {
     const diff = Math.abs(validityResult.heuristic - validityResult.llmRaw);
-    if (diff > 30) {
-      scoreConflict = { conflict: true, heuristic: validityResult.heuristic, llm: validityResult.llmRaw, difference: diff };
+    if (diff > disagreementThreshold) {
+      conservativeFloorApplied = true;
       finalValidityScore = Math.min(validityResult.heuristic, validityResult.llmRaw);
     }
   }
+
+  const validityDelta = validityResult.llmRaw !== null
+    ? Math.abs(validityResult.heuristic - validityResult.llmRaw)
+    : null;
+  let higherSide: "heuristic" | "llm" | "tied" | null = null;
+  if (validityResult.llmRaw !== null) {
+    if (validityResult.heuristic > validityResult.llmRaw) higherSide = "heuristic";
+    else if (validityResult.llmRaw > validityResult.heuristic) higherSide = "llm";
+    else higherSide = "tied";
+  }
+  const validityFusion: ValidityFusionAudit = {
+    finalApplied: finalValidityScore,
+    heuristic: validityResult.heuristic,
+    llmRaw: validityResult.llmRaw,
+    blended: validityResult.llmRaw !== null ? validityResult.final : null,
+    conservativeFloorApplied,
+    delta: validityDelta,
+    disagreementThreshold,
+    higherSide,
+  };
 
   const { quadrant, archetype } = classifyQuadrant(authenticityScore, finalValidityScore);
 
@@ -441,6 +491,7 @@ export function fuseScores(
     confidenceNote,
     claims: llm?.llmClaims ?? null,
     substance: llm?.llmSubstance ?? null,
+    validityFusion,
   };
 }
 
