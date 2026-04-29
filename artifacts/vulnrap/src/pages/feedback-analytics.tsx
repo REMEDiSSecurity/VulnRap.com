@@ -1304,6 +1304,13 @@ function renderHandwavyEditEntries({
 function HandwavyPhrasesAdmin() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // Task #215 — reuse the reviewer-token probe from CalibrationSection so a
+  // reviewer who scrolls past the calibration card and lands here still sees
+  // the same badge + missing/invalid banner. Both call sites use the same
+  // react-query key (`getGetCalibrationAuthStatusQueryKey()`), so this is
+  // dedup'd to a single auth-status request even though two components
+  // subscribe to the result.
+  const authState = useCalibrationAuthState();
   const [draft, setDraft] = useState("");
   const [draftRationale, setDraftRationale] = useState("");
   const [reviewer, setReviewer] = useState<string>(() => {
@@ -2632,6 +2639,10 @@ function HandwavyPhrasesAdmin() {
 
   return (
     <>
+    {/* Task #215 — same missing/invalid banner the calibration card renders,
+        repeated above the phrase editor so reviewers who scroll past the
+        calibration section still see it before attempting an add/remove. */}
+    <CalibrationAuthBanner state={authState} />
     <Card className="glass-card rounded-xl border-primary/10" data-testid="handwavy-admin">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -2639,7 +2650,10 @@ function HandwavyPhrasesAdmin() {
             <MessageCircleQuestion className="w-4 h-4 text-primary" />
             FLAT Hand-wavy Marker Phrases
           </CardTitle>
-          <Badge variant="secondary" className="text-[10px]">{phrases.length} active</Badge>
+          <div className="flex items-center gap-2">
+            <CalibrationAuthBadge state={authState} />
+            <Badge variant="secondary" className="text-[10px]">{phrases.length} active</Badge>
+          </div>
         </div>
         <CardDescription>
           Curated list of buzzword-soup framings the FLAT haircut looks for. Add a new
