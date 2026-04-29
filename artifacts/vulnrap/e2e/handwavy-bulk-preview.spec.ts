@@ -376,4 +376,147 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       await apiCtx.dispose();
     }
   });
+
+  // Task #178 — per-row dismiss on the bulk-remove confirm panel. Before
+  // this, a reviewer who spotted a high-thrash row in a 20-phrase batch
+  // had to back out of the panel, find that one phrase in the active
+  // list, untick it, then re-open the panel — friction that nudged
+  // people toward just hitting Remove anyway. The dismiss button drops
+  // ONE phrase from the pending batch in place so the rest can fire in
+  // a single confirm click.
+  test("Per-row drop button removes a single phrase from the pending batch and updates the live counts", async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const phrases = uniquePhrases(3, "drop");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p);
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, phrases);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Open the per-phrase outcomes list so the dismiss buttons render.
+      await panel
+        .getByTestId("handwavy-bulk-preview-results-details")
+        .locator("summary")
+        .click();
+
+      const allRows = panel.locator(
+        `[data-testid="handwavy-bulk-preview-result-row"]`,
+      );
+      await expect(allRows).toHaveCount(3);
+      await expect(panel).toContainText("Removal preview for 3 phrases");
+      const confirmBtn = panel.getByTestId("handwavy-bulk-preview-confirm");
+      await expect(confirmBtn).toHaveText(/Remove 3 phrases/);
+
+      // Drop the middle phrase via its inline dismiss button. The summary
+      // count and the confirm button label MUST both update live; the
+      // remaining rows MUST keep working (so we drop another in the next
+      // step).
+      const droppedPhrase = phrases[1];
+      const dropBtn = panel.locator(
+        `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${droppedPhrase}"]`,
+      );
+      await expect(dropBtn).toHaveCount(1);
+      await dropBtn.click();
+
+      await expect(allRows).toHaveCount(2);
+      await expect(
+        panel.locator(
+          `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${droppedPhrase}"]`,
+        ),
+      ).toHaveCount(0);
+      await expect(panel).toContainText("Removal preview for 2 phrases");
+      await expect(confirmBtn).toHaveText(/Remove 2 phrases/);
+
+      // The underlying selection checkbox for the dropped phrase should
+      // also be unticked so the active-list state matches the reviewer's
+      // intent (and the "selection has changed" stale banner doesn't fire
+      // from the drop itself).
+      const droppedRow = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: droppedPhrase });
+      await expect(droppedRow.getByTestId("handwavy-select")).not.toBeChecked();
+      await expect(panel.getByTestId("handwavy-bulk-preview-stale")).toHaveCount(0);
+
+      // Drop a second phrase — count + label keep tracking.
+      await panel
+        .locator(
+          `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${phrases[0]}"]`,
+        )
+        .click();
+      await expect(allRows).toHaveCount(1);
+      await expect(panel).toContainText("Removal preview for 1 phrase");
+      await expect(confirmBtn).toHaveText(/Remove 1 phrase\b/);
+
+      // Confirming now removes ONLY the surviving phrase. The two dropped
+      // phrases stay on the active list — the reviewer chose to skip them.
+      await confirmBtn.click();
+      await expect(panel).toHaveCount(0, { timeout: 15_000 });
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrases[2] }),
+      ).toHaveCount(0, { timeout: 15_000 });
+      for (const survivor of [phrases[0], phrases[1]]) {
+        await expect(
+          page
+            .locator(`[data-testid="handwavy-row"]`)
+            .filter({ hasText: survivor }),
+        ).toHaveCount(1);
+      }
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #178 — dropping the last selected phrase closes the panel, same
+  // as clicking Back out. Without this, the panel would render an empty
+  // list with a disabled confirm button, which is just dead UI.
+  test("Dropping the last phrase closes the bulk-remove preview (same as Back out)", async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const phrases = uniquePhrases(2, "droplast");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p);
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, phrases);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+      await panel
+        .getByTestId("handwavy-bulk-preview-results-details")
+        .locator("summary")
+        .click();
+
+      // Drop both phrases one by one. After the second drop the panel
+      // should disappear without firing any DELETEs.
+      for (const p of phrases) {
+        await panel
+          .locator(
+            `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${p}"]`,
+          )
+          .click();
+      }
+      await expect(panel).toHaveCount(0);
+
+      // Both phrases must still be on the active list (we never confirmed).
+      for (const p of phrases) {
+        await expect(
+          page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),
+        ).toHaveCount(1);
+      }
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
 });

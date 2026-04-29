@@ -2077,6 +2077,34 @@ function HandwavyPhrasesAdmin() {
     setBulkPreview((prev) => (prev ? { ...prev, acknowledged: ack } : prev));
   };
 
+  // Task #178 — drop a single phrase from the pending bulk-remove batch
+  // straight from the preview panel. Before this, a reviewer who spotted a
+  // high-thrash row had to back out, untick the row in the active list,
+  // then re-open the preview — three clicks of friction that nudged people
+  // toward just hitting "Remove" anyway. Now they can dismiss the
+  // contentious row inline and fire the rest in a single confirm click.
+  //
+  // We also untick the dropped phrase in the underlying `selected` set so
+  // the active-list checkbox state matches the reviewer's intent (and so
+  // the "selection has changed since this preview was generated" stale
+  // warning doesn't fire from the drop itself). Dropping the last phrase
+  // closes the panel — same end state as Back out.
+  const dropPhraseFromBulkPreview = (phrase: string) => {
+    setSelected((prev) => {
+      if (!prev.has(phrase)) return prev;
+      const next = new Set(prev);
+      next.delete(phrase);
+      return next;
+    });
+    setBulkPreview((prev) => {
+      if (!prev) return prev;
+      const remaining = prev.requestedPhrases.filter((p) => p !== phrase);
+      if (remaining.length === 0) return null;
+      if (remaining.length === prev.requestedPhrases.length) return prev;
+      return { ...prev, requestedPhrases: remaining };
+    });
+  };
+
   // Task #154 — confirm the destructive removal straight from the preview
   // panel. Uses the EXACT phrase list the preview was scored against so
   // the reviewer is committing to what they were just shown, not whatever
@@ -2906,7 +2934,28 @@ function HandwavyPhrasesAdmin() {
           const productionLost = production?.validDetectionsLost ?? 0;
           const totalValidLost = corpusLost + productionLost;
           const requiresAck = totalValidLost > 0;
-          const wouldRemove = data.wouldRemove;
+          // Task #178 — the reviewer can drop individual phrases inline
+          // from the per-phrase outcomes list, so the rendered counts
+          // ("Removal preview for N", "X would be removed", the Remove
+          // button label, etc.) MUST be recomputed against the current
+          // `requestedPhrases` instead of the original dry-run totals.
+          // We don't re-run the dry-run on every drop — the corpus and
+          // production impact figures stay as-shown (worst case, the
+          // ack warning over-warns by counting reports the dropped
+          // phrase contributed to; that's a safe direction to err in).
+          const requestedSet = new Set(bulkPreview.requestedPhrases);
+          const visibleResults: HandwavyPhraseBatchRemoveResultEntry[] =
+            data.results.filter((r: HandwavyPhraseBatchRemoveResultEntry) =>
+              requestedSet.has(r.raw),
+            );
+          const wouldRemove = visibleResults.filter((r) => r.removed).length;
+          const visibleNotFound = visibleResults.filter(
+            (r) => !r.removed && r.reason === "not-found",
+          ).length;
+          const visibleDuplicate = visibleResults.filter(
+            (r) => !r.removed && r.reason === "duplicate-in-batch",
+          ).length;
+          const visibleProjectedTotal = data.total - wouldRemove;
           const selectionDrifted =
             selectedInList.length !== bulkPreview.requestedPhrases.length ||
             !bulkPreview.requestedPhrases.every((p) =>
@@ -2951,19 +3000,19 @@ function HandwavyPhrasesAdmin() {
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
                   Of these {bulkPreview.requestedPhrases.length}, <span className="text-foreground/90">{wouldRemove}</span> would be removed
-                  {data.notFound > 0 && (
+                  {visibleNotFound > 0 && (
                     <>
-                      , <span className="text-foreground/90">{data.notFound}</span> {data.notFound === 1 ? "is" : "are"} not on the active list
+                      , <span className="text-foreground/90">{visibleNotFound}</span> {visibleNotFound === 1 ? "is" : "are"} not on the active list
                     </>
                   )}
-                  {data.duplicateInBatch > 0 && (
+                  {visibleDuplicate > 0 && (
                     <>
-                      , <span className="text-foreground/90">{data.duplicateInBatch}</span> {data.duplicateInBatch === 1 ? "is a duplicate" : "are duplicates"} in this batch
+                      , <span className="text-foreground/90">{visibleDuplicate}</span> {visibleDuplicate === 1 ? "is a duplicate" : "are duplicates"} in this batch
                     </>
                   )}
                   . The active list would shrink from{" "}
                   <span className="text-foreground/90">{data.total}</span> to{" "}
-                  <span className="text-foreground/90">{data.projectedTotal}</span>{" "}
+                  <span className="text-foreground/90">{visibleProjectedTotal}</span>{" "}
                   phrases. Nothing has been removed yet.
                 </div>
               </div>
@@ -3023,13 +3072,13 @@ function HandwavyPhrasesAdmin() {
             </div>
             <details className="text-[11px]" data-testid="handwavy-bulk-preview-results-details">
               <summary className="cursor-pointer text-muted-foreground/80 hover:text-foreground/80 select-none">
-                Per-phrase outcomes ({data.results.length})
+                Per-phrase outcomes ({visibleResults.length})
               </summary>
               <ul
                 className="mt-1 max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
                 data-testid="handwavy-bulk-preview-results"
               >
-                {data.results.map((r, idx) => {
+                {visibleResults.map((r, idx) => {
                   const cfg = r.removed
                     ? {
                         label: "would remove",
@@ -3083,6 +3132,24 @@ function HandwavyPhrasesAdmin() {
                           {cycleCount}× cycles
                         </Badge>
                       )}
+                      {/* Task #178 — per-row dismiss button. Lets the
+                          reviewer drop just this phrase from the pending
+                          batch (e.g., the one high-thrash entry in 20)
+                          without backing out and re-ticking everything
+                          else. Dropping the last phrase closes the
+                          panel — see `dropPhraseFromBulkPreview`. */}
+                      <button
+                        type="button"
+                        onClick={() => dropPhraseFromBulkPreview(r.raw)}
+                        disabled={busy === "bulk-remove"}
+                        className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-foreground/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                        data-testid="handwavy-bulk-preview-result-drop"
+                        data-phrase={r.raw}
+                        aria-label={`Drop "${r.raw}" from this batch`}
+                        title="Drop this phrase from the batch"
+                      >
+                        <XIcon className="w-3 h-3" />
+                      </button>
                     </li>
                   );
                 })}
