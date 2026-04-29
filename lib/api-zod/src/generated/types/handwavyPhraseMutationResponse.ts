@@ -10,6 +10,7 @@ import type { HandwavyEditEntry } from "./handwavyEditEntry";
 import type { HandwavyHistoryEntry } from "./handwavyHistoryEntry";
 import type { HandwavyMarker } from "./handwavyMarker";
 import type { HandwavyPhraseDryRunMatches } from "./handwavyPhraseDryRunMatches";
+import type { HandwavyPhraseDryRunOverlaps } from "./handwavyPhraseDryRunOverlaps";
 
 export interface HandwavyPhraseMutationResponse {
   /** True when POST appended the phrase. Omitted on PATCH/DELETE responses. */
@@ -74,4 +75,5 @@ the dry-run scan considered. Reported so reviewers know the depth of
 the second signal (e.g. "scanned the last 2000 reports").
  */
   dryRunMatchesProductionLimit?: number;
+  dryRunOverlaps?: HandwavyPhraseDryRunOverlaps;
 }

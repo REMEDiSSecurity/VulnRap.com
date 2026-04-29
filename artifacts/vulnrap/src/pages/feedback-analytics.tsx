@@ -10,6 +10,9 @@ import {
   editHandwavyPhrase, undoHandwavyPhrase,
   revertHandwavyPhraseEdit,
   type HandwavyPhraseDryRunMatches,
+  type HandwavyPhraseDryRunOverlaps,
+  type HandwavyPhraseDryRunOverlapsMatchesItem,
+  type HandwavyPhraseDryRunOverlapsMatchesItemRelation,
   type HandwavyPhraseBatchRemoveDryRunResponse,
   type HandwavyPhraseBatchRemoveDryRunImpact,
   type HandwavyPhraseBatchRemoveResultEntry,
@@ -736,6 +739,74 @@ function PreviewMatchBlock({
   );
 }
 
+// Task #128 — describe a curated-overlap relation in human-readable English
+// for the preview callout. Mirrors `describeOverlapRelation` in the CLI
+// script (preview-handwavy-phrase.mjs) so the web UI and the CLI surface
+// the same wording for the same `relation` value.
+function describeOverlapRelation(rel: HandwavyPhraseDryRunOverlapsMatchesItemRelation): string {
+  switch (rel) {
+    case "equal":
+      return "exact duplicate of";
+    case "candidate-contains-existing":
+      return "broader than (would supersede)";
+    case "existing-contains-candidate":
+      return "already covered by";
+    default:
+      return "overlaps with";
+  }
+}
+
+// Task #128 — render the curated-phrase overlap callout inside the add
+// preview panel. Mirrors the CLI's `renderOverlaps` block (the same
+// equal / broader / narrower phrasing) and uses the GREEN/YELLOW
+// false-positive callout's visual language so reviewers can spot the
+// signal at a glance. Returns null when there are no overlaps so the
+// panel stays compact for the common case.
+function PreviewOverlapsBlock({ overlaps, candidate }: {
+  overlaps: HandwavyPhraseDryRunOverlaps | null;
+  candidate: string;
+}) {
+  if (!overlaps || overlaps.matches.length === 0) return null;
+  const noun = overlaps.total === 1 ? "entry" : "entries";
+  return (
+    <div
+      className="rounded-md border border-red-500/40 bg-red-500/10 p-2.5 space-y-1.5 text-xs text-red-100"
+      data-testid="handwavy-preview-overlaps"
+    >
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-red-300" />
+        <div className="flex-1">
+          <div className="font-semibold text-red-100">
+            Overlaps with {overlaps.total} existing curated {noun} — adding may be redundant
+          </div>
+          <div className="text-[10px] text-red-200/80 mt-0.5">
+            &ldquo;{candidate}&rdquo; matches phrases already on the active list. Reinstating
+            or editing the existing entry is usually preferable to a near-duplicate add.
+          </div>
+        </div>
+      </div>
+      <ul className="ml-1 space-y-1">
+        {overlaps.matches.map((o: HandwavyPhraseDryRunOverlapsMatchesItem) => (
+          <li
+            key={`${o.relation}::${o.phrase}`}
+            className="flex items-start gap-1.5"
+            data-testid="handwavy-preview-overlap-row"
+          >
+            <span className="text-red-300/80 select-none">•</span>
+            <span className="flex-1">
+              <span className="text-red-200 font-medium">{describeOverlapRelation(o.relation)}</span>{" "}
+              <span className="text-foreground/90">&ldquo;{o.phrase}&rdquo;</span>{" "}
+              <span className="text-[10px] text-red-200/70 uppercase tracking-wide">
+                [{o.category}]
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // Task #154 — render block for one bulk-removal corpus impact (curated
 // benchmark fixtures or recent production reports). Mirrors the visual
 // shape of `PreviewMatchBlock` (the add-time corpus impact preview) so
@@ -1142,6 +1213,12 @@ function HandwavyPhrasesAdmin() {
     productionMatches: HandwavyPhraseDryRunMatches | null;
     productionError: string | null;
     productionLimit: number | null;
+    // Task #128 — overlap signal mirroring the CLI's `dryRunOverlaps` block.
+    // When non-null with `total > 0` the preview panel renders a colored
+    // callout showing each existing curated phrase the candidate is
+    // equal/broader/narrower than, so reviewers can spot near-duplicates
+    // before clicking "Add" the same way the CLI does.
+    overlaps: HandwavyPhraseDryRunOverlaps | null;
   } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   // Task #133 — track which phrase rows have their full edit history
@@ -1250,6 +1327,11 @@ function HandwavyPhrasesAdmin() {
         productionMatches: dry.dryRunMatchesProduction ?? null,
         productionError: dry.dryRunMatchesProductionError ?? null,
         productionLimit: dry.dryRunMatchesProductionLimit ?? null,
+        // Task #128 — capture the curated-phrase overlap block returned by the
+        // server (Task #123) so the preview panel can render the same
+        // equal / broader / narrower callout the CLI does. The field is
+        // optional in the response, so default to null when missing.
+        overlaps: dry.dryRunOverlaps ?? null,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to preview phrase.";
@@ -1983,18 +2065,25 @@ function HandwavyPhrasesAdmin() {
           const curatedFp = preview.matches.falsePositives;
           const productionFp = preview.productionMatches?.falsePositives ?? 0;
           const anyFp = curatedFp + productionFp;
+          // Task #128 — surface curated-phrase overlap (Task #123) the same
+          // way the CLI does. Overlaps don't crater AVRI like a false
+          // positive does, but they DO mean the add is redundant, so we
+          // tint the outer card red on an overlap as well and switch the
+          // confirm button copy to "Add anyway".
+          const overlapCount = preview.overlaps?.total ?? 0;
+          const hasWarning = anyFp > 0 || overlapCount > 0;
           return (
           <div
             className={cn(
               "rounded-md border p-3 space-y-3",
-              anyFp > 0
+              hasWarning
                 ? "border-red-500/40 bg-red-500/5"
                 : "border-emerald-500/40 bg-emerald-500/5",
             )}
             data-testid="handwavy-preview"
           >
             <div className="flex items-start gap-2">
-              {anyFp > 0 ? (
+              {hasWarning ? (
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
               ) : (
                 <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
@@ -2009,6 +2098,16 @@ function HandwavyPhrasesAdmin() {
                 </div>
               </div>
             </div>
+            {/* Task #128 — Overlap with already-curated phrases callout
+                (mirrors the CLI's `renderOverlaps` block). Rendered ABOVE
+                the corpus-impact grid so reviewers see redundancy warnings
+                before they scroll the false-positive numbers. The block
+                self-hides when there are no overlaps to keep the panel
+                compact for the common (non-overlapping) case. */}
+            <PreviewOverlapsBlock
+              overlaps={preview.overlaps}
+              candidate={preview.phrase}
+            />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <PreviewMatchBlock
                 kind="curated"
@@ -2057,14 +2156,14 @@ function HandwavyPhrasesAdmin() {
               </Button>
               <Button
                 size="sm"
-                variant={anyFp > 0 ? "destructive" : "default"}
+                variant={hasWarning ? "destructive" : "default"}
                 onClick={handleConfirmPreview}
                 disabled={busy === "confirm"}
                 data-testid="handwavy-preview-confirm"
               >
                 {busy === "confirm"
                   ? "Adding…"
-                  : anyFp > 0
+                  : hasWarning
                   ? "Add anyway"
                   : "Confirm add"}
               </Button>

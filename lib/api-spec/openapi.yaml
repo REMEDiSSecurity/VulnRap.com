@@ -3856,6 +3856,44 @@ components:
             (`falsePositives > 0`). Null when there are no GREEN/YELLOW hits.
       required: [total, byTier, falsePositives, corpusSize, sampleMatches]
 
+    HandwavyPhraseDryRunOverlaps:
+      type: object
+      description: |
+        Task #123 — overlap signal between a candidate FLAT hand-wavy phrase and the
+        already-curated active list. A non-empty `matches` array means adding the
+        candidate would be redundant (or partially redundant) with an existing entry,
+        which the reviewer should see BEFORE confirming the add. The relation tells
+        the reviewer whether the candidate is an exact duplicate, a broader phrase
+        that would supersede an existing one, or a narrower phrase already covered
+        by an existing entry.
+      properties:
+        total:
+          type: integer
+          description: Number of curated entries the candidate overlaps with.
+        matches:
+          type: array
+          items:
+            type: object
+            properties:
+              phrase:
+                type: string
+                description: The existing curated phrase that the candidate overlaps with.
+              category:
+                $ref: "#/components/schemas/HandwavyCategory"
+              relation:
+                type: string
+                enum: [equal, candidate-contains-existing, existing-contains-candidate]
+                description: |
+                  How the candidate relates to the existing curated phrase:
+                  - `equal`: identical normalized text (exact duplicate).
+                  - `candidate-contains-existing`: candidate is broader; it would
+                    supersede the existing entry (anything matching the existing
+                    phrase would also match the candidate).
+                  - `existing-contains-candidate`: candidate is narrower; the
+                    existing phrase already covers everything the candidate would.
+            required: [phrase, category, relation]
+      required: [total, matches]
+
     HandwavyPhraseMutationResponse:
       type: object
       properties:
@@ -3948,6 +3986,8 @@ components:
             Task #119 — Upper bound on the number of most-recent production reports
             the dry-run scan considered. Reported so reviewers know the depth of
             the second signal (e.g. "scanned the last 2000 reports").
+        dryRunOverlaps:
+          $ref: "#/components/schemas/HandwavyPhraseDryRunOverlaps"
       required: [phrase, total, phrases]
 
     VisitRecorded:

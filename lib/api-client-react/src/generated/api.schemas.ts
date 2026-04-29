@@ -2157,6 +2157,56 @@ export interface HandwavyPhraseDryRunMatches {
   warning?: string | null;
 }
 
+/**
+ * How the candidate relates to the existing curated phrase:
+- `equal`: identical normalized text (exact duplicate).
+- `candidate-contains-existing`: candidate is broader; it would
+  supersede the existing entry (anything matching the existing
+  phrase would also match the candidate).
+- `existing-contains-candidate`: candidate is narrower; the
+  existing phrase already covers everything the candidate would.
+
+ */
+export type HandwavyPhraseDryRunOverlapsMatchesItemRelation =
+  (typeof HandwavyPhraseDryRunOverlapsMatchesItemRelation)[keyof typeof HandwavyPhraseDryRunOverlapsMatchesItemRelation];
+
+export const HandwavyPhraseDryRunOverlapsMatchesItemRelation = {
+  equal: "equal",
+  "candidate-contains-existing": "candidate-contains-existing",
+  "existing-contains-candidate": "existing-contains-candidate",
+} as const;
+
+export type HandwavyPhraseDryRunOverlapsMatchesItem = {
+  /** The existing curated phrase that the candidate overlaps with. */
+  phrase: string;
+  category: HandwavyCategory;
+  /** How the candidate relates to the existing curated phrase:
+- `equal`: identical normalized text (exact duplicate).
+- `candidate-contains-existing`: candidate is broader; it would
+  supersede the existing entry (anything matching the existing
+  phrase would also match the candidate).
+- `existing-contains-candidate`: candidate is narrower; the
+  existing phrase already covers everything the candidate would.
+ */
+  relation: HandwavyPhraseDryRunOverlapsMatchesItemRelation;
+};
+
+/**
+ * Task #123 — overlap signal between a candidate FLAT hand-wavy phrase and the
+already-curated active list. A non-empty `matches` array means adding the
+candidate would be redundant (or partially redundant) with an existing entry,
+which the reviewer should see BEFORE confirming the add. The relation tells
+the reviewer whether the candidate is an exact duplicate, a broader phrase
+that would supersede an existing one, or a narrower phrase already covered
+by an existing entry.
+
+ */
+export interface HandwavyPhraseDryRunOverlaps {
+  /** Number of curated entries the candidate overlaps with. */
+  total: number;
+  matches: HandwavyPhraseDryRunOverlapsMatchesItem[];
+}
+
 export interface HandwavyPhraseMutationResponse {
   /** True when POST appended the phrase. Omitted on PATCH/DELETE responses. */
   added?: boolean;
@@ -2220,6 +2270,7 @@ the dry-run scan considered. Reported so reviewers know the depth of
 the second signal (e.g. "scanned the last 2000 reports").
  */
   dryRunMatchesProductionLimit?: number;
+  dryRunOverlaps?: HandwavyPhraseDryRunOverlaps;
 }
 
 export interface VisitRecorded {

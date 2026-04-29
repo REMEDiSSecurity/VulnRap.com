@@ -3495,6 +3495,39 @@ export const AddHandwavyPhraseResponse = zod.object({
     .describe(
       'Task #119 — Upper bound on the number of most-recent production reports\nthe dry-run scan considered. Reported so reviewers know the depth of\nthe second signal (e.g. \"scanned the last 2000 reports\").\n',
     ),
+  dryRunOverlaps: zod
+    .object({
+      total: zod
+        .number()
+        .describe("Number of curated entries the candidate overlaps with."),
+      matches: zod.array(
+        zod.object({
+          phrase: zod
+            .string()
+            .describe(
+              "The existing curated phrase that the candidate overlaps with.",
+            ),
+          category: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          relation: zod
+            .enum([
+              "equal",
+              "candidate-contains-existing",
+              "existing-contains-candidate",
+            ])
+            .describe(
+              "How the candidate relates to the existing curated phrase:\n- `equal`: identical normalized text (exact duplicate).\n- `candidate-contains-existing`: candidate is broader; it would\n  supersede the existing entry (anything matching the existing\n  phrase would also match the candidate).\n- `existing-contains-candidate`: candidate is narrower; the\n  existing phrase already covers everything the candidate would.\n",
+            ),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Task #123 — overlap signal between a candidate FLAT hand-wavy phrase and the\nalready-curated active list. A non-empty `matches` array means adding the\ncandidate would be redundant (or partially redundant) with an existing entry,\nwhich the reviewer should see BEFORE confirming the add. The relation tells\nthe reviewer whether the candidate is an exact duplicate, a broader phrase\nthat would supersede an existing one, or a narrower phrase already covered\nby an existing entry.\n",
+    ),
 });
 
 /**
@@ -4309,6 +4342,39 @@ export const EditHandwavyPhraseResponse = zod.object({
     .optional()
     .describe(
       'Task #119 — Upper bound on the number of most-recent production reports\nthe dry-run scan considered. Reported so reviewers know the depth of\nthe second signal (e.g. \"scanned the last 2000 reports\").\n',
+    ),
+  dryRunOverlaps: zod
+    .object({
+      total: zod
+        .number()
+        .describe("Number of curated entries the candidate overlaps with."),
+      matches: zod.array(
+        zod.object({
+          phrase: zod
+            .string()
+            .describe(
+              "The existing curated phrase that the candidate overlaps with.",
+            ),
+          category: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          relation: zod
+            .enum([
+              "equal",
+              "candidate-contains-existing",
+              "existing-contains-candidate",
+            ])
+            .describe(
+              "How the candidate relates to the existing curated phrase:\n- `equal`: identical normalized text (exact duplicate).\n- `candidate-contains-existing`: candidate is broader; it would\n  supersede the existing entry (anything matching the existing\n  phrase would also match the candidate).\n- `existing-contains-candidate`: candidate is narrower; the\n  existing phrase already covers everything the candidate would.\n",
+            ),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Task #123 — overlap signal between a candidate FLAT hand-wavy phrase and the\nalready-curated active list. A non-empty `matches` array means adding the\ncandidate would be redundant (or partially redundant) with an existing entry,\nwhich the reviewer should see BEFORE confirming the add. The relation tells\nthe reviewer whether the candidate is an exact duplicate, a broader phrase\nthat would supersede an existing one, or a narrower phrase already covered\nby an existing entry.\n",
     ),
 });
 
@@ -5158,6 +5224,39 @@ export const RemoveHandwavyPhraseResponse = zod.union([
       .optional()
       .describe(
         'Task #119 — Upper bound on the number of most-recent production reports\nthe dry-run scan considered. Reported so reviewers know the depth of\nthe second signal (e.g. \"scanned the last 2000 reports\").\n',
+      ),
+    dryRunOverlaps: zod
+      .object({
+        total: zod
+          .number()
+          .describe("Number of curated entries the candidate overlaps with."),
+        matches: zod.array(
+          zod.object({
+            phrase: zod
+              .string()
+              .describe(
+                "The existing curated phrase that the candidate overlaps with.",
+              ),
+            category: zod
+              .enum(["absence", "hedging", "buzzword"])
+              .describe(
+                "Theme bucket used by the diagnostics panel to group matched phrases.",
+              ),
+            relation: zod
+              .enum([
+                "equal",
+                "candidate-contains-existing",
+                "existing-contains-candidate",
+              ])
+              .describe(
+                "How the candidate relates to the existing curated phrase:\n- `equal`: identical normalized text (exact duplicate).\n- `candidate-contains-existing`: candidate is broader; it would\n  supersede the existing entry (anything matching the existing\n  phrase would also match the candidate).\n- `existing-contains-candidate`: candidate is narrower; the\n  existing phrase already covers everything the candidate would.\n",
+              ),
+          }),
+        ),
+      })
+      .optional()
+      .describe(
+        "Task #123 — overlap signal between a candidate FLAT hand-wavy phrase and the\nalready-curated active list. A non-empty `matches` array means adding the\ncandidate would be redundant (or partially redundant) with an existing entry,\nwhich the reviewer should see BEFORE confirming the add. The relation tells\nthe reviewer whether the candidate is an exact duplicate, a broader phrase\nthat would supersede an existing one, or a narrower phrase already covered\nby an existing entry.\n",
       ),
   }),
   zod
@@ -6680,6 +6779,39 @@ export const UndoHandwavyPhraseResponse = zod.object({
     .optional()
     .describe(
       'Task #119 — Upper bound on the number of most-recent production reports\nthe dry-run scan considered. Reported so reviewers know the depth of\nthe second signal (e.g. \"scanned the last 2000 reports\").\n',
+    ),
+  dryRunOverlaps: zod
+    .object({
+      total: zod
+        .number()
+        .describe("Number of curated entries the candidate overlaps with."),
+      matches: zod.array(
+        zod.object({
+          phrase: zod
+            .string()
+            .describe(
+              "The existing curated phrase that the candidate overlaps with.",
+            ),
+          category: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          relation: zod
+            .enum([
+              "equal",
+              "candidate-contains-existing",
+              "existing-contains-candidate",
+            ])
+            .describe(
+              "How the candidate relates to the existing curated phrase:\n- `equal`: identical normalized text (exact duplicate).\n- `candidate-contains-existing`: candidate is broader; it would\n  supersede the existing entry (anything matching the existing\n  phrase would also match the candidate).\n- `existing-contains-candidate`: candidate is narrower; the\n  existing phrase already covers everything the candidate would.\n",
+            ),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Task #123 — overlap signal between a candidate FLAT hand-wavy phrase and the\nalready-curated active list. A non-empty `matches` array means adding the\ncandidate would be redundant (or partially redundant) with an existing entry,\nwhich the reviewer should see BEFORE confirming the add. The relation tells\nthe reviewer whether the candidate is an exact duplicate, a broader phrase\nthat would supersede an existing one, or a narrower phrase already covered\nby an existing entry.\n",
     ),
 });
 
@@ -8494,6 +8626,39 @@ export const RevertHandwavyPhraseEditResponse = zod.object({
     .optional()
     .describe(
       'Task #119 — Upper bound on the number of most-recent production reports\nthe dry-run scan considered. Reported so reviewers know the depth of\nthe second signal (e.g. \"scanned the last 2000 reports\").\n',
+    ),
+  dryRunOverlaps: zod
+    .object({
+      total: zod
+        .number()
+        .describe("Number of curated entries the candidate overlaps with."),
+      matches: zod.array(
+        zod.object({
+          phrase: zod
+            .string()
+            .describe(
+              "The existing curated phrase that the candidate overlaps with.",
+            ),
+          category: zod
+            .enum(["absence", "hedging", "buzzword"])
+            .describe(
+              "Theme bucket used by the diagnostics panel to group matched phrases.",
+            ),
+          relation: zod
+            .enum([
+              "equal",
+              "candidate-contains-existing",
+              "existing-contains-candidate",
+            ])
+            .describe(
+              "How the candidate relates to the existing curated phrase:\n- `equal`: identical normalized text (exact duplicate).\n- `candidate-contains-existing`: candidate is broader; it would\n  supersede the existing entry (anything matching the existing\n  phrase would also match the candidate).\n- `existing-contains-candidate`: candidate is narrower; the\n  existing phrase already covers everything the candidate would.\n",
+            ),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Task #123 — overlap signal between a candidate FLAT hand-wavy phrase and the\nalready-curated active list. A non-empty `matches` array means adding the\ncandidate would be redundant (or partially redundant) with an existing entry,\nwhich the reviewer should see BEFORE confirming the add. The relation tells\nthe reviewer whether the candidate is an exact duplicate, a broader phrase\nthat would supersede an existing one, or a narrower phrase already covered\nby an existing entry.\n",
     ),
 });
 
