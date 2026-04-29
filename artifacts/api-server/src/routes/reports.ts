@@ -36,7 +36,6 @@ import type { VerificationMode } from "../lib/engines/avri/families";
 import { visitorHash, type VisitorAttribution } from "../lib/visitor";
 import { recordAndScore as recordVelocity } from "../lib/engines/avri/velocity";
 import { recordAndScore as recordTemplateFingerprint } from "../lib/engines/avri/template-fingerprint";
-import { maybeNotifyAfterReport } from "../lib/avri-drift-notifications";
 import {
   buildAvriRubricMarkdown,
   type AvriCompositeBlock as AvriRubricCompositeBlock,
@@ -991,12 +990,11 @@ router.post("/reports", async (req, res): Promise<void> => {
 
   res.status(201).json(response);
 
-  // Task #83 — Fire-and-forget AVRI drift check so newly-firing flags can
-  // page reviewers without anyone opening the calibration page. The helper
-  // is internally throttled (default: at most once every 6 hours per process)
-  // and short-circuits when AVRI_DRIFT_WEBHOOK_URL isn't configured, so this
-  // is safe to call on the hot path. Errors are swallowed inside the helper.
-  void maybeNotifyAfterReport();
+  // Task #197 — the AVRI drift notification check used to piggyback on this
+  // hot path as a fire-and-forget side effect. It now runs on a deterministic
+  // background timer started from src/index.ts, so report submissions no
+  // longer pay the drift-scan cost (and the cadence keeps firing on quiet
+  // days too).
 });
 
 function anonymizeId(id: number): string {

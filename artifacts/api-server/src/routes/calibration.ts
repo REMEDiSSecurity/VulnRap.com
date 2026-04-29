@@ -500,10 +500,10 @@ router.get("/feedback/calibration/avri-drift", async (req, res) => {
 // webhook (AVRI_DRIFT_WEBHOOK_URL) instead of waiting for someone to open
 // the calibration page. The endpoint is auth-gated because it triggers an
 // outbound HTTP call. It can be invoked by:
-//   - cron / scheduled job for periodic dispatch on top of the auto-trigger
-//     baked into the report-create path,
+//   - external cron / scheduled job for periodic dispatch alongside the
+//     in-process scheduler started in src/index.ts (Task #197),
 //   - a reviewer manually pressing a button in the calibration UI to force
-//     a check between auto-runs.
+//     a check between scheduled runs.
 // Repeat invocations within the same week for the same flag are de-duped by
 // `lib/avri-drift-notifications.ts` so this endpoint is safe to poll.
 router.post(

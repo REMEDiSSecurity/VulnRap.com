@@ -424,28 +424,31 @@ export async function notifyDriftFlagsIfNew(
 }
 
 // ---------------------------------------------------------------------------
-// In-process throttle for the auto-trigger from the report-create path.
+// Background scheduler.
 //
-// The drift query scans up to N weeks of reports (default 8) for every
-// invocation, which is too expensive to run on every report submission.
-// We keep a per-process timestamp and skip the check when the last run
-// was within AVRI_DRIFT_NOTIFY_INTERVAL_MS (default 6 hours).
+// Task #197: the drift check used to piggyback on POST /api/reports as a
+// fire-and-forget side effect throttled to one run per ~6h per process.
+// That coupled the cadence to traffic (quiet days = no checks) and made
+// the throttle process-local, so multi-instance deploys would multiply
+// the rate. This module now exposes a deterministic interval-timer
+// scheduler started from src/index.ts at server boot, plus a single-run
+// helper used by both the scheduler and the auth-gated manual endpoint.
 //
 // On *failure* (drift generation throws, or the webhook returns a
-// non-2xx) we use a much shorter retry interval
+// non-2xx) the scheduler re-arms with a much shorter retry interval
 // (AVRI_DRIFT_NOTIFY_RETRY_INTERVAL_MS, default 5 minutes) so a
 // transient outage at the start of a 6h window doesn't suppress the
 // next attempt for the full 6 hours.
 //
-// The explicit POST endpoint bypasses this throttle so reviewers and
-// cron always get a synchronous answer.
+// The explicit POST endpoint bypasses the timer so reviewers and cron
+// callers always get a synchronous answer.
 // ---------------------------------------------------------------------------
 
 const DEFAULT_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_RETRY_INTERVAL_MS = 5 * 60 * 1000;
-
-let lastAutoRunAt = 0;
-let lastAutoRunOk = true;
+// First tick fires shortly after boot rather than immediately so the
+// scheduler doesn't compete with HTTP startup work (DB warmup, etc.).
+const DEFAULT_INITIAL_DELAY_MS = 60 * 1000;
 
 function parseIntervalEnv(raw: string | undefined, fallback: number): number {
   if (typeof raw !== "string") return fallback;
@@ -465,25 +468,27 @@ function autoRetryIntervalMs(): number {
   );
 }
 
+function isWebhookConfigured(): boolean {
+  return (process.env.AVRI_DRIFT_WEBHOOK_URL ?? "").trim().length > 0;
+}
+
 /**
- * Fire-and-forget auto-trigger meant for the report-create path. Always
- * resolves (errors are logged and swallowed) so the caller never has to
- * await or guard against a notification failure.
+ * Run the drift check exactly once. Always resolves; errors are logged
+ * and surfaced as `ok: false` so callers (the scheduler, tests) can
+ * decide whether to retry sooner.
+ *
+ * Skips the DB scan entirely when AVRI_DRIFT_WEBHOOK_URL is unset, so
+ * operators that don't care about drift webhooks pay zero cost per
+ * tick.
  */
-export async function maybeNotifyAfterReport(): Promise<void> {
-  // Skip entirely when nothing is configured — saves the DB scan cost
-  // for operators that don't care about drift webhooks.
-  const webhookUrl = (process.env.AVRI_DRIFT_WEBHOOK_URL ?? "").trim();
-  if (webhookUrl.length === 0) return;
-
-  const now = Date.now();
-  const interval = lastAutoRunOk ? autoIntervalMs() : autoRetryIntervalMs();
-  if (now - lastAutoRunAt < interval) return;
-  // Mark the start of the attempt so concurrent report submissions
-  // don't pile up duplicate runs while this one is in flight.
-  lastAutoRunAt = now;
-
-  let ok = false;
+export async function runDriftNotificationCheck(): Promise<{
+  ok: boolean;
+  ranCheck: boolean;
+  outcome?: NotificationOutcome;
+}> {
+  if (!isWebhookConfigured()) {
+    return { ok: true, ranCheck: false };
+  }
   try {
     const driftReport = await generateAvriDriftReport({});
     const outcome = await notifyDriftFlagsIfNew(driftReport);
@@ -492,35 +497,117 @@ export async function maybeNotifyAfterReport(): Promise<void> {
     // succeeded / was skipped because no webhook is configured. A
     // dispatch failure (dispatchResult.ok === false) shortens the next
     // retry interval so we recover quickly from transient webhook
-    // outages (Slack 5xx, etc.) without re-scanning the DB on every
-    // single subsequent report submission.
-    ok = !outcome.dispatchResult || outcome.dispatchResult.ok;
+    // outages (Slack 5xx, etc.).
+    const ok = !outcome.dispatchResult || outcome.dispatchResult.ok;
+    return { ok, ranCheck: true, outcome };
   } catch (err) {
     logger.warn(
       { err },
-      "[avri-drift-notifications] Auto-notify after report failed (non-fatal).",
+      "[avri-drift-notifications] Scheduled drift check failed (non-fatal).",
     );
-    ok = false;
-  } finally {
-    lastAutoRunOk = ok;
+    return { ok: false, ranCheck: true };
   }
 }
 
-// Exported for unit tests so they can force a re-run without waiting
-// for the throttle to elapse.
+export interface DriftSchedulerOptions {
+  /** Override the success-case interval (defaults to env / 6h). */
+  intervalMs?: number;
+  /** Override the failure-case retry interval (defaults to env / 5min). */
+  retryIntervalMs?: number;
+  /** Delay before the first tick (defaults to 60s; tests typically pass 0). */
+  initialDelayMs?: number;
+  /** Inject a custom runner (used by tests to avoid touching the DB). */
+  run?: () => Promise<{ ok: boolean }>;
+}
+
+export interface DriftScheduler {
+  /** Cancel all future ticks. Safe to call multiple times. */
+  stop(): void;
+  /**
+   * Resolves with the count of ticks that have completed. Useful for
+   * tests that want to await the next scheduled tick deterministically.
+   */
+  ticksCompleted(): number;
+}
+
+/**
+ * Start the recurring drift-notification scheduler. Call exactly once
+ * at server boot from `src/index.ts`. Returns a handle whose `stop()`
+ * cancels the next tick.
+ */
+export function startDriftNotificationScheduler(
+  opts: DriftSchedulerOptions = {},
+): DriftScheduler {
+  const intervalMs = opts.intervalMs ?? autoIntervalMs();
+  const retryIntervalMs = opts.retryIntervalMs ?? autoRetryIntervalMs();
+  const initialDelayMs = opts.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
+  const run = opts.run ?? (() => runDriftNotificationCheck());
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
+  let completed = 0;
+
+  function schedule(delayMs: number): void {
+    if (stopped) return;
+    timer = setTimeout(() => {
+      void tick();
+    }, delayMs);
+    // Don't keep the event loop alive for the timer alone — the HTTP
+    // server is the process's reason to exist.
+    if (typeof timer.unref === "function") timer.unref();
+  }
+
+  async function tick(): Promise<void> {
+    if (stopped) return;
+    let ok = true;
+    try {
+      const result = await run();
+      ok = result.ok;
+    } catch (err) {
+      // `run` is supposed to swallow its own errors, but defend against
+      // a misbehaving injected runner so a single throw doesn't kill
+      // the scheduler.
+      logger.warn(
+        { err },
+        "[avri-drift-notifications] Scheduler tick threw unexpectedly (non-fatal).",
+      );
+      ok = false;
+    } finally {
+      completed += 1;
+    }
+    schedule(ok ? intervalMs : retryIntervalMs);
+  }
+
+  schedule(initialDelayMs);
+
+  logger.info(
+    { intervalMs, retryIntervalMs, initialDelayMs },
+    "[avri-drift-notifications] Drift notification scheduler started.",
+  );
+
+  return {
+    stop(): void {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+    ticksCompleted: () => completed,
+  };
+}
+
+// Exported for unit tests so they can pin internal state without
+// reaching into module internals directly.
 export const __testing = {
-  resetThrottle: () => {
-    lastAutoRunAt = 0;
-    lastAutoRunOk = true;
-  },
   resetResolvedPath: () => {
     RESOLVED_PATH = null;
   },
-  getThrottleState: () => ({ lastAutoRunAt, lastAutoRunOk }),
   buildLinks,
   readState,
   writeState,
   HISTORY_LIMIT,
   DEFAULT_INTERVAL_MS,
   DEFAULT_RETRY_INTERVAL_MS,
+  DEFAULT_INITIAL_DELAY_MS,
 };

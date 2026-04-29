@@ -88,13 +88,24 @@ To shorten time-to-action, freshly-firing drift flags can be pushed to a
 webhook instead of waiting for someone to open the calibration page.
 
 - **Source:** `artifacts/api-server/src/lib/avri-drift-notifications.ts`
-- **Endpoint (manual / cron):**
+- **Endpoint (manual / external cron):**
   `POST /api/feedback/calibration/avri-drift/notify` (auth-gated by
   `CALIBRATION_TOKEN` — same header as the other calibration mutations).
-- **Auto-trigger:** the report-create path
-  (`POST /api/reports`) fires the same check as a fire-and-forget side
-  effect, throttled to at most once per
-  `AVRI_DRIFT_NOTIFY_INTERVAL_MS` ms (default 6 hours) per process.
+- **Background scheduler (Task #197):** the API server starts an
+  in-process timer at boot (`startDriftNotificationScheduler` in
+  `src/index.ts`) that runs the same check on a deterministic
+  cadence — by default the first tick fires ~60s after boot and
+  subsequent ticks fire every `AVRI_DRIFT_NOTIFY_INTERVAL_MS` ms
+  (default 6 hours), independent of report traffic. A failed run
+  re-arms with the shorter `AVRI_DRIFT_NOTIFY_RETRY_INTERVAL_MS`
+  (default 5 minutes) so transient webhook outages recover quickly.
+  The scheduler short-circuits when `AVRI_DRIFT_WEBHOOK_URL` is unset,
+  so unconfigured environments pay zero cost per tick.
+
+  Earlier versions (pre Task #197) coupled this check to
+  `POST /api/reports` as a throttled fire-and-forget side effect. That
+  hot-path hook has been removed; the scheduler is now the only auto
+  trigger, alongside the manual / external-cron endpoint above.
 
 ### Setup
 
@@ -111,10 +122,12 @@ webhook instead of waiting for someone to open the calibration page.
    404 in most production setups because the deployed Express app
    does NOT serve the `docs/` directory as static assets.
 4. (Optional) Override `AVRI_DRIFT_NOTIFY_INTERVAL_MS` to change the
-   per-process auto-trigger throttle. Set to `0` to fire on every
-   report submission (only sane in low-volume / dev environments).
+   scheduler's success-case interval. Set to a small value during a
+   drift incident if you want more frequent re-checks; set to `0` to
+   tick almost continuously (only sane in low-volume / dev
+   environments — production should stay at 6h).
 5. (Optional) Override `AVRI_DRIFT_NOTIFY_RETRY_INTERVAL_MS` to
-   change how quickly the auto-trigger retries after a failed dispatch
+   change how quickly the scheduler retries after a failed dispatch
    (defaults to 5 minutes). Lower it during a drift incident if
    you're paging on a flaky webhook target.
 
@@ -155,12 +168,21 @@ notified, so transient webhook outages auto-recover on the next run.
 
 ### Operational notes
 
-- The auto-trigger short-circuits when `AVRI_DRIFT_WEBHOOK_URL` is
-  unset, so unconfigured environments pay zero cost on the report
-  hot path.
+- The background scheduler short-circuits when
+  `AVRI_DRIFT_WEBHOOK_URL` is unset, so unconfigured environments
+  pay zero cost per tick. The drift dashboard endpoint still works
+  exactly as before.
+- The scheduler is per-process: in a multi-instance deploy each
+  replica ticks independently. The dedup state file
+  (`avri-drift-notifications.json`) is the cross-tick guard against
+  duplicate webhook fan-out, so the same flag is dispatched at most
+  once per replica's view of the state file. If you run multiple
+  replicas with separate state files you will see at most one extra
+  dispatch per flag per replica — point all replicas at the same
+  state path (or at the same external state store) if that matters.
 - The manual `POST .../notify` endpoint always runs the check (it's
-  not throttled) so reviewers can press a "Re-check now" button
-  between auto-runs.
+  not gated by the scheduler interval) so reviewers can press a
+  "Re-check now" button between scheduled runs.
 - When the webhook is unset but flags exist, the notifier still
   records them as notified locally so wiring up a webhook later
   does not produce a retroactive flood. Truncate the state file if

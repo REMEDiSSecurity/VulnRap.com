@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupMigrations } from "./lib/startup-migrations";
+import { startDriftNotificationScheduler } from "./lib/avri-drift-notifications";
 
 const rawPort = process.env["PORT"];
 
@@ -25,4 +26,19 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Task #197 — Kick off the AVRI drift-notification scheduler. It runs at a
+  // deterministic interval (default 6h, configurable via
+  // AVRI_DRIFT_NOTIFY_INTERVAL_MS) and short-circuits when
+  // AVRI_DRIFT_WEBHOOK_URL is unset, so unconfigured environments pay zero
+  // cost per tick. Replaces the throttled fire-and-forget side effect that
+  // POST /api/reports used to invoke. The handle is retained so signal
+  // handlers can stop the timer cleanly during a graceful shutdown.
+  const driftScheduler = startDriftNotificationScheduler();
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, () => {
+      logger.info({ signal }, "Shutting down: stopping drift scheduler.");
+      driftScheduler.stop();
+    });
+  }
 });

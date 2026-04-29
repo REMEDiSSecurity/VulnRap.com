@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
@@ -6,6 +6,8 @@ import {
   dedupKeyForFlag,
   selectNewFlags,
   notifyDriftFlagsIfNew,
+  runDriftNotificationCheck,
+  startDriftNotificationScheduler,
   __testing,
   type WebhookDispatcher,
   type WebhookPayload,
@@ -360,5 +362,167 @@ describe("notifyDriftFlagsIfNew", () => {
       dispatch: rec.dispatch,
     });
     expect(outcome.runbookUrl).toBe("https://opt.example.com/runbook");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runDriftNotificationCheck — single-shot helper used by both the scheduler
+// and (in spirit) the manual notify endpoint. Verifies the cheap
+// short-circuit when no webhook is configured.
+// ---------------------------------------------------------------------------
+
+describe("runDriftNotificationCheck", () => {
+  let originalUrl: string | undefined;
+
+  beforeEach(() => {
+    originalUrl = process.env.AVRI_DRIFT_WEBHOOK_URL;
+    delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+  });
+
+  afterEach(() => {
+    if (originalUrl === undefined) delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    else process.env.AVRI_DRIFT_WEBHOOK_URL = originalUrl;
+  });
+
+  it("short-circuits without scanning the DB when no webhook is configured", async () => {
+    // No env, no DB connection in the test environment — proves the
+    // short-circuit by virtue of NOT throwing on the missing DB.
+    const result = await runDriftNotificationCheck();
+    expect(result).toEqual({ ok: true, ranCheck: false });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// startDriftNotificationScheduler — the deterministic background timer that
+// replaces the throttled fire-and-forget hook on POST /api/reports
+// (Task #197). Tests use vi.useFakeTimers() + an injected runner so they
+// don't touch the DB or the wall clock.
+// ---------------------------------------------------------------------------
+
+describe("startDriftNotificationScheduler", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function flushTick(): Promise<void> {
+    // Allow the queued microtasks for the just-fired tick to settle so
+    // the scheduler has a chance to re-arm before the next assertion.
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it("ticks on the success interval after a successful run", async () => {
+    const calls: string[] = [];
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 1000,
+      retryIntervalMs: 100,
+      initialDelayMs: 10,
+      run: async () => {
+        calls.push("ok");
+        return { ok: true };
+      },
+    });
+    try {
+      expect(sched.ticksCompleted()).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(10);
+      await flushTick();
+      expect(calls).toEqual(["ok"]);
+      expect(sched.ticksCompleted()).toBe(1);
+
+      // Next tick must wait the full success interval, not the retry
+      // interval, because the previous run returned ok.
+      await vi.advanceTimersByTimeAsync(99);
+      expect(calls).toEqual(["ok"]);
+
+      await vi.advanceTimersByTimeAsync(901);
+      await flushTick();
+      expect(calls).toEqual(["ok", "ok"]);
+      expect(sched.ticksCompleted()).toBe(2);
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("re-arms with the retry interval after a failed run", async () => {
+    let nextOk = false;
+    const calls: boolean[] = [];
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 10_000,
+      retryIntervalMs: 50,
+      initialDelayMs: 0,
+      run: async () => {
+        calls.push(nextOk);
+        return { ok: nextOk };
+      },
+    });
+    try {
+      // First tick fails → must re-arm at retryIntervalMs (50ms),
+      // not the success intervalMs (10s).
+      await vi.advanceTimersByTimeAsync(0);
+      await flushTick();
+      expect(calls).toEqual([false]);
+
+      nextOk = true;
+      await vi.advanceTimersByTimeAsync(50);
+      await flushTick();
+      expect(calls).toEqual([false, true]);
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("survives a runner that throws unexpectedly", async () => {
+    let firstCall = true;
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 10_000,
+      retryIntervalMs: 25,
+      initialDelayMs: 0,
+      run: async () => {
+        if (firstCall) {
+          firstCall = false;
+          throw new Error("boom");
+        }
+        return { ok: true };
+      },
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await flushTick();
+      expect(sched.ticksCompleted()).toBe(1);
+
+      // The throw must be treated as a failure → reschedule at the
+      // retry interval, not the success interval.
+      await vi.advanceTimersByTimeAsync(25);
+      await flushTick();
+      expect(sched.ticksCompleted()).toBe(2);
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("stop() cancels future ticks", async () => {
+    let calls = 0;
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 50,
+      retryIntervalMs: 10,
+      initialDelayMs: 0,
+      run: async () => {
+        calls += 1;
+        return { ok: true };
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await flushTick();
+    expect(calls).toBe(1);
+
+    sched.stop();
+    await vi.advanceTimersByTimeAsync(1000);
+    await flushTick();
+    expect(calls).toBe(1);
   });
 });
