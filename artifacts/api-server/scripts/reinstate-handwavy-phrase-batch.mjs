@@ -520,7 +520,7 @@ async function main() {
     const skipSuffix = args.dryRun ? "would be left untouched" : "was left untouched";
     for (const r of results) {
       if (r && r.reinstated === true) {
-        const verb = args.dryRun ? "would reinstate    " : "reinstated         ";
+        const verb = args.dryRun ? "would reinstate   " : "reinstated        ";
         console.log(color("green", `  ✓ ${verb} "${r.phrase}"`));
       } else if (r && r.reason === "already-reinstated") {
         console.log(color("yellow", `  ! already-reinstated "${r.phrase}" — ${skipSuffix}`));
