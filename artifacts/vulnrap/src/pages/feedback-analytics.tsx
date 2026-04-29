@@ -2561,9 +2561,24 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   // (one "REINSTATED" / "NOT-FOUND" / "AUTH-FAILED" / "ERROR" row per
   // phrase) so reviewers see exactly what happened without squinting at
   // toasts.
-  const handleUndoBulkBatch = async () => {
-    if (!bulkResults || bulkResults.kind !== "remove") return;
-    const removedRows = bulkResults.rows.filter((r) => r.status === "removed");
+  //
+  // Task #238 — accepts an optional explicit `rowsToReinstate` argument so
+  // the "Retry failed" button on the post-undo banner can re-run only the
+  // subset of rows that previously hit a retryable failure
+  // (error / auth-failed) without forcing the reviewer to chase them
+  // through the history panel one by one. Default behaviour (no argument)
+  // is unchanged: every REMOVED row from the just-completed bulk-remove
+  // batch gets reinstated.
+  const handleUndoBulkBatch = async (
+    rowsToReinstate?: { phrase: string; removedAt?: string }[],
+  ) => {
+    let removedRows: { phrase: string; removedAt?: string }[];
+    if (rowsToReinstate) {
+      removedRows = rowsToReinstate;
+    } else {
+      if (!bulkResults || bulkResults.kind !== "remove") return;
+      removedRows = bulkResults.rows.filter((r) => r.status === "removed");
+    }
     if (removedRows.length === 0) return;
     if (bailOnCooldown("Undo this batch")) return;
     setBusy("bulk-undo");
@@ -2576,6 +2591,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
           phrase: row.phrase,
           status: "auth-failed",
           message: "skipped after earlier auth failure",
+          removedAt: row.removedAt,
         });
         continue;
       }
@@ -2598,7 +2614,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
           removedAt: row.removedAt,
           reviewer: reviewerName,
         });
-        results.push({ phrase: row.phrase, status: "reinstated" });
+        results.push({
+          phrase: row.phrase,
+          status: "reinstated",
+          removedAt: row.removedAt,
+        });
       } catch (err) {
         const status = (err as { status?: number } | null)?.status;
         if (status === 401 || status === 403) {
@@ -2607,16 +2627,23 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
             phrase: row.phrase,
             status: "auth-failed",
             message: `HTTP ${status}`,
+            removedAt: row.removedAt,
           });
         } else if (status === 404) {
           results.push({
             phrase: row.phrase,
             status: "not-found",
             message: "server reported 404 (already reinstated?)",
+            removedAt: row.removedAt,
           });
         } else {
           const msg = err instanceof Error ? err.message : "Unknown error";
-          results.push({ phrase: row.phrase, status: "error", message: msg });
+          results.push({
+            phrase: row.phrase,
+            status: "error",
+            message: msg,
+            removedAt: row.removedAt,
+          });
         }
       }
     }
@@ -2848,6 +2875,55 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         description: parts.join(" · "),
         variant: removed === 0 ? "destructive" : undefined,
       });
+    }
+  };
+
+  // Task #238 — "Retry failed" on the bulk results banner re-runs ONLY the
+  // rows that previously hit a retryable failure (error / auth-failed)
+  // through the same endpoint the original batch used, then replaces the
+  // banner with the fresh per-phrase outcomes. `not-found` is excluded
+  // because the phrase is genuinely gone from the active list (for a
+  // remove batch) or already reinstated (for an undo batch); rows missing
+  // the captured `removedAt` history identifier on an undo batch are
+  // similarly unretryable through this endpoint and must be handled from
+  // the per-row history log. The button is only rendered when at least
+  // one retryable failure exists, mirroring the per-batch ergonomics of
+  // the existing single-row Retry affordances.
+  const retryableFailedRows = (state: BulkResultsState): BulkResultRow[] => {
+    if (state.kind === "remove") {
+      return state.rows.filter(
+        (r) => r.status === "error" || r.status === "auth-failed",
+      );
+    }
+    // Undo: only rows with a captured removedAt can be retried through
+    // the per-history-row reinstate endpoint.
+    return state.rows.filter(
+      (r) =>
+        (r.status === "error" || r.status === "auth-failed") &&
+        Boolean(r.removedAt),
+    );
+  };
+
+  const handleRetryFailedBulkResults = async () => {
+    if (!bulkResults) return;
+    const failedRows = retryableFailedRows(bulkResults);
+    if (failedRows.length === 0) return;
+    if (bulkResults.kind === "remove") {
+      // confirmBulkRemove builds a fresh banner ({ kind: "remove", rows })
+      // from the new per-phrase outcomes, which is exactly the "replace
+      // the banner with the new per-phrase outcomes" behaviour the task
+      // calls for. Cooldown / busy / refresh handling all match the
+      // original bulk-remove path.
+      await confirmBulkRemove(failedRows.map((r) => r.phrase));
+    } else {
+      // Undo retries route back through handleUndoBulkBatch with an
+      // explicit row list so we don't depend on bulkResults.kind ===
+      // "remove" (the previous undo banner is `kind: "undo"`). Each row
+      // already has its `removedAt` captured by the original undo path
+      // (Task #238 propagates it onto every undo result row).
+      await handleUndoBulkBatch(
+        failedRows.map((r) => ({ phrase: r.phrase, removedAt: r.removedAt })),
+      );
     }
   };
 
@@ -4423,6 +4499,21 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
             ? bulkResults.rows.filter((r) => r.status === "reinstated").length
             : 0;
           const undoBusy = busy === "bulk-undo";
+          // Task #238 — retryable failures (error / auth-failed) drive the
+          // "Retry failed" affordance. Not-found rows are intentionally
+          // excluded: on a remove batch the phrase is genuinely gone; on
+          // an undo batch the phrase is already reinstated. Undo rows
+          // missing a captured `removedAt` are similarly unretryable
+          // through the per-history-row endpoint and don't count toward
+          // the retry pool.
+          const failedRetryRows = retryableFailedRows(bulkResults);
+          const retryFailedCount = failedRetryRows.length;
+          const retryBusy =
+            bulkResults.kind === "remove"
+              ? busy === "bulk-remove"
+              : busy === "bulk-undo";
+          const showUndoBtn = bulkResults.kind === "remove" && removedCount > 0;
+          const showRetryBtn = retryFailedCount > 0;
           const headingLabel = bulkResults.kind === "undo"
             ? "Bulk undo results"
             : "Bulk removal results";
@@ -4440,6 +4531,31 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
               <Badge variant="outline" className="text-[10px]">
                 {summaryLabel}
               </Badge>
+              {/* Task #238 — "Retry failed" sits alongside the existing
+                  Undo / Dismiss controls so reviewers can re-run only
+                  the rows that previously errored or auth-failed without
+                  re-ticking the active list (for removes) or chasing
+                  the history panel one by one (for undos). The button
+                  is hidden when no retryable failure is present so the
+                  banner stays uncluttered for the all-success path. */}
+              {showRetryBtn && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto h-7 px-2 text-[11px]"
+                  onClick={handleRetryFailedBulkResults}
+                  disabled={retryBusy || !mutationsAllowed}
+                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                  data-testid="handwavy-bulk-retry-failed"
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                >
+                  <RotateCcw className="w-3 h-3 mr-1" />
+                  {retryBusy
+                    ? `Retrying ${retryFailedCount}…`
+                    : `Retry failed (${retryFailedCount})`}
+                </Button>
+              )}
               {/* Task #142 — "Undo this batch" lives next to the dismiss
                   control so it sits in reviewers' eyeline the moment the
                   removal results render. We show it on the removal banner
@@ -4449,13 +4565,16 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   handler surfaces them as per-phrase errors with a
                   manual-reinstate hint rather than silently dropping
                   them. */}
-              {bulkResults.kind === "remove" && removedCount > 0 && (
+              {showUndoBtn && (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="ml-auto h-7 px-2 text-[11px]"
-                  onClick={handleUndoBulkBatch}
+                  className={cn(
+                    "h-7 px-2 text-[11px]",
+                    showRetryBtn ? "" : "ml-auto",
+                  )}
+                  onClick={() => handleUndoBulkBatch()}
                   disabled={undoBusy || !mutationsAllowed}
                   title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                   data-testid="handwavy-bulk-undo"
@@ -4471,9 +4590,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                 type="button"
                 className={cn(
                   "text-[10px] text-muted-foreground hover:text-foreground underline",
-                  bulkResults.kind === "remove" && removedCount > 0
-                    ? ""
-                    : "ml-auto",
+                  showUndoBtn || showRetryBtn ? "" : "ml-auto",
                 )}
                 onClick={dismissBulkResults}
                 data-testid="handwavy-bulk-dismiss"
