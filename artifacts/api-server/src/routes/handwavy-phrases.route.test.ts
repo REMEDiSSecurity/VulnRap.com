@@ -204,6 +204,155 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     expect(r.status).toBe(400);
   });
 
+  // Task #155 — single-phrase DELETE with `dryRun: true` mirrors the batch
+  // dry-run shape (corpus + production removal-impact summary) so the in-UI
+  // Trash flow can show the same warning before a one-click removal, without
+  // mutating the active list, history, or cache.
+  describe("Task #155 single-phrase DELETE dry-run", () => {
+    interface SingleDryRunBody {
+      dryRun: boolean;
+      batch: boolean;
+      wouldRemove: number;
+      notFound: number;
+      duplicateInBatch: number;
+      phrase: string;
+      raw: string;
+      removed: boolean;
+      reason: string | null;
+      total: number;
+      projectedTotal: number;
+      results: Array<{ raw: string; phrase: string; removed: boolean; reason?: string }>;
+      dryRunImpact: {
+        corpus: {
+          total: number;
+          byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
+          validDetectionsLost: number;
+          falsePositivesDropped: number;
+          corpusSize: number;
+          sampleMatches: Array<{ id: string; tier: string }>;
+          warning: string | null;
+        };
+        production: {
+          total: number;
+          byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
+          validDetectionsLost: number;
+          falsePositivesDropped: number;
+          corpusSize: number;
+          sampleMatches: Array<{ id: string; tier: string }>;
+          warning: string | null;
+        } | null;
+        productionError: string | null;
+        productionLimit: number;
+      };
+      phrases: Marker[];
+    }
+
+    it("DELETE single-phrase dryRun=true returns the same impact shape as batch and does NOT mutate", async () => {
+      const r = await request<SingleDryRunBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "seed phrase one", dryRun: true },
+      );
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.batch).toBe(false);
+      expect(r.body.wouldRemove).toBe(1);
+      expect(r.body.notFound).toBe(0);
+      expect(r.body.duplicateInBatch).toBe(0);
+      expect(r.body.removed).toBe(true);
+      expect(r.body.phrase).toBe("seed phrase one");
+      expect(r.body.projectedTotal).toBe(r.body.total - 1);
+      // Per-phrase result mirrors the batch shape with exactly one entry.
+      expect(r.body.results).toHaveLength(1);
+      expect(r.body.results[0].removed).toBe(true);
+      expect(r.body.results[0].phrase).toBe("seed phrase one");
+      // Corpus impact must be present and well-formed.
+      expect(r.body.dryRunImpact.corpus.corpusSize).toBeGreaterThan(0);
+      expect(r.body.dryRunImpact.corpus.byTier).toEqual({
+        t1Legit: expect.any(Number),
+        t2Borderline: expect.any(Number),
+        t3Slop: expect.any(Number),
+        t4Hallucinated: expect.any(Number),
+      });
+      expect(r.body.dryRunImpact.productionLimit).toBe(2000);
+      expect(r.body.dryRunImpact).toHaveProperty("production");
+      expect(r.body.dryRunImpact).toHaveProperty("productionError");
+      // Crucially: the active list is unchanged and the seed phrase is still there.
+      const list = await request<{ phrases: Marker[]; history: unknown[] }>(
+        "GET",
+        "/feedback/calibration/handwavy-phrases",
+      );
+      expect(list.body.phrases.map((m) => m.phrase)).toContain("seed phrase one");
+    });
+
+    it("DELETE single-phrase dryRun=true surfaces a warning when valid hand-wavy detections would be lost", async () => {
+      // Restore curated defaults so a real slop-detecting phrase like
+      // "do not have a runnable reproducer" is on the active list — it
+      // uniquely flags multiple T3/T4 corpus fixtures, so removing it
+      // would un-flag legitimate slop reports that no other curated
+      // phrase covers.
+      __restoreDefaults();
+      const r = await request<SingleDryRunBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "do not have a runnable reproducer", dryRun: true },
+      );
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.batch).toBe(false);
+      expect(r.body.wouldRemove).toBe(1);
+      const c = r.body.dryRunImpact.corpus;
+      // The whole point of this task: a single-phrase Trash should warn
+      // when removing it would un-flag legitimate T3/T4 slop detections.
+      expect(c.validDetectionsLost).toBeGreaterThan(0);
+      expect(c.byTier.t3Slop + c.byTier.t4Hallucinated).toBe(c.validDetectionsLost);
+      expect(c.warning).not.toBeNull();
+      expect(c.warning).toMatch(/un-flag|legitimately/);
+    });
+
+    it("DELETE single-phrase dryRun=true with a not-found phrase returns wouldRemove=0 and a zero-impact preview", async () => {
+      const r = await request<SingleDryRunBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never registered xyzzy", dryRun: true },
+      );
+      // No mutation, so the 404 path of the live single-phrase delete does
+      // NOT apply to dry-run; we return 200 with a zero-impact preview.
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.wouldRemove).toBe(0);
+      expect(r.body.notFound).toBe(1);
+      expect(r.body.removed).toBe(false);
+      expect(r.body.reason).toBe("not-found");
+      expect(r.body.dryRunImpact.corpus.total).toBe(0);
+      expect(r.body.dryRunImpact.corpus.warning).toBeNull();
+      // Production scan is skipped entirely when nothing would be removed.
+      expect(r.body.dryRunImpact.production).not.toBeNull();
+      expect(r.body.dryRunImpact.production?.total).toBe(0);
+    });
+
+    it("DELETE single-phrase dryRun=true normalizes the phrase before previewing (mixed case + extra whitespace)", async () => {
+      const r = await request<SingleDryRunBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "  Seed   Phrase   ONE  ", dryRun: true },
+      );
+      expect(r.status).toBe(200);
+      expect(r.body.removed).toBe(true);
+      expect(r.body.phrase).toBe("seed phrase one");
+      expect(r.body.wouldRemove).toBe(1);
+    });
+
+    it("DELETE single-phrase dryRun=true rejects missing/empty phrase with 400 (no preview computed)", async () => {
+      const r = await request<{ error: string }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { dryRun: true },
+      );
+      expect(r.status).toBe(400);
+    });
+  });
+
   // Task #114 — dry-run preview: the route must report a corpus-match summary
   // for the candidate phrase WITHOUT persisting it, so reviewers can back out
   // before a poorly-chosen phrase craters the AVRI score for legitimate reports.

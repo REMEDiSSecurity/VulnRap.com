@@ -1205,6 +1205,76 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
       res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
       return;
     }
+
+    // Task #155 — single-phrase dry-run preview. Mirrors the batch dry-run
+    // shape (with `batch: false`) so the in-UI Trash flow can show the same
+    // corpus + production removal-impact warning before a one-click removal,
+    // without mutating the active list, history, or cache. Reuses
+    // previewRemoveHandwavyPhrasesBatch with a one-element list so the
+    // per-phrase result and the impact computation are identical to the
+    // batch path.
+    if (dryRun === true) {
+      const preview = previewRemoveHandwavyPhrasesBatch([phrase]);
+      const removedNormalized = preview.results
+        .filter((r) => r.removed)
+        .map((r) => r.phrase);
+      const remainingNormalized = preview.nextMarkers.map((m) => m.phrase);
+      const corpusImpact = previewRemovalAgainstCorpus(removedNormalized, remainingNormalized);
+      let productionImpact: RemovalImpact | null = null;
+      let productionError: string | null = null;
+      if (removedNormalized.length === 0) {
+        // Skip the DB probe entirely when the phrase is not on the active
+        // list — there is by definition no impact and no point spending
+        // the query.
+        productionImpact = {
+          total: 0,
+          byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+          validDetectionsLost: 0,
+          falsePositivesDropped: 0,
+          corpusSize: 0,
+          sampleMatches: [],
+          warning: null,
+        };
+      } else {
+        try {
+          productionImpact = await previewRemovalAgainstProduction(
+            removedNormalized,
+            remainingNormalized,
+          );
+        } catch (err) {
+          req.log?.error(err, "Production removal dry-run scan failed");
+          productionError = "Production archive scan failed; only curated-corpus signal is shown.";
+        }
+      }
+      const single = preview.results[0];
+      res.status(200).json({
+        dryRun: true,
+        batch: false,
+        // Mirror the batch dry-run field names so the client can reuse the
+        // same renderer; here `wouldRemove` is 0 or 1.
+        wouldRemove: preview.wouldRemove,
+        notFound: preview.notFound,
+        duplicateInBatch: preview.duplicateInBatch,
+        phrase: single.phrase,
+        raw: single.raw,
+        removed: single.removed,
+        reason: single.reason ?? null,
+        // Active list size BEFORE the removal (no mutation occurred).
+        total: preview.total,
+        // Projected size AFTER the removal would be applied.
+        projectedTotal: preview.nextMarkers.length,
+        results: preview.results,
+        dryRunImpact: {
+          corpus: corpusImpact,
+          production: productionImpact,
+          productionError,
+          productionLimit: PRODUCTION_PREVIEW_LIMIT,
+        },
+        phrases: getHandwavyPhrases(),
+      });
+      return;
+    }
+
     const result = removeHandwavyPhrase(phrase, { reviewer: reviewerStr });
     if (!result.removed) {
       res.status(404).json({ ...result, error: "Phrase not found." });
