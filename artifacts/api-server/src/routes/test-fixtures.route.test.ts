@@ -355,6 +355,34 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     max: number;
   }
 
+  function deleteJson<T>(urlPath: string): Promise<{ status: number; body: T }> {
+    return new Promise((resolve, reject) => {
+      const url = new URL(`${baseUrl}${urlPath}`);
+      const req = http.request(
+        {
+          method: "DELETE",
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+        },
+        res => {
+          const chunks: Buffer[] = [];
+          res.on("data", c => chunks.push(c));
+          res.on("end", () => {
+            try {
+              const parsed = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+              resolve({ status: res.statusCode ?? 0, body: parsed as T });
+            } catch (err) {
+              reject(err);
+            }
+          });
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
   function putJson<T>(urlPath: string, body: unknown): Promise<{ status: number; body: T }> {
     return new Promise((resolve, reject) => {
       const data = Buffer.from(JSON.stringify(body), "utf-8");
@@ -414,6 +442,35 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     const get = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
     expect(get.effectiveDays).toBe(60);
     expect(get.source).toBe("persisted");
+  });
+
+  // Task #210 — reviewer can clear the persisted setting from the UI
+  // and the resolved source flips back to "default".
+  it("DELETE clears the persisted window so the source falls back to default", async () => {
+    // Seed a persisted value so we can verify it's actually removed.
+    const seeded = await putJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+      { compactAfterDays: 90 },
+    );
+    expect(seeded.status).toBe(200);
+    expect(seeded.body.persistedDays).toBe(90);
+    expect(seeded.body.source).toBe("persisted");
+
+    const del = await deleteJson<CompactWindow>("/api/test/archetype-history/config");
+    expect(del.status).toBe(200);
+    expect(del.body.persistedDays).toBeNull();
+    expect(del.body.source).toBe("default");
+    expect(del.body.effectiveDays).toBe(del.body.defaultDays);
+
+    // GET reflects the cleared state, and a follow-up DELETE on an
+    // already-cleared config is a no-op (no ENOENT bleeding through).
+    const get = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    expect(get.persistedDays).toBeNull();
+    expect(get.source).toBe("default");
+
+    const delAgain = await deleteJson<CompactWindow>("/api/test/archetype-history/config");
+    expect(delAgain.status).toBe(200);
+    expect(delAgain.body.source).toBe("default");
   });
 
   it("PUT rejects out-of-range values with a 400 and a helpful error message", async () => {

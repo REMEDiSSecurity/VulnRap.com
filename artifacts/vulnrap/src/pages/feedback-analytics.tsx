@@ -5443,6 +5443,7 @@ function EmergingArchetypesSection() {
   // server-reported effective value whenever that changes.
   const [compactDraft, setCompactDraft] = useState<string>("");
   const [compactSaving, setCompactSaving] = useState(false);
+  const [compactResetting, setCompactResetting] = useState(false);
   useEffect(() => {
     if (configData) setCompactDraft(String(configData.effectiveDays));
   }, [configData?.effectiveDays]);
@@ -5460,7 +5461,7 @@ function EmergingArchetypesSection() {
   const envLocked = configData?.envOverride != null;
 
   async function saveCompactWindow() {
-    if (!compactDraftValid || compactSaving || envLocked) return;
+    if (!compactDraftValid || compactSaving || compactResetting || envLocked) return;
     setCompactSaving(true);
     try {
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -5490,6 +5491,45 @@ function EmergingArchetypesSection() {
       toast({ title: "Could not save", description: msg, variant: "destructive" });
     } finally {
       setCompactSaving(false);
+    }
+  }
+
+  // Task #210 — clear the persisted JSON entirely so the resolved source
+  // flips back to "default" (or "env" if the env override is set).
+  // Disabled when nothing is persisted, when the env override is winning
+  // anyway, or while another mutation is in flight.
+  async function resetCompactWindow() {
+    if (compactResetting || compactSaving || envLocked) return;
+    if (configData?.persistedDays == null) return;
+    setCompactResetting(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const headers: Record<string, string> = {};
+      const tok = getCalibrationToken();
+      if (tok) headers["x-calibration-token"] = tok;
+      const res = await fetch(`${baseUrl}/api/test/archetype-history/config`, {
+        method: "DELETE",
+        headers,
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        effectiveDays?: number;
+        defaultDays?: number;
+      };
+      if (!res.ok) {
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
+      toast({
+        title: "Compaction window reset",
+        description: `Reverted to the built-in default (${body.effectiveDays ?? body.defaultDays}d).`,
+      });
+      queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_QUERY_KEY });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to reset the compaction window.";
+      toast({ title: "Could not reset", description: msg, variant: "destructive" });
+    } finally {
+      setCompactResetting(false);
     }
   }
 
@@ -5585,7 +5625,7 @@ function EmergingArchetypesSection() {
               max={compactMax}
               step={1}
               value={compactDraft}
-              disabled={envLocked || compactSaving}
+              disabled={envLocked || compactSaving || compactResetting}
               onChange={e => setCompactDraft(e.target.value)}
               onKeyDown={e => {
                 if (e.key === "Enter") {
@@ -5599,7 +5639,7 @@ function EmergingArchetypesSection() {
                 compactDraft.length > 0 && !compactDraftValid
                   ? "border-red-400/60"
                   : "border-border",
-                (envLocked || compactSaving) && "opacity-60 cursor-not-allowed",
+                (envLocked || compactSaving || compactResetting) && "opacity-60 cursor-not-allowed",
               )}
             />
             <span>days</span>
@@ -5607,10 +5647,31 @@ function EmergingArchetypesSection() {
               size="sm"
               variant="outline"
               className="h-7 px-2 text-[11px]"
-              disabled={!compactDraftDirty || compactSaving || envLocked}
+              disabled={!compactDraftDirty || compactSaving || compactResetting || envLocked}
               onClick={() => void saveCompactWindow()}
             >
               {compactSaving ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-[11px]"
+              disabled={
+                envLocked
+                || compactSaving
+                || compactResetting
+                || configData.persistedDays == null
+              }
+              onClick={() => void resetCompactWindow()}
+              title={
+                envLocked
+                  ? "ARCHETYPE_HISTORY_COMPACT_DAYS is set; unset it to take effect."
+                  : configData.persistedDays == null
+                    ? `Already on the built-in default (${configData.defaultDays}d).`
+                    : `Clear the persisted setting and revert to the built-in default (${configData.defaultDays}d).`
+              }
+            >
+              {compactResetting ? "Resetting…" : "Reset to default"}
             </Button>
             <span className="text-muted-foreground/70">
               effective <span className="font-mono text-foreground">{configData.effectiveDays}d</span>

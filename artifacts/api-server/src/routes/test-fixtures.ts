@@ -19,6 +19,7 @@ import {
   readDatasetHistory,
 } from "../lib/dataset-history";
 import {
+  clearPersistedCompactAfterDays,
   CompactWindowValidationError,
   getCompactAfterDaysSetting,
   setPersistedCompactAfterDays,
@@ -2783,6 +2784,30 @@ router.put(
       res
         .status(500)
         .json({ error: (err as Error)?.message ?? "Failed to update compaction window." });
+    }
+  },
+);
+
+// Task #210 — let reviewers reset the persisted compaction window back to
+// the built-in default with one click. Removing the persisted JSON makes
+// the resolved source flip back to "default" (or "env" if the env override
+// is set), without forcing the reviewer to remember and re-type the
+// default value. Same calibration-token gating and prod 404 as the PUT.
+router.delete(
+  "/test/archetype-history/config",
+  requireCalibrationAuth,
+  async (_req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      res.status(404).json({ error: "Not available in production." });
+      return;
+    }
+    try {
+      const next = await clearPersistedCompactAfterDays();
+      res.json(next);
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: (err as Error)?.message ?? "Failed to reset compaction window." });
     }
   },
 );
