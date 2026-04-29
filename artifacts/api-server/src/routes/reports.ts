@@ -2126,6 +2126,27 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   if (verification) {
     lines.push("## Verification Results");
     lines.push("");
+    // Task 67: Mirror the diagnostics-panel "Active verification mode" line so
+    // reviewers reading the printable report can tell *which* AVRI mode routed
+    // the verification (and therefore why some probes are absent — e.g. "no
+    // GitHub checks" is expected for an ENDPOINT-mode report). The mode/family
+    // are persisted on the cached VerificationResult, so this header line
+    // appears whether the verification ran fresh or was served from cache.
+    if (verification.mode) {
+      const familySuffix = verification.familyName ? ` — ${verification.familyName}` : "";
+      lines.push(`- Mode: **${verification.mode}**${familySuffix}`);
+      if (verification.mode === "MANUAL_ONLY") {
+        // performActiveVerification pushes the "Active verification skipped —
+        // <family> requires manual reproduction." hint as the first triageNote
+        // for MANUAL_ONLY families. Reproduce it verbatim so the printable
+        // report matches the diagnostics panel.
+        const skipNote = verification.triageNotes.find(n => n.startsWith("Active verification skipped"));
+        if (skipNote) {
+          lines.push(`- ${skipNote}`);
+        }
+      }
+      lines.push("");
+    }
     // v3.6.0 §2: Mirror the diagnostics-panel breakdown so report exports show
     // submitters which checks were against repos they cited vs. ones we guessed.
     const checksWithSource = verification.checks as Array<{ source?: string; result: string; type: string; detail: string }>;

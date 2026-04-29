@@ -81,7 +81,11 @@ vi.mock("../lib/triage-recommendation", () => ({
 }));
 
 vi.mock("../lib/triage-assistant", () => ({
-  generateTriageAssistant: vi.fn(async () => null),
+  // generateTriageAssistant is synchronous (not async); the route assigns its
+  // return value directly without awaiting, so a Promise-returning mock would
+  // make the body's `if (mdTriageAssistant)` branch enter with a Promise and
+  // then crash on `.gaps.length`. Return null synchronously.
+  generateTriageAssistant: vi.fn(() => null),
 }));
 
 vi.mock("../lib/engines", () => ({
@@ -461,6 +465,156 @@ describe("GET /api/reports/:id/triage-report — showInFeed enforcement", () => 
     const r = seedReport({ showInFeed: true });
     const res = await get(`/api/reports/${r.id}/triage-report`);
     expect(res.status).toBe(200);
+  });
+});
+
+// Task 67: The printable triage report must surface which active-verification
+// mode (SOURCE_CODE / ENDPOINT / MANUAL_ONLY / GENERIC) routed the report so a
+// reviewer can tell that e.g. "no GitHub checks" is expected for an
+// ENDPOINT-mode family. This mirrors the existing diagnostics-panel "Active
+// verification mode" line.
+describe("GET /api/reports/:id/triage-report — verification mode header", () => {
+  async function getText(path: string): Promise<{ status: number; body: string }> {
+    const r = await fetch(`${baseUrl}${path}`);
+    return { status: r.status, body: await r.text() };
+  }
+
+  it("includes Mode line and family above the verification table for ENDPOINT mode", async () => {
+    const av = await import("../lib/active-verification");
+    vi.mocked(av.performActiveVerification).mockResolvedValueOnce({
+      checks: [
+        {
+          type: "poc_plausibility_warning",
+          target: "https://example.com/api/foo",
+          result: "warning",
+          detail: "PoC uses placeholder domain example.com",
+          weight: 5,
+          source: "referenced_in_report",
+        },
+      ],
+      summary: { verified: 0, notFound: 0, warnings: 1, errors: 0 },
+      triageNotes: [],
+      score: 5,
+      detectedProjects: [],
+      mode: "ENDPOINT",
+      familyName: "XSS / CSRF / clickjacking / open redirect",
+    });
+
+    const r = seedReport({ showInFeed: true, redactedText: "sample text" });
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+
+    const verifIdx = res.body.indexOf("## Verification Results");
+    expect(verifIdx).toBeGreaterThan(-1);
+    const modeIdx = res.body.indexOf(
+      "- Mode: **ENDPOINT** — XSS / CSRF / clickjacking / open redirect",
+    );
+    expect(modeIdx).toBeGreaterThan(verifIdx);
+    // The Mode bullet must appear before the verification table header.
+    expect(modeIdx).toBeLessThan(res.body.indexOf("| Check | Status |"));
+  });
+
+  it("reproduces the 'requires manual reproduction' hint for MANUAL_ONLY families", async () => {
+    const av = await import("../lib/active-verification");
+    const skipNote =
+      "Active verification skipped — HTTP request smuggling / desync requires manual reproduction.";
+    vi.mocked(av.performActiveVerification).mockResolvedValueOnce({
+      checks: [
+        {
+          type: "manual_review_required",
+          target: "HTTP request smuggling / desync",
+          result: "skipped",
+          detail:
+            "Automated source/endpoint verification is not meaningful for the HTTP request smuggling / desync family; route to a human reviewer.",
+          weight: 0,
+        },
+      ],
+      summary: { verified: 0, notFound: 0, warnings: 0, errors: 0 },
+      triageNotes: [skipNote],
+      score: 0,
+      detectedProjects: [],
+      mode: "MANUAL_ONLY",
+      familyName: "HTTP request smuggling / desync",
+    });
+
+    const r = seedReport({ showInFeed: true, redactedText: "sample text" });
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+    expect(res.body).toContain(
+      "- Mode: **MANUAL_ONLY** — HTTP request smuggling / desync",
+    );
+    expect(res.body).toContain(`- ${skipNote}`);
+  });
+
+  it("omits the family suffix when familyName is not set", async () => {
+    const av = await import("../lib/active-verification");
+    vi.mocked(av.performActiveVerification).mockResolvedValueOnce({
+      checks: [],
+      summary: { verified: 0, notFound: 0, warnings: 0, errors: 0 },
+      triageNotes: [],
+      score: 0,
+      detectedProjects: [],
+      mode: "GENERIC",
+    });
+
+    const r = seedReport({ showInFeed: true, redactedText: "sample text" });
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("- Mode: **GENERIC**");
+    expect(res.body).not.toContain("- Mode: **GENERIC** —");
+  });
+
+  it("renders the same Mode line for cache-hit results as for fresh ones", async () => {
+    // Task 67 acceptance: "The same line appears whether the verification ran
+    // fresh or was served from cache." performActiveVerification persists
+    // mode/familyName onto the cached VerificationResult and backfills them on
+    // older cache entries, so the route is agnostic to provenance — we prove
+    // that here by feeding it back-to-back results that *would* have come from
+    // a fresh run vs. an L1 cache hit (cacheMetadata distinguishes the two)
+    // and asserting the rendered Mode line is byte-identical.
+    const av = await import("../lib/active-verification");
+    const baseResult = {
+      checks: [
+        {
+          type: "github_file_verified",
+          target: "example/foo:src/parse.c",
+          result: "verified" as const,
+          detail: "File path exists",
+          weight: -8,
+          source: "referenced_in_report" as const,
+        },
+      ],
+      summary: { verified: 1, notFound: 0, warnings: 0, errors: 0 },
+      triageNotes: [],
+      score: -8,
+      detectedProjects: [],
+      mode: "SOURCE_CODE" as const,
+      familyName: "Memory corruption / unsafe C",
+    };
+
+    // Fresh run.
+    vi.mocked(av.performActiveVerification).mockResolvedValueOnce({
+      ...baseResult,
+      cacheMetadata: { hits: { l1: 0, db: 0, fresh: 1 } },
+    });
+    const fresh = seedReport({ showInFeed: true, redactedText: "fresh body" });
+    const freshRes = await getText(`/api/reports/${fresh.id}/triage-report`);
+    expect(freshRes.status).toBe(200);
+
+    // Cached run (same VerificationResult shape, but cacheMetadata says L1
+    // hit — the route must not key off provenance and must render the same
+    // Mode line).
+    vi.mocked(av.performActiveVerification).mockResolvedValueOnce({
+      ...baseResult,
+      cacheMetadata: { hits: { l1: 1, db: 0, fresh: 0 } },
+    });
+    const cached = seedReport({ showInFeed: true, redactedText: "cached body" });
+    const cachedRes = await getText(`/api/reports/${cached.id}/triage-report`);
+    expect(cachedRes.status).toBe(200);
+
+    const expected = "- Mode: **SOURCE_CODE** — Memory corruption / unsafe C";
+    expect(freshRes.body).toContain(expected);
+    expect(cachedRes.body).toContain(expected);
   });
 });
 
