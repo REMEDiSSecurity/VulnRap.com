@@ -52,7 +52,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -5856,9 +5856,108 @@ function DatasetCohortMeansSection() {
 
 const AVRI_DRIFT_LOOKBACK_OPTIONS = [4, 8, 13, 26] as const;
 type AvriDriftLookbackWeeks = (typeof AVRI_DRIFT_LOOKBACK_OPTIONS)[number];
+const AVRI_DRIFT_DEFAULT_WEEKS: AvriDriftLookbackWeeks = 8;
+const AVRI_DRIFT_LOOKBACK_QUERY_KEY = "driftWeeks";
+const AVRI_DRIFT_LOOKBACK_STORAGE_KEY = "vulnrap.avri.driftWeeks";
+
+function isValidDriftLookback(value: number): value is AvriDriftLookbackWeeks {
+  return (AVRI_DRIFT_LOOKBACK_OPTIONS as readonly number[]).includes(value);
+}
+
+function parseDriftLookback(raw: string | null | undefined): AvriDriftLookbackWeeks | null {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return isValidDriftLookback(n) ? n : null;
+}
+
+function readStoredDriftLookback(): AvriDriftLookbackWeeks | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return parseDriftLookback(window.localStorage.getItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
 
 function AvriDriftSection() {
-  const [weeks, setWeeks] = useState<AvriDriftLookbackWeeks>(8);
+  // Sprint 13 — Persist the lookback selection across reloads. The URL query
+  // param (?driftWeeks=26) makes the panel state shareable in chat/links;
+  // localStorage covers reviewers who navigate back to the page without the
+  // query string. Precedence rules:
+  //   - URL present + valid  -> use URL (so a shared link wins).
+  //   - URL present + invalid -> fall back to the default (NOT storage), so a
+  //     bad/garbled link can't produce reviewer-specific behaviour.
+  //   - URL absent           -> use stored value, else default.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawUrlValue = searchParams.get(AVRI_DRIFT_LOOKBACK_QUERY_KEY);
+  const urlPresent = rawUrlValue !== null;
+  const urlWeeks = urlPresent ? parseDriftLookback(rawUrlValue) : null;
+  const weeks: AvriDriftLookbackWeeks = urlPresent
+    ? (urlWeeks ?? AVRI_DRIFT_DEFAULT_WEEKS)
+    : (readStoredDriftLookback() ?? AVRI_DRIFT_DEFAULT_WEEKS);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY, String(weeks));
+    } catch {
+      // Ignore quota / privacy-mode write errors — the URL param still works.
+    }
+  }, [weeks]);
+
+  // Normalize the URL on first render so the address bar always matches the
+  // visible state and is safely shareable:
+  //   - URL has a malformed/out-of-range value -> strip it (we resolved to 8).
+  //   - URL is absent but storage gave us a non-default value -> add it so
+  //     the reviewer can copy/share the current view.
+  // Uses replace so we don't add an extra history entry.
+  useEffect(() => {
+    const urlInvalid = urlPresent && urlWeeks === null;
+    const shouldAddFromStorage = !urlPresent && weeks !== AVRI_DRIFT_DEFAULT_WEEKS;
+    if (!urlInvalid && !shouldAddFromStorage) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (urlInvalid) {
+          next.delete(AVRI_DRIFT_LOOKBACK_QUERY_KEY);
+        } else {
+          next.set(AVRI_DRIFT_LOOKBACK_QUERY_KEY, String(weeks));
+        }
+        return next;
+      },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setWeeks = (value: AvriDriftLookbackWeeks) => {
+    // Write storage synchronously here — not just via the [weeks] effect.
+    // When switching back to the default we drop the query param, so the
+    // immediate re-render falls into the "URL absent -> read storage"
+    // branch. Without this synchronous write, storage would still hold the
+    // previous non-default value and the chooser would visibly snap back.
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY, String(value));
+      } catch {
+        // Ignore quota / privacy-mode write errors — URL handling still works.
+      }
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value === AVRI_DRIFT_DEFAULT_WEEKS) {
+          next.delete(AVRI_DRIFT_LOOKBACK_QUERY_KEY);
+        } else {
+          next.set(AVRI_DRIFT_LOOKBACK_QUERY_KEY, String(value));
+        }
+        return next;
+      },
+      { replace: false },
+    );
+  };
+
   const params = { weeks };
   const { data, isLoading, isFetching, error } = useGetAvriDriftReport(params, {
     query: {
