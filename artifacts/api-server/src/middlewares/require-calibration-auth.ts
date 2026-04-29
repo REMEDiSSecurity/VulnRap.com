@@ -1,5 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
+import type { RateLimitRequestHandler } from "express-rate-limit";
+import { createCalibrationAuthLimiter } from "./calibration-auth-rate-limit";
 
 // Task #113 — gate every mutation under /feedback/calibration/* behind a
 // shared reviewer token so the API can be safely exposed publicly. The
@@ -8,6 +10,13 @@ import type { Request, Response, NextFunction } from "express";
 // but would let any visitor pollute the FLAT haircut list the moment the
 // service goes public. Read endpoints that expose reviewer-identifying
 // metadata (Task #163) are gated with requireCalibrationAuthStrict.
+//
+// Task #116 — wrong-token attempts on the mutation gate are now throttled
+// per-IP. Crucially, the limiter only sees requests that already FAILED
+// the token check: a correct-token request returns next() before the
+// limiter is touched, so a legitimate reviewer who happens to share an IP
+// (NAT, office network) with an attacker is never blocked by the
+// brute-force defense.
 //
 // requireCalibrationAuth behavior (used for mutation endpoints):
 //   - When CALIBRATION_TOKEN is unset or empty, the middleware is a no-op.
@@ -18,11 +27,16 @@ import type { Request, Response, NextFunction } from "express";
 //     `Authorization: Bearer <token>` header. Comparison is timing-safe.
 //   - Missing/wrong token returns 401 with a JSON error body that matches
 //     the rest of the calibration surface.
+//   - Repeated 401s from the same IP within the limiter window return 429
+//     instead. The 401 path is wrapped in the limiter so successful auth
+//     never increments the bucket and never gets blocked by it.
 //
 // requireCalibrationAuthStrict behavior (used for sensitive read endpoints):
 //   - Always requires a valid token — fails closed even when CALIBRATION_TOKEN
 //     is unset. This prevents reviewer metadata from leaking publicly when the
 //     token env var is not configured.
+//   - The Task #116 throttle does NOT apply here: the task scopes the
+//     brute-force defense to mutation routes only. Read 401s remain unthrottled.
 
 const HEADER_NAME = "x-calibration-token";
 
@@ -61,6 +75,33 @@ function constantTimeEquals(a: string, b: string): boolean {
   return timingSafeEqual(aBuf, bBuf);
 }
 
+// Lazy singleton so the production process gets a single limiter built from
+// env vars on first use, while tests can inject their own (smaller-window,
+// isolated) instance via __setCalibrationAuthLimiterForTests.
+let limiterInstance: RateLimitRequestHandler | null = null;
+
+function getLimiter(): RateLimitRequestHandler {
+  if (limiterInstance === null) {
+    limiterInstance = createCalibrationAuthLimiter();
+  }
+  return limiterInstance;
+}
+
+/**
+ * Test seam — replace the lazy limiter with a freshly built one (or null to
+ * force the next request to construct from env on demand). Each test should
+ * inject a dedicated limiter so its in-memory hit store cannot leak counts
+ * to neighbouring tests.
+ */
+export function __setCalibrationAuthLimiterForTests(
+  limiter: RateLimitRequestHandler | null,
+): void {
+  limiterInstance = limiter;
+}
+
+const WRONG_TOKEN_MESSAGE =
+  "Calibration mutations require a reviewer token. Send the configured token via the X-Calibration-Token header or Authorization: Bearer <token>.";
+
 export function requireCalibrationAuth(
   req: Request,
   res: Response,
@@ -72,19 +113,28 @@ export function requireCalibrationAuth(
     return;
   }
   const presented = extractPresentedToken(req);
-  if (presented === null || !constantTimeEquals(expected, presented)) {
-    res.status(401).json({
-      error:
-        "Calibration mutations require a reviewer token. Send the configured token via the X-Calibration-Token header or Authorization: Bearer <token>.",
-    });
+  if (presented !== null && constantTimeEquals(expected, presented)) {
+    // Correct token — pass through immediately. The limiter is NEVER touched
+    // on this path, so a valid reviewer is never throttled regardless of how
+    // many failed attempts have come from the same IP.
+    next();
     return;
   }
-  next();
+  // Wrong or missing token — route this single request through the per-IP
+  // limiter. If the bucket is full, the limiter responds with 429 itself
+  // and our callback is never invoked. Otherwise the limiter increments the
+  // hit count and calls our callback, which sends the standard 401.
+  const limiter = getLimiter();
+  limiter(req, res, () => {
+    res.status(401).json({ error: WRONG_TOKEN_MESSAGE });
+  });
 }
 
 // Task #163 — strict variant: fails closed even when CALIBRATION_TOKEN is
 // unset, so sensitive read endpoints that expose reviewer metadata are never
-// publicly accessible regardless of deployment configuration.
+// publicly accessible regardless of deployment configuration. The Task #116
+// throttle is intentionally NOT applied here; the task scopes brute-force
+// defense to mutation routes.
 export function requireCalibrationAuthStrict(
   req: Request,
   res: Response,

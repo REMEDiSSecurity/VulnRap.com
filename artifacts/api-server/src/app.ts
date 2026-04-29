@@ -120,6 +120,12 @@ const analysisLimiter = rateLimit({
 app.post("/api/reports/check", analysisLimiter);
 app.post("/api/reports", analysisLimiter);
 
+// Task #116 — wrong-token attempts on /api/feedback/calibration mutation
+// routes are throttled per-IP. The throttle is integrated into
+// requireCalibrationAuth (see middlewares/require-calibration-auth.ts) so
+// only failed-auth requests touch the limiter; correct-token calls bypass
+// it entirely and are never blocked by an exhausted bucket from the same IP.
+
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
