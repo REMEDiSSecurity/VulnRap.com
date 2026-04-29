@@ -682,6 +682,26 @@ export interface ReinstatePhraseOptions {
   now?: string;
 }
 
+/**
+ * Task #159 — options for `reinstateHandwavyPhrasesBatch`. Extends the
+ * single-phrase reinstate options with a `dryRun` flag that lets reviewers
+ * preview the per-phrase outcome of a batch reinstate (which inner phrases
+ * would be reinstated, which would be skipped because they're already
+ * reinstated or already on the active list) without mutating the active
+ * marker list, the removal-history log, or the cache.
+ */
+export interface ReinstateBatchOptions extends ReinstatePhraseOptions {
+  /**
+   * When true, the function computes the same `results` / `reinstated` /
+   * `skipped` shape but skips the `persist` step entirely. Reviewer name
+   * and timestamp are still recorded in the in-memory `historyEntry` /
+   * inner phrase rows that come back, so the caller can show "this batch
+   * would be reinstated by <reviewer> at <now>" in the preview, but
+   * nothing is written back to disk and `CACHED_*` are left untouched.
+   */
+  dryRun?: boolean;
+}
+
 /** Maximum number of edit-history entries kept on a single marker. */
 const EDITS_PER_PHRASE_LIMIT = 50;
 
@@ -872,7 +892,7 @@ export type ReinstateBatchResult =
  */
 export function reinstateHandwavyPhrasesBatch(
   removedAt: string,
-  options: ReinstatePhraseOptions = {},
+  options: ReinstateBatchOptions = {},
 ): ReinstateBatchResult {
   const { markers: current, history } = load();
   const idx = history.findIndex((h) => h.removedAt === removedAt);
@@ -932,10 +952,17 @@ export function reinstateHandwavyPhrasesBatch(
   const nextHistory = history.slice();
   nextHistory[idx] = updatedEntry;
 
-  // Only persist when something actually changed; otherwise just report the
-  // skip reasons so a reviewer who clicks "Reinstate all" on an already
-  // fully-reinstated batch sees a clean no-op result.
-  if (reinstatedCount > 0) {
+  // Task #159 — when called in dry-run mode, return the same result shape
+  // (so the UI / CLI preview matches the real call) but skip the persist
+  // step entirely. This lets reviewers see exactly which inner phrases
+  // would be reinstated and which would be skipped (already-reinstated /
+  // already-active) before pulling the trigger.
+  //
+  // Only persist when something actually changed AND this is not a dry
+  // run; otherwise just report the skip reasons so a reviewer who clicks
+  // "Reinstate all" on an already fully-reinstated batch sees a clean
+  // no-op result.
+  if (!options.dryRun && reinstatedCount > 0) {
     const trimmed = persist(nextMarkers, nextHistory);
     CACHED_MARKERS = nextMarkers;
     CACHED_HISTORY = trimmed;

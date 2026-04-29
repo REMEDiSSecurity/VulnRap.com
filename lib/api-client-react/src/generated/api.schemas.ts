@@ -1985,12 +1985,21 @@ The batch history entry is matched by `removedAt`; every inner phrase
 that has not already been reinstated and is not currently active is
 re-added in one round-trip.
 
+Task #159 — when `dryRun: true` the server returns
+`HandwavyPhraseReinstateBatchDryRunResponse` with the same per-phrase
+outcome shape, and does NOT mutate the active marker list, the
+removal-history log, or the cache. Both the mutating and dry-run
+paths return HTTP 200; callers discriminate on the `dryRun` flag
+in the response body.
+
  */
 export interface HandwavyPhraseReinstateBatchBody {
   /** ISO 8601 timestamp of the matching batch removal entry's `removedAt` field. */
   removedAt: string;
   /** Reviewer name or email recorded as `addedBy`/`reinstatedBy` on every reinstated phrase. Optional. */
   reviewer?: string;
+  /** When true, return a per-phrase reinstate preview without mutating the active list or removal-history log. */
+  dryRun?: boolean;
 }
 
 /**
@@ -2021,7 +2030,7 @@ export interface HandwavyPhraseReinstateBatchEntryResult {
 
  */
 export interface HandwavyPhraseReinstateBatchResponse {
-  /** Always true on a successful 201 response (the batch was processed). */
+  /** Always true on a successful mutating response (the batch was processed). */
   reinstated: boolean;
   /** Always true — distinguishes this response from a single-phrase /reinstate. */
   batch: boolean;
@@ -2035,6 +2044,35 @@ export interface HandwavyPhraseReinstateBatchResponse {
   results: HandwavyPhraseReinstateBatchEntryResult[];
   historyEntry: HandwavyHistoryEntry;
   phrases: HandwavyMarker[];
+  history: HandwavyHistoryEntry[];
+}
+
+/**
+ * Task #159 — dry-run preview returned when POST
+/feedback/calibration/handwavy-phrases/reinstate-batch is called with
+`dryRun: true`. Mirrors the per-phrase outcome shape of
+`HandwavyPhraseReinstateBatchResponse` so callers can reuse the same
+renderer, but does NOT mutate the active marker list, the
+removal-history log, or the cache. Both the mutating and dry-run
+paths return HTTP 200; callers discriminate on the `dryRun` flag
+in the response body.
+
+ */
+export interface HandwavyPhraseReinstateBatchDryRunResponse {
+  dryRun: boolean;
+  batch: boolean;
+  removedAt: string;
+  /** Number of inner phrases that WOULD be re-added if the batch were applied. */
+  reinstatedCount: number;
+  /** Number of inner phrases that would be skipped (already reinstated or already active). */
+  skipped: number;
+  /** Projected number of active phrases after the batch reinstate would be applied. */
+  total: number;
+  results: HandwavyPhraseReinstateBatchEntryResult[];
+  historyEntry: HandwavyHistoryEntry;
+  /** Active list (unchanged because this is a dry run). */
+  phrases: HandwavyMarker[];
+  /** Removal-history log (unchanged because this is a dry run). */
   history: HandwavyHistoryEntry[];
 }
 

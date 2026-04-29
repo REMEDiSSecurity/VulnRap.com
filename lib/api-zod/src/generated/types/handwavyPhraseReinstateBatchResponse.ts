@@ -14,7 +14,7 @@ import type { HandwavyPhraseReinstateBatchEntryResult } from "./handwavyPhraseRe
 
  */
 export interface HandwavyPhraseReinstateBatchResponse {
-  /** Always true on a successful 201 response (the batch was processed). */
+  /** Always true on a successful mutating response (the batch was processed). */
   reinstated: boolean;
   /** Always true — distinguishes this response from a single-phrase /reinstate. */
   batch: boolean;

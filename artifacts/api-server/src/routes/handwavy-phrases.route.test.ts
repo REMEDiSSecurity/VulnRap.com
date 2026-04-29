@@ -1291,7 +1291,7 @@ describe("/feedback/calibration/handwavy-phrases", () => {
         removedAt,
         reviewer: "carol@team.com",
       });
-      expect(r.status).toBe(201);
+      expect(r.status).toBe(200);
       expect(r.body.reinstatedCount).toBe(3);
       expect(r.body.skipped).toBe(0);
       expect(r.body.results.every((x) => x.reinstated)).toBe(true);
@@ -1324,7 +1324,7 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       }>("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
         removedAt,
       });
-      expect(r.status).toBe(201);
+      expect(r.status).toBe(200);
       expect(r.body.reinstatedCount).toBe(1);
       expect(r.body.skipped).toBe(1);
       const skipA = r.body.results.find((x) => x.phrase === "rb skip a");
@@ -1363,6 +1363,135 @@ describe("/feedback/calibration/handwavy-phrases", () => {
         {},
       );
       expect(r.status).toBe(400);
+    });
+
+    // Task #159 — dry-run preview endpoint behaviour.
+    it("POST /reinstate-batch with dryRun:true returns the same shape with HTTP 200 and does not mutate state", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb dry alpha", category: "absence" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb dry bravo", category: "hedging" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb dry charlie", category: "buzzword" });
+      const removed = await request<{
+        historyEntry: { removedAt: string };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["rb dry alpha", "rb dry bravo", "rb dry charlie"],
+        reviewer: "alice@team.com",
+      });
+      const removedAt = removed.body.historyEntry.removedAt;
+
+      // Snapshot active list + the matching history row before the dry-run.
+      const beforeList = await request<{ phrases: Marker[] }>(
+        "GET",
+        "/feedback/calibration/handwavy-phrases",
+      );
+      const beforeActive = beforeList.body.phrases.map((m) => m.phrase);
+
+      const dry = await request<{
+        dryRun: boolean;
+        batch: boolean;
+        reinstatedCount: number;
+        skipped: number;
+        total: number;
+        results: Array<{ phrase: string; reinstated: boolean; reason?: string }>;
+        historyEntry: { reinstated?: boolean; phrases?: Array<{ phrase: string; reinstated?: boolean }> };
+      }>("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
+        removedAt,
+        dryRun: true,
+      });
+      expect(dry.status).toBe(200);
+      expect(dry.body.dryRun).toBe(true);
+      expect(dry.body.batch).toBe(true);
+      expect(dry.body.reinstatedCount).toBe(3);
+      expect(dry.body.skipped).toBe(0);
+      expect(dry.body.results.every((r) => r.reinstated)).toBe(true);
+      // Projected total = current active size + 3.
+      expect(dry.body.total).toBe(beforeActive.length + 3);
+
+      // Active list is UNCHANGED — none of the dry-run phrases came back.
+      const afterList = await request<{ phrases: Marker[] }>(
+        "GET",
+        "/feedback/calibration/handwavy-phrases",
+      );
+      const afterActive = afterList.body.phrases.map((m) => m.phrase);
+      expect(afterActive).toEqual(beforeActive);
+      expect(afterActive).not.toContain("rb dry alpha");
+      expect(afterActive).not.toContain("rb dry bravo");
+      expect(afterActive).not.toContain("rb dry charlie");
+
+      // Issuing the real call afterwards still works (no state was
+      // accidentally locked / flagged).
+      const real = await request<{ reinstatedCount: number; phrases: Marker[] }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate-batch",
+        { removedAt },
+      );
+      expect(real.status).toBe(200);
+      expect(real.body.reinstatedCount).toBe(3);
+      const live = real.body.phrases.map((m) => m.phrase);
+      expect(live).toContain("rb dry alpha");
+      expect(live).toContain("rb dry bravo");
+      expect(live).toContain("rb dry charlie");
+    });
+
+    it("POST /reinstate-batch with dryRun:true reflects skip reasons without mutating state", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb dry skip a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb dry skip b" });
+      const removed = await request<{
+        historyEntry: { removedAt: string };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["rb dry skip a", "rb dry skip b"],
+      });
+      const removedAt = removed.body.historyEntry.removedAt;
+      // Reinstate one ahead of time so the dry-run sees a real skip.
+      await request("POST", "/feedback/calibration/handwavy-phrases/reinstate", {
+        phrase: "rb dry skip a",
+        removedAt,
+      });
+
+      const dry = await request<{
+        dryRun: boolean;
+        reinstatedCount: number;
+        skipped: number;
+        results: Array<{ phrase: string; reinstated: boolean; reason?: string }>;
+      }>("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
+        removedAt,
+        dryRun: true,
+      });
+      expect(dry.status).toBe(200);
+      expect(dry.body.dryRun).toBe(true);
+      expect(dry.body.reinstatedCount).toBe(1);
+      expect(dry.body.skipped).toBe(1);
+      const skipA = dry.body.results.find((x) => x.phrase === "rb dry skip a");
+      expect(skipA?.reinstated).toBe(false);
+      expect(skipA?.reason).toBe("already-reinstated");
+      const wouldB = dry.body.results.find((x) => x.phrase === "rb dry skip b");
+      expect(wouldB?.reinstated).toBe(true);
+
+      // The "rb dry skip b" phrase is still NOT in the active list — the
+      // dry-run did not actually re-add it.
+      const list = await request<{ phrases: Marker[] }>(
+        "GET",
+        "/feedback/calibration/handwavy-phrases",
+      );
+      expect(list.body.phrases.map((m) => m.phrase)).not.toContain("rb dry skip b");
+    });
+
+    it("POST /reinstate-batch rejects non-boolean dryRun with 400", async () => {
+      const r = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate-batch",
+        { removedAt: "2099-01-01T00:00:00.000Z", dryRun: "yes" },
+      );
+      expect(r.status).toBe(400);
+    });
+
+    it("POST /reinstate-batch with dryRun:true still returns 404 when removedAt does not match", async () => {
+      const r = await request<{ reason?: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate-batch",
+        { removedAt: "2099-01-01T00:00:00.000Z", dryRun: true },
+      );
+      expect(r.status).toBe(404);
+      expect(r.body.reason).toBe("history-not-found");
     });
   });
 

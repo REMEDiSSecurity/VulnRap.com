@@ -889,6 +889,120 @@ describe("handwavy-phrases loader", () => {
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.reason).toBe("not-a-batch");
     });
+
+    // Task #159 — dry-run preview returns the same shape but skips persist.
+    it("dryRun: true returns the same per-phrase preview without mutating state or appending history", () => {
+      addHandwavyPhrase("dryrun reinstate alpha", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("dryrun reinstate bravo", "hedging", { now: "2026-04-20T08:01:00.000Z" });
+      addHandwavyPhrase("dryrun reinstate charlie", "buzzword", { now: "2026-04-20T08:02:00.000Z" });
+      removeHandwavyPhrasesBatch(
+        ["dryrun reinstate alpha", "dryrun reinstate bravo", "dryrun reinstate charlie"],
+        { reviewer: "alice@team.com", now: "2026-04-22T13:00:00.000Z" },
+      );
+
+      // Snapshot the active list and history BEFORE the dry-run so we can
+      // prove the call did not mutate either.
+      const beforeActive = getHandwavyPhrases().map((m) => m.phrase);
+      const beforeHistory = JSON.parse(JSON.stringify(getHandwavyPhraseHistory()));
+
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        reviewer: "carol@team.com",
+        now: "2026-04-22T15:00:00.000Z",
+        dryRun: true,
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Same shape as the mutating call.
+      expect(result.reinstated).toBe(3);
+      expect(result.skipped).toBe(0);
+      expect(result.results.every((r) => r.reinstated)).toBe(true);
+      // The projected `total` reflects "all three would be back".
+      expect(result.total).toBe(beforeActive.length + 3);
+
+      // Active list and history are UNCHANGED on disk + in cache.
+      const afterActive = getHandwavyPhrases().map((m) => m.phrase);
+      expect(afterActive).toEqual(beforeActive);
+      expect(afterActive).not.toContain("dryrun reinstate alpha");
+      expect(afterActive).not.toContain("dryrun reinstate bravo");
+      expect(afterActive).not.toContain("dryrun reinstate charlie");
+      expect(getHandwavyPhraseHistory()).toEqual(beforeHistory);
+      const removedRow = getHandwavyPhraseHistory().find(
+        (h) => h.removedAt === "2026-04-22T13:00:00.000Z",
+      );
+      expect(removedRow?.reinstated).not.toBe(true);
+      expect(removedRow?.phrases?.every((p) => p.reinstated !== true)).toBe(true);
+
+      // A subsequent real call still works and produces the same per-phrase
+      // outcomes the dry-run advertised.
+      const real = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        reviewer: "carol@team.com",
+        now: "2026-04-22T15:00:00.000Z",
+      });
+      expect(real.ok).toBe(true);
+      if (!real.ok) return;
+      expect(real.reinstated).toBe(3);
+      const live = getHandwavyPhrases().map((m) => m.phrase);
+      expect(live).toContain("dryrun reinstate alpha");
+      expect(live).toContain("dryrun reinstate bravo");
+      expect(live).toContain("dryrun reinstate charlie");
+    });
+
+    it("dryRun: true reflects partial-undo skips without persisting them", () => {
+      addHandwavyPhrase("dryrun skip one", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("dryrun skip two", "absence", { now: "2026-04-20T08:01:00.000Z" });
+      removeHandwavyPhrasesBatch(["dryrun skip one", "dryrun skip two"], {
+        now: "2026-04-22T13:00:00.000Z",
+      });
+      // Reinstate one ahead of time so the dry-run sees a real skip reason.
+      reinstateHandwavyPhrase("dryrun skip one", "2026-04-22T13:00:00.000Z", {
+        now: "2026-04-22T13:30:00.000Z",
+      });
+
+      const beforeActive = getHandwavyPhrases().map((m) => m.phrase);
+      const beforeHistory = JSON.parse(JSON.stringify(getHandwavyPhraseHistory()));
+
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        dryRun: true,
+        now: "2026-04-22T15:00:00.000Z",
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.reinstated).toBe(1);
+      expect(result.skipped).toBe(1);
+      const byPhrase = new Map(result.results.map((r) => [r.phrase, r]));
+      expect(byPhrase.get("dryrun skip one")?.reason).toBe("already-reinstated");
+      expect(byPhrase.get("dryrun skip two")?.reinstated).toBe(true);
+
+      // Active list and history are UNCHANGED.
+      expect(getHandwavyPhrases().map((m) => m.phrase)).toEqual(beforeActive);
+      expect(getHandwavyPhraseHistory()).toEqual(beforeHistory);
+    });
+
+    it("dryRun: true is a clean no-op when every inner phrase is already reinstated/active", () => {
+      addHandwavyPhrase("dryrun noop one", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("dryrun noop two", "absence", { now: "2026-04-20T08:01:00.000Z" });
+      removeHandwavyPhrasesBatch(["dryrun noop one", "dryrun noop two"], {
+        now: "2026-04-22T13:00:00.000Z",
+      });
+      reinstateHandwavyPhrase("dryrun noop one", "2026-04-22T13:00:00.000Z", {
+        now: "2026-04-22T13:30:00.000Z",
+      });
+      reinstateHandwavyPhrase("dryrun noop two", "2026-04-22T13:00:00.000Z", {
+        now: "2026-04-22T13:31:00.000Z",
+      });
+      const beforeHistory = JSON.parse(JSON.stringify(getHandwavyPhraseHistory()));
+
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        dryRun: true,
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.reinstated).toBe(0);
+      expect(result.skipped).toBe(2);
+      expect(result.results.every((r) => r.reason === "already-reinstated")).toBe(true);
+      // History is byte-for-byte unchanged.
+      expect(getHandwavyPhraseHistory()).toEqual(beforeHistory);
+    });
   });
 
   it("stamps addedAt automatically when no `now` override is supplied", () => {

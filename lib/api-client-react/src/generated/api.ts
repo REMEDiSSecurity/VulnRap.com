@@ -39,6 +39,7 @@ import type {
   HandwavyPhraseEditBody,
   HandwavyPhraseMutationResponse,
   HandwavyPhraseReinstateBatchBody,
+  HandwavyPhraseReinstateBatchDryRunResponse,
   HandwavyPhraseReinstateBatchResponse,
   HandwavyPhraseReinstateBody,
   HandwavyPhraseRemovalBatchesList,
@@ -2171,6 +2172,16 @@ have been re-added to the active list separately are skipped with a
 reason instead of failing the whole call. Per-phrase reinstate via
 the existing /reinstate endpoint still works for partial undos.
 
+Task #159 — when `dryRun: true` is sent in the body, the server
+returns the same `results` / `reinstatedCount` / `skipped` shape
+(with `dryRun: true` and `batch: true` flags) without mutating
+the active marker list or appending to the removal-history log.
+Reviewers can preview exactly which inner phrases would be
+reinstated and which would be skipped before pressing yes.
+Mirrors the dry-run pattern used by the bulk-remove endpoint:
+both the mutating and dry-run paths return HTTP 200 and callers
+discriminate on the `dryRun` flag in the body.
+
  * @summary Reinstate every not-yet-reinstated phrase from a single batch removal entry
  */
 export const getReinstateHandwavyPhrasesBatchUrl = () => {
@@ -2180,16 +2191,19 @@ export const getReinstateHandwavyPhrasesBatchUrl = () => {
 export const reinstateHandwavyPhrasesBatch = async (
   handwavyPhraseReinstateBatchBody: HandwavyPhraseReinstateBatchBody,
   options?: RequestInit,
-): Promise<HandwavyPhraseReinstateBatchResponse> => {
-  return customFetch<HandwavyPhraseReinstateBatchResponse>(
-    getReinstateHandwavyPhrasesBatchUrl(),
-    {
-      ...options,
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...options?.headers },
-      body: JSON.stringify(handwavyPhraseReinstateBatchBody),
-    },
-  );
+): Promise<
+  | HandwavyPhraseReinstateBatchResponse
+  | HandwavyPhraseReinstateBatchDryRunResponse
+> => {
+  return customFetch<
+    | HandwavyPhraseReinstateBatchResponse
+    | HandwavyPhraseReinstateBatchDryRunResponse
+  >(getReinstateHandwavyPhrasesBatchUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(handwavyPhraseReinstateBatchBody),
+  });
 };
 
 export const getReinstateHandwavyPhrasesBatchMutationOptions = <

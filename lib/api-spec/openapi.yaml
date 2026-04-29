@@ -752,6 +752,16 @@ paths:
         have been re-added to the active list separately are skipped with a
         reason instead of failing the whole call. Per-phrase reinstate via
         the existing /reinstate endpoint still works for partial undos.
+
+        Task #159 — when `dryRun: true` is sent in the body, the server
+        returns the same `results` / `reinstatedCount` / `skipped` shape
+        (with `dryRun: true` and `batch: true` flags) without mutating
+        the active marker list or appending to the removal-history log.
+        Reviewers can preview exactly which inner phrases would be
+        reinstated and which would be skipped before pressing yes.
+        Mirrors the dry-run pattern used by the bulk-remove endpoint:
+        both the mutating and dry-run paths return HTTP 200 and callers
+        discriminate on the `dryRun` flag in the body.
       requestBody:
         required: true
         content:
@@ -759,14 +769,19 @@ paths:
             schema:
               $ref: "#/components/schemas/HandwavyPhraseReinstateBatchBody"
       responses:
-        "201":
-          description: Batch processed (see `reinstatedCount` and `results`).
+        "200":
+          description: |
+            Batch processed (mutating path; see `reinstatedCount` and
+            `results`) OR dry-run preview when `dryRun: true` was sent
+            (`dryRun: true` and `batch: true` flags, no state was mutated).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HandwavyPhraseReinstateBatchResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/HandwavyPhraseReinstateBatchResponse"
+                  - $ref: "#/components/schemas/HandwavyPhraseReinstateBatchDryRunResponse"
         "400":
-          description: Invalid body (missing or non-string `removedAt`/`reviewer`).
+          description: Invalid body (missing or non-string `removedAt`/`reviewer`, or non-boolean `dryRun`).
           content:
             application/json:
               schema:
@@ -3610,6 +3625,13 @@ components:
         The batch history entry is matched by `removedAt`; every inner phrase
         that has not already been reinstated and is not currently active is
         re-added in one round-trip.
+
+        Task #159 — when `dryRun: true` the server returns
+        `HandwavyPhraseReinstateBatchDryRunResponse` with the same per-phrase
+        outcome shape, and does NOT mutate the active marker list, the
+        removal-history log, or the cache. Both the mutating and dry-run
+        paths return HTTP 200; callers discriminate on the `dryRun` flag
+        in the response body.
       properties:
         removedAt:
           type: string
@@ -3618,6 +3640,9 @@ components:
         reviewer:
           type: string
           description: Reviewer name or email recorded as `addedBy`/`reinstatedBy` on every reinstated phrase. Optional.
+        dryRun:
+          type: boolean
+          description: When true, return a per-phrase reinstate preview without mutating the active list or removal-history log.
       required: [removedAt]
 
     HandwavyPhraseReinstateBatchResponse:
@@ -3627,7 +3652,7 @@ components:
       properties:
         reinstated:
           type: boolean
-          description: Always true on a successful 201 response (the batch was processed).
+          description: Always true on a successful mutating response (the batch was processed).
         batch:
           type: boolean
           description: Always true — distinguishes this response from a single-phrase /reinstate.
@@ -3674,6 +3699,54 @@ components:
           enum: [already-reinstated, already-active]
           description: Present only when `reinstated` is false.
       required: [phrase, reinstated]
+
+    HandwavyPhraseReinstateBatchDryRunResponse:
+      type: object
+      description: |
+        Task #159 — dry-run preview returned when POST
+        /feedback/calibration/handwavy-phrases/reinstate-batch is called with
+        `dryRun: true`. Mirrors the per-phrase outcome shape of
+        `HandwavyPhraseReinstateBatchResponse` so callers can reuse the same
+        renderer, but does NOT mutate the active marker list, the
+        removal-history log, or the cache. Both the mutating and dry-run
+        paths return HTTP 200; callers discriminate on the `dryRun` flag
+        in the response body.
+      properties:
+        dryRun:
+          type: boolean
+          enum: [true]
+        batch:
+          type: boolean
+          enum: [true]
+        removedAt:
+          type: string
+          format: date-time
+        reinstatedCount:
+          type: integer
+          description: Number of inner phrases that WOULD be re-added if the batch were applied.
+        skipped:
+          type: integer
+          description: Number of inner phrases that would be skipped (already reinstated or already active).
+        total:
+          type: integer
+          description: Projected number of active phrases after the batch reinstate would be applied.
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyPhraseReinstateBatchEntryResult"
+        historyEntry:
+          $ref: "#/components/schemas/HandwavyHistoryEntry"
+        phrases:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyMarker"
+          description: Active list (unchanged because this is a dry run).
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyHistoryEntry"
+          description: Removal-history log (unchanged because this is a dry run).
+      required: [dryRun, batch, removedAt, reinstatedCount, skipped, total, results, historyEntry, phrases, history]
 
     HandwavyPhraseDryRunMatches:
       type: object

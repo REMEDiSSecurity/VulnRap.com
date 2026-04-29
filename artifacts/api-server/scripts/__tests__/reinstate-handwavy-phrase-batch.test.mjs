@@ -121,7 +121,7 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
   it("reinstates a whole batch in one round-trip and renders per-phrase outcomes", async () => {
     state.postResponses = [
       {
-        status: 201,
+        status: 200,
         body: {
           reinstated: true,
           batch: true,
@@ -165,7 +165,7 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
   it("succeeds (exit 0) even when every inner phrase was already reinstated/active", async () => {
     state.postResponses = [
       {
-        status: 201,
+        status: 200,
         body: {
           reinstated: true,
           batch: true,
@@ -478,7 +478,7 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
   it("--yes skips the interactive prompt", async () => {
     state.postResponses = [
       {
-        status: 201,
+        status: 200,
         body: {
           reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
           reinstatedCount: 1, skipped: 0, total: 5,
@@ -491,5 +491,61 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     const res = await runScript(["--removed-at", "2026-04-22T12:34:56.000Z", "--yes"]);
     expect(res.code).toBe(0);
     expect(res.stdout).not.toMatch(/\[y\/N\]/);
+  });
+
+  // Task #159 — --dry-run sends `dryRun: true`, never prompts, prints the
+  // preview header, and exits 0 on a successful preview without mutating
+  // anything server-side.
+  it("--dry-run sends dryRun:true, skips the prompt, and prints a preview", async () => {
+    state.postResponses = [
+      {
+        status: 200,
+        body: {
+          dryRun: true,
+          batch: true,
+          removedAt: "2026-04-22T12:34:56.000Z",
+          reinstatedCount: 2,
+          skipped: 1,
+          total: 9,
+          results: [
+            { phrase: "rb dry a", reinstated: true },
+            { phrase: "rb dry b", reinstated: true },
+            { phrase: "rb dry c", reinstated: false, reason: "already-reinstated" },
+          ],
+          historyEntry: {
+            removedAt: "2026-04-22T12:34:56.000Z",
+            reinstated: false,
+            phrases: [],
+          },
+          phrases: [],
+          history: [],
+        },
+      },
+    ];
+
+    const res = await runScript([
+      "--removed-at", "2026-04-22T12:34:56.000Z",
+      "--dry-run",
+    ]);
+    expect(res.code).toBe(0);
+
+    const posts = state.requests.filter((r) => r.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0].body).toMatchObject({
+      removedAt: "2026-04-22T12:34:56.000Z",
+      dryRun: true,
+    });
+
+    // No interactive confirm prompt was rendered.
+    expect(res.stdout).not.toMatch(/\[y\/N\]/);
+    // Preview-mode wording (not the mutating "Reinstated:" / "Active list size now:" text).
+    expect(res.stdout).toMatch(/Batch reinstate preview/);
+    expect(res.stdout).toMatch(/Would reinstate:\s+2/);
+    expect(res.stdout).toMatch(/Would skip:\s+1/);
+    expect(res.stdout).toMatch(/Projected active total:\s+9/);
+    expect(res.stdout).toMatch(/\(dry-run — no changes were made\)/);
+    // Per-phrase rendering uses the dry-run verb.
+    expect(res.stdout).toMatch(/would reinstate.*"rb dry a"/);
+    expect(res.stdout).toMatch(/already-reinstated.*"rb dry c"/);
   });
 });

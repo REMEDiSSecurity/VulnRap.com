@@ -90,6 +90,7 @@ export * from "./handwavyPhraseDryRunMatchesSampleMatchesItemTier";
 export * from "./handwavyPhraseEditBody";
 export * from "./handwavyPhraseMutationResponse";
 export * from "./handwavyPhraseReinstateBatchBody";
+export * from "./handwavyPhraseReinstateBatchDryRunResponse";
 export * from "./handwavyPhraseReinstateBatchEntryResult";
 export * from "./handwavyPhraseReinstateBatchEntryResultReason";
 export * from "./handwavyPhraseReinstateBatchResponse";

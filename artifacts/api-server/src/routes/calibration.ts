@@ -822,9 +822,10 @@ router.post(
   requireCalibrationAuth,
   (req, res) => {
     try {
-      const { removedAt, reviewer } = (req.body ?? {}) as {
+      const { removedAt, reviewer, dryRun } = (req.body ?? {}) as {
         removedAt?: unknown;
         reviewer?: unknown;
+        dryRun?: unknown;
       };
       if (typeof removedAt !== "string" || removedAt.trim().length === 0) {
         res.status(400).json({
@@ -836,8 +837,14 @@ router.post(
         res.status(400).json({ error: "reviewer must be a string when provided." });
         return;
       }
+      if (dryRun !== undefined && typeof dryRun !== "boolean") {
+        res.status(400).json({ error: "dryRun must be a boolean when provided." });
+        return;
+      }
+      const isDryRun = dryRun === true;
       const result = reinstateHandwavyPhrasesBatch(removedAt, {
         reviewer: typeof reviewer === "string" ? reviewer : undefined,
+        dryRun: isDryRun,
       });
       if (!result.ok) {
         if (result.reason === "history-not-found") {
@@ -854,7 +861,36 @@ router.post(
         });
         return;
       }
-      res.status(201).json({
+      // Task #159 — preview mode: return the same `results` /
+      // `reinstatedCount` / `skipped` shape so the CLI can reuse the same
+      // renderer, but with `dryRun: true` and no state mutation. Mirrors
+      // the bulk-remove dry-run pattern (Task #145): both the mutating
+      // and dry-run paths return HTTP 200 and callers discriminate on the
+      // `dryRun` flag in the body. We report the projected `total` (active
+      // list size after the batch would be applied) so reviewers can
+      // sanity-check before pressing yes.
+      if (isDryRun) {
+        res.status(200).json({
+          dryRun: true,
+          batch: true,
+          removedAt: result.removedAt,
+          reinstatedCount: result.reinstated,
+          skipped: result.skipped,
+          // Projected size AFTER the batch would be applied. The pre-batch
+          // count is `result.total - result.reinstated` if a reviewer wants
+          // to derive it, but the CLI / UI typically just shows "would
+          // reinstate N inner phrase(s)".
+          total: result.total,
+          results: result.results,
+          historyEntry: result.historyEntry,
+          // Echo back the CURRENT (unchanged) active list so the response
+          // shape stays parallel to the mutating path.
+          phrases: getHandwavyPhrases(),
+          history: getHandwavyPhraseHistory(),
+        });
+        return;
+      }
+      res.status(200).json({
         reinstated: true,
         batch: true,
         removedAt: result.removedAt,
