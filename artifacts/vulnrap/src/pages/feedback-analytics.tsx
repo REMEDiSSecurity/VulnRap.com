@@ -885,6 +885,45 @@ function formatProductionScanRange(
   return `from ${oldestStr} to ${newestStr}`;
 }
 
+// Task #219 — Freshness window (in days) for the production scan sample
+// surfaced on the dry-run preview. When the newest report in the sample is
+// older than this, we render an amber notice in the production
+// `PreviewMatchBlock` warning reviewers that the false-positive count may
+// not reflect current reporter behavior. Tuned in one place — bump this
+// constant to widen/tighten the freshness window for all reviewers at once.
+export const PRODUCTION_SCAN_FRESHNESS_DAYS = 14;
+
+// Task #219 — Compute how many whole days have elapsed between `now` and the
+// newest production-scan timestamp. Returns null when:
+//   - the input is missing/unparseable (curated block or empty scan), OR
+//   - the timestamp is in the future (clock-skew guard — we don't want to
+//     warn for a "negatively stale" sample, that's noise).
+// Floors to whole days so the rendered string is stable across re-renders
+// of the same preview within a calendar day.
+export function productionScanStalenessDays(
+  newestIso: string | null | undefined,
+  now: Date = new Date(),
+): number | null {
+  if (!newestIso) return null;
+  const t = new Date(newestIso).getTime();
+  if (!Number.isFinite(t)) return null;
+  const diffMs = now.getTime() - t;
+  if (diffMs < 0) return null;
+  return Math.floor(diffMs / (24 * 60 * 60 * 1000));
+}
+
+// Task #219 — Convenience predicate: is the scan's newest report older than
+// the freshness threshold? Returns false for missing/future timestamps so
+// callers don't have to special-case "null means fresh".
+export function isProductionScanStale(
+  newestIso: string | null | undefined,
+  now: Date = new Date(),
+  thresholdDays: number = PRODUCTION_SCAN_FRESHNESS_DAYS,
+): boolean {
+  const days = productionScanStalenessDays(newestIso, now);
+  return days !== null && days > thresholdDays;
+}
+
 // Task #119 — Side-by-side render of one dry-run match block (curated vs.
 // production). Identical visual shape so reviewers can read both signals at
 // a glance; the `kind` prop only changes the leading icon and label noun.
@@ -904,6 +943,17 @@ function PreviewMatchBlock({
   // Task #124 — only the production block carries a createdAt window; the
   // curated block has no wall-clock timestamps so this returns null there.
   const scanRange = formatProductionScanRange(matches.oldestCreatedAt, matches.newestCreatedAt);
+  // Task #219 — Compute staleness only for the production block. The curated
+  // block has no wall-clock timestamps (its fixtures aren't time-bound), so
+  // freshness is meaningless there. We compute against `Date.now()` at render
+  // time; the helper itself floors to whole days, so the rendered string is
+  // stable across re-renders within the same calendar day. We delegate the
+  // threshold comparison to `isProductionScanStale` so there's a single
+  // source of truth for the staleness predicate.
+  const stalenessDays = kind === "production"
+    ? productionScanStalenessDays(matches.newestCreatedAt)
+    : null;
+  const isStale = kind === "production" && isProductionScanStale(matches.newestCreatedAt);
   const fp = matches.falsePositives;
   const sourceNoun = kind === "curated" ? "fixture" : "report";
   return (
@@ -929,6 +979,32 @@ function PreviewMatchBlock({
         >
           Scanned {matches.corpusSize} {sourceNoun}
           {matches.corpusSize === 1 ? "" : "s"} {scanRange}
+        </div>
+      )}
+      {isStale && (
+        // Task #219 — Amber freshness notice. We don't change the
+        // false-positive count itself (the scoring is correct for the rows
+        // we actually have), we just tell the reviewer the sample is old so
+        // they discount the signal accordingly. Uses the same amber palette
+        // as the existing "Production archive scan unavailable" notice so
+        // reviewers learn the colour means "production-side caveat".
+        <div
+          className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100 flex items-start gap-1.5"
+          data-testid={`handwavy-preview-${kind}-stale`}
+          data-stale-days={stalenessDays}
+        >
+          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+          <div>
+            <div className="font-semibold text-amber-200">
+              Production sample is {stalenessDays} day{stalenessDays === 1 ? "" : "s"} old
+              {" "}— may not reflect current reporter behavior
+            </div>
+            <div className="text-amber-100/80 mt-0.5">
+              The newest report in this scan is older than the {PRODUCTION_SCAN_FRESHNESS_DAYS}-day
+              freshness window. Production traffic may have dropped or the table may not be
+              up-to-date — discount the false-positive count accordingly.
+            </div>
+          </div>
         </div>
       )}
       {matches.warning ? (

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { revertWouldBeNoop } from "./feedback-analytics";
+import {
+  revertWouldBeNoop,
+  productionScanStalenessDays,
+  isProductionScanStale,
+  PRODUCTION_SCAN_FRESHNESS_DAYS,
+} from "./feedback-analytics";
 import type { HandwavyEditEntry } from "@workspace/api-client-react";
 
 describe("revertWouldBeNoop (Task #148 — disable Revert when it would be a no-op)", () => {
@@ -80,5 +85,58 @@ describe("revertWouldBeNoop (Task #148 — disable Revert when it would be a no-
     it("is NOT a no-op when neither field matches", () => {
       expect(revertWouldBeNoop(entry, "buzzword", "newer reason")).toBe(false);
     });
+  });
+});
+
+describe("productionScanStalenessDays / isProductionScanStale (Task #219 — warn when production sample is older than the freshness window)", () => {
+  // A fixed "now" so day-floor arithmetic is deterministic regardless of when
+  // the test suite happens to run.
+  const NOW = new Date("2026-04-29T12:00:00.000Z");
+
+  it("returns null for missing or unparseable timestamps so callers can render normally", () => {
+    expect(productionScanStalenessDays(null, NOW)).toBeNull();
+    expect(productionScanStalenessDays(undefined, NOW)).toBeNull();
+    expect(productionScanStalenessDays("not-a-date", NOW)).toBeNull();
+    expect(isProductionScanStale(null, NOW)).toBe(false);
+    expect(isProductionScanStale(undefined, NOW)).toBe(false);
+    expect(isProductionScanStale("not-a-date", NOW)).toBe(false);
+  });
+
+  it("returns null for future timestamps (clock-skew guard) so a slightly-ahead sample isn't flagged as stale", () => {
+    const future = new Date(NOW.getTime() + 60 * 60 * 1000).toISOString();
+    expect(productionScanStalenessDays(future, NOW)).toBeNull();
+    expect(isProductionScanStale(future, NOW)).toBe(false);
+  });
+
+  it("floors to whole days so the rendered string is stable across same-day re-renders", () => {
+    const oneDayAndAHalfAgo = new Date(NOW.getTime() - (1 * 24 + 12) * 60 * 60 * 1000).toISOString();
+    expect(productionScanStalenessDays(oneDayAndAHalfAgo, NOW)).toBe(1);
+    const justUnderOneDay = new Date(NOW.getTime() - (24 * 60 * 60 * 1000 - 1)).toISOString();
+    expect(productionScanStalenessDays(justUnderOneDay, NOW)).toBe(0);
+  });
+
+  it("treats a sample exactly at the threshold as fresh and one day past as stale", () => {
+    // The default threshold is "older than N days" so equality should be fresh.
+    const exactlyAtThreshold = new Date(NOW.getTime() - PRODUCTION_SCAN_FRESHNESS_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    expect(productionScanStalenessDays(exactlyAtThreshold, NOW)).toBe(PRODUCTION_SCAN_FRESHNESS_DAYS);
+    expect(isProductionScanStale(exactlyAtThreshold, NOW)).toBe(false);
+
+    const onePastThreshold = new Date(NOW.getTime() - (PRODUCTION_SCAN_FRESHNESS_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
+    expect(productionScanStalenessDays(onePastThreshold, NOW)).toBe(PRODUCTION_SCAN_FRESHNESS_DAYS + 1);
+    expect(isProductionScanStale(onePastThreshold, NOW)).toBe(true);
+  });
+
+  it("respects an overridden threshold so callers can probe arbitrary windows", () => {
+    const fiveDaysAgo = new Date(NOW.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    expect(isProductionScanStale(fiveDaysAgo, NOW, 7)).toBe(false);
+    expect(isProductionScanStale(fiveDaysAgo, NOW, 3)).toBe(true);
+  });
+
+  it("exports a sensible default freshness window (positive integer, not too aggressive)", () => {
+    // Sanity-check the default so a typo in the constant (negative, zero, or
+    // a humongous value) doesn't silently disable the warning everywhere.
+    expect(Number.isInteger(PRODUCTION_SCAN_FRESHNESS_DAYS)).toBe(true);
+    expect(PRODUCTION_SCAN_FRESHNESS_DAYS).toBeGreaterThan(0);
+    expect(PRODUCTION_SCAN_FRESHNESS_DAYS).toBeLessThanOrEqual(90);
   });
 });
