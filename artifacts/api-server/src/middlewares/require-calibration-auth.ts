@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import type { RateLimitRequestHandler } from "express-rate-limit";
 import { createCalibrationAuthLimiter } from "./calibration-auth-rate-limit";
+import { logger } from "../lib/logger";
 
 // Task #113 — gate every mutation under /feedback/calibration/* behind a
 // shared reviewer token so the API can be safely exposed publicly. The
@@ -102,6 +103,45 @@ export function __setCalibrationAuthLimiterForTests(
 const WRONG_TOKEN_MESSAGE =
   "Calibration mutations require a reviewer token. Send the configured token via the X-Calibration-Token header or Authorization: Bearer <token>.";
 
+// Task #213 — emit a structured warn-level log every time the calibration
+// auth gate rejects a request with 401, so an operator can see sustained
+// brute-force probes in the standard pino log stream. The log NEVER
+// includes the presented (wrong) token value — only the request IP, the
+// route, the HTTP method, and which gate variant fired ("mutation" or
+// "strict-read"). The companion 429 log lives in the limiter itself
+// (calibration-auth-rate-limit.ts) so the bucket window/limit can be
+// included in that record.
+//
+// Runbook — to investigate a possible brute-force attempt in production:
+//   1. Filter pino output by the message:
+//        kubectl logs ... | jq 'select(.msg=="calibration auth: wrong-token attempt rejected (401)")'
+//      or for the throttled bucket:
+//        kubectl logs ... | jq 'select(.msg=="calibration auth: wrong-token throttle triggered (429)")'
+//   2. Group by the `ip` field to find the offending source.
+//   3. If the rate is sustained, rotate CALIBRATION_TOKEN and/or block the
+//      IP at the proxy. The 429 records also expose the configured
+//      `windowMs`/`max` so you can confirm the throttle is doing what
+//      you expect before tightening it via
+//      CALIBRATION_AUTH_RATE_LIMIT_{WINDOW_MS,MAX_FAILURES}.
+function logWrongTokenRejection(
+  req: Request,
+  gate: "mutation" | "strict-read",
+): void {
+  // express's req.ip already honours the `trust proxy` setting configured
+  // in app.ts so this reflects the real client IP behind the deployment
+  // proxy. We deliberately do NOT log the presented token — only the fact
+  // that a wrong/missing token was supplied.
+  logger.warn(
+    {
+      ip: req.ip ?? null,
+      route: req.originalUrl,
+      method: req.method,
+      gate,
+    },
+    "calibration auth: wrong-token attempt rejected (401)",
+  );
+}
+
 export function requireCalibrationAuth(
   req: Request,
   res: Response,
@@ -122,10 +162,12 @@ export function requireCalibrationAuth(
   }
   // Wrong or missing token — route this single request through the per-IP
   // limiter. If the bucket is full, the limiter responds with 429 itself
-  // and our callback is never invoked. Otherwise the limiter increments the
-  // hit count and calls our callback, which sends the standard 401.
+  // (and emits its own warn-level log via its `handler`) and our callback
+  // is never invoked. Otherwise the limiter increments the hit count and
+  // calls our callback, which logs the rejection and sends the standard 401.
   const limiter = getLimiter();
   limiter(req, res, () => {
+    logWrongTokenRejection(req, "mutation");
     res.status(401).json({ error: WRONG_TOKEN_MESSAGE });
   });
 }
@@ -142,6 +184,7 @@ export function requireCalibrationAuthStrict(
 ): void {
   const expected = readConfiguredToken();
   if (expected === null) {
+    logWrongTokenRejection(req, "strict-read");
     res.status(401).json({
       error:
         "This endpoint requires calibration auth. Set CALIBRATION_TOKEN and send it via the X-Calibration-Token header or Authorization: Bearer <token>.",
@@ -150,6 +193,7 @@ export function requireCalibrationAuthStrict(
   }
   const presented = extractPresentedToken(req);
   if (presented === null || !constantTimeEquals(expected, presented)) {
+    logWrongTokenRejection(req, "strict-read");
     res.status(401).json({
       error:
         "Calibration auth required. Send the configured token via the X-Calibration-Token header or Authorization: Bearer <token>.",

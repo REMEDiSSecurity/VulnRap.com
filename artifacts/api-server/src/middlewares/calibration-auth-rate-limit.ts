@@ -1,4 +1,5 @@
 import rateLimit, { type RateLimitRequestHandler } from "express-rate-limit";
+import { logger } from "../lib/logger";
 
 // Task #116 — throttle wrong-token attempts on the calibration mutation
 // endpoints. Task #113 added a shared-token gate (require-calibration-auth.ts)
@@ -51,14 +52,35 @@ export function createCalibrationAuthLimiter(
     DEFAULT_MAX_FAILURES,
   );
 
+  // Task #213 — when the bucket is exhausted, emit a structured warn-level
+  // log BEFORE responding so an operator can see sustained brute-force
+  // probes in the standard pino log stream. The log includes the request
+  // IP (honouring `trust proxy`), the route, the method, and the bucket's
+  // configured window/limit — but NEVER the presented (wrong) token value.
+  // See the runbook comment in require-calibration-auth.ts for grep tips.
+  const throttledMessage = {
+    error:
+      "Too many failed calibration auth attempts. Please wait a minute before trying again.",
+  };
+
   return rateLimit({
     windowMs,
     max,
     standardHeaders: true,
     legacyHeaders: false,
-    message: {
-      error:
-        "Too many failed calibration auth attempts. Please wait a minute before trying again.",
+    message: throttledMessage,
+    handler: (req, res) => {
+      logger.warn(
+        {
+          ip: req.ip ?? null,
+          route: req.originalUrl,
+          method: req.method,
+          windowMs,
+          max,
+        },
+        "calibration auth: wrong-token throttle triggered (429)",
+      );
+      res.status(429).json(throttledMessage);
     },
   });
 }
