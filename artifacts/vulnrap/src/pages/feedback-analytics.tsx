@@ -521,6 +521,11 @@ function PreviewTierBadge({ label, count, negative }: { label: string; count: nu
 // so the audit trail captures who is curating without forcing a re-entry on
 // every add/remove.
 const HANDWAVY_REVIEWER_KEY = "vulnrap.handwavy.reviewer";
+// Task #150 — persist the "Most contentious first" toggle so reviewers who
+// triage thrashed phrases as part of their routine don't have to flip it on
+// every visit. Stored as the literal string "1" when ON; missing/anything
+// else defaults to OFF, preserving the original first-time experience.
+const HANDWAVY_SORT_THRASH_KEY = "vulnrap.handwavy.sortByThrash";
 
 function formatAuditTimestamp(iso: string | undefined | null): string | null {
   if (!iso) return null;
@@ -1020,7 +1025,30 @@ function HandwavyPhrasesAdmin() {
   // when ON we sort by descending remove+reinstate cycle count, with the
   // original index as a stable tie-breaker so phrases with the same count
   // don't shuffle around between renders.
-  const [sortByThrash, setSortByThrash] = useState(false);
+  const [sortByThrash, setSortByThrash] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(HANDWAVY_SORT_THRASH_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  // Task #150 — mirror the toggle into localStorage on every change so the
+  // preference survives reloads. We write "1" for ON and remove the key for
+  // OFF (rather than writing "0") so first-time users and anyone who clears
+  // browser storage cleanly fall back to the documented default of OFF.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (sortByThrash) {
+        window.localStorage.setItem(HANDWAVY_SORT_THRASH_KEY, "1");
+      } else {
+        window.localStorage.removeItem(HANDWAVY_SORT_THRASH_KEY);
+      }
+    } catch {
+      // ignore storage failures (private mode, quota)
+    }
+  }, [sortByThrash]);
   // Task #120 — in-place edit state. Only one row can be in edit mode at a
   // time so the audit-trail save button doesn't get visually ambiguous.
   const [editing, setEditing] = useState<{
