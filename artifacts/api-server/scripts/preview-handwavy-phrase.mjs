@@ -100,6 +100,53 @@ async function postJson(url, body, token) {
   return { status: res.status, ok: res.ok, payload };
 }
 
+// Task #129 — pre-dry-run fetch of the active curated list. The GET
+// endpoint is also auth-gated so we forward the same token we'd use for
+// the POST. Failures are non-fatal — we just skip the early overlap hint
+// and let the dry-run's server-side overlap detection take over.
+async function getJson(url, token) {
+  let res;
+  const headers = { Accept: "application/json" };
+  if (token) headers["X-Calibration-Token"] = token;
+  try {
+    res = await fetch(url, { method: "GET", headers });
+  } catch (err) {
+    throw new Error(`Network error talking to ${url}: ${err.message}`);
+  }
+  let payload = null;
+  const text = await res.text();
+  if (text) {
+    try { payload = JSON.parse(text); } catch { payload = text; }
+  }
+  return { status: res.status, ok: res.ok, payload };
+}
+
+// Task #129 — local mirror of the server's `detectCuratedOverlaps` helper
+// (calibration.ts) and `normalizePhrase` (handwavy-phrases.ts). Kept in
+// sync deliberately so the CLI's pre-dry-run hint matches what the server
+// would later return in `dryRunOverlaps`.
+function normalizePhraseForOverlap(raw) {
+  return String(raw).toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function detectLocalCuratedOverlaps(rawCandidate, curated) {
+  const normalized = normalizePhraseForOverlap(rawCandidate);
+  const matches = [];
+  if (normalized.length < 3) return { total: 0, matches };
+  for (const m of curated || []) {
+    const existing = m && typeof m.phrase === "string" ? m.phrase : "";
+    if (!existing) continue;
+    let relation = null;
+    if (existing === normalized) relation = "equal";
+    else if (existing.includes(normalized)) relation = "existing-contains-candidate";
+    else if (normalized.includes(existing)) relation = "candidate-contains-existing";
+    if (relation) {
+      matches.push({ phrase: existing, category: m.category ?? "absence", relation });
+    }
+  }
+  return { total: matches.length, matches };
+}
+
 function renderPreview(phrase, category, m) {
   const lines = [];
   lines.push("");
@@ -209,6 +256,41 @@ async function main() {
   // otherwise both POSTs return 401. We accept the token via --token or the
   // CALIBRATION_TOKEN env var so the script works in either mode.
   const token = args.token ?? process.env.CALIBRATION_TOKEN ?? null;
+
+  // Task #129 — surface curated-list overlap BEFORE issuing the dry-run.
+  // The dry-run already returns `dryRunOverlaps`, but it also runs the
+  // full corpus scan and a production-archive query — which is wasted
+  // work when the candidate is an obvious near-duplicate the reviewer
+  // would back out of immediately. We fetch the active list (cheap GET),
+  // run the same normalization + substring rules locally, and print a
+  // one-line hint up front. If the GET fails (network, auth, etc.) we
+  // log the reason and continue — the server-side check inside the
+  // dry-run will still catch overlaps as a fallback.
+  try {
+    const list = await getJson(endpoint, token);
+    if (list.status === 401 || list.status === 403) {
+      console.log(color("dim", "→ Skipping pre-preview overlap check (active list endpoint is auth-gated and no/invalid token was supplied; the dry-run will still flag overlaps)."));
+    } else if (!list.ok) {
+      const msg = list.payload && typeof list.payload === "object" && "error" in list.payload
+        ? list.payload.error
+        : `HTTP ${list.status}`;
+      console.log(color("dim", `→ Skipping pre-preview overlap check (active list fetch failed: ${msg}; the dry-run will still flag overlaps).`));
+    } else {
+      const curated = list.payload && Array.isArray(list.payload.phrases) ? list.payload.phrases : [];
+      const earlyOverlaps = detectLocalCuratedOverlaps(args.phrase, curated);
+      if (earlyOverlaps.total > 0) {
+        console.log("");
+        console.log(color("yellow", `Heads up: this candidate already overlaps with ${earlyOverlaps.total} curated ${earlyOverlaps.total === 1 ? "entry" : "entries"} (checked locally before the dry-run):`));
+        for (const o of earlyOverlaps.matches) {
+          const rel = describeOverlapRelation(o.relation);
+          console.log(`    - ${color("yellow", rel)} "${o.phrase}" ${color("dim", `[${o.category}]`)}`);
+        }
+        console.log("");
+      }
+    }
+  } catch (err) {
+    console.log(color("dim", `→ Skipping pre-preview overlap check (${err && err.message ? err.message : err}; the dry-run will still flag overlaps).`));
+  }
 
   console.log(color("dim", `→ Previewing against ${endpoint} ...`));
   const dry = await postJson(endpoint, {

@@ -641,6 +641,71 @@ function PreviewTierBadge({ label, count, negative }: { label: string; count: nu
   );
 }
 
+// Task #129 — pre-preview overlap detection. Mirror EXACTLY the
+// normalization (`normalizePhrase` in handwavy-phrases.ts) and substring
+// rules used by `detectCuratedOverlaps` in calibration.ts so the inline
+// hint shown under the add-phrase input matches what the eventual server
+// dry-run would surface, just rendered earlier (before the reviewer pays
+// the round-trip + corpus scan + production DB hit).
+type HandwavyOverlapRelation =
+  | "equal"
+  | "candidate-contains-existing"
+  | "existing-contains-candidate";
+
+interface HandwavyOverlapMatch {
+  phrase: string;
+  category: "absence" | "hedging" | "buzzword";
+  relation: HandwavyOverlapRelation;
+}
+
+function normalizeHandwavyPhrase(raw: string): string {
+  return raw.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function isHandwavyCategory(value: unknown): value is HandwavyOverlapMatch["category"] {
+  return value === "absence" || value === "hedging" || value === "buzzword";
+}
+
+function detectHandwavyCuratedOverlaps(
+  rawCandidate: string,
+  curated: ReadonlyArray<{ phrase: string; category: string }>,
+): HandwavyOverlapMatch[] {
+  const normalized = normalizeHandwavyPhrase(rawCandidate);
+  if (normalized.length < 3) return [];
+  const matches: HandwavyOverlapMatch[] = [];
+  for (const m of curated) {
+    const existing = typeof m?.phrase === "string" ? m.phrase : "";
+    if (!existing) continue;
+    let relation: HandwavyOverlapRelation | null = null;
+    if (existing === normalized) {
+      relation = "equal";
+    } else if (existing.includes(normalized)) {
+      relation = "existing-contains-candidate";
+    } else if (normalized.includes(existing)) {
+      relation = "candidate-contains-existing";
+    }
+    if (relation) {
+      // Guard at runtime against malformed payloads — the API client type
+      // says `category` is one of three strings but we'd rather degrade
+      // gracefully (default to "absence") than render a missing label.
+      const category = isHandwavyCategory(m.category) ? m.category : "absence";
+      matches.push({ phrase: existing, category, relation });
+    }
+  }
+  return matches;
+}
+
+function describeHandwavyOverlapRelation(rel: HandwavyOverlapRelation): string {
+  switch (rel) {
+    case "equal":
+      return "exact duplicate of";
+    case "candidate-contains-existing":
+      return "broader than (would supersede)";
+    case "existing-contains-candidate":
+      return "already covered by";
+  }
+}
+
 // Local-storage key for remembering the reviewer name/email between sessions
 // so the audit trail captures who is curating without forcing a re-entry on
 // every add/remove.
@@ -1373,6 +1438,16 @@ function HandwavyPhrasesAdmin() {
   const phrases = data?.phrases ?? [];
   const history = data?.history ?? [];
   const [draftCategory, setDraftCategory] = useState<"absence" | "hedging" | "buzzword">("absence");
+  // Task #129 — pre-preview overlap hint. Recompute every render against the
+  // current draft + active phrase list so the reviewer sees the warning the
+  // moment they finish typing the candidate, before the dry-run round-trip.
+  // Using the same normalize + substring rules as the server's
+  // `detectCuratedOverlaps` keeps the hint identical to what the eventual
+  // preview would surface (no false alarms / no missed warnings).
+  const draftOverlaps = useMemo(
+    () => detectHandwavyCuratedOverlaps(draft, phrases),
+    [draft, phrases],
+  );
   const CATEGORY_LABELS: Record<"absence" | "hedging" | "buzzword", string> = {
     absence: "Self-admitted absence of evidence",
     hedging: "Generic hedging",
@@ -2219,6 +2294,41 @@ function HandwavyPhrasesAdmin() {
             )}
           </div>
         </form>
+        {/* Task #129 — pre-preview overlap hint. Surfaces inline as the
+            reviewer types the candidate, *before* they click "Preview impact",
+            so an obvious near-duplicate can be caught without paying for the
+            full dry-run round-trip (corpus scan + production DB hit). The
+            hint is suppressed once the preview block is open so the two
+            warnings don't stack — the dry-run already includes its own
+            overlap detection on the server side. */}
+        {preview === null && draftOverlaps.length > 0 && (
+          <div
+            className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] text-amber-100 flex items-start gap-2"
+            data-testid="handwavy-overlap-hint"
+            role="status"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+            <div className="flex-1">
+              <span className="font-semibold">
+                Likely redundant — overlaps with {draftOverlaps.length} existing curated{" "}
+                {draftOverlaps.length === 1 ? "phrase" : "phrases"}:
+              </span>{" "}
+              <span data-testid="handwavy-overlap-hint-top">
+                {describeHandwavyOverlapRelation(draftOverlaps[0].relation)}{" "}
+                <span className="font-mono">&ldquo;{draftOverlaps[0].phrase}&rdquo;</span>{" "}
+                <span className="text-amber-200/70">
+                  [{CATEGORY_LABELS[draftOverlaps[0].category]}]
+                </span>
+              </span>
+              {draftOverlaps.length > 1 && (
+                <span className="text-amber-200/60">
+                  {" "}
+                  (+{draftOverlaps.length - 1} more — full list shown in the dry-run preview)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         {preview && (() => {
           // Task #119 — combined false-positive count across BOTH the curated
           // benchmark cohorts and the production-archive scan. Either signal
