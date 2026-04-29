@@ -9,6 +9,9 @@ import {
   editHandwavyPhrase, undoHandwavyPhrase,
   revertHandwavyPhraseEdit,
   type HandwavyPhraseDryRunMatches,
+  type HandwavyPhraseBatchRemoveDryRunResponse,
+  type HandwavyPhraseBatchRemoveDryRunImpact,
+  type HandwavyPhraseBatchRemoveResultEntry,
   type HandwavyHistoryEntry,
   type HandwavyEditEntry,
   applyCalibration,
@@ -607,6 +610,91 @@ function PreviewMatchBlock({
   );
 }
 
+// Task #154 — render block for one bulk-removal corpus impact (curated
+// benchmark fixtures or recent production reports). Mirrors the visual
+// shape of `PreviewMatchBlock` (the add-time corpus impact preview) so
+// reviewers see the same affordance for both add and remove flows. The
+// `kind` prop only swaps the leading icon and the noun used for the
+// sample-match list ("fixture" vs "report").
+function BulkRemovalImpactBlock({
+  kind,
+  title,
+  subtitle,
+  impact,
+  emptyHint,
+}: {
+  kind: "curated" | "production";
+  title: string;
+  subtitle: string;
+  impact: HandwavyPhraseBatchRemoveDryRunImpact;
+  emptyHint: string;
+}) {
+  const lost = impact.validDetectionsLost;
+  const dropped = impact.falsePositivesDropped;
+  const sourceNoun = kind === "curated" ? "fixture" : "report";
+  return (
+    <div
+      className={cn(
+        "rounded-md border p-2.5 space-y-1.5 text-xs",
+        lost > 0
+          ? "border-red-500/40 bg-red-500/10"
+          : dropped > 0
+            ? "border-amber-500/30 bg-amber-500/5"
+            : "border-emerald-500/30 bg-emerald-500/5",
+      )}
+      data-testid={`handwavy-bulk-preview-${kind}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="font-semibold text-foreground">{title}</div>
+        <Badge variant="outline" className="text-[9px] uppercase tracking-wide">
+          {subtitle}
+        </Badge>
+      </div>
+      {impact.warning ? (
+        <div
+          className="text-red-200 text-[11px]"
+          data-testid={`handwavy-bulk-preview-${kind}-warning`}
+        >
+          {impact.warning}
+        </div>
+      ) : impact.total > 0 ? (
+        <div className="text-amber-200 text-[11px]">
+          {impact.total} false-positive {sourceNoun}{impact.total === 1 ? "" : "s"} would no longer be flagged — informational only, no real detections lost here.
+        </div>
+      ) : (
+        <div className="text-emerald-200 text-[11px]">
+          {emptyHint}.
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-1.5 pt-0.5 text-[11px]">
+        <PreviewTierBadge label="GREEN (T1 legit) dropped" count={impact.byTier.t1Legit} />
+        <PreviewTierBadge label="YELLOW (T2 borderline) dropped" count={impact.byTier.t2Borderline} />
+        <PreviewTierBadge label="RED (T3 slop) lost" count={impact.byTier.t3Slop} negative />
+        <PreviewTierBadge
+          label="RED (T4 hallucinated) lost"
+          count={impact.byTier.t4Hallucinated}
+          negative
+        />
+      </div>
+      {impact.sampleMatches.length > 0 && (
+        <details className="text-[10px] text-muted-foreground">
+          <summary className="cursor-pointer hover:text-foreground">
+            Sample {sourceNoun}s that would lose their flag ({impact.sampleMatches.length})
+          </summary>
+          <ul className="mt-1 ml-3 list-disc space-y-0.5 font-mono">
+            {impact.sampleMatches.map((s) => (
+              <li key={s.id}>
+                {kind === "production" ? `report #${s.id}` : s.id}{" "}
+                <span className="opacity-60">[{s.tier}]</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 // Task #147 — word-level diff for rationale edits in the audit log so reviewers
 // can see at a glance which words actually changed instead of mentally diffing
 // two quoted strings. Tokenizing on whitespace+word runs keeps punctuation and
@@ -857,16 +945,16 @@ function HandwavyPhrasesAdmin() {
   const [revertConfirm, setRevertConfirm] = useState<
     { phrase: string; entry: HandwavyEditEntry } | null
   >(null);
-  // Task #134 — bulk-remove state. `selected` is the set of currently-checked
-  // phrases (keyed by the normalized `phrase` string the server stores), and
-  // mirrors the CLI's batch removal flow: we collect a list, show ONE
-  // confirmation summary, then issue one DELETE per phrase. `bulkConfirm`
-  // toggles the inline confirmation panel; `bulkResults` keeps the per-phrase
-  // outcome (removed / not-found / auth-failed / error) visible after the
-  // batch completes so the reviewer can see exactly what happened without
-  // squinting at toasts. The active list is refreshed ONCE after the batch.
+  // Task #134 + Task #154 — bulk-remove state. `selected` is the set of
+  // currently-checked phrases (keyed by the normalized `phrase` string
+  // the server stores). Bulk removal goes through the side-by-side
+  // preview panel (`bulkPreview` below): the reviewer ticks rows, opens
+  // the preview, and only the preview's confirm button can fire the
+  // actual DELETEs (one per phrase, one batched refresh after).
+  // `bulkResults` keeps the per-phrase outcome (removed / not-found /
+  // auth-failed / error) visible after the batch completes so the
+  // reviewer can see exactly what happened without squinting at toasts.
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const [bulkConfirm, setBulkConfirm] = useState<string[] | null>(null);
   // Task #139 — when a single-phrase remove targets a phrase that's already
   // been thrash'd (>=2 completed remove+reinstate cycles), we pause the DELETE
   // behind a confirm panel so the reviewer sees the prior cycles before
@@ -886,6 +974,20 @@ function HandwavyPhrasesAdmin() {
   const [bulkResults, setBulkResults] = useState<
     Array<{ phrase: string; status: BulkOutcome; message?: string }> | null
   >(null);
+  // Task #154 — bulk-removal preview state. Mirrors the CLI `--dry-run` flow:
+  // before the destructive DELETE fires we ask the server for a per-phrase
+  // outcome breakdown plus the corpus + production impact, so the reviewer
+  // can see "of these N, X are not on the active list, Y are duplicates,
+  // the remaining Z would un-flag W legitimate hand-wavy reports between
+  // them" and decide whether to proceed. `acknowledged` is set once the
+  // reviewer ticks the explicit confirmation checkbox; the actual delete
+  // button stays disabled until that flips when valid detections would be
+  // lost (in either the curated corpus or the production sample).
+  const [bulkPreview, setBulkPreview] = useState<{
+    requestedPhrases: string[];
+    data: HandwavyPhraseBatchRemoveDryRunResponse;
+    acknowledged: boolean;
+  } | null>(null);
   // Task #114 — corpus-impact preview state. After the reviewer presses
   // "Add phrase" we first issue a dry-run POST and surface the GREEN/YELLOW
   // false-positive count. The actual add only persists after the reviewer
@@ -1166,25 +1268,93 @@ function HandwavyPhrasesAdmin() {
     }
   };
 
-  const openBulkConfirm = () => {
-    if (selectedInList.length === 0) return;
-    setBulkResults(null);
-    setBulkConfirm([...selectedInList]);
-  };
-  const cancelBulkConfirm = () => {
-    setBulkConfirm(null);
-  };
   const dismissBulkResults = () => {
     setBulkResults(null);
   };
 
-  const confirmBulkRemove = async () => {
-    if (!bulkConfirm || bulkConfirm.length === 0) return;
+  // Task #154 — fetch the dry-run preview for the current selection. The
+  // server returns the same `wouldRemove` / `notFound` / `duplicateInBatch`
+  // breakdown the CLI's `--dry-run` flag surfaces, plus the corpus and
+  // production impact summary. We hold both the response and the exact
+  // phrase list we sent so the eventual real DELETE acts on what the
+  // preview was scored against (selection changes after preview will
+  // require re-previewing — see the "stale preview" guard on the confirm
+  // button below). Per Task #154 this is the SOLE entry point for bulk
+  // removal: there is no longer a "Remove selected" path that bypasses the
+  // preview, so reviewers always see the dryRun impact before any DELETE.
+  const handlePreviewBulkRemove = async () => {
+    if (selectedInList.length === 0) return;
+    const phrasesToPreview = [...selectedInList];
+    setBulkResults(null);
+    setBusy("bulk-preview");
+    try {
+      const resp = await removeHandwavyPhrase({
+        phrases: phrasesToPreview,
+        dryRun: true,
+      });
+      // Defensive: the union response could be a non-dry-run shape if the
+      // server somehow ignored dryRun. Fail closed rather than silently
+      // mutating the active list.
+      if (
+        !("dryRun" in resp) ||
+        resp.dryRun !== true ||
+        !("dryRunImpact" in resp)
+      ) {
+        toast({
+          title: "Preview unavailable",
+          description:
+            "The server did not return a removal preview. No phrases were removed — please retry.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setBulkPreview({
+        requestedPhrases: phrasesToPreview,
+        data: resp,
+        acknowledged: false,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to preview removal.";
+      toast({ title: "Preview failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const cancelBulkPreview = () => {
+    setBulkPreview(null);
+  };
+
+  const setBulkPreviewAcknowledged = (ack: boolean) => {
+    setBulkPreview((prev) => (prev ? { ...prev, acknowledged: ack } : prev));
+  };
+
+  // Task #154 — confirm the destructive removal straight from the preview
+  // panel. Uses the EXACT phrase list the preview was scored against so
+  // the reviewer is committing to what they were just shown, not whatever
+  // the live selection happens to be at click time.
+  const confirmBulkRemoveFromPreview = async () => {
+    if (!bulkPreview) return;
+    const phrasesToRemove = bulkPreview.requestedPhrases;
+    if (phrasesToRemove.length === 0) {
+      setBulkPreview(null);
+      return;
+    }
+    setBulkPreview(null);
+    await confirmBulkRemove(phrasesToRemove);
+  };
+
+  // The destructive bulk-remove path. Always called with the explicit
+  // phrase list the reviewer just acknowledged in the preview panel
+  // (Task #154 made the preview mandatory; nothing else may invoke this
+  // helper).
+  const confirmBulkRemove = async (phrasesToRemove: string[]) => {
+    if (!phrasesToRemove || phrasesToRemove.length === 0) return;
     setBusy("bulk-remove");
     const results: Array<{ phrase: string; status: BulkOutcome; message?: string }> = [];
     let authFailedSticky = false;
     const reviewerName = reviewer.trim() || undefined;
-    for (const phrase of bulkConfirm) {
+    for (const phrase of phrasesToRemove) {
       if (authFailedSticky) {
         // Mirror the CLI: once auth fails for one phrase the token is bad for
         // every subsequent phrase, so don't bother issuing more requests.
@@ -1231,7 +1401,6 @@ function HandwavyPhrasesAdmin() {
       }
       return next;
     });
-    setBulkConfirm(null);
     setBulkResults(results);
     setBusy(null);
 
@@ -1741,57 +1910,235 @@ function HandwavyPhrasesAdmin() {
           </div>
           );
         })()}
-        {/* Task #134 — bulk-remove confirmation banner. Shows EVERY selected
-            phrase so the reviewer can eyeball the batch before any DELETE
-            fires, mirroring the CLI's confirm-then-delete flow. */}
-        {bulkConfirm && bulkConfirm.length > 0 && (
+        {/* Task #154 — bulk-removal preview panel. Wires the calibration UI
+            to the same DELETE `{phrases, dryRun: true}` endpoint the CLI's
+            `--dry-run` flag consumes, so reviewers see the per-phrase
+            outcomes (`wouldRemove` / `notFound` / `duplicateInBatch`) plus
+            the corpus + production impact summary BEFORE the destructive
+            action. The "Remove these N" button stays disabled until the
+            reviewer ticks the explicit acknowledgment checkbox when valid
+            T3/T4 detections would be lost in either corpus. */}
+        {bulkPreview && (() => {
+          const data = bulkPreview.data;
+          const corpus = data.dryRunImpact.corpus;
+          const production = data.dryRunImpact.production ?? null;
+          const productionError = data.dryRunImpact.productionError ?? null;
+          const productionLimit = data.dryRunImpact.productionLimit ?? null;
+          const corpusLost = corpus.validDetectionsLost;
+          const productionLost = production?.validDetectionsLost ?? 0;
+          const totalValidLost = corpusLost + productionLost;
+          const requiresAck = totalValidLost > 0;
+          const wouldRemove = data.wouldRemove;
+          const selectionDrifted =
+            selectedInList.length !== bulkPreview.requestedPhrases.length ||
+            !bulkPreview.requestedPhrases.every((p) =>
+              selectedInList.includes(p),
+            );
+          const removalDisabled =
+            wouldRemove === 0 ||
+            busy === "bulk-remove" ||
+            (requiresAck && !bulkPreview.acknowledged);
+          return (
           <div
-            className="rounded-md border border-red-500/40 bg-red-500/5 p-3 space-y-2 text-xs"
-            data-testid="handwavy-bulk-confirm"
+            className={cn(
+              "rounded-md border p-3 space-y-3 text-xs",
+              requiresAck
+                ? "border-red-500/40 bg-red-500/5"
+                : "border-amber-500/40 bg-amber-500/5",
+            )}
+            data-testid="handwavy-bulk-preview"
           >
             <div className="flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+              {requiresAck ? (
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+              ) : (
+                <Info className="w-4 h-4 mt-0.5 shrink-0 text-amber-300" />
+              )}
               <div className="flex-1">
                 <div className="font-semibold text-foreground">
-                  Remove {bulkConfirm.length} phrase{bulkConfirm.length === 1 ? "" : "s"} from the active list?
+                  Removal preview for {bulkPreview.requestedPhrases.length} phrase
+                  {bulkPreview.requestedPhrases.length === 1 ? "" : "s"}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Each phrase below will be deleted in its own request. The active list refreshes once when the batch finishes.
+                  Of these {bulkPreview.requestedPhrases.length}, <span className="text-foreground/90">{wouldRemove}</span> would be removed
+                  {data.notFound > 0 && (
+                    <>
+                      , <span className="text-foreground/90">{data.notFound}</span> {data.notFound === 1 ? "is" : "are"} not on the active list
+                    </>
+                  )}
+                  {data.duplicateInBatch > 0 && (
+                    <>
+                      , <span className="text-foreground/90">{data.duplicateInBatch}</span> {data.duplicateInBatch === 1 ? "is a duplicate" : "are duplicates"} in this batch
+                    </>
+                  )}
+                  . The active list would shrink from{" "}
+                  <span className="text-foreground/90">{data.total}</span> to{" "}
+                  <span className="text-foreground/90">{data.projectedTotal}</span>{" "}
+                  phrases. Nothing has been removed yet.
                 </div>
               </div>
             </div>
-            <ul
-              className="max-h-48 overflow-y-auto pl-2 border-l border-red-500/30 space-y-0.5"
-              data-testid="handwavy-bulk-confirm-list"
+            <div
+              className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+              data-testid="handwavy-bulk-preview-impact"
             >
-              {bulkConfirm.map((p) => (
-                <li key={p} className="font-mono text-foreground/80 break-all text-[11px]">• {p}</li>
-              ))}
-            </ul>
+              <BulkRemovalImpactBlock
+                kind="curated"
+                title="Curated benchmark"
+                subtitle={`${corpus.corpusSize} fixtures`}
+                impact={corpus}
+                emptyHint="No curated detections would be lost"
+              />
+              {production ? (
+                <BulkRemovalImpactBlock
+                  kind="production"
+                  title="Production archive"
+                  subtitle={
+                    productionLimit != null
+                      ? `last ${production.corpusSize} of up to ${productionLimit} reports`
+                      : `last ${production.corpusSize} reports`
+                  }
+                  impact={production}
+                  emptyHint="No production detections would be lost"
+                />
+              ) : (
+                <div
+                  className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
+                  data-testid="handwavy-bulk-preview-production-error"
+                >
+                  <div className="font-semibold flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Production archive scan unavailable
+                  </div>
+                  <div className="mt-1 text-amber-100/80">
+                    {productionError ??
+                      "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
+                  </div>
+                </div>
+              )}
+            </div>
+            <details className="text-[11px]" data-testid="handwavy-bulk-preview-results-details">
+              <summary className="cursor-pointer text-muted-foreground/80 hover:text-foreground/80 select-none">
+                Per-phrase outcomes ({data.results.length})
+              </summary>
+              <ul
+                className="mt-1 max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
+                data-testid="handwavy-bulk-preview-results"
+              >
+                {data.results.map((r, idx) => {
+                  const cfg = r.removed
+                    ? {
+                        label: "would remove",
+                        color: "text-emerald-400",
+                        icon: <CheckCircle2 className="w-3 h-3" />,
+                      }
+                    : r.reason === "duplicate-in-batch"
+                      ? {
+                          label: "duplicate",
+                          color: "text-amber-400",
+                          icon: <AlertTriangle className="w-3 h-3" />,
+                        }
+                      : {
+                          label: "not-found",
+                          color: "text-yellow-400",
+                          icon: <AlertTriangle className="w-3 h-3" />,
+                        };
+                  return (
+                    <li
+                      key={`${r.raw}-${idx}`}
+                      className="flex items-start gap-2 text-[11px]"
+                      data-testid="handwavy-bulk-preview-result-row"
+                      data-outcome={r.removed ? "would-remove" : r.reason ?? "unknown"}
+                    >
+                      <span className={cn("flex items-center gap-1 w-28 shrink-0", cfg.color)}>
+                        {cfg.icon}
+                        <span className="uppercase tracking-wide font-bold text-[9px]">
+                          {cfg.label}
+                        </span>
+                      </span>
+                      <span className="font-mono text-foreground/80 break-all flex-1">
+                        {r.raw}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+            {selectionDrifted && (
+              <div
+                className="text-[11px] text-amber-200 italic flex items-start gap-1"
+                data-testid="handwavy-bulk-preview-stale"
+              >
+                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                Selection has changed since this preview was generated. Re-preview to refresh — confirming will still apply to the {bulkPreview.requestedPhrases.length} phrase
+                {bulkPreview.requestedPhrases.length === 1 ? "" : "s"} shown above.
+              </div>
+            )}
+            {requiresAck ? (
+              <label
+                className="flex items-start gap-2 text-[11px] text-red-100 cursor-pointer select-none"
+                data-testid="handwavy-bulk-preview-ack-label"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-red-500"
+                  checked={bulkPreview.acknowledged}
+                  onChange={(e) => setBulkPreviewAcknowledged(e.target.checked)}
+                  data-testid="handwavy-bulk-preview-ack"
+                  aria-label="I understand legitimate detections would be lost"
+                />
+                <span>
+                  I understand this would un-flag{" "}
+                  <span className="font-semibold">{totalValidLost}</span>{" "}
+                  legitimately-flagged hand-wavy {totalValidLost === 1 ? "report" : "reports"}
+                  {corpusLost > 0 && productionLost > 0
+                    ? ` (${corpusLost} curated + ${productionLost} production)`
+                    : corpusLost > 0
+                      ? ` in the curated benchmark corpus`
+                      : ` in the recent production sample`}{" "}
+                  and proceed anyway.
+                </span>
+              </label>
+            ) : wouldRemove > 0 ? (
+              <div className="text-[11px] text-emerald-200 flex items-start gap-1">
+                <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0" />
+                No legitimate hand-wavy detections would be lost. Safe to proceed.
+              </div>
+            ) : (
+              <div className="text-[11px] text-amber-200 flex items-start gap-1">
+                <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                Nothing in this batch would be removed (every phrase is already off the active list or duplicated). Cancel and adjust your selection.
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-1">
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={cancelBulkConfirm}
+                onClick={cancelBulkPreview}
                 disabled={busy === "bulk-remove"}
-                data-testid="handwavy-bulk-cancel"
+                data-testid="handwavy-bulk-preview-cancel"
               >
                 Back out
               </Button>
               <Button
                 size="sm"
-                variant="destructive"
-                onClick={confirmBulkRemove}
-                disabled={busy === "bulk-remove"}
-                data-testid="handwavy-bulk-confirm-go"
+                variant={requiresAck ? "destructive" : "default"}
+                onClick={confirmBulkRemoveFromPreview}
+                disabled={removalDisabled}
+                data-testid="handwavy-bulk-preview-confirm"
               >
                 {busy === "bulk-remove"
                   ? "Removing…"
-                  : `Remove ${bulkConfirm.length} phrase${bulkConfirm.length === 1 ? "" : "s"}`}
+                  : wouldRemove === 0
+                    ? "Nothing to remove"
+                    : requiresAck
+                      ? `Remove ${wouldRemove} anyway`
+                      : `Remove ${wouldRemove} phrase${wouldRemove === 1 ? "" : "s"}`}
               </Button>
             </div>
           </div>
-        )}
+          );
+        })()}
         {/* Task #139 — confirm panel for high-thrash single removals. Only
             shown when the trash button is pressed on a phrase with >=2
             completed remove+reinstate cycles, so reviewers see the prior
@@ -1972,6 +2319,12 @@ function HandwavyPhrasesAdmin() {
                 <RotateCcw className="w-3 h-3" />
                 <span>Most contentious first</span>
               </label>
+              {/* Task #154 — sole bulk-remove entry point. The reviewer
+                  is always routed through the side-by-side preview panel
+                  (`handwavy-bulk-preview`) before any DELETE fires. The
+                  preview panel itself owns the destructive confirm + the
+                  acknowledgment checkbox when valid detections would be
+                  lost. */}
               <Button
                 variant="destructive"
                 size="sm"
@@ -1979,13 +2332,17 @@ function HandwavyPhrasesAdmin() {
                 disabled={
                   selectedInList.length === 0 ||
                   busy === "bulk-remove" ||
-                  bulkConfirm !== null
+                  busy === "bulk-preview" ||
+                  bulkPreview !== null
                 }
-                onClick={openBulkConfirm}
+                onClick={handlePreviewBulkRemove}
                 data-testid="handwavy-bulk-remove"
+                title="Open the side-by-side removal preview. You'll see how many active phrases would be removed, plus how many flagged reports would lose their flag, before anything is committed."
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Remove selected{selectedInList.length > 0 ? ` (${selectedInList.length})` : ""}
+                {busy === "bulk-preview"
+                  ? "Previewing…"
+                  : `Remove selected${selectedInList.length > 0 ? ` (${selectedInList.length})` : ""}`}
               </Button>
             </div>
             <div className="divide-y divide-border/20">
@@ -2005,7 +2362,7 @@ function HandwavyPhrasesAdmin() {
               // confirmation the row's edit affordance is disabled. The
               // disable rules below keep both flows visible side-by-side
               // without letting them step on each other.
-              const bulkBusy = busy === "bulk-remove" || bulkConfirm !== null;
+              const bulkBusy = busy === "bulk-remove" || bulkPreview !== null;
               const isUndoTarget =
                 undoCandidate !== null && undoCandidate.phrase === m.phrase;
               const undoBusyKey = isUndoTarget && undoCandidate
