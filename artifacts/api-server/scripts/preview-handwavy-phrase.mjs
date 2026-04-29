@@ -147,6 +147,76 @@ function detectLocalCuratedOverlaps(rawCandidate, curated) {
   return { total: matches.length, matches };
 }
 
+// Task #221 — same normalize + substring rules as `detectLocalCuratedOverlaps`,
+// but pointed at the REMOVAL HISTORY log so a candidate that re-introduces a
+// phrase a reviewer deliberately retired gets caught before the dry-run too.
+// Reinstated entries are skipped because those phrases are back on the active
+// list and `detectLocalCuratedOverlaps` will already flag them. Returns the
+// most-recent removal per phrase so a phrase that was removed → reinstated →
+// removed again only contributes one hint line (the most recent decision).
+function tryHistoryOverlap(normalized, existing) {
+  if (!existing) return null;
+  if (existing === normalized) return "equal";
+  if (existing.includes(normalized)) return "existing-contains-candidate";
+  if (normalized.includes(existing)) return "candidate-contains-existing";
+  return null;
+}
+
+function detectLocalHistoryOverlaps(rawCandidate, history) {
+  const normalized = normalizePhraseForOverlap(rawCandidate);
+  const matches = [];
+  if (normalized.length < 3) return { total: 0, matches };
+  const all = [];
+  for (const h of history || []) {
+    if (!h || typeof h !== "object" || typeof h.removedAt !== "string") continue;
+    if (Array.isArray(h.phrases) && h.phrases.length > 0) {
+      for (const p of h.phrases) {
+        if (!p || typeof p.phrase !== "string" || p.reinstated === true) continue;
+        const relation = tryHistoryOverlap(normalized, p.phrase);
+        if (!relation) continue;
+        all.push({
+          phrase: p.phrase,
+          category: p.category ?? "absence",
+          relation,
+          removedAt: h.removedAt,
+          removedBy: typeof h.removedBy === "string" ? h.removedBy : null,
+          rationale: typeof p.rationale === "string" ? p.rationale : null,
+          undone: false,
+        });
+      }
+      continue;
+    }
+    if (h.reinstated === true) continue;
+    const relation = tryHistoryOverlap(normalized, typeof h.phrase === "string" ? h.phrase : "");
+    if (!relation) continue;
+    all.push({
+      phrase: h.phrase,
+      category: h.category ?? "absence",
+      relation,
+      removedAt: h.removedAt,
+      removedBy: typeof h.removedBy === "string" ? h.removedBy : null,
+      rationale: typeof h.rationale === "string" ? h.rationale : null,
+      undone: h.undone === true,
+    });
+  }
+  all.sort((a, b) => Date.parse(b.removedAt) - Date.parse(a.removedAt));
+  const seen = new Set();
+  for (const m of all) {
+    if (seen.has(m.phrase)) continue;
+    seen.add(m.phrase);
+    matches.push(m);
+  }
+  return { total: matches.length, matches };
+}
+
+function formatHistoryRemovedAt(iso) {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "an unknown date";
+  // YYYY-MM-DD in UTC keeps the CLI deterministic regardless of the
+  // operator's local timezone — important for snapshot-style assertions.
+  return new Date(t).toISOString().slice(0, 10);
+}
+
 function renderPreview(phrase, category, m) {
   const lines = [];
   lines.push("");
@@ -284,6 +354,28 @@ async function main() {
         for (const o of earlyOverlaps.matches) {
           const rel = describeOverlapRelation(o.relation);
           console.log(`    - ${color("yellow", rel)} "${o.phrase}" ${color("dim", `[${o.category}]`)}`);
+        }
+        console.log("");
+      }
+      // Task #221 — separate hint for the removal-history log. Same
+      // normalization + substring rules as the active-list check, but
+      // points at phrases a reviewer deliberately retired so an
+      // accidental re-add doesn't slip through silently. Rendered in
+      // addition to (not in place of) the active-list "Heads up" line so
+      // a candidate that overlaps both surfaces both warnings.
+      const history = list.payload && Array.isArray(list.payload.history) ? list.payload.history : [];
+      const earlyHistoryOverlaps = detectLocalHistoryOverlaps(args.phrase, history);
+      if (earlyHistoryOverlaps.total > 0) {
+        console.log("");
+        const noun = earlyHistoryOverlaps.total === 1 ? "entry" : "entries";
+        console.log(color("yellow", `Heads up: this candidate matches ${earlyHistoryOverlaps.total} previously-removed ${noun} in the history log:`));
+        for (const o of earlyHistoryOverlaps.matches) {
+          const rel = describeOverlapRelation(o.relation);
+          const verb = o.undone ? "undone" : "removed";
+          const who = o.removedBy ?? "unknown reviewer";
+          const when = formatHistoryRemovedAt(o.removedAt);
+          const rationale = o.rationale ? ` — rationale: "${o.rationale}"` : "";
+          console.log(`    - ${color("yellow", rel)} "${o.phrase}" ${color("dim", `[${o.category}]`)} — ${verb} by ${who} on ${when}${rationale}`);
         }
         console.log("");
       }

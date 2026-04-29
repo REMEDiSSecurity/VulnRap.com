@@ -29,6 +29,10 @@ function resetState() {
     // so legacy tests that don't care about pre-dry-run overlap detection
     // get a no-op (no "Heads up" line).
     phrases: [],
+    // Task #221 — removal-history log returned from the same GET endpoint.
+    // Default empty so legacy tests don't accidentally trip the new
+    // history-overlap "Heads up" line.
+    history: [],
     // Scripted POST responses (consumed in order). Same field used by both
     // legacy tests and Task #129 tests so we don't fork response state.
     postResponses: [],
@@ -75,7 +79,7 @@ beforeAll(async () => {
           return;
         }
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ phrases: state.phrases }));
+        res.end(JSON.stringify({ phrases: state.phrases, history: state.history }));
         return;
       }
 
@@ -702,5 +706,233 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
     expect(gets[0].token).toBe("tok-abc");
     // Hint still emitted because the GET succeeded with the matching token.
     expect(res.stdout).toMatch(/Heads up:/);
+  });
+});
+
+// Task #221 — pre-dry-run history-overlap hint coverage. Same normalize +
+// substring rules as the active-list overlap hint, but pointed at the
+// removal-history log so a candidate that re-introduces a phrase a reviewer
+// deliberately retired surfaces a separate "previously removed" hint.
+function historyEntry({
+  phrase,
+  category = "absence",
+  removedAt = "2026-04-15T12:00:00.000Z",
+  removedBy,
+  rationale,
+  reinstated,
+  undone,
+} = {}) {
+  const e = { phrase, category, removedAt };
+  if (removedBy) e.removedBy = removedBy;
+  if (rationale) e.rationale = rationale;
+  if (reinstated) e.reinstated = true;
+  if (undone) e.undone = true;
+  return e;
+}
+
+describe("preview-handwavy-phrase CLI: pre-dry-run history-overlap hint (Task #221)", () => {
+  it("warns when the candidate exactly matches a previously-removed phrase", async () => {
+    state.history = [
+      historyEntry({
+        phrase: "as far as i can tell",
+        category: "hedging",
+        removedAt: "2026-04-15T12:00:00.000Z",
+        removedBy: "alice@example.com",
+        rationale: "too vague",
+      }),
+    ];
+    state.postResponses = [
+      { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "as far as i can tell" } },
+      {
+        status: 200,
+        body: {
+          added: true,
+          phrase: "as far as i can tell",
+          category: "absence",
+          total: 1,
+          phrases: [],
+        },
+      },
+    ];
+
+    const res = await runScript(["--phrase", "As Far As I Can Tell", "--yes"]);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(
+      /Heads up: this candidate matches 1 previously-removed entry in the history log/,
+    );
+    expect(res.stdout).toMatch(/exact duplicate of "as far as i can tell"/);
+    expect(res.stdout).toMatch(/removed by alice@example.com on 2026-04-15/);
+    expect(res.stdout).toMatch(/rationale: "too vague"/);
+    // Both pre-dry-run hints sit ABOVE the dry-run "Previewing against" line.
+    const headsUpIdx = res.stdout.indexOf("Heads up: this candidate matches");
+    const previewingIdx = res.stdout.indexOf("Previewing against");
+    expect(headsUpIdx).toBeGreaterThanOrEqual(0);
+    expect(previewingIdx).toBeGreaterThan(headsUpIdx);
+  });
+
+  it("renders the active-list AND history-overlap hints together when both apply", async () => {
+    state.phrases = [entry("private poc")];
+    state.history = [
+      historyEntry({
+        phrase: "private poc",
+        category: "absence",
+        removedAt: "2026-04-10T09:00:00.000Z",
+        removedBy: "bob@example.com",
+        // Note: this is a contrived setup — in practice a phrase wouldn't
+        // be both active AND in the removal log unless it had been removed
+        // and re-added. The hint shouldn't suppress one for the other.
+      }),
+    ];
+    state.postResponses = [
+      { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "private poc" } },
+      {
+        status: 200,
+        body: { added: false, phrase: "private poc", category: "absence", total: 1, phrases: [] },
+      },
+    ];
+
+    const res = await runScript(["--phrase", "private poc", "--yes"]);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/Heads up: this candidate already overlaps with 1 curated entry/);
+    expect(res.stdout).toMatch(
+      /Heads up: this candidate matches 1 previously-removed entry in the history log/,
+    );
+  });
+
+  it("does not warn when the matching history entry has already been reinstated", async () => {
+    state.history = [
+      historyEntry({
+        phrase: "private poc",
+        removedAt: "2026-04-10T09:00:00.000Z",
+        reinstated: true,
+      }),
+    ];
+    state.postResponses = [
+      { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "private poc" } },
+      {
+        status: 201,
+        body: { added: true, phrase: "private poc", category: "absence", total: 1, phrases: [] },
+      },
+    ];
+
+    const res = await runScript(["--phrase", "private poc", "--yes"]);
+    expect(res.code).toBe(0);
+    expect(res.stdout).not.toMatch(/previously-removed/);
+  });
+
+  it("warns about non-reinstated phrases inside a batch removal entry", async () => {
+    state.history = [
+      {
+        removedAt: "2026-04-12T08:00:00.000Z",
+        removedBy: "carol@example.com",
+        phrases: [
+          { phrase: "private poc", category: "absence", reinstated: true },
+          {
+            phrase: "modern threat landscape",
+            category: "buzzword",
+            rationale: "too generic",
+          },
+        ],
+      },
+    ];
+    state.postResponses = [
+      { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "modern threat landscape" } },
+      {
+        status: 201,
+        body: {
+          added: true,
+          phrase: "modern threat landscape",
+          category: "buzzword",
+          total: 1,
+          phrases: [],
+        },
+      },
+    ];
+
+    const res = await runScript([
+      "--phrase", "modern threat landscape",
+      "--category", "buzzword",
+      "--yes",
+    ]);
+    expect(res.code).toBe(0);
+    // The reinstated batch member ("private poc") is filtered out; only
+    // the still-removed member surfaces.
+    expect(res.stdout).toMatch(
+      /Heads up: this candidate matches 1 previously-removed entry in the history log/,
+    );
+    expect(res.stdout).toMatch(/exact duplicate of "modern threat landscape"/);
+    expect(res.stdout).toMatch(/removed by carol@example.com on 2026-04-12/);
+    expect(res.stdout).not.toMatch(/private poc/);
+  });
+
+  it("renders the 'undone' verb when the original removal was an Undo", async () => {
+    state.history = [
+      historyEntry({
+        phrase: "comprehensive zero-trust assessment",
+        removedAt: "2026-04-14T10:00:00.000Z",
+        removedBy: "dan@example.com",
+        undone: true,
+      }),
+    ];
+    state.postResponses = [
+      {
+        status: 200,
+        body: { ...EMPTY_DRY_RUN_BODY, phrase: "comprehensive zero-trust assessment" },
+      },
+      {
+        status: 201,
+        body: {
+          added: true,
+          phrase: "comprehensive zero-trust assessment",
+          category: "absence",
+          total: 1,
+          phrases: [],
+        },
+      },
+    ];
+
+    const res = await runScript([
+      "--phrase", "comprehensive zero-trust assessment",
+      "--yes",
+    ]);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/undone by dan@example.com on 2026-04-14/);
+    expect(res.stdout).not.toMatch(/removed by dan@example.com/);
+  });
+
+  it("dedupes by phrase, keeping the most-recent removal", async () => {
+    state.history = [
+      historyEntry({
+        phrase: "weak security culture",
+        removedAt: "2026-03-01T08:00:00.000Z",
+        removedBy: "old-reviewer",
+      }),
+      historyEntry({
+        phrase: "weak security culture",
+        removedAt: "2026-04-20T08:00:00.000Z",
+        removedBy: "recent-reviewer",
+      }),
+    ];
+    state.postResponses = [
+      { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "weak security culture" } },
+      {
+        status: 201,
+        body: {
+          added: true,
+          phrase: "weak security culture",
+          category: "absence",
+          total: 1,
+          phrases: [],
+        },
+      },
+    ];
+
+    const res = await runScript(["--phrase", "weak security culture", "--yes"]);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(
+      /Heads up: this candidate matches 1 previously-removed entry in the history log/,
+    );
+    expect(res.stdout).toMatch(/removed by recent-reviewer on 2026-04-20/);
+    expect(res.stdout).not.toMatch(/old-reviewer/);
   });
 });

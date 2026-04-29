@@ -716,6 +716,108 @@ function describeHandwavyOverlapRelation(rel: HandwavyOverlapRelation): string {
   }
 }
 
+// Task #221 — pre-preview overlap detection against the REMOVAL HISTORY log.
+// Mirrors `detectHandwavyCuratedOverlaps` (which scans the active list) but
+// targets phrases a reviewer deliberately retired so a near-duplicate re-add
+// doesn't slip through silently. Reinstated history entries are skipped:
+// those phrases are back on the active list and any overlap will already be
+// flagged by the active-list hint, so warning here too would be confusing.
+interface HandwavyHistoryOverlapMatch {
+  phrase: string;
+  category: HandwavyOverlapMatch["category"];
+  relation: HandwavyOverlapRelation;
+  removedAt: string;
+  removedBy?: string;
+  rationale?: string;
+  /** True when the original removal was an Undo of a brand-new add (Task #130). */
+  undone?: boolean;
+}
+
+function pushHistoryOverlapCandidate(
+  out: HandwavyHistoryOverlapMatch[],
+  normalized: string,
+  candidate: {
+    phrase?: string;
+    category?: unknown;
+    removedAt?: string;
+    removedBy?: string;
+    rationale?: string;
+    undone?: boolean;
+  },
+): void {
+  const existing = typeof candidate.phrase === "string" ? candidate.phrase : "";
+  if (!existing) return;
+  let relation: HandwavyOverlapRelation | null = null;
+  if (existing === normalized) {
+    relation = "equal";
+  } else if (existing.includes(normalized)) {
+    relation = "existing-contains-candidate";
+  } else if (normalized.includes(existing)) {
+    relation = "candidate-contains-existing";
+  }
+  if (!relation) return;
+  if (!candidate.removedAt) return;
+  const category = isHandwavyCategory(candidate.category) ? candidate.category : "absence";
+  const m: HandwavyHistoryOverlapMatch = {
+    phrase: existing,
+    category,
+    relation,
+    removedAt: candidate.removedAt,
+  };
+  if (candidate.removedBy) m.removedBy = candidate.removedBy;
+  if (candidate.rationale) m.rationale = candidate.rationale;
+  if (candidate.undone) m.undone = true;
+  out.push(m);
+}
+
+function detectHandwavyHistoryOverlaps(
+  rawCandidate: string,
+  history: ReadonlyArray<HandwavyHistoryEntry>,
+): HandwavyHistoryOverlapMatch[] {
+  const normalized = normalizeHandwavyPhrase(rawCandidate);
+  if (normalized.length < 3) return [];
+  const all: HandwavyHistoryOverlapMatch[] = [];
+  for (const h of history) {
+    if (!h || typeof h !== "object") continue;
+    if (Array.isArray(h.phrases) && h.phrases.length > 0) {
+      // Task #135 batch removal — each inner phrase tracks its own
+      // reinstated state, so we filter per-phrase rather than per-batch.
+      for (const p of h.phrases) {
+        if (!p || p.reinstated === true) continue;
+        pushHistoryOverlapCandidate(all, normalized, {
+          phrase: p.phrase,
+          category: p.category,
+          removedAt: h.removedAt,
+          removedBy: h.removedBy,
+          rationale: p.rationale,
+        });
+      }
+      continue;
+    }
+    if (h.reinstated === true) continue;
+    pushHistoryOverlapCandidate(all, normalized, {
+      phrase: h.phrase,
+      category: h.category,
+      removedAt: h.removedAt,
+      removedBy: h.removedBy,
+      rationale: h.rationale,
+      undone: h.undone === true,
+    });
+  }
+  // Sort newest-first and dedupe by phrase: a phrase that was removed,
+  // re-added, removed again would otherwise produce two hint lines for the
+  // same retirement decision. Most-recent removal wins.
+  all.sort((a, b) => Date.parse(b.removedAt) - Date.parse(a.removedAt));
+  const seen = new Set<string>();
+  const deduped: HandwavyHistoryOverlapMatch[] = [];
+  for (const m of all) {
+    if (seen.has(m.phrase)) continue;
+    seen.add(m.phrase);
+    deduped.push(m);
+  }
+  return deduped;
+}
+
 // Local-storage key for remembering the reviewer name/email between sessions
 // so the audit trail captures who is curating without forcing a re-entry on
 // every add/remove.
@@ -1602,6 +1704,15 @@ function HandwavyPhrasesAdmin() {
   const draftOverlaps = useMemo(
     () => detectHandwavyCuratedOverlaps(draft, phrases),
     [draft, phrases],
+  );
+  // Task #221 — separate pre-preview hint that flags candidates which
+  // duplicate (or wholly contain / are wholly contained by) a phrase a
+  // reviewer deliberately retired in the past. Renders alongside, not in
+  // place of, `draftOverlaps` so a candidate that overlaps both the active
+  // list AND the removal log shows both warnings.
+  const draftHistoryOverlaps = useMemo(
+    () => detectHandwavyHistoryOverlaps(draft, history),
+    [draft, history],
   );
   const CATEGORY_LABELS: Record<"absence" | "hedging" | "buzzword", string> = {
     absence: "Self-admitted absence of evidence",
@@ -2814,6 +2925,55 @@ function HandwavyPhrasesAdmin() {
             </div>
           </div>
         )}
+        {/* Task #221 — pre-preview hint that warns the reviewer when the
+            candidate matches a phrase that was deliberately retired in the
+            past. Sits next to (not in place of) the active-list overlap
+            hint so a candidate that overlaps both surfaces both warnings.
+            Like that hint, it's suppressed once the dry-run preview is
+            open; the preview block already shows the full removal-history
+            list separately. */}
+        {preview === null && draftHistoryOverlaps.length > 0 && (() => {
+          const top = draftHistoryOverlaps[0];
+          const removedAtLabel = formatAuditTimestamp(top.removedAt) ?? "an unknown date";
+          const verb = top.undone ? "undone" : "removed";
+          return (
+            <div
+              className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] text-amber-100 flex items-start gap-2"
+              data-testid="handwavy-history-overlap-hint"
+              role="status"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+              <div className="flex-1">
+                <span className="font-semibold">
+                  Previously {verb} — overlaps with {draftHistoryOverlaps.length} entr{draftHistoryOverlaps.length === 1 ? "y" : "ies"} in the removal log:
+                </span>{" "}
+                <span data-testid="handwavy-history-overlap-hint-top">
+                  {describeHandwavyOverlapRelation(top.relation)}{" "}
+                  <span className="font-mono">&ldquo;{top.phrase}&rdquo;</span>{" "}
+                  <span className="text-amber-200/70">
+                    [{CATEGORY_LABELS[top.category]}]
+                  </span>
+                  {" — "}
+                  {verb} by{" "}
+                  <span className="font-medium">{top.removedBy ?? "unknown reviewer"}</span>{" "}
+                  on {removedAtLabel}
+                  {top.rationale ? (
+                    <>
+                      {" — rationale: "}
+                      <span className="italic">&ldquo;{top.rationale}&rdquo;</span>
+                    </>
+                  ) : null}
+                </span>
+                {draftHistoryOverlaps.length > 1 && (
+                  <span className="text-amber-200/60">
+                    {" "}
+                    (+{draftHistoryOverlaps.length - 1} more — see the removal log below)
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
         {preview && (() => {
           // Task #119 — combined false-positive count across BOTH the curated
           // benchmark cohorts and the production-archive scan. Either signal
