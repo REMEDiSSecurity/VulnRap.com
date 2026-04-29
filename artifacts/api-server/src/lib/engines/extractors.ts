@@ -42,17 +42,43 @@ export const STRENGTH_MULTIPLIERS: Record<EvidenceType, number> = {
 
 // v3.6.0 §2c: Vulnerability type detector. Used by Engine 3 to penalize reports
 // that describe a specific vulnerability class but do not cite a CWE.
+//
+// Sprint 13C (Task #205): all acronym patterns now use the /i flag so terse
+// shorthand like "found a stored xss" matches the same as "Stored XSS". The
+// inconsistency was a latent bug — the long-form patterns were already /i,
+// but the acronym variants (\bXSS\b, \bSSRF\b, \bUAF\b, \bCSRF\b, \bRCE\b)
+// were not, so half the report corpus was being missed for no good reason.
 const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
-  XSS: [/cross.?site.?script/i, /\bXSS\b/, /<script>/i, /document\.cookie/i],
+  XSS: [/cross.?site.?script/i, /\bXSS\b/i, /<script>/i, /document\.cookie/i],
   SQLi: [/sql.?inject/i, /\bSQLi\b/i, /UNION\s+SELECT/i, /OR\s+1\s*=\s*1/i],
-  SSRF: [/server.?side.?request/i, /\bSSRF\b/, /169\.254\.169\.254/],
+  SSRF: [/server.?side.?request/i, /\bSSRF\b/i, /169\.254\.169\.254/],
   "Buffer Overflow": [/buffer.?overflow/i, /heap.?overflow/i, /stack.?overflow/i, /out.?of.?bounds/i],
-  "Use After Free": [/use.?after.?free/i, /\bUAF\b/, /CWE-416/],
+  "Use After Free": [/use.?after.?free/i, /\bUAF\b/i, /CWE-416/i],
   "Path Traversal": [/path.?traversal/i, /directory.?traversal/i, /\.\.\//],
   "Auth Bypass": [/auth(?:entication|orization).?bypass/i, /\bIDOR\b/i, /broken.?access/i],
-  CSRF: [/cross.?site.?request.?forgery/i, /\bCSRF\b/],
-  RCE: [/remote.?code.?execution/i, /\bRCE\b/, /command.?injection/i],
+  CSRF: [/cross.?site.?request.?forgery/i, /\bCSRF\b/i],
+  RCE: [/remote.?code.?execution/i, /\bRCE\b/i, /command.?injection/i],
   "Info Disclosure": [/information.?disclosure/i, /sensitive.?data.?expos/i, /info.?leak/i],
+};
+
+// Sprint 13C (Task #205) — soft-citation lookup. Mirrors VULN_TYPE_PATTERNS
+// so every detected vulnerability name resolves to a canonical CWE id. Used
+// by Engine 3 to grant a "soft citation" credit when a report names a known
+// vulnerability class (e.g. "found a stored XSS") but doesn't include the
+// explicit CWE-XX token. Keep this table in lock-step with VULN_TYPE_PATTERNS:
+// every key here MUST also be a key in VULN_TYPE_PATTERNS, otherwise the
+// soft-citation lookup will silently miss.
+export const VULN_TYPE_TO_CWE: Record<string, string> = {
+  XSS: "79",
+  SQLi: "89",
+  SSRF: "918",
+  "Buffer Overflow": "119",
+  "Use After Free": "416",
+  "Path Traversal": "22",
+  "Auth Bypass": "287",
+  CSRF: "352",
+  RCE: "78",
+  "Info Disclosure": "200",
 };
 
 export function detectVulnerabilityType(text: string): string | null {
@@ -62,6 +88,30 @@ export function detectVulnerabilityType(text: string): string | null {
     }
   }
   return null;
+}
+
+export interface SoftCitation {
+  /** Vulnerability name as keyed in VULN_TYPE_PATTERNS (e.g. "XSS"). */
+  name: string;
+  /** Bare numeric CWE id (no "CWE-" prefix, e.g. "79"). */
+  cweId: string;
+}
+
+/**
+ * Sprint 13C (Task #205) — soft citation detector.
+ *
+ * Returns the inferred CWE for a report that *names* a recognised
+ * vulnerability class without including an explicit `CWE-XX` token, or
+ * null when no recognised name appears. This is intentionally a thin
+ * wrapper over `detectVulnerabilityType` + `VULN_TYPE_TO_CWE` so the two
+ * never drift.
+ */
+export function detectSoftCitation(text: string): SoftCitation | null {
+  const name = detectVulnerabilityType(text);
+  if (!name) return null;
+  const cweId = VULN_TYPE_TO_CWE[name];
+  if (!cweId) return null;
+  return { name, cweId };
 }
 
 const KNOWN_ALLOCATOR_ADDRS = new Set([

@@ -2,7 +2,7 @@
 // Each engine is fully independent (no shared state) per spec §Architecture.
 
 import type { ExtractedSignals } from "./extractors";
-import { detectVulnerabilityType } from "./extractors";
+import { detectSoftCitation, detectVulnerabilityType } from "./extractors";
 import { CWE_FINGERPRINTS, HIGH_REJECTION_CWES } from "./cwe-fingerprints";
 import { evaluateCrashTrace } from "./avri/crash-trace";
 import { evaluateRawHttpRequest } from "./avri/raw-http";
@@ -489,11 +489,39 @@ function phraseMatchCount(text: string, phrases: string[]): number {
 
 export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult {
   const claimedCwes = s.claimedCwes;
-  // v3.6.0 §3: Vuln-type-aware default. If the report describes a known
-  // vulnerability class but omits the CWE label, treat as mildly underspecified
-  // (38) rather than fully neutral. If no vuln type is detected, use 42 — a
-  // small downward bias from 50 so missing CWE never carries the field.
+  // Sprint 13C (Task #205) — soft citation tier. When the report names a
+  // recognised vulnerability class (e.g. "found a stored XSS") but omits the
+  // explicit CWE-XX token, grant a 60 floor instead of treating the missing
+  // CWE as the worst-case outcome. Tier hierarchy:
+  //   - explicit CWE cited & coherent → 78 floor (handled below)
+  //   - soft citation (name matched, no CWE token) → 60
+  //   - no recognised name, no CWE → 42 (neutral-ish)
+  // Reports that mention a vuln name without an explicit CWE no longer fall
+  // through to the old 38 underspecified score — that punished terse legit
+  // reports while doing nothing to deter slop.
   if (!claimedCwes || claimedCwes.length === 0) {
+    const softCite = detectSoftCitation(fullText);
+    if (softCite) {
+      const inferred = `CWE-${softCite.cweId}`;
+      const score = 60;
+      return {
+        engine: "CWE Coherence Checker",
+        score,
+        verdict: "YELLOW",
+        confidence: "LOW",
+        triggeredIndicators: [{
+          signal: "SOFT_CITATION",
+          value: `${softCite.name} → ${inferred}`,
+          strength: "MEDIUM",
+          explanation: `Report names "${softCite.name}" but does not cite a CWE; treating as soft citation of ${inferred} (floor ${score}).`,
+        }],
+        signalBreakdown: {
+          claimedCWEs: [],
+          softCitation: { name: softCite.name, inferredCwe: inferred },
+        },
+        note: `Soft citation: ${softCite.name} → ${inferred} (floor ${score}).`,
+      };
+    }
     const vulnType = detectVulnerabilityType(fullText);
     const defaultScore = vulnType ? 38 : 42;
     return {
@@ -738,6 +766,10 @@ function applyOverrideRules(
     "UNDERSPECIFIED",
     "NO_CWE_CLAIMED",
     "VULN_TYPE_NO_CWE",
+    // Sprint 13C (Task #205): a soft citation grants the 60 floor on its
+    // own; we don't additionally hand out the +6 BEHAVIORAL_MATCH_REWARD
+    // because the report didn't actually cite a CWE.
+    "SOFT_CITATION",
   ]);
   const cweClean = !(cwe?.triggeredIndicators?.some((i) => cweNegativeSignals.has(i.signal)) ?? false);
   const cweStrong = (cwe?.score ?? 0) >= 60;

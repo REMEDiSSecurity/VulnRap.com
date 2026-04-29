@@ -5,6 +5,7 @@
 // is still surfaced as `legacyScore` in signalBreakdown for diagnostics.
 
 import type { ExtractedSignals } from "../extractors";
+import { detectSoftCitation } from "../extractors";
 import type { EngineResult, TriggeredIndicator, Verdict } from "../engines";
 import { runEngine3 as runEngine3Legacy } from "../engines";
 import type { FamilyRubric } from "./families";
@@ -108,6 +109,13 @@ export function runEngine3Avri(
   // an integer overflow → MEMORY_CORRUPTION via keyword fallback) still earn
   // the same-family floor when content agrees with the chosen family.
   const sameFamily = selectedFamily !== "FLAT" && evidenceFamily !== null && evidenceFamily === selectedFamily;
+  // Sprint 13C (Task #205) — soft citation lookup. When the report names a
+  // recognised vulnerability class (XSS, SQLi, SSRF, …) but doesn't include
+  // an explicit CWE-XX token, AVRI's "no CWE cited" path lifts from 38 to 60
+  // so terse-but-legit reports stop being penalised for shorthand. The lookup
+  // mirrors the legacy E3 implementation; both paths must agree.
+  const softCite = !isCweCited ? detectSoftCitation(fullText) : null;
+
   let baseScore: number;
   let baseRule:
     | "SAME_FAMILY_FLOOR"
@@ -115,6 +123,7 @@ export function runEngine3Avri(
     | "OFF_FAMILY_CEILING"
     | "CITED_NO_EVIDENCE"
     | "FAMILY_DETECTED_NO_CWE"
+    | "SOFT_CITATION"
     | "FALLBACK";
   if (offFamilyHighConf) {
     baseScore = 25;
@@ -126,8 +135,18 @@ export function runEngine3Avri(
     // suppressed base — this is what stops T3 slop from inheriting the 78
     // floor just because they say the right keywords.
     if (concreteGoldHitCount === 0) {
-      baseScore = 32;
-      baseRule = "SAME_FAMILY_NO_CONCRETE_EVIDENCE";
+      // Sprint 13C (Task #205) — but if the report is *uncited* and uses a
+      // recognised vulnerability shorthand (XSS, SQLi, …), prefer the soft
+      // citation tier (60) over the suppressed same-family base (32). Slop
+      // reports that copy a CWE label still hit SAME_FAMILY_NO_CONCRETE_EVIDENCE
+      // because soft-cite only fires for *uncited* (no `CWE-XX` token) reports.
+      if (softCite) {
+        baseScore = 60;
+        baseRule = "SOFT_CITATION";
+      } else {
+        baseScore = 32;
+        baseRule = "SAME_FAMILY_NO_CONCRETE_EVIDENCE";
+      }
     } else {
       baseScore = 75;
       baseRule = "SAME_FAMILY_FLOOR";
@@ -137,6 +156,11 @@ export function runEngine3Avri(
     // trust the report cautiously (well above fallback, well below floor).
     baseScore = 60;
     baseRule = "CITED_NO_EVIDENCE";
+  } else if (softCite) {
+    // Soft citation outside the same-family branch: report names a known
+    // vuln class without citing the CWE. Tier between cited (78) and missing (38).
+    baseScore = 60;
+    baseRule = "SOFT_CITATION";
   } else if (!isCweCited) {
     baseScore = 38;
     baseRule = "FAMILY_DETECTED_NO_CWE";
@@ -182,6 +206,15 @@ export function runEngine3Avri(
       explanation: ci.description,
     });
   }
+  if (softCite && baseRule === "SOFT_CITATION") {
+    const inferred = `CWE-${softCite.cweId}`;
+    indicators.push({
+      signal: "SOFT_CITATION",
+      value: `${softCite.name} → ${inferred}`,
+      strength: "MEDIUM",
+      explanation: `Report names "${softCite.name}" but does not cite a CWE; treating as soft citation of ${inferred} (floor ${baseScore}).`,
+    });
+  }
 
   const verdict: Verdict =
     blendedScore >= 65 ? "GREEN" :
@@ -208,9 +241,14 @@ export function runEngine3Avri(
         legacyScore: legacy.score,
         blendedScore,
         coherenceIssues: coherenceIssues.map((i) => ({ id: i.id, penalty: -i.penalty })),
+        softCitation: softCite && baseRule === "SOFT_CITATION"
+          ? { name: softCite.name, inferredCwe: `CWE-${softCite.cweId}` }
+          : null,
       },
     },
-    note: `AVRI ${family.displayName} (${classification.confidence}): ${goldHitCount}/${family.goldSignals.length} gold, ${contradictions.length} contradictions, ${coherenceIssues.length} coherence issue(s). Blended: ${blendedScore}.`,
+    note: softCite && baseRule === "SOFT_CITATION"
+      ? `AVRI ${family.displayName} (${classification.confidence}): soft citation ${softCite.name} → CWE-${softCite.cweId}, ${goldHitCount}/${family.goldSignals.length} gold, ${contradictions.length} contradictions, ${coherenceIssues.length} coherence issue(s). Blended: ${blendedScore}.`
+      : `AVRI ${family.displayName} (${classification.confidence}): ${goldHitCount}/${family.goldSignals.length} gold, ${contradictions.length} contradictions, ${coherenceIssues.length} coherence issue(s). Blended: ${blendedScore}.`,
   };
 
   return {
