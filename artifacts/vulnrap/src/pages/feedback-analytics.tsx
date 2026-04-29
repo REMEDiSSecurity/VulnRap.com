@@ -55,7 +55,7 @@ import {
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
   Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
-  KeyRound,
+  KeyRound, ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -3090,6 +3090,17 @@ function HandwavyPhrasesAdmin() {
               // as a hover-able badge so reviewers can spot contentious
               // markers at a glance.
               const cycles = thrashByPhrase.get(m.phrase) ?? [];
+              // Task #149 — count category transitions from the in-row edit
+              // history so reviewers can spot phrases that have bounced
+              // between absence/hedging/buzzword multiple times without
+              // expanding the full history panel. We only count edits that
+              // actually changed the category (the audit log omits the
+              // `category` field when only the rationale changed) and only
+              // surface the badge once there are >= 2 distinct transitions
+              // to keep noise off rows that just had a one-off correction.
+              const categoryFlips = editsList.filter(
+                (e) => e.category && e.category.from !== e.category.to,
+              );
               return (
                 <div
                   key={m.phrase}
@@ -3155,6 +3166,72 @@ function HandwavyPhrasesAdmin() {
                                   </div>
                                 </li>
                               ))}
+                            </ol>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    {/* Task #149 — category-flip badge sits next to the
+                       thrash badge so the two "this phrase is unstable"
+                       signals (remove+reinstate cycles vs. category
+                       reassignments) live side by side. Only renders when
+                       reviewers have moved the phrase between categories
+                       at least twice, otherwise the row stays clean. */}
+                    {categoryFlips.length >= 2 && (
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger
+                            type="button"
+                            className="cursor-help inline-flex"
+                            data-testid="handwavy-category-flip-badge"
+                            aria-label={`Category changed ${categoryFlips.length} times across edit history`}
+                          >
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] border-sky-500/40 text-sky-300"
+                            >
+                              <ArrowLeftRight className="w-3 h-3 mr-1" />
+                              {categoryFlips.length} category flips
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="top"
+                            align="end"
+                            collisionPadding={12}
+                            className="max-w-xs glass-card glow-border text-popover-foreground text-left font-normal normal-case px-3 py-2 whitespace-normal"
+                            data-testid="handwavy-category-flip-tooltip"
+                          >
+                            <div className="text-[11px] font-semibold mb-1">
+                              Category changed {categoryFlips.length} times
+                            </div>
+                            <ol className="space-y-1 text-[10px] leading-snug">
+                              {categoryFlips.map((e, i) => {
+                                const at = formatAuditTimestamp(e.editedAt);
+                                return (
+                                  <li
+                                    key={`${e.editedAt}-${i}`}
+                                    className="space-y-0.5"
+                                  >
+                                    <div>
+                                      <span className="text-muted-foreground">#{i + 1}:</span>{" "}
+                                      <span className="text-foreground/90 capitalize">
+                                        {e.category!.from}
+                                      </span>
+                                      {" → "}
+                                      <span className="text-foreground/90 capitalize">
+                                        {e.category!.to}
+                                      </span>
+                                    </div>
+                                    <div className="text-muted-foreground">
+                                      by{" "}
+                                      <span className="text-foreground/80">
+                                        {e.editedBy || "anonymous"}
+                                      </span>
+                                      {at && <> • {at}</>}
+                                    </div>
+                                  </li>
+                                );
+                              })}
                             </ol>
                           </TooltipContent>
                         </Tooltip>
