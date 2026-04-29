@@ -8,6 +8,14 @@
 // pipeline trace row, so subsequent /reports/:id and /reports/check responses
 // get matrix-driven recommendations for those legacy reports.
 //
+// Task #193 — both branches (engine re-run + cached-signal reconstruction)
+// pass report text into `computeComposite`, so the v3.6.0 fabricated-evidence
+// composite penalty fires for legacy reports during a re-backfill. The
+// engine path forwards the persisted redactedText/contentText; the
+// reconstruction path rebuilds a synthetic trigger text from the cached
+// `hallucination_*` evidence entries so legacy reports stored without raw
+// text still get rescored when the cached signals warrant it.
+//
 // Usage (from artifacts/api-server):
 //   pnpm run build && node --enable-source-maps ./dist/backfill-vulnrap.mjs
 // Flags:
@@ -32,6 +40,7 @@ import {
   type EngineResult,
   type CompositeResult,
 } from "./lib/engines";
+import { reconstructHallucinationTriggerText } from "./backfill-vulnrap-helpers";
 
 // Evidence types that count as "strong" for the v3.6.0 triage matrix's
 // strongEvidenceCount input. Mirrors the strength multipliers in
@@ -64,6 +73,12 @@ interface CachedSignals {
 // report off the neutral 50/50 matrix fallback. The result is explicitly
 // flagged as reconstructed in every signalBreakdown so reviewers can tell it
 // apart from a real engine run.
+//
+// Task #193 — when the cached evidence list contains `hallucination_*`
+// entries (persisted by score-fusion at original-analysis time), we
+// reconstruct a synthetic trigger text from those signals and pass it to
+// `computeComposite` so the v3.6.0 fabricated-evidence composite penalty
+// re-fires for legacy fabricated reports during a re-backfill.
 function reconstructFromCachedSignals(s: CachedSignals): CompositeResult {
   const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
 
@@ -159,10 +174,21 @@ function reconstructFromCachedSignals(s: CachedSignals): CompositeResult {
     note: "CWE coherence neutralized (50) — claimed CWEs were not retained in cache.",
   };
 
-  const composite = computeComposite([e1, e2, e3]);
+  // Task #193 — pass a synthetic hallucination-trigger text rebuilt from the
+  // cached `hallucination_*` evidence entries so the v3.6.0 fabricated-
+  // evidence composite penalty fires for legacy fabricated reports too.
+  // Reports with no cached hallucination signals get an empty string, which
+  // computeComposite treats as no-text (no override) — same as before.
+  const triggerText = reconstructHallucinationTriggerText(s.evidence);
+  const composite = computeComposite(
+    [e1, e2, e3],
+    triggerText.length > 0 ? triggerText : undefined,
+  );
   composite.warnings = [
     ...composite.warnings,
-    "Composite reconstructed from cached v3.5.0 signals; raw report text was not retained.",
+    triggerText.length > 0
+      ? "Composite reconstructed from cached v3.5.0 signals; hallucination penalty re-derived from cached fabrication signals."
+      : "Composite reconstructed from cached v3.5.0 signals; no cached fabrication signals to re-evaluate.",
   ];
   return composite;
 }
