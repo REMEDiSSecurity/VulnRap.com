@@ -311,4 +311,145 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await apiCtx.dispose();
     }
   });
+
+  // Task #222 — navigate-away guard. After adding a phrase the reviewer
+  // has a finite (5-minute) chance to roll the mistake back through the
+  // audit-friendly Undo path; if they accidentally click an in-app Link
+  // before that window elapses, the only way left to drop the phrase is
+  // the regular Trash button (which records a manual-removal entry
+  // instead of "added then undone"). The guard intercepts that
+  // navigation and pops a confirm dialog naming the phrase + remaining
+  // time. This test seeds an add, clicks the layout's logo Link
+  // (to "/"), confirms the dialog appears with the correct copy,
+  // dismisses it, asserts we're still on the panel, then re-clicks the
+  // Link and confirms "Leave anyway" actually navigates.
+  test("navigating away while an undo window is still ticking pops a confirm dialog with the phrase + remaining time, and dismissing it keeps the reviewer on the panel", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task222 navguard", "phrase");
+
+    try {
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const reviewer = page.getByTestId("handwavy-reviewer");
+      await expect(reviewer).toBeVisible({ timeout: 15_000 });
+      await reviewer.fill("e2e-task222");
+
+      await addPhraseViaUi(page, phrase);
+
+      // Sanity: the row must carry an Undo button so we know the guard
+      // has something to protect — otherwise this test would silently
+      // pass against the pre-Task #222 build (which had no guard but
+      // also no Undo to lose).
+      const newRow = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
+
+      // Click an in-app Link in the layout. The header logo is a
+      // <Link to="/"> rendered in artifacts/vulnrap/src/components/
+      // layout.tsx (it appears multiple times for desktop/mobile
+      // breakpoints — .first() picks whichever is visible). Without
+      // the guard this would navigate immediately to "/" and the
+      // panel — and its undo opportunity — would unmount.
+      const logoLink = page.locator('a[href="/"]').first();
+      await expect(logoLink).toBeVisible();
+      await logoLink.click();
+
+      // The guard's confirm dialog must appear, and it must name the
+      // exact phrase the reviewer is about to lose the undo on.
+      const dialog = page.getByTestId("handwavy-undo-leave-confirm");
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+      await expect(
+        dialog.getByTestId("handwavy-undo-leave-confirm-phrase"),
+      ).toContainText(phrase);
+      // The remaining-time copy must read in the same "Xm YYs" form as
+      // the row-level Undo button (formatUndoRemaining) — the dialog
+      // is meant to reinforce that countdown, not invent a new one.
+      const remainingText = await dialog
+        .getByTestId("handwavy-undo-leave-confirm-remaining")
+        .textContent();
+      expect(remainingText ?? "").toMatch(/^\d+m \d{2}s$/);
+
+      // "Stay on this page" must dismiss the dialog WITHOUT navigating
+      // — we should still be on /feedback-analytics with the phrase
+      // row + Undo affordance intact.
+      await dialog.getByTestId("handwavy-undo-leave-confirm-cancel").click();
+      await expect(dialog).not.toBeVisible();
+      expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+      ).toHaveCount(1);
+      await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
+
+      // Clicking the Link a second time must re-arm the dialog — the
+      // guard isn't a one-shot, it stays active for as long as a
+      // candidate is still inside its window.
+      await logoLink.click();
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+      // "Leave anyway" must actually navigate. We assert via the URL
+      // pathname rather than waiting for a specific selector on "/"
+      // because the home page is lazy-loaded and could take a moment
+      // to render under load.
+      await dialog.getByTestId("handwavy-undo-leave-confirm-confirm").click();
+      await expect(dialog).not.toBeVisible();
+      await expect
+        .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
+        .toBe("/");
+    } finally {
+      await cleanup(apiCtx, phrase, { reviewer: "e2e-task222-cleanup" });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #222 — suppression contract. Clicking the row-level Undo
+  // button must NOT pop the navigate-away dialog: the reviewer is the
+  // one initiating the rollback, and the panel's instant refresh +
+  // list mutation that follows would otherwise spuriously trip the
+  // guard against them. The undo path is the audit-friendly route
+  // ("added then undone" history entry) so a stray prompt here would
+  // actively discourage the behaviour we want.
+  test("clicking the row-level Undo button does not pop the navigate-away dialog (the reviewer is the one undoing)", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task222 navguard", "self-undo");
+
+    try {
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const reviewer = page.getByTestId("handwavy-reviewer");
+      await expect(reviewer).toBeVisible({ timeout: 15_000 });
+      await reviewer.fill("e2e-task222-self");
+
+      await addPhraseViaUi(page, phrase);
+
+      const newRow = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      const undoBtn = newRow.getByTestId("handwavy-undo");
+      await expect(undoBtn).toBeVisible();
+
+      await undoBtn.click();
+
+      // The phrase must disappear from the active list (proving the
+      // undo round-trip happened) AND the leave-confirm dialog must
+      // never have surfaced during it.
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+      ).toHaveCount(0, { timeout: 15_000 });
+      await expect(
+        page.getByTestId("handwavy-undo-leave-confirm"),
+      ).not.toBeVisible();
+
+      // Belt-and-braces: still on /feedback-analytics, no stray
+      // navigation triggered.
+      expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
+    } finally {
+      await cleanup(apiCtx, phrase, { reviewer: "e2e-task222-self-cleanup" });
+      await apiCtx.dispose();
+    }
+  });
 });

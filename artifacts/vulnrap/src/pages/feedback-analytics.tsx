@@ -56,7 +56,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -3018,10 +3018,209 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     return map;
   }, [reviewerAddedByPhrase, nowMs, UNDO_WINDOW_MS]);
 
+  // Task #222 — navigate-away guard for live undo windows. Once a reviewer
+  // adds a FLAT phrase they have a finite (5-minute) chance to roll the
+  // mistake back through the audit-friendly Undo path; if they
+  // accidentally close the tab, refresh, hit back/forward, or click an
+  // in-app Link before that window elapses, the only way left to drop the
+  // phrase is the regular Trash button (which records a manual-removal
+  // history entry instead of "added then undone"). The guard nudges them
+  // before that cliff: any navigation attempt while at least one
+  // reviewer-added phrase is still inside its window pops a confirm
+  // dialog with the most-recent phrase + remaining time. Dismissing the
+  // dialog leaves them on the page; confirming (or hitting Leave anyway)
+  // proceeds with the navigation. Once every candidate has expired (or
+  // been undone) the listeners self-uninstall so other pages aren't
+  // affected.
+  const navigate = useNavigate();
+  // Suppression flag — set to true while the reviewer's own Undo click is
+  // in flight so the post-undo refresh / list mutation doesn't spuriously
+  // arm the prompt against them. The ref is consulted by every handler
+  // (beforeunload, click intercept, popstate) before deciding to block.
+  const suppressNavGuardRef = useRef(false);
+  // Most-recent reviewer add still inside its window. Drives the dialog
+  // copy ("You still have Xm Ys to undo \"foo\"…") so the reviewer sees
+  // exactly what they're about to lock in.
+  const mostRecentUndoCandidate = useMemo(() => {
+    let best:
+      | { phrase: string; addedAtMs: number; remainingMs: number }
+      | null = null;
+    for (const [phrase, entry] of undoCandidates) {
+      if (best === null || entry.addedAtMs > best.addedAtMs) {
+        best = {
+          phrase,
+          addedAtMs: entry.addedAtMs,
+          remainingMs: entry.remainingMs,
+        };
+      }
+    }
+    return best;
+  }, [undoCandidates]);
+  const hasActiveUndo = mostRecentUndoCandidate !== null;
+  // The `useBlocker` / `unstable_usePrompt` hooks from react-router would
+  // be the obvious tool here, but they only work under a data router
+  // (RouterProvider + createBrowserRouter). This app wires the routes
+  // through the declarative <BrowserRouter>, so the guard is implemented
+  // by hand: a beforeunload listener for tab close / refresh, a
+  // capture-phase click interceptor for in-app <Link> clicks, and a
+  // popstate sentinel for back/forward.
+  const [pendingNavigation, setPendingNavigation] = useState<
+    | { kind: "link"; href: string }
+    | { kind: "popstate" }
+    | null
+  >(null);
+  // Refs shadow the latest values so the long-lived listeners don't have
+  // to re-bind on every state tick (the 1Hz countdown re-renders this
+  // component every second; rebinding `beforeunload` / `popstate` /
+  // capture-phase click handlers that often would be wasteful and could
+  // also race with in-flight navigations).
+  const hasActiveUndoRef = useRef(hasActiveUndo);
+  useEffect(() => {
+    hasActiveUndoRef.current = hasActiveUndo;
+  }, [hasActiveUndo]);
+  // Tab close / hard refresh — modern browsers ignore custom messages
+  // and just show their own "Leave site?" dialog, but setting
+  // returnValue is what makes the dialog appear at all.
+  useEffect(() => {
+    const handler = (event: BeforeUnloadEvent) => {
+      if (suppressNavGuardRef.current) return;
+      if (!hasActiveUndoRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
+  // In-app Link clicks — react-router renders <Link> as a real <a>, so
+  // a capture-phase click listener can intercept the navigation before
+  // react-router handles it. Modifier-key clicks, middle clicks, and
+  // target=_blank are intentionally NOT intercepted (the user is
+  // explicitly opening in a new tab/window and the current tab — and
+  // therefore the undo window — stays put).
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (suppressNavGuardRef.current) return;
+      if (!hasActiveUndoRef.current) return;
+      if (event.defaultPrevented) return;
+      if (event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      let node: HTMLElement | null = event.target as HTMLElement | null;
+      while (node && node !== document.body) {
+        if (node.tagName === "A") break;
+        node = node.parentElement;
+      }
+      if (!node || node.tagName !== "A") return;
+      const anchor = node as HTMLAnchorElement;
+      const target = anchor.getAttribute("target");
+      if (target && target !== "_self") return;
+      const rawHref = anchor.getAttribute("href");
+      if (!rawHref) return;
+      // Only intercept SPA-internal links (same origin, real path).
+      // Anchor jumps (#foo), mailto:, tel:, javascript:, and absolute
+      // off-site URLs are left alone — react-router won't claim them
+      // either, and the browser's own beforeunload fires for the off-
+      // site cases.
+      if (rawHref.startsWith("#")) return;
+      let parsed: URL;
+      try {
+        parsed = new URL(anchor.href, window.location.href);
+      } catch {
+        return;
+      }
+      if (parsed.origin !== window.location.origin) return;
+      const samePath =
+        parsed.pathname === window.location.pathname &&
+        parsed.search === window.location.search;
+      if (samePath) return;
+      const basename = import.meta.env.BASE_URL.replace(/\/$/, "");
+      let routerPath = parsed.pathname;
+      if (basename && routerPath.startsWith(basename)) {
+        routerPath = routerPath.slice(basename.length) || "/";
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingNavigation({
+        kind: "link",
+        href: `${routerPath}${parsed.search}${parsed.hash}`,
+      });
+    };
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, []);
+  // Back / forward button — push a sentinel state on top of the stack
+  // when a candidate first appears so the very next popstate brings us
+  // back to the same URL with the sentinel popped. We then re-push the
+  // sentinel and surface the prompt; "Leave anyway" plays back the
+  // history.go(-2) the reviewer originally requested (popping both the
+  // re-pushed sentinel and the entry below it). We deliberately do NOT
+  // try to scrub the sentinel from history on cleanup — calling
+  // history.back() during effect teardown would race with in-flight
+  // route changes and could send the reviewer back to /feedback-
+  // analytics seconds after they navigated away. The phantom entry is
+  // a small, contained side-effect; an unintended jump-back is not.
+  useEffect(() => {
+    if (!hasActiveUndo) return;
+    const sentinel = { __vulnrapNavGuard: Date.now() };
+    window.history.pushState(sentinel, "");
+    const handler = () => {
+      if (suppressNavGuardRef.current) return;
+      if (!hasActiveUndoRef.current) return;
+      window.history.pushState(sentinel, "");
+      setPendingNavigation({ kind: "popstate" });
+    };
+    window.addEventListener("popstate", handler);
+    return () => {
+      window.removeEventListener("popstate", handler);
+    };
+  }, [hasActiveUndo]);
+  // If every candidate ages out (or is undone) while the dialog is
+  // still open, drop the pending navigation so the dialog auto-closes
+  // cleanly instead of resurrecting itself the next time a fresh
+  // candidate appears.
+  useEffect(() => {
+    if (!hasActiveUndo && pendingNavigation !== null) {
+      setPendingNavigation(null);
+    }
+  }, [hasActiveUndo, pendingNavigation]);
+  // The dialog's "Xm Ys" copy reads from the live `undoCandidates`
+  // memo so the countdown inside it keeps ticking while the reviewer
+  // is deciding — otherwise it would freeze on the remaining-time it
+  // was opened with, which would be slightly off-putting next to the
+  // live per-row countdown this task is meant to reinforce.
+  const pendingPhrase = pendingNavigation ? mostRecentUndoCandidate : null;
+
+  const proceedPendingNavigation = () => {
+    if (!pendingNavigation) return;
+    suppressNavGuardRef.current = true;
+    const target = pendingNavigation;
+    setPendingNavigation(null);
+    if (target.kind === "link") {
+      navigate(target.href);
+    } else {
+      // Pop the re-pushed sentinel AND the entry the reviewer's
+      // original Back press was aimed at, so a single click of
+      // "Leave anyway" lands them where they actually wanted to go.
+      window.history.go(-2);
+    }
+    // Re-enable the guard on the next tick — by then either the route
+    // change has flushed and this component has unmounted, or the
+    // reviewer cancelled out and we want the guard back.
+    window.setTimeout(() => {
+      suppressNavGuardRef.current = false;
+    }, 0);
+  };
+
   const handleUndo = async (phrase: string, addedAtIso: string) => {
     if (bailOnCooldown("Undo add")) return;
     const key = `undo:${phrase}:${addedAtIso}`;
     setBusy(key);
+    // Task #222 — the reviewer is the one asking for the rollback; the
+    // ensuing phrases-list refetch will briefly leave the candidate in
+    // the `reviewerAddedByPhrase` map (the new server response hasn't
+    // landed yet). Without this flag the guard could fire against the
+    // reviewer's own confirm-add → undo flow, which would be deeply
+    // confusing. Cleared on the next tick after the refresh.
+    suppressNavGuardRef.current = true;
     try {
       await undoHandwavyPhrase({
         phrase,
@@ -3038,6 +3237,9 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       toast({ title: "Undo failed", description: msg, variant: "destructive" });
     } finally {
       setBusy(null);
+      window.setTimeout(() => {
+        suppressNavGuardRef.current = false;
+      }, 0);
     }
   };
 
@@ -5737,6 +5939,67 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
             }}
           >
             Reinstate batch
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Task #222 — navigate-away guard. Pops when the reviewer triggers
+        an in-app Link click or back/forward while at least one
+        reviewer-added FLAT phrase is still inside its undo window.
+        Shows the most-recent candidate phrase + remaining time so the
+        reviewer can decide whether to stay (and use the row-level Undo
+        button) or proceed and accept that the audit trail will record
+        a manual removal if they later need to delete it. The matching
+        beforeunload listener handles tab close / hard refresh; the
+        browser controls that dialog's copy. */}
+    <AlertDialog
+      open={pendingNavigation !== null && pendingPhrase !== null}
+      onOpenChange={(open) => {
+        if (!open) setPendingNavigation(null);
+      }}
+    >
+      <AlertDialogContent data-testid="handwavy-undo-leave-confirm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Leave before undoing?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              {pendingPhrase && (
+                <>
+                  <div>
+                    You still have{" "}
+                    <strong data-testid="handwavy-undo-leave-confirm-remaining">
+                      {formatUndoRemaining(pendingPhrase.remainingMs)}
+                    </strong>{" "}
+                    to undo{" "}
+                    <span
+                      className="font-mono text-foreground/80"
+                      data-testid="handwavy-undo-leave-confirm-phrase"
+                    >
+                      “{pendingPhrase.phrase}”
+                    </span>
+                    . Leave anyway?
+                  </div>
+                  <div className="text-xs italic">
+                    If you leave, the row-level Undo affordance disappears
+                    and any later removal will be recorded as a manual
+                    removal in the audit trail rather than as “added then
+                    undone”.
+                  </div>
+                </>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="handwavy-undo-leave-confirm-cancel">
+            Stay on this page
+          </AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="handwavy-undo-leave-confirm-confirm"
+            onClick={proceedPendingNavigation}
+          >
+            Leave anyway
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
