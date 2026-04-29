@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ChevronDown, ChevronUp, Activity, AlertCircle, Download, ClipboardCopy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  buildAvriRubricMarkdown,
+  type AvriCompositeBlock,
+  type AvriEngine2Block,
+} from "@workspace/avri-rubric";
 
 // Task 62: keep in sync with VerificationMode in
 // artifacts/api-server/src/lib/engines/avri/families.ts.
@@ -1136,102 +1141,21 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     lines.push("");
   }
 
+  // Task 190: render the AVRI Family Rubric via the shared helper in
+  // `@workspace/avri-rubric` so this export and the server-side
+  // `/reports/:id/triage-report` endpoint stay in lock-step. See that
+  // package for the canonical formatting and snapshot test.
   const e2EngineForAvri = data.engines?.engines?.find((e) => /Technical Substance/i.test(e.engine));
-  const e2Avri = (e2EngineForAvri?.signalBreakdown?.avri ?? null) as AvriEngine2Breakdown | null;
-  if (data.avri || e2Avri) {
-    const familyName = data.avri?.familyName ?? e2Avri?.familyName ?? data.avri?.family ?? e2Avri?.family ?? "—";
-    lines.push("## AVRI Family Rubric");
-    lines.push(`- Family: **${familyName}**`);
-    if (data.avri?.classification?.confidence) {
-      lines.push(`- Classification confidence: ${data.avri.classification.confidence}`);
-    }
-    if (data.avri?.classification?.reason) {
-      lines.push(`- Classification reason: ${data.avri.classification.reason}`);
-    }
-    const goldTotal = e2Avri?.goldTotalCount ?? ((e2Avri?.goldHits?.length ?? 0) + (e2Avri?.goldMisses?.length ?? 0));
-    lines.push(`- Gold signals: ${e2Avri?.goldHitCount ?? data.avri?.goldHitCount ?? 0}/${goldTotal}`);
-    if (e2Avri?.goldHits && e2Avri.goldHits.length > 0) {
-      lines.push("- Gold signals found:");
-      for (const g of e2Avri.goldHits) lines.push(`  - +${g.points} ${g.description} (${g.id})`);
-    }
-    if (e2Avri?.goldMisses && e2Avri.goldMisses.length > 0) {
-      lines.push("- Expected signals missing:");
-      for (const g of e2Avri.goldMisses) lines.push(`  - −${g.points} ${g.description} (${g.id})`);
-    }
-    if (e2Avri?.absencePenalties && e2Avri.absencePenalties.length > 0) {
-      lines.push("- Absence penalties applied:");
-      // Task 110: mirror the on-screen FLAT grouping (Task 107) in the
-      // markdown export so a slop FLAT report doesn't dump every hand-wavy
-      // phrase as one ungrouped scroll. Entries with a flatHandwavyCategory
-      // get bucketed by theme with per-category subtotals; non-FLAT absence
-      // penalties (no category) keep the existing flat list.
-      const categorized = e2Avri.absencePenalties.filter(
-        (a) => a.flatHandwavyCategory != null,
-      );
-      const uncategorized = e2Avri.absencePenalties.filter(
-        (a) => a.flatHandwavyCategory == null,
-      );
-      if (categorized.length > 0) {
-        const groups = new Map<HandwavyCategoryUI, typeof categorized>();
-        for (const a of categorized) {
-          const key = a.flatHandwavyCategory as HandwavyCategoryUI;
-          const arr = groups.get(key) ?? [];
-          arr.push(a);
-          groups.set(key, arr);
-        }
-        for (const key of HANDWAVY_CATEGORY_ORDER) {
-          const items = groups.get(key);
-          if (!items || items.length === 0) continue;
-          const subtotal = items.reduce((s, a) => s + a.points, 0);
-          lines.push(
-            `  - ${HANDWAVY_CATEGORY_LABELS[key]} (${items.length} phrase${items.length === 1 ? "" : "s"}, −${subtotal} raw):`,
-          );
-          for (const a of items) lines.push(`    - −${a.points} ${a.description} (${a.id})`);
-        }
-      }
-      for (const a of uncategorized) lines.push(`  - −${a.points} ${a.description} (${a.id})`);
-    }
-    if (e2Avri?.contradictions && e2Avri.contradictions.length > 0) {
-      lines.push(`- Contradiction phrases: ${e2Avri.contradictions.map((c) => `"${c}"`).join(", ")}`);
-    }
-    if (e2Avri?.crashTrace?.isStripped) {
-      const ct = e2Avri.crashTrace;
-      const familyId = data.avri?.family ?? e2Avri?.family ?? null;
-      const traceKindLabel =
-        familyId === "RACE_CONCURRENCY"
-          ? "race trace"
-          : familyId === "MEMORY_CORRUPTION"
-            ? "crash trace"
-            : "tool trace";
-      lines.push(
-        `- Stripped ${traceKindLabel} (penalty ${ct.penalty}): ${ct.reason ?? "stripped trace"} — frames ${ct.framesAnalyzed}, good ${ct.goodFrames}, placeholder ${ct.placeholderFrames}`,
-      );
-      if (ct.revokedGoldHits.length > 0) {
-        lines.push(
-          `  - Trace gold signals revoked: ${ct.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
-        );
-      }
-    }
-    // Sprint 12 / Task 93: surface the FAKE_RAW_HTTP block alongside
-    // STRIPPED_CRASH_TRACE so reviewers reading the printable export see
-    // why a REQUEST_SMUGGLING report's gold hits were revoked.
-    if (e2Avri?.rawHttp?.isFake) {
-      const rh = e2Avri.rawHttp;
-      const goodHeaders = Math.max(0, rh.totalHeaders - rh.placeholderHeaders);
-      lines.push(
-        `- Fake raw HTTP request (penalty ${rh.penalty}): ${rh.reason ?? "fabricated raw HTTP request"} — requests ${rh.requestsAnalyzed}, headers ${goodHeaders}/${rh.totalHeaders} good, placeholder ${rh.placeholderHeaders}, CRLF ${rh.crlfPresent ? "yes" : "no"}, TE/CL conflicts ${rh.teClConflicts} (broken ${rh.teClBroken})`,
-      );
-      if (rh.revokedGoldHits.length > 0) {
-        lines.push(
-          `  - Smuggling gold signals revoked: ${rh.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
-        );
-      }
-    }
-    if (data.avri && (data.avri.velocityPenalty < 0 || data.avri.templatePenalty < 0)) {
-      lines.push(`- Behavioural penalties: velocity ${data.avri.velocityPenalty}, template ${data.avri.templatePenalty}`);
-    }
-    lines.push("");
-  }
+  const e2Avri = (e2EngineForAvri?.signalBreakdown?.avri ?? null) as AvriEngine2Block | null;
+  const avriComposite = (data.avri ?? null) as AvriCompositeBlock | null;
+  const avriOverrides = data.composite?.overridesApplied ?? data.trace?.composite?.overridesApplied ?? [];
+  lines.push(
+    ...buildAvriRubricMarkdown({
+      composite: avriComposite,
+      engine2: e2Avri,
+      overridesApplied: avriOverrides,
+    }),
+  );
 
   const warnings = data.engines?.warnings ?? data.trace?.composite?.warnings ?? [];
   if (warnings.length > 0) {

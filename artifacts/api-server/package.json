@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
+    "@workspace/avri-rubric": "workspace:*",
     "@workspace/db": "workspace:*",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",

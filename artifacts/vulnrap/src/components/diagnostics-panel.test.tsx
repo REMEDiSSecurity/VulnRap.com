@@ -780,7 +780,10 @@ describe("DiagnosticsPanel smoke test", () => {
 
     const md = buildMarkdownSummary(withFlatHandwavy);
 
-    expect(md).toContain("- Absence penalties applied:");
+    // Task 190: AVRI rubric now lives in @workspace/avri-rubric, which uses
+    // bold-key formatting and adds a "(haircut N)" total to the absence
+    // penalties header.
+    expect(md).toMatch(/- \*\*Absence penalties applied\*\* \(haircut -?\d+\):/);
     // Per-theme headers carry the same phrase count + raw subtotal as the on-screen panel.
     expect(md).toContain("Self-admitted absence of evidence (2 phrases, −12 raw):");
     expect(md).toContain("Generic hedging (\"may / appears\") (1 phrase, −6 raw):");
@@ -848,7 +851,8 @@ describe("DiagnosticsPanel smoke test", () => {
 
     const md = buildMarkdownSummary(withFamilyAbsence);
 
-    expect(md).toContain("- Absence penalties applied:");
+    // Task 190: bold-key absence header from @workspace/avri-rubric.
+    expect(md).toMatch(/- \*\*Absence penalties applied\*\* \(haircut -?\d+\):/);
     // No themed grouping headers for non-FLAT families.
     expect(md).not.toContain("Self-admitted absence of evidence");
     expect(md).not.toContain("Generic hedging");
@@ -936,7 +940,9 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(md).toContain("`FAKE_RAW_HTTP`");
     // Structural rawHttp block under the AVRI Family Rubric, alongside the
     // STRIPPED_CRASH_TRACE block, with the per-request counters spelled out.
-    expect(md).toContain("Fake raw HTTP request (penalty -18)");
+    // Task 190: now rendered with bold-key formatting from
+    // @workspace/avri-rubric.
+    expect(md).toContain("**Fake raw HTTP request** (penalty -18)");
     expect(md).toContain("requests 1");
     expect(md).toContain("headers 3/7 good");
     expect(md).toContain("placeholder 4");
