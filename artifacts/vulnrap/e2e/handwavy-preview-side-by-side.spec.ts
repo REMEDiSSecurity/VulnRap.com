@@ -276,4 +276,127 @@ test.describe("Side-by-side dry-run preview panel (Task #126)", () => {
       await api.dispose();
     }
   });
+
+  // Task #224 — Coverage for the THIRD branch of the side-by-side preview:
+  // when the production-archive probe fails the route returns
+  // `dryRunMatchesProduction: null` + a non-empty
+  // `dryRunMatchesProductionError`, and the UI replaces the production
+  // block with an amber "production scan unavailable" notice
+  // (`handwavy-preview-production-error`). Tests #126/#141 above only
+  // exercise the two healthy paths (both blocks render; production has
+  // FPs); the failed-probe branch has been route-unit-tested but never
+  // driven through the browser, so a regression — e.g. the amber notice
+  // silently disappearing, or the curated block also being hidden when
+  // the prod probe fails — would slip past CI.
+  test("Amber 'production scan unavailable' notice renders when the production probe fails", async ({
+    page,
+  }) => {
+    const id = randomUUID().replace(/-/g, "").slice(0, 12);
+    const phrase = `task224 prod failure ${id}`;
+    // Embed the random id in the synthetic error text so the
+    // `toContainText` assertion is guaranteed to be matching THIS
+    // route's payload (and not some leftover string from another
+    // run / a real probe failure that happens to render).
+    const productionErrorMessage = `synthetic prod probe failure ${id}: timed out querying archive`;
+    const api = await newApiContext();
+
+    try {
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "POST") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrase?: string; category?: string }
+            | undefined;
+          if (!body?.dryRun) {
+            await route.fallback();
+            return;
+          }
+          // Curated returns a CLEAN preview (zero matches), production
+          // probe is reported as FAILED via
+          // `dryRunMatchesProduction: null` + a populated
+          // `dryRunMatchesProductionError`. This is the exact
+          // server-side contract emitted by
+          // `routes/calibration.ts` when the prod DB probe throws.
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              dryRun: true,
+              added: false,
+              phrase: body.phrase,
+              category: body.category ?? "absence",
+              total: 42,
+              phrases: [],
+              dryRunMatches: {
+                total: 0,
+                byTier: {
+                  t1Legit: 0,
+                  t2Borderline: 0,
+                  t3Slop: 0,
+                  t4Hallucinated: 0,
+                },
+                falsePositives: 0,
+                corpusSize: 50,
+                sampleMatches: [],
+                warning: null,
+              },
+              dryRunMatchesProduction: null,
+              dryRunMatchesProductionError: productionErrorMessage,
+              dryRunMatchesProductionLimit: 2000,
+              dryRunOverlaps: { total: 0, matches: [] },
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      await page.getByTestId("handwavy-input").fill(phrase);
+      await page.getByTestId("handwavy-add").click();
+
+      const panel = page.getByTestId("handwavy-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Curated block must STILL be visible — a failed production probe
+      // must never hide the curated-corpus signal (the regression we
+      // are explicitly guarding against).
+      await expect(panel.getByTestId("handwavy-preview-curated")).toBeVisible();
+
+      // Amber notice must render and surface the synthetic error text
+      // verbatim from the payload — guards against the notice being
+      // silently dropped or its `productionError` binding being
+      // accidentally swapped for the static fallback copy.
+      const errorNotice = panel.getByTestId(
+        "handwavy-preview-production-error",
+      );
+      await expect(errorNotice).toBeVisible();
+      await expect(errorNotice).toContainText(productionErrorMessage);
+
+      // The production block MUST NOT render when the prod probe
+      // failed — `preview.productionMatches` is null, so the
+      // side-by-side grid renders the amber notice in its place.
+      await expect(
+        panel.getByTestId("handwavy-preview-production"),
+      ).toHaveCount(0);
+
+      // Back out without committing — the intercept means nothing was
+      // ever persisted, but cancel keeps parity with the other specs
+      // in this file and verifies the panel can still be dismissed
+      // from the failed-probe state.
+      await panel.getByTestId("handwavy-preview-cancel").click();
+      await expect(panel).toHaveCount(0);
+    } finally {
+      // Belt-and-braces: the intercept means no real POST hits the
+      // server, but cleanup is idempotent and matches the pattern
+      // used by the other specs in this file.
+      await cleanupPhrase(api, phrase);
+      await api.dispose();
+    }
+  });
 });
