@@ -24,6 +24,93 @@ export function getCalibrationToken(): string | null {
   return calibrationToken;
 }
 
+// Task #212 — surface rate-limit (HTTP 429) responses to subscribers so the
+// vulnrap calibration UI can render a friendly cooldown banner and gate
+// mutation buttons until the limiter window resets. The shared client just
+// publishes the parsed metadata; the subscriber decides what to do with it
+// (e.g. only listen for `/feedback/calibration/*` URLs). Putting the wiring
+// in one place means every generated mutation hook automatically gets the
+// signal without each call site having to inspect `ApiError.headers` itself.
+export interface RateLimitNotice {
+  /** HTTP method of the throttled request (uppercased). */
+  method: string;
+  /** Fully-resolved request URL (path + query). */
+  url: string;
+  /** Always 429 today; carried through so a future expansion can branch on it. */
+  status: number;
+  /** Milliseconds until the bucket should be retried. Falls back to 0 when no header is present. */
+  retryAfterMs: number;
+  /** Wall-clock timestamp (Date.now()-style ms) the cooldown is expected to elapse. */
+  resetAt: number;
+  /** Parsed `RateLimit-Limit` header, if present and numeric. */
+  limit: number | null;
+  /** Parsed `RateLimit-Remaining` header, if present and numeric. */
+  remaining: number | null;
+  /** Response body (already parsed by parseErrorBody). Useful for surfacing the server's friendly message. */
+  body: unknown;
+  /** Raw response headers, in case a subscriber needs the exact wire values. */
+  headers: Headers;
+}
+
+type RateLimitObserver = (notice: RateLimitNotice) => void;
+
+const rateLimitObservers = new Set<RateLimitObserver>();
+
+export function addRateLimitObserver(observer: RateLimitObserver): () => void {
+  rateLimitObservers.add(observer);
+  return () => {
+    rateLimitObservers.delete(observer);
+  };
+}
+
+function parseNumericHeader(headers: Headers, name: string): number | null {
+  const raw = headers.get(name);
+  if (raw == null) return null;
+  const parsed = Number.parseInt(raw.trim(), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function computeRetryAfterMs(headers: Headers): number {
+  // Draft-6 of the IETF rate-limit headers (express-rate-limit's default
+  // when `standardHeaders: true`) reports `RateLimit-Reset` in seconds-
+  // until-reset, and also emits a `Retry-After` header in seconds. Either
+  // is fine; we prefer RateLimit-Reset since it's the calibration limiter's
+  // canonical signal, then fall back to Retry-After, then to 0.
+  const reset = parseNumericHeader(headers, "ratelimit-reset");
+  if (reset != null && reset >= 0) return reset * 1000;
+  const retryAfter = parseNumericHeader(headers, "retry-after");
+  if (retryAfter != null && retryAfter >= 0) return retryAfter * 1000;
+  return 0;
+}
+
+function emitRateLimit(
+  response: Response,
+  body: unknown,
+  requestInfo: { method: string; url: string },
+): void {
+  if (rateLimitObservers.size === 0) return;
+  const retryAfterMs = computeRetryAfterMs(response.headers);
+  const notice: RateLimitNotice = {
+    method: requestInfo.method,
+    url: response.url || requestInfo.url,
+    status: response.status,
+    retryAfterMs,
+    resetAt: Date.now() + retryAfterMs,
+    limit: parseNumericHeader(response.headers, "ratelimit-limit"),
+    remaining: parseNumericHeader(response.headers, "ratelimit-remaining"),
+    body,
+    headers: response.headers,
+  };
+  for (const observer of Array.from(rateLimitObservers)) {
+    try {
+      observer(notice);
+    } catch {
+      // Swallow observer failures — a misbehaving subscriber must not
+      // mask the underlying ApiError throw below.
+    }
+  }
+}
+
 export type ErrorType<T = unknown> = ApiError<T>;
 
 export type BodyType<T> = T;
@@ -331,6 +418,13 @@ export async function customFetch<T = unknown>(
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+    if (response.status === 429) {
+      // Notify rate-limit subscribers BEFORE throwing so the calibration
+      // UI can update its cooldown state in the same tick the ApiError is
+      // about to surface as a toast / banner. Subscribers are isolated
+      // (see emitRateLimit) so a thrown listener cannot mask the throw.
+      emitRateLimit(response, errorData, requestInfo);
+    }
     throw new ApiError(response, errorData, requestInfo);
   }
 

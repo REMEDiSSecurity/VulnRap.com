@@ -67,6 +67,10 @@ import {
   KeyRound, ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  useCalibrationCooldown,
+  type CalibrationCooldownState,
+} from "@/lib/calibration-cooldown";
 
 function StatCard({ title, value, subtitle, icon, color }: {
   title: string;
@@ -322,12 +326,23 @@ function BucketRow({ bucket }: { bucket: BucketAnalysis }) {
   );
 }
 
-function SuggestionCard({ suggestion, onApply, applying }: {
+function SuggestionCard({ suggestion, onApply, applying, cooldownActive, cooldownSecondsRemaining }: {
   suggestion: CalibrationSuggestion;
   onApply: (s: CalibrationSuggestion) => void;
   applying: boolean;
+  // Task #212 — when the wrong-token throttle is active the Apply button
+  // renders disabled with a "wait Ns" label so reviewers don't keep firing
+  // requests at a bucket the limiter is already rejecting.
+  cooldownActive: boolean;
+  cooldownSecondsRemaining: number;
 }) {
   const confColor = suggestion.confidence === "high" ? "text-green-400" : suggestion.confidence === "medium" ? "text-yellow-400" : "text-muted-foreground";
+
+  const buttonLabel = cooldownActive
+    ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
+    : applying
+      ? "Applying..."
+      : "Apply This Change";
 
   return (
     <div className="p-4 rounded-lg glass-card border border-border/50 space-y-3">
@@ -354,10 +369,11 @@ function SuggestionCard({ suggestion, onApply, applying }: {
         variant="outline"
         className="gap-2 text-xs"
         onClick={() => onApply(suggestion)}
-        disabled={applying}
+        disabled={applying || cooldownActive}
+        data-testid="apply-suggestion-button"
       >
         <Play className="w-3 h-3" />
-        {applying ? "Applying..." : "Apply This Change"}
+        {buttonLabel}
       </Button>
     </div>
   );
@@ -478,11 +494,71 @@ function CalibrationAuthBanner({ state }: { state: CalibrationAuthState }) {
   );
 }
 
+// Task #212 — friendly cooldown banner shown when the calibration UI hits the
+// per-IP wrong-token throttle (Task #116). The shared API client publishes
+// every 429 to `useCalibrationCooldown`, which derives the seconds-remaining
+// from the `RateLimit-Reset` response header and re-renders this component
+// once per second so the countdown ticks down in place. While `state.active`
+// is true, the calibration mutation buttons (handwavy add/remove/reinstate/
+// edit/revert/undo and the Apply suggestion button) render in their disabled
+// state via `useCalibrationCooldownDisabled` below, so a fat-fingered token
+// won't keep firing rejected requests at the limiter.
+function CalibrationCooldownBanner({
+  state,
+}: { state: CalibrationCooldownState }) {
+  if (!state.active) return null;
+  const seconds = Math.max(1, state.secondsRemaining);
+  const headline =
+    seconds === 1
+      ? "Too many failed attempts — try again in 1 second"
+      : `Too many failed attempts — try again in ${seconds} seconds`;
+  const detail =
+    state.serverMessage ??
+    "The reviewer-token throttle has temporarily blocked calibration mutations from this IP. Mutation buttons are disabled until the cooldown elapses.";
+  const limitDetail =
+    state.limit != null
+      ? ` The limit is ${state.limit} failed attempt${state.limit === 1 ? "" : "s"} per window.`
+      : "";
+  return (
+    <Card
+      className="glass-card rounded-xl border-amber-500/40 bg-amber-500/5"
+      role="alert"
+      data-testid="calibration-cooldown-banner"
+    >
+      <CardContent className="p-4 flex items-start gap-3">
+        <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <div
+            className="text-sm font-semibold text-amber-300"
+            data-testid="calibration-cooldown-headline"
+          >
+            {headline}
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {detail}
+            {limitDetail}
+          </p>
+          <p className="text-xs text-muted-foreground/70 leading-relaxed">
+            Confirm the reviewer token (<code className="font-mono text-[11px]">VITE_CALIBRATION_TOKEN</code>)
+            matches the server's <code className="font-mono text-[11px]">CALIBRATION_TOKEN</code>{" "}
+            before retrying — every wrong-token attempt extends the bucket.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function CalibrationSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [applying, setApplying] = useState(false);
   const authState = useCalibrationAuthState();
+  // Task #212 — observe the per-IP wrong-token throttle. While `cooldown.active`
+  // is true, the Apply button below renders disabled and the cooldown banner
+  // appears above the dashboard so reviewers know to wait rather than retry
+  // (which would just reset the bucket).
+  const cooldown = useCalibrationCooldown();
 
   const { data: calibration, isLoading: calLoading } = useGetCalibrationReport({
     query: {
@@ -498,6 +574,18 @@ function CalibrationSection() {
   });
 
   const handleApply = async (suggestion: CalibrationSuggestion) => {
+    // Task #212 — defense in depth: even if a stale render lets the click
+    // through, refuse to extend the wrong-token bucket while a cooldown is
+    // active. The button is also disabled, so this only fires on a race
+    // (e.g. cooldown landed between render and click).
+    if (cooldown.active) {
+      toast({
+        title: "Cooldown active",
+        description: `Wait ${Math.max(1, cooldown.secondsRemaining)}s before retrying calibration mutations.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setApplying(true);
     try {
       const parts = suggestion.parameter.split(".");
@@ -539,6 +627,7 @@ function CalibrationSection() {
   return (
     <div className="space-y-6">
       <CalibrationAuthBanner state={authState} />
+      <CalibrationCooldownBanner state={cooldown} />
       <AvriDriftSection />
       <Card className="glass-card rounded-xl border-primary/10">
         <CardHeader className="pb-2">
@@ -588,7 +677,14 @@ function CalibrationSection() {
           </CardHeader>
           <CardContent className="space-y-3">
             {calibration.suggestions.map((s: CalibrationSuggestion, i: number) => (
-              <SuggestionCard key={i} suggestion={s} onApply={handleApply} applying={applying} />
+              <SuggestionCard
+                key={i}
+                suggestion={s}
+                onApply={handleApply}
+                applying={applying}
+                cooldownActive={cooldown.active}
+                cooldownSecondsRemaining={cooldown.secondsRemaining}
+              />
             ))}
           </CardContent>
         </Card>
@@ -1506,6 +1602,11 @@ function HandwavyPhrasesAdmin() {
   // dedup'd to a single auth-status request even though two components
   // subscribe to the result.
   const authState = useCalibrationAuthState();
+  // Task #212 — observe the per-IP wrong-token throttle so handwavy
+  // mutations (add, edit, remove, reinstate, undo, revert-edit) gate on the
+  // cooldown the same way the calibration Apply button does. Used both in
+  // the visible banner and in per-handler defense-in-depth checks below.
+  const cooldown = useCalibrationCooldown();
   const [draft, setDraft] = useState("");
   const [draftRationale, setDraftRationale] = useState("");
   const [reviewer, setReviewer] = useState<string>(() => {
@@ -1837,10 +1938,27 @@ function HandwavyPhrasesAdmin() {
     });
   };
 
+  // Task #212 — single-line cooldown bail used by every mutation handler in
+  // this admin. Returns true (and surfaces a toast) if the wrong-token
+  // throttle is currently active, so the caller can `if (bail()) return;`
+  // before firing another request that would just be rejected and prolong
+  // the throttle. The buttons are also disabled when cooldown.active, so
+  // this is defense-in-depth for stale renders / dialog confirms.
+  const bailOnCooldown = (label: string): boolean => {
+    if (!cooldown.active) return false;
+    toast({
+      title: "Cooldown active",
+      description: `${label} disabled — wait ${Math.max(1, cooldown.secondsRemaining)}s for the wrong-token throttle to clear.`,
+      variant: "destructive",
+    });
+    return true;
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     const phrase = draft.trim();
     if (!phrase) return;
+    if (bailOnCooldown("Preview impact")) return;
     setBusy("preview");
     try {
       // Task #114: ask the API to score the candidate against the corpus
@@ -1897,6 +2015,7 @@ function HandwavyPhrasesAdmin() {
 
   const handleConfirmPreview = async () => {
     if (!preview) return;
+    if (bailOnCooldown("Confirm add")) return;
     setBusy("confirm");
     try {
       const result = await addHandwavyPhrase({
@@ -1936,6 +2055,7 @@ function HandwavyPhrasesAdmin() {
 
   const handleSaveEdit = async () => {
     if (!editing) return;
+    if (bailOnCooldown("Save edit")) return;
     setBusy(`edit:${editing.phrase}`);
     try {
       const result = await editHandwavyPhrase({
@@ -1966,6 +2086,7 @@ function HandwavyPhrasesAdmin() {
   // back) returns edited=false and we surface that as a "nothing to undo"
   // toast so the reviewer doesn't think the click was lost.
   const handleRevertEdit = async (phrase: string, entry: HandwavyEditEntry) => {
+    if (bailOnCooldown("Revert edit")) return;
     const editedAt =
       entry.editedAt instanceof Date ? entry.editedAt.toISOString() : String(entry.editedAt);
     const key = `revert:${phrase}:${editedAt}`;
@@ -1997,6 +2118,7 @@ function HandwavyPhrasesAdmin() {
   };
 
   const handleRemove = async (phrase: string) => {
+    if (bailOnCooldown("Remove phrase")) return;
     setBusy(`rm:${phrase}`);
     try {
       await removeHandwavyPhrase({ phrase, reviewer: reviewer.trim() || undefined });
@@ -2025,6 +2147,7 @@ function HandwavyPhrasesAdmin() {
   // batch flow, gated behind an explicit acknowledgment checkbox when
   // valid hand-wavy detections would be un-flagged.
   const requestRemoveWithImpactPreview = async (phrase: string) => {
+    if (bailOnCooldown("Removal preview")) return;
     setBusy(`rm-preview:${phrase}`);
     try {
       const resp = await removeHandwavyPhrase({ phrase, dryRun: true });
@@ -2152,6 +2275,7 @@ function HandwavyPhrasesAdmin() {
     if (!bulkResults || bulkResults.kind !== "remove") return;
     const removedRows = bulkResults.rows.filter((r) => r.status === "removed");
     if (removedRows.length === 0) return;
+    if (bailOnCooldown("Undo this batch")) return;
     setBusy("bulk-undo");
     const reviewerName = reviewer.trim() || undefined;
     const results: BulkResultRow[] = [];
@@ -2247,6 +2371,7 @@ function HandwavyPhrasesAdmin() {
   // preview, so reviewers always see the dryRun impact before any DELETE.
   const handlePreviewBulkRemove = async () => {
     if (selectedInList.length === 0) return;
+    if (bailOnCooldown("Preview bulk removal")) return;
     const phrasesToPreview = [...selectedInList];
     setBulkResults(null);
     setBusy("bulk-preview");
@@ -2331,6 +2456,7 @@ function HandwavyPhrasesAdmin() {
       setBulkPreview(null);
       return;
     }
+    if (bailOnCooldown("Bulk removal")) return;
     setBulkPreview(null);
     await confirmBulkRemove(phrasesToRemove);
   };
@@ -2437,6 +2563,7 @@ function HandwavyPhrasesAdmin() {
   // server pulls the original category and rationale from that history row,
   // so the reviewer doesn't have to retype anything.
   const handleReinstate = async (entry: { phrase: string; removedAt: HandwavyHistoryEntry["removedAt"]; category?: HandwavyHistoryEntry["category"] }) => {
+    if (bailOnCooldown("Reinstate phrase")) return;
     const key = `reinstate:${entry.phrase}:${entry.removedAt}`;
     setBusy(key);
     try {
@@ -2468,6 +2595,7 @@ function HandwavyPhrasesAdmin() {
   // isn't currently active). Per-phrase reinstate buttons still work for
   // partial undos.
   const handleReinstateBatch = async (removedAtIso: string, batchSize: number) => {
+    if (bailOnCooldown("Reinstate batch")) return;
     const key = `reinstate-batch:${removedAtIso}`;
     setBusy(key);
     try {
@@ -2507,6 +2635,7 @@ function HandwavyPhrasesAdmin() {
   // the actual mutating call only fires when the reviewer presses the
   // "Confirm reinstate" button rendered inside the preview panel.
   const handlePreviewReinstateBatch = async (removedAtIso: string) => {
+    if (bailOnCooldown("Reinstate preview")) return;
     const key = `reinstate-batch-preview:${removedAtIso}`;
     setBusy(key);
     // Drop any in-flight preview for this batch up front so a failed
@@ -2648,6 +2777,7 @@ function HandwavyPhrasesAdmin() {
   }, [reviewerAddedByPhrase, nowMs, UNDO_WINDOW_MS]);
 
   const handleUndo = async (phrase: string, addedAtIso: string) => {
+    if (bailOnCooldown("Undo add")) return;
     const key = `undo:${phrase}:${addedAtIso}`;
     setBusy(key);
     try {
@@ -2847,6 +2977,9 @@ function HandwavyPhrasesAdmin() {
         repeated above the phrase editor so reviewers who scroll past the
         calibration section still see it before attempting an add/remove. */}
     <CalibrationAuthBanner state={authState} />
+    {/* Task #212 — wrong-token throttle countdown banner, mirrored above the
+        admin card so reviewers see it before attempting any handwavy mutation. */}
+    <CalibrationCooldownBanner state={cooldown} />
     <Card className="glass-card rounded-xl border-primary/10" data-testid="handwavy-admin">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -2916,11 +3049,13 @@ function HandwavyPhrasesAdmin() {
             <Button
               type="submit"
               size="sm"
-              disabled={busy === "preview" || busy === "confirm" || preview !== null || draft.trim().length < 3}
+              disabled={busy === "preview" || busy === "confirm" || preview !== null || draft.trim().length < 3 || cooldown.active}
               data-testid="handwavy-add"
             >
               <Plus className="w-3.5 h-3.5 mr-1" />
-              {busy === "preview" ? "Checking corpus…" : "Preview impact"}
+              {cooldown.active
+                ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                : busy === "preview" ? "Checking corpus…" : "Preview impact"}
             </Button>
           </div>
           <textarea
@@ -3169,10 +3304,12 @@ function HandwavyPhrasesAdmin() {
                 size="sm"
                 variant={hasWarning ? "destructive" : "default"}
                 onClick={handleConfirmPreview}
-                disabled={busy === "confirm"}
+                disabled={busy === "confirm" || cooldown.active}
                 data-testid="handwavy-preview-confirm"
               >
-                {busy === "confirm"
+                {cooldown.active
+                  ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                  : busy === "confirm"
                   ? "Adding…"
                   : hasWarning
                   ? "Add anyway"
@@ -3235,7 +3372,8 @@ function HandwavyPhrasesAdmin() {
           const removalDisabled =
             wouldRemove === 0 ||
             busy === "bulk-remove" ||
-            (requiresAck && !bulkPreview.acknowledged);
+            (requiresAck && !bulkPreview.acknowledged) ||
+            cooldown.active;
           // Task #151 — count selected phrases that have already been
           // removed and reinstated >= HIGH_THRASH_MIN times. We surface
           // this both as a summary banner and as per-row badges below so
@@ -3489,7 +3627,9 @@ function HandwavyPhrasesAdmin() {
                 disabled={removalDisabled}
                 data-testid="handwavy-bulk-preview-confirm"
               >
-                {busy === "bulk-remove"
+                {cooldown.active
+                  ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                  : busy === "bulk-remove"
                   ? "Removing…"
                   : wouldRemove === 0
                     ? "Nothing to remove"
