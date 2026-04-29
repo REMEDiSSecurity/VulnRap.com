@@ -44,6 +44,7 @@ let tmpDir: string;
 const previousNodeEnv = process.env.NODE_ENV;
 const previousHistoryPath = process.env.ARCHETYPE_HISTORY_PATH;
 const previousHistoryConfigPath = process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
+const previousHistoryStatsPath = process.env.ARCHETYPE_HISTORY_STATS_PATH;
 const previousDatasetHistoryPath = process.env.DATASET_HISTORY_PATH;
 const previousDatasetsDir = process.env.VULNRAP_DATASETS_DIR;
 const previousCalibrationToken = process.env.CALIBRATION_TOKEN;
@@ -54,6 +55,10 @@ beforeAll(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "archetype-history-"));
   process.env.ARCHETYPE_HISTORY_PATH = path.join(tmpDir, "archetype-history.json");
   process.env.ARCHETYPE_HISTORY_CONFIG_PATH = path.join(tmpDir, "archetype-history-config.json");
+  // Task #211 — sibling stats file gets written on every compaction
+  // pass. Point it at the per-suite tmpdir so the route test doesn't
+  // pollute the repo's data directory.
+  process.env.ARCHETYPE_HISTORY_STATS_PATH = path.join(tmpDir, "archetype-history-stats.json");
   process.env.DATASET_HISTORY_PATH = path.join(tmpDir, "dataset-history.json");
   // Task #187 — point the dataset-loader at a tmpdir that we'll *only*
   // populate inside the positive Task #187 test. The dataset-loader
@@ -84,6 +89,8 @@ afterAll(async () => {
   else process.env.ARCHETYPE_HISTORY_PATH = previousHistoryPath;
   if (previousHistoryConfigPath === undefined) delete process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
   else process.env.ARCHETYPE_HISTORY_CONFIG_PATH = previousHistoryConfigPath;
+  if (previousHistoryStatsPath === undefined) delete process.env.ARCHETYPE_HISTORY_STATS_PATH;
+  else process.env.ARCHETYPE_HISTORY_STATS_PATH = previousHistoryStatsPath;
   if (previousDatasetHistoryPath === undefined) delete process.env.DATASET_HISTORY_PATH;
   else process.env.DATASET_HISTORY_PATH = previousDatasetHistoryPath;
   if (previousDatasetsDir === undefined) delete process.env.VULNRAP_DATASETS_DIR;
@@ -353,6 +360,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     defaultDays: number;
     min: number;
     max: number;
+    // Task #211 — most recent compaction pass outcome, or null if the
+    // routine has not run yet on this deployment.
+    lastCompaction: { lastCompactedAt: string; lastRemovedCount: number } | null;
   }
 
   function deleteJson<T>(urlPath: string): Promise<{ status: number; body: T }> {
@@ -492,6 +502,28 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
       { compactAfterDays: "abc" },
     );
     expect(notNumber.status).toBe(400);
+  });
+
+  // Task #211 — the config response surfaces the most recent compaction
+  // outcome so the dashboard can render "Last compacted Xh ago — removed
+  // N snapshots". The earlier "/api/test/archetype-history" describe
+  // block has already triggered several /api/test/run calls (each of
+  // which appends snapshots and runs the compaction pass), so by the
+  // time this test executes the stats file must be populated even
+  // though no rows are old enough to be rolled up yet.
+  it("GET surfaces the most recent compaction pass timestamp + rows-removed count", async () => {
+    const cfg = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    expect(cfg.lastCompaction).not.toBeNull();
+    const stats = cfg.lastCompaction!;
+    expect(typeof stats.lastCompactedAt).toBe("string");
+    expect(Number.isFinite(Date.parse(stats.lastCompactedAt))).toBe(true);
+    expect(typeof stats.lastRemovedCount).toBe("number");
+    expect(stats.lastRemovedCount).toBeGreaterThanOrEqual(0);
+    // The fixture battery only seeds fresh "now" snapshots, so nothing
+    // is older than the default 30-day window — the most recent pass
+    // must report zero rolled-up rows. (If this ever flips to non-zero
+    // it means the compaction pass started misclassifying recent rows.)
+    expect(stats.lastRemovedCount).toBe(0);
   });
 });
 

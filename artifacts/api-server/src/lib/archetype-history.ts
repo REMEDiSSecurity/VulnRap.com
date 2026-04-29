@@ -31,6 +31,7 @@ import {
   DEFAULT_COMPACT_AFTER_DAYS,
   getEffectiveCompactAfterDays,
 } from "./archetype-history-config";
+import { recordCompactionRun } from "./archetype-history-stats";
 
 export interface ArchetypeSnapshot {
   /** ISO-8601 timestamp of the test run that produced this snapshot. */
@@ -192,11 +193,24 @@ export function appendArchetypeSnapshots(
     }
     // Down-sample older entries before applying the hard MAX_SNAPSHOTS
     // cap so we trim raw points (not freshly-aggregated daily rows).
+    // Task #211 — record how many rows the compaction pass collapsed so
+    // the calibration dashboard can confirm the routine is running and
+    // surface its effect ("Last compacted 2h ago — removed 14 snapshots").
+    // We only count compaction-driven removal here, not the hard
+    // MAX_SNAPSHOTS truncation below — those are conceptually separate
+    // (eviction vs. roll-up) and reviewers care about the latter.
+    const beforeCompact = file.snapshots.length;
     file.snapshots = compactSnapshots(file.snapshots, new Date(), compactAfterDays());
+    const removedByCompaction = beforeCompact - file.snapshots.length;
     if (file.snapshots.length > MAX_SNAPSHOTS) {
       file.snapshots.splice(0, file.snapshots.length - MAX_SNAPSHOTS);
     }
     await writeToDisk(p, file);
+    // Stats write is best-effort: recordCompactionRun swallows + warns
+    // on failure so a stats-file hiccup never breaks /api/test/run. We
+    // still await it so the next GET sees the fresh value rather than
+    // the cached stale one from before this append.
+    await recordCompactionRun(removedByCompaction);
     return file;
   });
   // Keep the chain alive even if a write rejects so subsequent appends still run.

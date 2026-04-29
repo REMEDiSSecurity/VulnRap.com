@@ -24,6 +24,7 @@ import {
   getCompactAfterDaysSetting,
   setPersistedCompactAfterDays,
 } from "../lib/archetype-history-config";
+import { readCompactionStats } from "../lib/archetype-history-stats";
 import { requireCalibrationAuth } from "../middlewares/require-calibration-auth";
 import {
   discover as discoverDatasets,
@@ -2759,7 +2760,15 @@ router.get("/test/archetype-history/config", (_req, res) => {
     res.status(404).json({ error: "Not available in production." });
     return;
   }
-  res.json(getCompactAfterDaysSetting());
+  // Task #211 — surface the most recent compaction pass's outcome
+  // alongside the window setting so the dashboard can show
+  // "Last compacted Xh ago — removed N snapshots". `null` when the
+  // routine has not run yet on this deployment (e.g. fresh env, no
+  // /api/test/run calls have triggered an append yet).
+  res.json({
+    ...getCompactAfterDaysSetting(),
+    lastCompaction: readCompactionStats(),
+  });
 });
 
 router.put(
@@ -2775,7 +2784,10 @@ router.put(
         (req.body as { compactAfterDays?: unknown } | null | undefined)
           ?.compactAfterDays,
       );
-      res.json(next);
+      // Mirror the GET shape (Task #211) so the dashboard can drop the
+      // PUT response straight into its query cache without a follow-up
+      // GET to learn the most recent compaction outcome.
+      res.json({ ...next, lastCompaction: readCompactionStats() });
     } catch (err) {
       if (err instanceof CompactWindowValidationError) {
         res.status(err.status).json({ error: err.message });

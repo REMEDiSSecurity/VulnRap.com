@@ -5539,6 +5539,14 @@ const ARCHETYPE_HISTORY_CONFIG_QUERY_KEY = ["test-run-archetype-history-config"]
 // Task #99 — shape returned by GET /api/test/archetype-history/config so the
 // reviewer can see *why* the effective compaction window is what it is
 // (env var override, persisted reviewer setting, or the built-in default).
+// Task #211 — `lastCompaction` carries the most recent compaction pass's
+// timestamp + rows-collapsed count so the dashboard can render
+// "Last compacted Xh ago — removed N snapshots" next to the window
+// control. `null` while the routine has not run yet.
+interface ArchetypeHistoryCompactionStats {
+  lastCompactedAt: string;
+  lastRemovedCount: number;
+}
 interface ArchetypeHistoryConfigResponse {
   effectiveDays: number;
   source: "env" | "persisted" | "default";
@@ -5547,6 +5555,27 @@ interface ArchetypeHistoryConfigResponse {
   defaultDays: number;
   min: number;
   max: number;
+  lastCompaction: ArchetypeHistoryCompactionStats | null;
+}
+
+// Task #211 — render an ISO timestamp as a coarse "Xs/min/h/d ago"
+// string so reviewers can tell at a glance whether the compaction
+// routine is running on every /api/test/run (seconds–minutes) or has
+// gone quiet (hours–days). Returns null for unparseable inputs so the
+// caller can fall back to hiding the line entirely.
+function formatRelativeAgo(iso: string, now: number = Date.now()): string | null {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const diffMs = Math.max(0, now - t);
+  const sec = Math.round(diffMs / 1000);
+  if (sec < 5) return "just now";
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  return `${day}d ago`;
 }
 
 const AVRI_DRIFT_RUNBOOK_REPO_BASE =
@@ -5873,9 +5902,14 @@ function EmergingArchetypesSection() {
   // Invalidate the persisted-history query whenever a fresh /api/test/run
   // result lands so the new snapshot appears in the sparkline immediately,
   // rather than waiting for the 5-minute refetch tick.
+  // Task #211 — also invalidate the config query so the
+  // "Last compacted Xh ago — removed N snapshots" line refreshes on the
+  // same beat (compaction stats are returned by the config endpoint and
+  // would otherwise stay stale until the next 5-minute refetch).
   useEffect(() => {
     if (data) {
       queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY });
     }
   }, [dataUpdatedAt, data, queryClient]);
 
@@ -6180,6 +6214,28 @@ function EmergingArchetypesSection() {
             {compactDraft.length > 0 && !compactDraftValid && (
               <span className="text-red-400">
                 Enter a whole number between {compactMin} and {compactMax}.
+              </span>
+            )}
+            {/* Task #211 — confirm the compaction routine is actually
+                running and surface what it did on its most recent pass.
+                Hidden when the routine has not run yet (fresh deploy
+                with no /api/test/run calls), and degrades to a stable
+                ISO date if relative formatting can't parse the value. */}
+            {configData.lastCompaction && (
+              <span
+                className="basis-full text-muted-foreground/70"
+                title={`Last compacted at ${configData.lastCompaction.lastCompactedAt}`}
+              >
+                Last compacted{" "}
+                <span className="font-mono text-foreground/80">
+                  {formatRelativeAgo(configData.lastCompaction.lastCompactedAt)
+                    ?? configData.lastCompaction.lastCompactedAt}
+                </span>
+                {" — removed "}
+                <span className="font-mono text-foreground/80 tabular-nums">
+                  {configData.lastCompaction.lastRemovedCount}
+                </span>{" "}
+                snapshot{configData.lastCompaction.lastRemovedCount === 1 ? "" : "s"}
               </span>
             )}
           </div>

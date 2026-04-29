@@ -9,6 +9,10 @@ import {
   readArchetypeHistory,
   type ArchetypeSnapshot,
 } from "./archetype-history";
+import {
+  __testing as statsTesting,
+  readCompactionStats,
+} from "./archetype-history-stats";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -98,13 +102,17 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
   let tmpDir: string;
   let prevPath: string | undefined;
   let prevDays: string | undefined;
+  let prevStatsPath: string | undefined;
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "archetype-history-compact-"));
     prevPath = process.env.ARCHETYPE_HISTORY_PATH;
     prevDays = process.env.ARCHETYPE_HISTORY_COMPACT_DAYS;
+    prevStatsPath = process.env.ARCHETYPE_HISTORY_STATS_PATH;
     process.env.ARCHETYPE_HISTORY_PATH = path.join(tmpDir, "history.json");
     process.env.ARCHETYPE_HISTORY_COMPACT_DAYS = "30";
+    process.env.ARCHETYPE_HISTORY_STATS_PATH = path.join(tmpDir, "stats.json");
+    statsTesting.resetCache();
   });
 
   afterEach(async () => {
@@ -112,15 +120,23 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
     else process.env.ARCHETYPE_HISTORY_PATH = prevPath;
     if (prevDays === undefined) delete process.env.ARCHETYPE_HISTORY_COMPACT_DAYS;
     else process.env.ARCHETYPE_HISTORY_COMPACT_DAYS = prevDays;
+    if (prevStatsPath === undefined) delete process.env.ARCHETYPE_HISTORY_STATS_PATH;
+    else process.env.ARCHETYPE_HISTORY_STATS_PATH = prevStatsPath;
+    statsTesting.resetCache();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
   it("compacts older entries on append while leaving recent appends intact", async () => {
     // Seed the file with many synthetic old snapshots across several days.
+    // Pin each day's runs to early-UTC hours (0..5) so all 6 always land
+    // in the same UTC day bucket regardless of when the test happens to
+    // run — otherwise the per-day-aggregate count flips between 21 and
+    // 22 depending on wall-clock time of day.
     const now = Date.now();
+    const todayUtcMidnight = Math.floor(now / DAY_MS) * DAY_MS;
     const seed: ArchetypeSnapshot[] = [];
     for (let day = 60; day >= 40; day--) {
-      const base = now - day * DAY_MS;
+      const base = todayUtcMidnight - day * DAY_MS;
       for (let run = 0; run < 6; run++) {
         seed.push({
           timestamp: new Date(base + run * 60 * 60 * 1000).toISOString(),
@@ -163,5 +179,28 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
       expect(a.avriOnMax).toBeCloseTo(17, 5);
       expect(a.archetype).toBe("fabricated_diff");
     }
+
+    // Task #211 — the compaction pass must record its run timestamp and
+    // the number of rows it collapsed so the dashboard can confirm the
+    // routine is actually doing work. 21 days * 6 raw rows seeded → 21
+    // aggregates + 1 fresh row = 22 rows after, vs 126 + 1 = 127 before
+    // → 105 rows removed by compaction.
+    const stats = readCompactionStats();
+    expect(stats).not.toBeNull();
+    expect(stats!.lastRemovedCount).toBe(127 - 22);
+    expect(Number.isFinite(Date.parse(stats!.lastCompactedAt))).toBe(true);
+  });
+
+  it("records a 0-row compaction pass when nothing is old enough to roll up", async () => {
+    // Task #211 — even when the pass has nothing to do, the dashboard
+    // benefits from seeing "Last compacted Xs ago — removed 0 snapshots"
+    // (vs. silence) as proof the routine is alive.
+    await appendArchetypeSnapshots([
+      { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
+    ]);
+    const stats = readCompactionStats();
+    expect(stats).not.toBeNull();
+    expect(stats!.lastRemovedCount).toBe(0);
+    expect(Number.isFinite(Date.parse(stats!.lastCompactedAt))).toBe(true);
   });
 });
