@@ -49,7 +49,7 @@ const FEATURE_USE_NEW_COMPOSITE = (): boolean =>
   (process.env.VULNRAP_USE_NEW_COMPOSITE ?? "true").toLowerCase() !== "false";
 
 const FEATURE_USE_AVRI = (): boolean =>
-  (process.env.VULNRAP_USE_AVRI ?? "false").toLowerCase() === "true";
+  (process.env.VULNRAP_USE_AVRI ?? "true").toLowerCase() !== "false";
 
 export function isNewCompositeEnabled(): boolean {
   return FEATURE_USE_NEW_COMPOSITE();

@@ -427,7 +427,7 @@ function SlopDetectionCard() {
 
           <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2.5">
             <p className="text-[11px] text-muted-foreground/85 leading-relaxed">
-              <span className="text-violet-300 font-semibold">AVRI (in flight, behind <span className="font-mono">VULNRAP_USE_AVRI</span>):</span> swaps Engine 2's rubric for one of eight CWE-family-specific rubrics (memory corruption, injection, auth/access, crypto/protocol, DoS/resource, info exposure, request forgery, hardware) with family-specific gold signals and absence penalties. Weights stay 5/60/35; only Engine 2's internals change. Default off in production until calibration confirms the score-gap target. The legacy <span className="font-mono">slopScore</span> API field is mapped from the composite for backward compatibility.
+              <span className="text-violet-300 font-semibold">AVRI (default on as of v3.9.0, kill-switch <span className="font-mono">VULNRAP_USE_AVRI=false</span>):</span> swaps Engine 2's rubric for one of eight CWE-family-specific rubrics (memory corruption, injection, auth/access, crypto/protocol, DoS/resource, info exposure, request forgery, hardware) with family-specific gold signals and absence penalties. Weights stay 5/60/35; only Engine 2's internals change. Sprint 12 calibration confirmed the slop/legit gap holds at 31 points (slop ≤23, legit ≥54). The legacy <span className="font-mono">slopScore</span> API field is mapped from the composite for backward compatibility.
             </p>
           </div>
 

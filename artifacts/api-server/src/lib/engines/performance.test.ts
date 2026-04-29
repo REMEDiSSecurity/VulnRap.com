@@ -74,15 +74,29 @@ describe("Sprint 9 v3 — Engine performance", () => {
     const elapsed = Date.now() - start;
     expect(elapsed).toBeLessThan(1500);
     expect(trace.totalDurationMs).toBeLessThan(1500);
-    // All stages should report individual timings
-    expect(trace.stages.length).toBeGreaterThanOrEqual(5);
+    // Default (AVRI) pipeline collapses Engine 1/2/3 + composite into a single
+    // avri_composite stage, leaving 3 top-level stages. Legacy mode (forced
+    // off below) reports the full 6-stage breakdown.
+    expect(trace.stages.length).toBeGreaterThanOrEqual(3);
     for (const s of trace.stages) {
       expect(s.durationMs).toBeGreaterThanOrEqual(0);
     }
   });
 
-  it("trace exposes per-stage timings, feature flags, and signals summary", () => {
+  it("default (AVRI) trace exposes per-stage timings, feature flags, and signals summary", () => {
     const { trace } = analyzeWithEnginesTraced(TYPICAL_REPORT);
+    const stageNames = trace.stages.map(s => s.stage);
+    expect(stageNames).toContain("extract_signals");
+    expect(stageNames).toContain("perplexity");
+    expect(stageNames).toContain("avri_composite");
+    expect(trace.featureFlags.VULNRAP_USE_NEW_COMPOSITE).toBeDefined();
+    expect(trace.featureFlags.VULNRAP_USE_AVRI).toBe(true);
+    expect(trace.signalsSummary?.wordCount).toBeGreaterThan(0);
+    expect(trace.correlationId).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+  });
+
+  it("legacy (AVRI off) trace exposes per-engine stage timings", () => {
+    const { trace } = analyzeWithEnginesTraced(TYPICAL_REPORT, { forceAvri: false });
     const stageNames = trace.stages.map(s => s.stage);
     expect(stageNames).toContain("extract_signals");
     expect(stageNames).toContain("perplexity");

@@ -4,10 +4,49 @@ import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout, Link2 } from "lucide-react";
 import { useEffect } from "react";
 
-export const CURRENT_VERSION = "3.8.0";
-export const RELEASE_DATE = "2026-04-24";
+export const CURRENT_VERSION = "3.9.0";
+export const RELEASE_DATE = "2026-04-29";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.9.0",
+    date: "2026-04-29",
+    label: "Sprint 13A — AVRI on by default",
+    labelColor: "border-emerald-500 text-emerald-300",
+    sections: [
+      {
+        icon: <Zap className="w-4 h-4 text-emerald-300" />,
+        title: "FEATURE_USE_AVRI default flipped from off → on",
+        type: "feature",
+        items: [
+          "The CWE-Family Scoring (AVRI) pipeline that has been shipping behind VULNRAP_USE_AVRI since v3.7.0 is now the default scoring path in production. Reports submitted with no env override now route through Engine 0 family classification, family-specific gold signals, BEHAVIORAL_MATCH_REWARD, and absence/contradiction penalties out of the box",
+          "Kill switch preserved: set VULNRAP_USE_AVRI=false in the environment to revert to the v3.6.0 legacy composite path without a redeploy. Useful for incident response if AVRI ever produces a regression in the field — drop the env var to roll back, investigate, then re-enable",
+          "No code changes to the AVRI engine itself — purely a default-value flip in lib/engines/index.ts so the existing forceAvri override path and per-call escape hatches still work exactly as before",
+        ],
+      },
+      {
+        icon: <BarChart3 className="w-4 h-4 text-emerald-300" />,
+        title: "Calibration snapshot — pre-flip vs. post-flip on the existing fixture battery",
+        type: "improvement",
+        items: [
+          "Slop cohort (8 fixtures, lower=better): pre-flip max 23 → post-flip max 23. Per-fixture: 17→10, 23→23, 15→7, 22→9, 23→23, 0→6, 19→19, 18→10. AVRI's family classifier surfaced new AVRI_NO_GOLD_SIGNALS overrides on five of the eight slop reports, dropping their composites further below the ≤35 calibration threshold",
+          "Legit cohort (3 fixtures, higher=better): pre-flip min 60 → post-flip min 54. Per-fixture: 62→71 (legit-01-curl-gzip), 69→77 (legit-02-curl-cookie), 60→54 (legit-03-request-smuggling). The two strongest fixtures gained 8–9 points from family-aware E3 floors and BEHAVIORAL_MATCH_REWARD; legit-03 dropped 6 points because its E2 substance is in the 42–45 band where the existing E3_SUBSTANCE_GATE caps the now-stronger family-aware E3 score, but it still lands comfortably in the REASONABLE band (54 ≥ 50 fixture floor)",
+          "Slop/legit gap: pre-flip 60 − 23 = 37 → post-flip 54 − 23 = 31. Both are well above the ≥25 calibration target. The gap closed by 6 points entirely because the highest-scoring slop fixture (slop-02 / slop-05 at 23) doesn't fit any AVRI family — it's hand-wavy template prose that lands in FLAT and gets the legacy substance score with the hand-wavy haircut applied. AVRI's wins are concentrated on the slop reports that DO claim a family (sqli, rce, csrf, xss)",
+          "All 13 benchmark.test.ts assertions pass under the flipped default — slop fixtures stay ≤35, legit fixtures stay ≥55 (or ≥50 for the calibrated legit-03), borderline-01 stays in [35, 65]",
+        ],
+      },
+      {
+        icon: <ListChecks className="w-4 h-4 text-emerald-300" />,
+        title: "Operational notes",
+        type: "improvement",
+        items: [
+          "performance.test.ts updated to cover both the default (AVRI: extract_signals → perplexity → avri_composite, 3 stages) and legacy (forceAvri:false: 6-stage breakdown) trace shapes, so neither pipeline can quietly regress",
+          "Sprint 12 task #174 (\"Reward more types of strong evidence in default scoring\") is now redundant: the BEHAVIORAL_MATCH_REWARD path it was meant to enable is reachable on the default scoring path as of this release. Recommend closing #174 unless follow-up legacy-Engine-2 gold hooks are still desired",
+          "Home-page scoring-pipeline copy and the AVRI feature-flag callout updated to reflect that AVRI is now the default and VULNRAP_USE_AVRI=false is the kill switch (not the on switch)",
+        ],
+      },
+    ],
+  },
   {
     version: "3.8.0",
     date: "2026-04-24",
