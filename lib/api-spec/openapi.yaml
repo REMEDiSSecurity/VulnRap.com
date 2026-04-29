@@ -493,6 +493,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScoringConfigResponse"
 
+  /feedback/calibration/auth-status:
+    get:
+      operationId: getCalibrationAuthStatus
+      tags: [feedback]
+      summary: Probe whether the reviewer token is configured/valid
+      description: |
+        Task #117 — Returns boolean signals describing whether the API server
+        requires a reviewer token for calibration mutations and whether the
+        caller's request would be accepted by `requireCalibrationAuth`. This
+        endpoint is intentionally NOT auth-gated so the dashboard can render
+        a "Reviewer token: configured / missing / invalid" indicator BEFORE
+        the reviewer triggers a mutation that 401s. The configured token is
+        never echoed in the response — only boolean signals.
+      responses:
+        "200":
+          description: Auth status snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalibrationAuthStatus"
+
   /feedback/calibration/apply:
     post:
       operationId: applyCalibration
@@ -2904,6 +2925,39 @@ components:
           items:
             $ref: "#/components/schemas/ScoringConfigItem"
       required: [current, history]
+
+    CalibrationAuthStatus:
+      description: |
+        Task #117 — Snapshot of the calibration token gate as observed by the
+        API server for THIS request. The dashboard polls this probe to render
+        a "Reviewer token: configured / missing / invalid" indicator before
+        the reviewer triggers a mutation that would otherwise 401.
+      type: object
+      properties:
+        serverRequiresToken:
+          type: boolean
+          description: |
+            True when `CALIBRATION_TOKEN` is set on the API process. When
+            false, every calibration mutation is open (single-reviewer / local
+            dev fallback) and the UI does not need to send a token.
+        tokenPresented:
+          type: boolean
+          description: |
+            True when the request included a token via either the
+            `X-Calibration-Token` header or `Authorization: Bearer <token>`.
+        tokenValid:
+          type: boolean
+          description: |
+            True when a token was presented AND it matches the server's
+            configured token. Always false when the server has no token
+            configured (since there is nothing to compare against).
+        mutationsAllowed:
+          type: boolean
+          description: |
+            Derived: `!serverRequiresToken || tokenValid`. When false, the
+            UI should warn the reviewer that calibration mutations will be
+            rejected with 401.
+      required: [serverRequiresToken, tokenPresented, tokenValid, mutationsAllowed]
 
     BucketAnalysis:
       type: object

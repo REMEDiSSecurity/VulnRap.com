@@ -297,4 +297,132 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
     );
     expect(r.status).not.toBe(401);
   });
+
+  // Task #117 — un-gated auth-status probe used by the dashboard to render a
+  // "Reviewer token: configured / missing / invalid" indicator BEFORE the
+  // reviewer triggers a mutation that 401s. The probe must remain reachable
+  // without a token (so the UI can detect the misconfigured case at all),
+  // and must report the same accept/reject decision the auth middleware
+  // would compute for the same headers.
+  it("GET /feedback/calibration/auth-status without a token returns serverRequiresToken=true and mutationsAllowed=false", async () => {
+    const r = await request<{
+      serverRequiresToken: boolean;
+      tokenPresented: boolean;
+      tokenValid: boolean;
+      mutationsAllowed: boolean;
+    }>("GET", "/feedback/calibration/auth-status");
+    expect(r.status).toBe(200);
+    expect(r.body.serverRequiresToken).toBe(true);
+    expect(r.body.tokenPresented).toBe(false);
+    expect(r.body.tokenValid).toBe(false);
+    expect(r.body.mutationsAllowed).toBe(false);
+  });
+
+  it("GET /feedback/calibration/auth-status with the correct token reports mutationsAllowed=true", async () => {
+    const r = await request<{
+      serverRequiresToken: boolean;
+      tokenPresented: boolean;
+      tokenValid: boolean;
+      mutationsAllowed: boolean;
+    }>("GET", "/feedback/calibration/auth-status", undefined, { "X-Calibration-Token": TOKEN });
+    expect(r.status).toBe(200);
+    expect(r.body.serverRequiresToken).toBe(true);
+    expect(r.body.tokenPresented).toBe(true);
+    expect(r.body.tokenValid).toBe(true);
+    expect(r.body.mutationsAllowed).toBe(true);
+  });
+
+  it("GET /feedback/calibration/auth-status with the correct Bearer token reports mutationsAllowed=true", async () => {
+    const r = await request<{
+      tokenPresented: boolean;
+      tokenValid: boolean;
+      mutationsAllowed: boolean;
+    }>("GET", "/feedback/calibration/auth-status", undefined, { Authorization: `Bearer ${TOKEN}` });
+    expect(r.status).toBe(200);
+    expect(r.body.tokenPresented).toBe(true);
+    expect(r.body.tokenValid).toBe(true);
+    expect(r.body.mutationsAllowed).toBe(true);
+  });
+
+  it("GET /feedback/calibration/auth-status with the wrong token reports tokenPresented=true but mutationsAllowed=false", async () => {
+    const r = await request<{
+      serverRequiresToken: boolean;
+      tokenPresented: boolean;
+      tokenValid: boolean;
+      mutationsAllowed: boolean;
+    }>("GET", "/feedback/calibration/auth-status", undefined, { "X-Calibration-Token": "not-the-token" });
+    expect(r.status).toBe(200);
+    expect(r.body.serverRequiresToken).toBe(true);
+    expect(r.body.tokenPresented).toBe(true);
+    expect(r.body.tokenValid).toBe(false);
+    expect(r.body.mutationsAllowed).toBe(false);
+  });
+
+  it("GET /feedback/calibration/auth-status never echoes the configured token", async () => {
+    const r = await request<Record<string, unknown>>(
+      "GET",
+      "/feedback/calibration/auth-status",
+      undefined,
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(200);
+    // The response body is JSON-stringified before the assertion so we catch
+    // any field at any nesting level that might have leaked the secret.
+    expect(JSON.stringify(r.body)).not.toContain(TOKEN);
+  });
+});
+
+// Task #117 — dedicated suite for the open / single-reviewer / local-dev
+// fallback. When CALIBRATION_TOKEN is unset, the auth gate is a no-op and
+// the probe should report serverRequiresToken=false / mutationsAllowed=true
+// regardless of whether the caller sent a token, so the UI renders a
+// neutral "not required" chip rather than a misleading "missing" warning.
+//
+// The middleware reads `process.env.CALIBRATION_TOKEN` on every request, so
+// we can reuse the gated suite's server: we just temporarily unset the env
+// var around the open-mode assertions and restore it afterwards.
+describe("calibration auth-status probe (CALIBRATION_TOKEN unset / open mode)", () => {
+  beforeEach(() => {
+    delete process.env.CALIBRATION_TOKEN;
+  });
+
+  afterAll(() => {
+    process.env.CALIBRATION_TOKEN = TOKEN;
+  });
+
+  it("GET /feedback/calibration/auth-status reports serverRequiresToken=false / mutationsAllowed=true when the env var is unset", async () => {
+    const r = await request<{
+      serverRequiresToken: boolean;
+      tokenPresented: boolean;
+      tokenValid: boolean;
+      mutationsAllowed: boolean;
+    }>("GET", "/feedback/calibration/auth-status");
+    expect(r.status).toBe(200);
+    expect(r.body.serverRequiresToken).toBe(false);
+    expect(r.body.tokenPresented).toBe(false);
+    expect(r.body.tokenValid).toBe(false);
+    expect(r.body.mutationsAllowed).toBe(true);
+  });
+
+  it("GET /feedback/calibration/auth-status with no token configured but a presented token still reports mutationsAllowed=true", async () => {
+    const r = await request<{
+      serverRequiresToken: boolean;
+      tokenPresented: boolean;
+      tokenValid: boolean;
+      mutationsAllowed: boolean;
+    }>(
+      "GET",
+      "/feedback/calibration/auth-status",
+      undefined,
+      { "X-Calibration-Token": "anything" },
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.serverRequiresToken).toBe(false);
+    expect(r.body.tokenPresented).toBe(true);
+    // tokenValid stays false when there's nothing on the server to compare
+    // against — the UI keys off mutationsAllowed (and serverRequiresToken)
+    // rather than tokenValid for the "open" case.
+    expect(r.body.tokenValid).toBe(false);
+    expect(r.body.mutationsAllowed).toBe(true);
+  });
 });

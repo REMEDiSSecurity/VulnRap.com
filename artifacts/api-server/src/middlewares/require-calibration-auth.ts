@@ -110,3 +110,34 @@ export function requireCalibrationAuthStrict(
 }
 
 export const __CALIBRATION_AUTH_HEADER = HEADER_NAME;
+
+// Task #117 — un-gated probe used by the dashboard to detect a token
+// misconfiguration BEFORE the reviewer triggers a mutation that 401s. Returns
+// a snapshot of the same three signals the auth middleware computes:
+//   * `serverRequiresToken` — is `CALIBRATION_TOKEN` set on the API process?
+//   * `tokenPresented`      — did the request include a token (header/bearer)?
+//   * `tokenValid`          — does the presented token match the server's?
+// `mutationsAllowed` is the derived "would `requireCalibrationAuth.next()` be
+// called?" boolean: true when the server is open OR when the presented token
+// is valid. Exposed as a separate helper (rather than inlined in the route)
+// so the UI probe and the middleware can never drift on what counts as a
+// valid token presentation.
+export interface CalibrationAuthStatus {
+  serverRequiresToken: boolean;
+  tokenPresented: boolean;
+  tokenValid: boolean;
+  mutationsAllowed: boolean;
+}
+
+export function getCalibrationAuthStatus(req: Request): CalibrationAuthStatus {
+  const expected = readConfiguredToken();
+  const presentedToken = extractPresentedToken(req);
+  const tokenPresented = presentedToken !== null;
+  let tokenValid = false;
+  if (expected !== null && presentedToken !== null) {
+    tokenValid = constantTimeEquals(expected, presentedToken);
+  }
+  const serverRequiresToken = expected !== null;
+  const mutationsAllowed = !serverRequiresToken || tokenValid;
+  return { serverRequiresToken, tokenPresented, tokenValid, mutationsAllowed };
+}

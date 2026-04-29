@@ -2374,6 +2374,44 @@ export const GetScoringConfigResponse = zod.object({
 });
 
 /**
+ * Task #117 — Returns boolean signals describing whether the API server
+requires a reviewer token for calibration mutations and whether the
+caller's request would be accepted by `requireCalibrationAuth`. This
+endpoint is intentionally NOT auth-gated so the dashboard can render
+a "Reviewer token: configured / missing / invalid" indicator BEFORE
+the reviewer triggers a mutation that 401s. The configured token is
+never echoed in the response — only boolean signals.
+
+ * @summary Probe whether the reviewer token is configured/valid
+ */
+export const GetCalibrationAuthStatusResponse = zod
+  .object({
+    serverRequiresToken: zod
+      .boolean()
+      .describe(
+        "True when `CALIBRATION_TOKEN` is set on the API process. When\nfalse, every calibration mutation is open (single-reviewer \/ local\ndev fallback) and the UI does not need to send a token.\n",
+      ),
+    tokenPresented: zod
+      .boolean()
+      .describe(
+        "True when the request included a token via either the\n`X-Calibration-Token` header or `Authorization: Bearer <token>`.\n",
+      ),
+    tokenValid: zod
+      .boolean()
+      .describe(
+        "True when a token was presented AND it matches the server's\nconfigured token. Always false when the server has no token\nconfigured (since there is nothing to compare against).\n",
+      ),
+    mutationsAllowed: zod
+      .boolean()
+      .describe(
+        "Derived: `!serverRequiresToken || tokenValid`. When false, the\nUI should warn the reviewer that calibration mutations will be\nrejected with 401.\n",
+      ),
+  })
+  .describe(
+    'Task #117 — Snapshot of the calibration token gate as observed by the\nAPI server for THIS request. The dashboard polls this probe to render\na \"Reviewer token: configured \/ missing \/ invalid\" indicator before\nthe reviewer triggers a mutation that would otherwise 401.\n',
+  );
+
+/**
  * Creates a new scoring configuration version with the specified changes. All subsequent reports will be scored with the new config.
  * @summary Apply calibration changes to scoring config
  */

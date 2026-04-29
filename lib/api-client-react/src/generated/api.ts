@@ -20,6 +20,7 @@ import type {
   ApplyCalibrationBody,
   ApplyCalibrationResponse,
   AvriDriftReport,
+  CalibrationAuthStatus,
   CalibrationReport,
   CheckReportBody,
   CheckResult,
@@ -1473,6 +1474,90 @@ export function useGetScoringConfig<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetScoringConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #117 — Returns boolean signals describing whether the API server
+requires a reviewer token for calibration mutations and whether the
+caller's request would be accepted by `requireCalibrationAuth`. This
+endpoint is intentionally NOT auth-gated so the dashboard can render
+a "Reviewer token: configured / missing / invalid" indicator BEFORE
+the reviewer triggers a mutation that 401s. The configured token is
+never echoed in the response — only boolean signals.
+
+ * @summary Probe whether the reviewer token is configured/valid
+ */
+export const getGetCalibrationAuthStatusUrl = () => {
+  return `/api/feedback/calibration/auth-status`;
+};
+
+export const getCalibrationAuthStatus = async (
+  options?: RequestInit,
+): Promise<CalibrationAuthStatus> => {
+  return customFetch<CalibrationAuthStatus>(getGetCalibrationAuthStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCalibrationAuthStatusQueryKey = () => {
+  return [`/api/feedback/calibration/auth-status`] as const;
+};
+
+export const getGetCalibrationAuthStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCalibrationAuthStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCalibrationAuthStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetCalibrationAuthStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCalibrationAuthStatus>>
+  > = ({ signal }) => getCalibrationAuthStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCalibrationAuthStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCalibrationAuthStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCalibrationAuthStatus>>
+>;
+export type GetCalibrationAuthStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Probe whether the reviewer token is configured/valid
+ */
+
+export function useGetCalibrationAuthStatus<
+  TData = Awaited<ReturnType<typeof getCalibrationAuthStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCalibrationAuthStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCalibrationAuthStatusQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

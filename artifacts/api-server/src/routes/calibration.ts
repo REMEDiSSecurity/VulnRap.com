@@ -21,7 +21,11 @@ import {
   type HandwavyMarker,
 } from "../lib/engines/avri/handwavy-phrases";
 import { TEST_FIXTURE_COHORTS } from "./test-fixtures";
-import { requireCalibrationAuth, requireCalibrationAuthStrict } from "../middlewares/require-calibration-auth";
+import {
+  requireCalibrationAuth,
+  requireCalibrationAuthStrict,
+  getCalibrationAuthStatus,
+} from "../middlewares/require-calibration-auth";
 
 // Task #114 — preview a candidate FLAT hand-wavy phrase against the curated
 // benchmark corpus (the T1–T4 fixture cohorts also used by /api/test/run) so
@@ -490,6 +494,19 @@ router.get("/feedback/calibration/config", (_req, res) => {
     _req.log?.error(err, "Failed to fetch scoring config");
     res.status(500).json({ error: "Failed to fetch scoring config." });
   }
+});
+
+// Task #117 — un-gated probe so the dashboard can detect a token
+// misconfiguration BEFORE the reviewer triggers a mutation that 401s. This
+// endpoint deliberately does NOT enforce auth: it tells the caller whether
+// the SERVER requires a token AND whether the token they sent (if any)
+// would be accepted, so the UI can render a "Reviewer token: configured /
+// missing / invalid" indicator instead of letting every add/remove explode
+// into a generic 401 toast. We never echo the configured token back — only
+// boolean signals — so this remains safe to expose without auth.
+router.get("/feedback/calibration/auth-status", (req, res) => {
+  const status = getCalibrationAuthStatus(req);
+  res.json(status);
 });
 
 router.post("/feedback/calibration/apply", requireCalibrationAuth, async (req, res) => {

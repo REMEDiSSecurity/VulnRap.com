@@ -4,6 +4,7 @@ import {
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
   useGetScoringConfig, getGetScoringConfigQueryKey,
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
+  useGetCalibrationAuthStatus, getGetCalibrationAuthStatusQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
   addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, reinstateHandwavyPhrasesBatch,
   editHandwavyPhrase, undoHandwavyPhrase,
@@ -50,6 +51,7 @@ import {
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
   Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -348,10 +350,126 @@ function SuggestionCard({ suggestion, onApply, applying }: {
   );
 }
 
+// Task #117 — small status indicator + (when relevant) banner explaining
+// whether the dashboard is going to be able to perform calibration mutations.
+// Without this, the only signal a reviewer gets when the API server has
+// `CALIBRATION_TOKEN` set but the UI build does not is a generic 401 toast
+// per attempted add/remove — which doesn't tell them WHY their phrase didn't
+// stick. We probe the un-gated `/feedback/calibration/auth-status` endpoint
+// (which reports whether the server requires a token AND whether the token
+// the UI sent — if any — would be accepted) and render a token chip in the
+// Scoring Calibration card header. When mutations would be rejected we also
+// show a prominent warning above the calibration UI so the reviewer doesn't
+// burn a bunch of clicks finding out the hard way.
+type CalibrationAuthStateKind =
+  | "loading"
+  | "open"        // server doesn't require a token; UI is fine either way
+  | "valid"       // server requires a token and the UI is sending the right one
+  | "missing"     // server requires a token and the UI isn't sending one at all
+  | "invalid"     // server requires a token and the UI is sending the wrong one
+  | "probe-failed"; // the auth-status probe itself failed (network/server error)
+
+interface CalibrationAuthState {
+  kind: CalibrationAuthStateKind;
+  // Convenience flag: false when reviewers should be warned that mutations
+  // will 401. `loading` and `probe-failed` are treated as "allowed" because
+  // we don't want to block the UI on a transient probe failure — the worst
+  // case (mutations actually fail) still shows the existing 401 toast.
+  mutationsAllowed: boolean;
+}
+
+function useCalibrationAuthState(): CalibrationAuthState {
+  // Refetch periodically so a reviewer who configures the server token while
+  // the dashboard is open sees the indicator flip without a hard reload.
+  const { data, isLoading, isError } = useGetCalibrationAuthStatus({
+    query: {
+      queryKey: getGetCalibrationAuthStatusQueryKey(),
+      refetchInterval: 60_000,
+      retry: 1,
+    },
+  });
+  if (isLoading) return { kind: "loading", mutationsAllowed: true };
+  if (isError || !data) return { kind: "probe-failed", mutationsAllowed: true };
+  if (!data.serverRequiresToken) return { kind: "open", mutationsAllowed: true };
+  if (data.tokenValid) return { kind: "valid", mutationsAllowed: true };
+  if (data.tokenPresented) return { kind: "invalid", mutationsAllowed: false };
+  return { kind: "missing", mutationsAllowed: false };
+}
+
+function CalibrationAuthBadge({ state }: { state: CalibrationAuthState }) {
+  let className: string;
+  let label: string;
+  let title: string;
+  switch (state.kind) {
+    case "loading":
+      className = "text-muted-foreground bg-muted/20";
+      label = "Reviewer token: checking…";
+      title = "Probing the calibration auth endpoint to see whether a reviewer token is required.";
+      break;
+    case "open":
+      className = "text-muted-foreground bg-muted/20";
+      label = "Reviewer token: not required";
+      title = "The API server has no CALIBRATION_TOKEN configured, so calibration mutations are open to any caller.";
+      break;
+    case "valid":
+      className = "text-green-400 bg-green-400/10";
+      label = "Reviewer token: configured";
+      title = "The API server requires a reviewer token and the dashboard build supplies the correct one. Mutations will be accepted.";
+      break;
+    case "missing":
+      className = "text-red-400 bg-red-400/10";
+      label = "Reviewer token: missing";
+      title = "The API server requires a reviewer token but this UI build is not sending one (VITE_CALIBRATION_TOKEN unset). Calibration mutations will be rejected with 401.";
+      break;
+    case "invalid":
+      className = "text-red-400 bg-red-400/10";
+      label = "Reviewer token: invalid";
+      title = "The API server requires a reviewer token and this UI build is sending one, but the server rejected it. Calibration mutations will be rejected with 401.";
+      break;
+    case "probe-failed":
+      className = "text-yellow-400 bg-yellow-400/10";
+      label = "Reviewer token: probe failed";
+      title = "Could not reach the auth-status endpoint to check whether a reviewer token is required. Mutations will still attempt — watch for 401 toasts.";
+      break;
+  }
+  return (
+    <Badge variant="outline" className={cn("text-[10px] gap-1", className)} title={title}>
+      <KeyRound className="w-3 h-3" /> {label}
+    </Badge>
+  );
+}
+
+function CalibrationAuthBanner({ state }: { state: CalibrationAuthState }) {
+  if (state.kind !== "missing" && state.kind !== "invalid") return null;
+  const detail =
+    state.kind === "missing"
+      ? "This UI build is not sending a reviewer token (VITE_CALIBRATION_TOKEN was unset at build time), but the API server requires one. Adding, editing, or removing phrases — and applying calibration changes — will be rejected with HTTP 401."
+      : "The reviewer token baked into this UI build was rejected by the API server (the build's VITE_CALIBRATION_TOKEN does not match the server's CALIBRATION_TOKEN). Calibration mutations will be rejected with HTTP 401.";
+  return (
+    <Card className="glass-card rounded-xl border-red-500/40 bg-red-500/5">
+      <CardContent className="p-4 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <div className="text-sm font-semibold text-red-300">
+            Calibration mutations will be rejected
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{detail}</p>
+          <p className="text-xs text-muted-foreground/70 leading-relaxed">
+            Read-only views (analytics, reports, version history) still work. To enable
+            mutations, rebuild the UI with <code className="font-mono text-[11px]">VITE_CALIBRATION_TOKEN</code> set
+            to the same value as the server's <code className="font-mono text-[11px]">CALIBRATION_TOKEN</code>.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function CalibrationSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [applying, setApplying] = useState(false);
+  const authState = useCalibrationAuthState();
 
   const { data: calibration, isLoading: calLoading } = useGetCalibrationReport({
     query: {
@@ -407,6 +525,7 @@ function CalibrationSection() {
 
   return (
     <div className="space-y-6">
+      <CalibrationAuthBanner state={authState} />
       <AvriDriftSection />
       <Card className="glass-card rounded-xl border-primary/10">
         <CardHeader className="pb-2">
@@ -416,6 +535,7 @@ function CalibrationSection() {
               Scoring Calibration
             </CardTitle>
             <div className="flex items-center gap-2">
+              <CalibrationAuthBadge state={authState} />
               <Badge variant="outline" className={cn("text-[10px] gap-1", healthColor)}>
                 <Shield className="w-3 h-3" /> {healthLabel}
               </Badge>

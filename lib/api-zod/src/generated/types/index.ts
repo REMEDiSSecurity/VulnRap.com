@@ -20,6 +20,7 @@ export * from "./avriDriftWeekBucketPerFamily";
 export * from "./avriDriftWeekBucketStats";
 export * from "./bucketAnalysis";
 export * from "./bucketAnalysisSignal";
+export * from "./calibrationAuthStatus";
 export * from "./calibrationReport";
 export * from "./calibrationReportOverallHealth";
 export * from "./calibrationSuggestion";
