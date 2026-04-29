@@ -1371,10 +1371,30 @@ function HandwavyPhrasesAdmin() {
     phrase: string;
     cycles: RemoveConfirmCycle[];
   } | null>(null);
-  type BulkOutcome = "removed" | "not-found" | "auth-failed" | "error";
-  const [bulkResults, setBulkResults] = useState<
-    Array<{ phrase: string; status: BulkOutcome; message?: string }> | null
-  >(null);
+  // Task #142 — `reinstated` is the success outcome for the per-batch
+  // "Undo this batch" action that lives on the results banner. It uses the
+  // same banner shape as the removal outcomes so the reviewer sees the
+  // post-undo per-phrase summary in the exact same place the removal
+  // summary just was. `removedAt` is captured per row so the undo handler
+  // can call the existing single-phrase reinstate endpoint with the
+  // history-row identifier the server already records.
+  type BulkOutcome =
+    | "removed"
+    | "not-found"
+    | "auth-failed"
+    | "error"
+    | "reinstated";
+  type BulkResultRow = {
+    phrase: string;
+    status: BulkOutcome;
+    message?: string;
+    removedAt?: string;
+  };
+  type BulkResultsState = {
+    kind: "remove" | "undo";
+    rows: BulkResultRow[];
+  };
+  const [bulkResults, setBulkResults] = useState<BulkResultsState | null>(null);
   // Task #154 — bulk-removal preview state. Mirrors the CLI `--dry-run` flow:
   // before the destructive DELETE fires we ask the server for a per-phrase
   // outcome breakdown plus the corpus + production impact, so the reviewer
@@ -1766,6 +1786,104 @@ function HandwavyPhrasesAdmin() {
     setBulkResults(null);
   };
 
+  // Task #142 — one-click "Undo this batch" on the bulk-removal results
+  // banner. Mirrors the per-row Reinstate button in the history log but
+  // operates on every successfully-removed phrase from the just-completed
+  // batch in a single click. Each phrase is reinstated using its captured
+  // history-row identifier (phrase + removedAt) so we hit the existing
+  // single-phrase reinstate endpoint exactly the way the per-row button
+  // does. We refresh ONCE at the end and replace the banner contents with
+  // the per-phrase reinstate outcomes in the same shape as the removals
+  // (one "REINSTATED" / "NOT-FOUND" / "AUTH-FAILED" / "ERROR" row per
+  // phrase) so reviewers see exactly what happened without squinting at
+  // toasts.
+  const handleUndoBulkBatch = async () => {
+    if (!bulkResults || bulkResults.kind !== "remove") return;
+    const removedRows = bulkResults.rows.filter((r) => r.status === "removed");
+    if (removedRows.length === 0) return;
+    setBusy("bulk-undo");
+    const reviewerName = reviewer.trim() || undefined;
+    const results: BulkResultRow[] = [];
+    let authFailedSticky = false;
+    for (const row of removedRows) {
+      if (authFailedSticky) {
+        results.push({
+          phrase: row.phrase,
+          status: "auth-failed",
+          message: "skipped after earlier auth failure",
+        });
+        continue;
+      }
+      if (!row.removedAt) {
+        // Defensive: a row that somehow missed its `removedAt` (shouldn't
+        // happen — every successful DELETE returns a `historyEntry` with
+        // one) can't be reinstated through the per-history-row endpoint.
+        // Surface this rather than silently skipping so the reviewer
+        // knows to fall back to the manual per-row Reinstate.
+        results.push({
+          phrase: row.phrase,
+          status: "error",
+          message: "missing history identifier; reinstate manually from the history log",
+        });
+        continue;
+      }
+      try {
+        await reinstateHandwavyPhrase({
+          phrase: row.phrase,
+          removedAt: row.removedAt,
+          reviewer: reviewerName,
+        });
+        results.push({ phrase: row.phrase, status: "reinstated" });
+      } catch (err) {
+        const status = (err as { status?: number } | null)?.status;
+        if (status === 401 || status === 403) {
+          authFailedSticky = true;
+          results.push({
+            phrase: row.phrase,
+            status: "auth-failed",
+            message: `HTTP ${status}`,
+          });
+        } else if (status === 404) {
+          results.push({
+            phrase: row.phrase,
+            status: "not-found",
+            message: "server reported 404 (already reinstated?)",
+          });
+        } else {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          results.push({ phrase: row.phrase, status: "error", message: msg });
+        }
+      }
+    }
+    refresh();
+    setBulkResults({ kind: "undo", rows: results });
+    setBusy(null);
+
+    const reinstated = results.filter((r) => r.status === "reinstated").length;
+    const notFound = results.filter((r) => r.status === "not-found").length;
+    const authFailed = results.filter((r) => r.status === "auth-failed").length;
+    const errored = results.filter((r) => r.status === "error").length;
+    const failures = notFound + authFailed + errored;
+    if (failures === 0) {
+      const noun = reinstated === 1 ? "phrase" : "phrases";
+      toast({
+        title: `${reinstated} ${noun} reinstated`,
+        description: "The active list has been refreshed.",
+      });
+    } else {
+      const parts: string[] = [];
+      if (reinstated > 0) parts.push(`${reinstated} reinstated`);
+      if (notFound > 0) parts.push(`${notFound} not-found`);
+      if (authFailed > 0) parts.push(`${authFailed} auth-failed`);
+      if (errored > 0) parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
+      toast({
+        title: "Batch undo finished with issues",
+        description: parts.join(" · "),
+        variant: reinstated === 0 ? "destructive" : undefined,
+      });
+    }
+  };
+
   // Task #154 — fetch the dry-run preview for the current selection. The
   // server returns the same `wouldRemove` / `notFound` / `duplicateInBatch`
   // breakdown the CLI's `--dry-run` flag surfaces, plus the corpus and
@@ -1845,7 +1963,7 @@ function HandwavyPhrasesAdmin() {
   const confirmBulkRemove = async (phrasesToRemove: string[]) => {
     if (!phrasesToRemove || phrasesToRemove.length === 0) return;
     setBusy("bulk-remove");
-    const results: Array<{ phrase: string; status: BulkOutcome; message?: string }> = [];
+    const results: BulkResultRow[] = [];
     let authFailedSticky = false;
     const reviewerName = reviewer.trim() || undefined;
     for (const phrase of phrasesToRemove) {
@@ -1860,8 +1978,19 @@ function HandwavyPhrasesAdmin() {
         continue;
       }
       try {
-        await removeHandwavyPhrase({ phrase, reviewer: reviewerName });
-        results.push({ phrase, status: "removed" });
+        // Task #142 — capture the server-assigned `removedAt` from the
+        // single-phrase DELETE response so the per-batch "Undo this batch"
+        // action on the results banner can reinstate using the same
+        // history-row identifier the existing per-row Reinstate uses.
+        const resp = await removeHandwavyPhrase({ phrase, reviewer: reviewerName });
+        const removedAtRaw =
+          ("historyEntry" in resp && resp.historyEntry?.removedAt) || undefined;
+        const removedAt = removedAtRaw
+          ? removedAtRaw instanceof Date
+            ? removedAtRaw.toISOString()
+            : String(removedAtRaw)
+          : undefined;
+        results.push({ phrase, status: "removed", removedAt });
       } catch (err) {
         const status = (err as { status?: number } | null)?.status;
         if (status === 401 || status === 403) {
@@ -1895,7 +2024,7 @@ function HandwavyPhrasesAdmin() {
       }
       return next;
     });
-    setBulkResults(results);
+    setBulkResults({ kind: "remove", rows: results });
     setBusy(null);
 
     const removed = results.filter((r) => r.status === "removed").length;
@@ -2912,20 +3041,79 @@ function HandwavyPhrasesAdmin() {
           </div>
         )}
         {/* Task #134 — per-phrase results banner shown after a bulk batch
-            finishes, mirroring the CLI's per-phrase outcome summary. */}
-        {bulkResults && (
+            finishes, mirroring the CLI's per-phrase outcome summary.
+            Task #142 — the same banner is reused for the "Undo this batch"
+            action that appears when the just-completed batch retired at
+            least one phrase: clicking it reinstates each removed phrase
+            via the existing single-phrase reinstate endpoint and then
+            replaces these rows with the per-phrase reinstate outcomes. */}
+        {bulkResults && (() => {
+          // Task #142 — the Undo affordance is gated purely on REMOVED
+          // rows existing (the literal Done-looks-like wording). Rows
+          // that somehow lack the `removedAt` history identifier still
+          // show up in the count so the banner doesn't lie about what
+          // the click will attempt; `handleUndoBulkBatch` flags those
+          // identifier-less rows as per-phrase errors with a "reinstate
+          // manually from the history log" message rather than silently
+          // skipping them.
+          const removedRows = bulkResults.kind === "remove"
+            ? bulkResults.rows.filter((r) => r.status === "removed")
+            : [];
+          const removedCount = removedRows.length;
+          const reinstatedCount = bulkResults.kind === "undo"
+            ? bulkResults.rows.filter((r) => r.status === "reinstated").length
+            : 0;
+          const undoBusy = busy === "bulk-undo";
+          const headingLabel = bulkResults.kind === "undo"
+            ? "Bulk undo results"
+            : "Bulk removal results";
+          const summaryLabel = bulkResults.kind === "undo"
+            ? `${reinstatedCount} / ${bulkResults.rows.length} reinstated`
+            : `${removedCount} / ${bulkResults.rows.length} removed`;
+          return (
           <div
             className="rounded-md border border-border/40 bg-background/40 p-3 space-y-2 text-xs"
             data-testid="handwavy-bulk-results"
+            data-kind={bulkResults.kind}
           >
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">Bulk removal results</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-foreground">{headingLabel}</span>
               <Badge variant="outline" className="text-[10px]">
-                {bulkResults.filter((r) => r.status === "removed").length} / {bulkResults.length} removed
+                {summaryLabel}
               </Badge>
+              {/* Task #142 — "Undo this batch" lives next to the dismiss
+                  control so it sits in reviewers' eyeline the moment the
+                  removal results render. We show it on the removal banner
+                  (not after the undo itself completes) whenever at least
+                  one row reports REMOVED. Rows missing the captured
+                  `removedAt` identifier are still counted here; the
+                  handler surfaces them as per-phrase errors with a
+                  manual-reinstate hint rather than silently dropping
+                  them. */}
+              {bulkResults.kind === "remove" && removedCount > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto h-7 px-2 text-[11px]"
+                  onClick={handleUndoBulkBatch}
+                  disabled={undoBusy}
+                  data-testid="handwavy-bulk-undo"
+                >
+                  <Undo2 className="w-3 h-3 mr-1" />
+                  {undoBusy
+                    ? `Undoing ${removedCount}…`
+                    : `Undo this batch (${removedCount})`}
+                </Button>
+              )}
               <button
                 type="button"
-                className="ml-auto text-[10px] text-muted-foreground hover:text-foreground underline"
+                className={cn(
+                  "text-[10px] text-muted-foreground hover:text-foreground underline",
+                  bulkResults.kind === "remove" && removedCount > 0
+                    ? ""
+                    : "ml-auto",
+                )}
                 onClick={dismissBulkResults}
                 data-testid="handwavy-bulk-dismiss"
               >
@@ -2933,20 +3121,23 @@ function HandwavyPhrasesAdmin() {
               </button>
             </div>
             <ul className="space-y-0.5">
-              {bulkResults.map((r) => {
+              {bulkResults.rows.map((r) => {
                 const cfg =
                   r.status === "removed"
                     ? { label: "removed", color: "text-emerald-400", icon: <CheckCircle2 className="w-3 h-3" /> }
-                    : r.status === "not-found"
-                      ? { label: "not-found", color: "text-yellow-400", icon: <AlertTriangle className="w-3 h-3" /> }
-                      : r.status === "auth-failed"
-                        ? { label: "auth-failed", color: "text-red-400", icon: <XCircle className="w-3 h-3" /> }
-                        : { label: "error", color: "text-red-400", icon: <XCircle className="w-3 h-3" /> };
+                    : r.status === "reinstated"
+                      ? { label: "reinstated", color: "text-emerald-400", icon: <RotateCcw className="w-3 h-3" /> }
+                      : r.status === "not-found"
+                        ? { label: "not-found", color: "text-yellow-400", icon: <AlertTriangle className="w-3 h-3" /> }
+                        : r.status === "auth-failed"
+                          ? { label: "auth-failed", color: "text-red-400", icon: <XCircle className="w-3 h-3" /> }
+                          : { label: "error", color: "text-red-400", icon: <XCircle className="w-3 h-3" /> };
                 return (
                   <li
                     key={`${r.phrase}-${r.status}`}
                     className="flex items-start gap-2 text-[11px]"
                     data-testid="handwavy-bulk-result-row"
+                    data-status={r.status}
                   >
                     <span className={cn("flex items-center gap-1 w-24 shrink-0", cfg.color)}>
                       {cfg.icon}
@@ -2963,7 +3154,8 @@ function HandwavyPhrasesAdmin() {
               })}
             </ul>
           </div>
-        )}
+          );
+        })()}
         {isLoading ? (
           <Skeleton className="h-32 rounded-md" />
         ) : phrases.length === 0 ? (
