@@ -144,6 +144,44 @@ if (!VISITOR_HMAC_KEY) {
 }
 const VISITOR_HMAC_KEY_FINAL: string = VISITOR_HMAC_KEY;
 
+// page_views is materialized only in production (see lib/startup-migrations.ts
+// for why). In development the table simply does not exist, which previously
+// caused every /stats/visit and /stats/visitors call to bubble up a Postgres
+// "undefined_table" error and return 500 — polluting the network panel and
+// server logs on every homepage / /stats load. We treat that specific error
+// (Postgres SQLSTATE 42P01) as "visitor analytics not provisioned in this
+// environment" and degrade gracefully: visit recordings become a no-op, and
+// the visitor counter reports zero (the UI already hides itself in that
+// case). Any other database error still surfaces as a 500 so genuine
+// breakage in production is not silently swallowed.
+const PG_UNDEFINED_TABLE = "42P01";
+
+function hasUndefinedTableCode(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === PG_UNDEFINED_TABLE
+  );
+}
+
+function isMissingPageViewsTable(err: unknown): boolean {
+  // drizzle-orm wraps driver errors in DrizzleQueryError and exposes the
+  // original pg error (with its SQLSTATE `code`) on `.cause`. Check both
+  // levels so this works regardless of whether the raw pg error or the
+  // drizzle wrapper is what propagates.
+  if (hasUndefinedTableCode(err)) return true;
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "cause" in err &&
+    hasUndefinedTableCode((err as { cause?: unknown }).cause)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 router.post("/stats/visit", async (req, res): Promise<void> => {
   const ip = req.ip || req.socket.remoteAddress || "unknown";
   const today = new Date().toISOString().slice(0, 10);
@@ -151,32 +189,48 @@ router.post("/stats/visit", async (req, res): Promise<void> => {
     .update(`${today}::${ip}`)
     .digest("hex");
 
-  await db.execute(sql`
-    INSERT INTO page_views (visitor_hash, view_date)
-    VALUES (${visitorHash}, ${today}::date)
-    ON CONFLICT (visitor_hash, view_date) DO NOTHING
-  `);
-
-  res.json({ recorded: true });
+  try {
+    await db.execute(sql`
+      INSERT INTO page_views (visitor_hash, view_date)
+      VALUES (${visitorHash}, ${today}::date)
+      ON CONFLICT (visitor_hash, view_date) DO NOTHING
+    `);
+    res.json({ recorded: true });
+  } catch (err) {
+    if (isMissingPageViewsTable(err)) {
+      res.json({ recorded: false });
+      return;
+    }
+    throw err;
+  }
 });
 
 router.get("/stats/visitors", async (_req, res): Promise<void> => {
-  const result = await db.execute<{
-    total_unique_visitors: number;
-    total_visits: number;
-  }>(sql`
-    SELECT
-      count(distinct visitor_hash)::int AS total_unique_visitors,
-      count(distinct view_date)::int    AS total_visits
-    FROM page_views
-  `);
-  const row = result.rows[0];
+  try {
+    const result = await db.execute<{
+      total_unique_visitors: number;
+      total_visits: number;
+    }>(sql`
+      SELECT
+        count(distinct visitor_hash)::int AS total_unique_visitors,
+        count(distinct view_date)::int    AS total_visits
+      FROM page_views
+    `);
+    const row = result.rows[0];
 
-  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
-  res.json({
-    totalUniqueVisitors: row?.total_unique_visitors ?? 0,
-    totalVisits: row?.total_visits ?? 0,
-  });
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+    res.json({
+      totalUniqueVisitors: row?.total_unique_visitors ?? 0,
+      totalVisits: row?.total_visits ?? 0,
+    });
+  } catch (err) {
+    if (isMissingPageViewsTable(err)) {
+      res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+      res.json({ totalUniqueVisitors: 0, totalVisits: 0 });
+      return;
+    }
+    throw err;
+  }
 });
 
 router.get("/stats/trends", async (req, res): Promise<void> => {
