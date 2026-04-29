@@ -1,0 +1,144 @@
+import { test, expect, request, type APIRequestContext } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+
+// Task #148 — End-to-end coverage for the per-edit Revert button's disabled
+// state on the per-phrase edit-history panel. Task #132 introduced the
+// Revert button itself; Task #133 surfaced the full chronological history.
+// Task #148 closes the loop by disabling the button when reverting it would
+// be a no-op (the marker's live state already matches the entry's "from"
+// values — typically because a later edit put the field back). Reviewers
+// then see "At this state" instead of clicking and discovering the no-op
+// only after a round-trip toast.
+//
+// The spec seeds a marker through the API and runs three edits so the
+// edit-history panel has multiple rows in known states, then asserts the
+// per-row disabled / enabled state via the data-noop attribute that the
+// renderer stamps on every Revert button.
+
+const API_PORT = Number(process.env.E2E_API_PORT || 8080);
+const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
+const CALIBRATION_TOKEN =
+  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
+
+function newApiContext() {
+  return request.newContext({
+    baseURL: API_BASE,
+    extraHTTPHeaders: { "X-Calibration-Token": CALIBRATION_TOKEN },
+  });
+}
+
+function uniquePhrase(): string {
+  const id = randomUUID().replace(/-/g, "").slice(0, 12);
+  return `task148 revert-disabled ${id}`;
+}
+
+async function cleanup(api: APIRequestContext, phrase: string): Promise<void> {
+  await api
+    .delete("/api/feedback/calibration/handwavy-phrases", {
+      data: { phrases: [phrase], reviewer: "e2e-task148-cleanup" },
+    })
+    .catch(() => undefined);
+}
+
+test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (Task #148)", () => {
+  test("disables Revert on a history row whose 'from' values already match the live marker, and leaves Revert enabled on rows that would actually change something", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase();
+
+    try {
+      // Seed: add the phrase, then edit it twice through the API so we land
+      // back at the original category. We do this through the API instead of
+      // the UI to keep the spec focused on the disabled-state assertion (the
+      // add + edit UI flows are exercised by other handwavy specs).
+      const addResp = await apiCtx.post("/api/feedback/calibration/handwavy-phrases", {
+        data: {
+          phrase,
+          category: "absence",
+          reviewer: "e2e-task148-seed",
+          rationale: "seed rationale",
+        },
+      });
+      expect(addResp.ok(), `add failed: ${addResp.status()}`).toBe(true);
+
+      // Edit #1: absence -> hedging.
+      const edit1Resp = await apiCtx.patch(
+        "/api/feedback/calibration/handwavy-phrases",
+        {
+          data: {
+            phrase,
+            category: "hedging",
+            reviewer: "e2e-task148-edit1",
+          },
+        },
+      );
+      expect(edit1Resp.ok(), `edit#1 failed: ${edit1Resp.status()}`).toBe(true);
+
+      // Edit #2: hedging -> absence (puts the marker back to its original
+      // category, so reverting Edit #1 would now be a no-op).
+      const edit2Resp = await apiCtx.patch(
+        "/api/feedback/calibration/handwavy-phrases",
+        {
+          data: {
+            phrase,
+            category: "absence",
+            reviewer: "e2e-task148-edit2",
+          },
+        },
+      );
+      expect(edit2Resp.ok(), `edit#2 failed: ${edit2Resp.status()}`).toBe(true);
+
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const row = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      await expect(row, "seeded phrase should appear in the active list").toHaveCount(1, {
+        timeout: 15_000,
+      });
+
+      // Two recorded edits => the multi-edit history toggle renders. Open
+      // the per-row history panel.
+      const historyToggle = row.getByTestId("handwavy-edit-history-toggle");
+      await expect(historyToggle, "edit-history toggle should appear for >1 edits").toBeVisible({
+        timeout: 15_000,
+      });
+      if ((await historyToggle.getAttribute("aria-expanded")) !== "true") {
+        await historyToggle.click();
+      }
+      const historyList = row.getByTestId("handwavy-edit-history-list");
+      await expect(historyList).toBeVisible();
+
+      // Both edits should render as Revert-button rows. Renderer reverses
+      // the list so the most recent edit (Edit #2) is row[0] and the older
+      // one (Edit #1) is row[1].
+      const revertButtons = historyList.getByTestId("handwavy-revert-edit");
+      await expect(revertButtons).toHaveCount(2);
+
+      // Most recent edit (hedging -> absence): reverting it would set the
+      // category back to hedging — a real change — so the button must be
+      // ENABLED with its normal "Revert" label.
+      const newestRevert = revertButtons.nth(0);
+      await expect(newestRevert).toHaveAttribute("data-noop", "false");
+      await expect(newestRevert).toBeEnabled();
+      await expect(newestRevert).toContainText("Revert");
+
+      // Older edit (absence -> hedging): the live category is already
+      // 'absence', so reverting would be a no-op — the button must be
+      // DISABLED with the "At this state" label and aria-label/title that
+      // explain why.
+      const olderRevert = revertButtons.nth(1);
+      await expect(olderRevert).toHaveAttribute("data-noop", "true");
+      await expect(olderRevert).toBeDisabled();
+      await expect(olderRevert).toContainText("At this state");
+      await expect(olderRevert).toHaveAttribute(
+        "aria-label",
+        new RegExp(`Revert unavailable for ${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+      );
+    } finally {
+      await cleanup(apiCtx, phrase);
+      await apiCtx.dispose();
+    }
+  });
+});

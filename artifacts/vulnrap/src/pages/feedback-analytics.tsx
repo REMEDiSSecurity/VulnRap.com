@@ -18,6 +18,7 @@ import {
   type HandwavyPhraseBatchRemoveResultEntry,
   type HandwavyHistoryEntry,
   type HandwavyEditEntry,
+  type HandwavyCategory,
   applyCalibration,
   type FeedbackAnalyticsDailyTrendItem,
   type FeedbackAnalyticsScoreCorrelationItem,
@@ -1139,6 +1140,30 @@ function RationaleDiff({
   );
 }
 
+// Task #148 — pure helper that decides whether reverting a given edit entry
+// would be a no-op against the current marker state. The Revert button is
+// disabled when this returns true so reviewers don't get a "nothing to undo"
+// toast from a click whose outcome was knowable up front. An entry that
+// recorded no tracked field changes is treated as a no-op as well.
+//
+// Exported only so the focused unit test in feedback-analytics.test.tsx can
+// exercise every branch without standing up the full HandwavyPhrasesAdmin
+// query/auth stack. The runtime UI continues to call it in-module.
+export function revertWouldBeNoop(
+  entry: HandwavyEditEntry,
+  currentCategory: HandwavyCategory,
+  currentRationale: string | undefined,
+): boolean {
+  if (!entry.category && !entry.rationale) return true;
+  if (entry.category && currentCategory !== entry.category.from) return false;
+  if (entry.rationale) {
+    const cur = currentRationale ?? "";
+    const target = entry.rationale.from ?? "";
+    if (cur !== target) return false;
+  }
+  return true;
+}
+
 // Shared renderer for the per-edit list. Both the single-edit
 // <details> affordance (Task #132) and the full chronological history
 // panel (Task #133) call this so they stay structurally aligned and
@@ -1150,6 +1175,8 @@ function RationaleDiff({
 function renderHandwavyEditEntries({
   editsList,
   phrase,
+  currentCategory,
+  currentRationale,
   editing,
   busy,
   onRevertClick,
@@ -1157,6 +1184,11 @@ function renderHandwavyEditEntries({
 }: {
   editsList: HandwavyEditEntry[];
   phrase: string;
+  // Task #148 — current live values for the marker. Used to compute whether
+  // each entry's Revert would be a no-op (so the button can be disabled with
+  // an explanatory tooltip rather than firing and bouncing back as a toast).
+  currentCategory: HandwavyCategory;
+  currentRationale: string | undefined;
   editing: { phrase: string } | null;
   busy: string | null;
   // Task #146 — the click handler now opens a confirmation dialog rather
@@ -1175,6 +1207,12 @@ function renderHandwavyEditEntries({
           : String(entry.editedAt);
       const revertKey = `revert:${phrase}:${editedAtKey}`;
       const editedAtLabel = formatAuditTimestamp(entry.editedAt);
+      // Task #148 — disable Revert when the entry's "from" values already
+      // match the live marker state (a later edit already put things back,
+      // or the entry recorded no tracked field changes). Reviewers see an
+      // explanatory tooltip instead of a "nothing to undo" toast they only
+      // discover after firing.
+      const isNoop = revertWouldBeNoop(entry, currentCategory, currentRationale);
       return (
         <li
           key={`${editedAtKey}-${idx}`}
@@ -1226,15 +1264,28 @@ function renderHandwavyEditEntries({
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 px-1.5 text-[10px] text-amber-300 hover:text-amber-200 shrink-0"
-            disabled={editing !== null || busy === revertKey || busy === `rm:${phrase}`}
+            className="h-6 px-1.5 text-[10px] text-amber-300 hover:text-amber-200 shrink-0 disabled:text-muted-foreground/60"
+            disabled={editing !== null || busy === revertKey || busy === `rm:${phrase}` || isNoop}
             onClick={() => onRevertClick(entry)}
             data-testid="handwavy-revert-edit"
-            aria-label={`Revert edit on ${phrase} from ${editedAtLabel ?? entry.editedAt}`}
-            title="Restore the values from before this edit (recorded as a new audit entry)."
+            data-noop={isNoop ? "true" : "false"}
+            aria-label={
+              isNoop
+                ? `Revert unavailable for ${phrase}: the marker already matches this edit's prior state.`
+                : `Revert edit on ${phrase} from ${editedAtLabel ?? entry.editedAt}`
+            }
+            title={
+              isNoop
+                ? "Already at this state — nothing to revert."
+                : "Restore the values from before this edit (recorded as a new audit entry)."
+            }
           >
             <Undo2 className="w-3 h-3 mr-1" />
-            {busy === revertKey ? "Reverting…" : "Revert"}
+            {busy === revertKey
+              ? "Reverting…"
+              : isNoop
+                ? "At this state"
+                : "Revert"}
           </Button>
         </li>
       );
@@ -3267,6 +3318,8 @@ function HandwavyPhrasesAdmin() {
                         {renderHandwavyEditEntries({
                           editsList,
                           phrase: m.phrase,
+                          currentCategory: m.category,
+                          currentRationale: m.rationale,
                           editing,
                           busy,
                           onRevertClick: (entry) =>
@@ -3292,6 +3345,8 @@ function HandwavyPhrasesAdmin() {
                         {renderHandwavyEditEntries({
                           editsList,
                           phrase: m.phrase,
+                          currentCategory: m.category,
+                          currentRationale: m.rationale,
                           editing,
                           busy,
                           onRevertClick: (entry) =>
