@@ -4,6 +4,7 @@ import { and, isNotNull, sql } from "drizzle-orm";
 import { generateCalibrationReport, type BucketAnalysis } from "../lib/calibration";
 import { getCurrentConfig, getConfigHistory, applyNewConfig } from "../lib/scoring-config";
 import { generateAvriDriftReport } from "../lib/avri-drift";
+import { notifyDriftFlagsIfNew } from "../lib/avri-drift-notifications";
 import {
   getHandwavyPhrases,
   getHandwavyPhraseHistory,
@@ -428,6 +429,56 @@ router.get("/feedback/calibration/avri-drift", async (req, res) => {
     res.status(500).json({ error: "Failed to generate AVRI drift report." });
   }
 });
+
+// Task #83 — Push freshly-fired drift flags to reviewers via the configured
+// webhook (AVRI_DRIFT_WEBHOOK_URL) instead of waiting for someone to open
+// the calibration page. The endpoint is auth-gated because it triggers an
+// outbound HTTP call. It can be invoked by:
+//   - cron / scheduled job for periodic dispatch on top of the auto-trigger
+//     baked into the report-create path,
+//   - a reviewer manually pressing a button in the calibration UI to force
+//     a check between auto-runs.
+// Repeat invocations within the same week for the same flag are de-duped by
+// `lib/avri-drift-notifications.ts` so this endpoint is safe to poll.
+router.post(
+  "/feedback/calibration/avri-drift/notify",
+  requireCalibrationAuth,
+  async (req, res) => {
+    try {
+      const weeksRaw = req.query.weeks ?? (req.body ?? {}).weeks;
+      const weeksParsed =
+        typeof weeksRaw === "string"
+          ? Number.parseInt(weeksRaw, 10)
+          : typeof weeksRaw === "number"
+            ? weeksRaw
+            : undefined;
+      const weeks = Number.isFinite(weeksParsed) ? weeksParsed : undefined;
+      const driftReport = await generateAvriDriftReport({ weeks });
+      const outcome = await notifyDriftFlagsIfNew(driftReport);
+      const status = outcome.dispatchResult && !outcome.dispatchResult.ok ? 502 : 200;
+      res.status(status).json({
+        weeksRequested: driftReport.weeksRequested,
+        totalFlags: driftReport.flags.length,
+        notifiedCount: outcome.notified.length,
+        alreadyNotifiedCount: outcome.alreadyNotified.length,
+        dispatched: outcome.dispatched,
+        webhookSkipped: outcome.webhookSkipped,
+        dispatchResult: outcome.dispatchResult ?? null,
+        calibrationUrl: outcome.calibrationUrl,
+        runbookUrl: outcome.runbookUrl,
+        notified: outcome.notified.map((f) => ({
+          key: f.key,
+          weekStart: f.weekStart,
+          kind: f.kind,
+          detail: f.detail,
+        })),
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to dispatch AVRI drift notifications");
+      res.status(500).json({ error: "Failed to dispatch AVRI drift notifications." });
+    }
+  },
+);
 
 router.get("/feedback/calibration/config", (_req, res) => {
   try {

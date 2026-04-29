@@ -1,0 +1,4 @@
+{
+  "_meta": "Persisted dedup state for AVRI drift notifications (Task #83). Each entry records a flag that has already been dispatched to AVRI_DRIFT_WEBHOOK_URL so the same flag for the same week never re-notifies reviewers. Capped at 500 entries by lib/avri-drift-notifications.ts. Safe to delete or truncate to force re-notification of recent flags.",
+  "notified": []
+}

@@ -81,3 +81,87 @@ The drift thresholds themselves live in
 - `MIN_BUCKET = 3`
 
 Change them only when the calibrated 51pt gap target itself moves.
+
+## Notifications
+
+To shorten time-to-action, freshly-firing drift flags can be pushed to a
+webhook instead of waiting for someone to open the calibration page.
+
+- **Source:** `artifacts/api-server/src/lib/avri-drift-notifications.ts`
+- **Endpoint (manual / cron):**
+  `POST /api/feedback/calibration/avri-drift/notify` (auth-gated by
+  `CALIBRATION_TOKEN` — same header as the other calibration mutations).
+- **Auto-trigger:** the report-create path
+  (`POST /api/reports`) fires the same check as a fire-and-forget side
+  effect, throttled to at most once per
+  `AVRI_DRIFT_NOTIFY_INTERVAL_MS` ms (default 6 hours) per process.
+
+### Setup
+
+1. Set `AVRI_DRIFT_WEBHOOK_URL` to a webhook that accepts JSON
+   (Slack/Discord incoming webhook, PagerDuty Events v2, your own
+   bridge to email, etc.). When unset, the notifier is a no-op — the
+   drift dashboard still works exactly as before.
+2. Set `PUBLIC_URL` so the webhook payload's `calibrationUrl`
+   resolves to your deployed site. Defaults to `https://vulnrap.com`
+   if unset.
+3. (Recommended) Set `AVRI_DRIFT_RUNBOOK_URL` to wherever you
+   actually host this runbook (GitHub blob URL, internal wiki, etc.).
+   The default link is the in-repo path off `PUBLIC_URL`, which will
+   404 in most production setups because the deployed Express app
+   does NOT serve the `docs/` directory as static assets.
+4. (Optional) Override `AVRI_DRIFT_NOTIFY_INTERVAL_MS` to change the
+   per-process auto-trigger throttle. Set to `0` to fire on every
+   report submission (only sane in low-volume / dev environments).
+5. (Optional) Override `AVRI_DRIFT_NOTIFY_RETRY_INTERVAL_MS` to
+   change how quickly the auto-trigger retries after a failed dispatch
+   (defaults to 5 minutes). Lower it during a drift incident if
+   you're paging on a flaky webhook target.
+
+### Payload
+
+```json
+{
+  "event": "avri_drift_flags",
+  "generatedAt": "2026-04-29T00:00:00Z",
+  "calibrationUrl": "https://vulnrap.example.com/feedback-analytics",
+  "runbookUrl": "https://vulnrap.example.com/docs/avri-drift-runbook.md",
+  "thresholds": { "gapWarn": 45, "familyShiftWarn": 5, "minBucketSize": 3 },
+  "cohort": "avri_on_only",
+  "flags": [
+    {
+      "key": "2026-04-20|GAP_BELOW_45",
+      "weekStart": "2026-04-20",
+      "kind": "GAP_BELOW_45",
+      "detail": "T1−T3 composite gap 40 < 45pt threshold (T1 n=5 mean=70, T3 n=5 mean=30)."
+    }
+  ]
+}
+```
+
+### De-duplication
+
+Reviewers are notified at most once per flag, scoped by:
+
+- `GAP_BELOW_45`: `weekStart`
+- `FAMILY_MEAN_SHIFT`: `weekStart` + bucket (`T1`/`T3`) + family
+
+State is persisted to
+`artifacts/api-server/data/avri-drift-notifications.json` so a process
+restart does not re-flood the channel. To force re-notification of
+recent flags (e.g. after a webhook outage), truncate that file's
+`notified` array. A failed dispatch does NOT mark its flags as
+notified, so transient webhook outages auto-recover on the next run.
+
+### Operational notes
+
+- The auto-trigger short-circuits when `AVRI_DRIFT_WEBHOOK_URL` is
+  unset, so unconfigured environments pay zero cost on the report
+  hot path.
+- The manual `POST .../notify` endpoint always runs the check (it's
+  not throttled) so reviewers can press a "Re-check now" button
+  between auto-runs.
+- When the webhook is unset but flags exist, the notifier still
+  records them as notified locally so wiring up a webhook later
+  does not produce a retroactive flood. Truncate the state file if
+  you actually want the backlog.

@@ -259,4 +259,42 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
       expect(r.body.message).toMatch(/updated/i);
     }
   });
+
+  // Task #83 — the new auto/manual drift notify endpoint must be
+  // gated by the same calibration token so a leaked URL can't be used
+  // to drain a webhook quota or learn the dedup-state shape.
+  it("POST /feedback/calibration/avri-drift/notify without a token is rejected with 401", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/avri-drift/notify",
+    );
+    expect(r.status).toBe(401);
+    expect(r.body.error).toMatch(/token/i);
+  });
+
+  it("POST /feedback/calibration/avri-drift/notify with the wrong token is rejected with 401", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/avri-drift/notify",
+      undefined,
+      { "X-Calibration-Token": "not-the-token" },
+    );
+    expect(r.status).toBe(401);
+  });
+
+  it("POST /feedback/calibration/avri-drift/notify with the token bypasses the auth gate", async () => {
+    // We don't assert the response shape here because the underlying
+    // drift query touches the live DB connection (which is not seeded
+    // for this fixture). The contract we're locking in is: with a
+    // valid token the request must NOT 401 — i.e. it reaches the
+    // handler. Any handler-internal error surfaces as 500, which is
+    // still a "passed the gate" outcome for the auth contract.
+    const r = await request<{ error?: string; outcome?: unknown }>(
+      "POST",
+      "/feedback/calibration/avri-drift/notify",
+      undefined,
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).not.toBe(401);
+  });
 });
