@@ -69,6 +69,10 @@ artifacts/*/playwright/.cache/
 
 # Dev-only persisted snapshots from /api/test/run
 artifacts/api-server/data/archetype-history.json
+# Stray copy created when the api-server is launched with cwd=artifacts/api-server
+# (e.g. via `pnpm --filter`); the canonical default path is resolved via
+# process.cwd() so a non-root cwd lands the file inside this nested dir.
+artifacts/api-server/artifacts/
 
 # Runtime state (curated defaults live in DEFAULT_MARKERS in code; reviewers mutate this at runtime via /feedback/calibration/handwavy-phrases)
 artifacts/api-server/data/handwavy-phrases.json
