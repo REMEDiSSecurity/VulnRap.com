@@ -65,11 +65,15 @@ export default defineConfig({
     : [
         {
           // Run the bundled production api-server (dist/index.mjs via `start`),
-          // not `dev`. We rebuild first so any source change since the last
-          // build is exercised, mirroring what ships in the
+          // not `dev`. The `build-if-stale.mjs` helper rebuilds only when
+          // dist/index.mjs is missing or older than the watched sources, so
+          // back-to-back release-gate runs don't pay the full esbuild cost.
+          // Set E2E_SKIP_PROD_BUILD=1 to trust the existing dist (CI builds
+          // in a separate stage); set E2E_FORCE_PROD_BUILD=1 to always
+          // rebuild. The full build still mirrors what ships in the
           // [services.production] block of artifacts/api-server/.replit-artifact/artifact.toml.
           command:
-            "pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/api-server run start",
+            "node ../../scripts/build-if-stale.mjs api-server && pnpm --filter @workspace/api-server run start",
           url: `http://127.0.0.1:${API_PORT}/api/healthz`,
           reuseExistingServer: true,
           timeout: 240_000,
@@ -95,9 +99,13 @@ export default defineConfig({
           // Build the production vite bundle and serve it via `vite preview`,
           // not `vite` (dev). The preview server proxies /api to the bundled
           // api-server above (see preview.proxy in vite.config.ts), so a
-          // base-path or bundle regression will surface here.
+          // base-path or bundle regression will surface here. The
+          // `build-if-stale.mjs` helper skips the vite build when
+          // dist/public/index.html is newer than every watched source — see
+          // the api-server webServer block above for the env knobs
+          // (E2E_SKIP_PROD_BUILD, E2E_FORCE_PROD_BUILD).
           command:
-            "pnpm --filter @workspace/vulnrap run build:no-prerender && pnpm --filter @workspace/vulnrap run serve",
+            "node ../../scripts/build-if-stale.mjs vulnrap && pnpm --filter @workspace/vulnrap run serve",
           url: BASE_URL,
           reuseExistingServer: true,
           timeout: 240_000,

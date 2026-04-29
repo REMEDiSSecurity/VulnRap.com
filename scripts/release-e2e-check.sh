@@ -3,6 +3,17 @@ set -euo pipefail
 
 echo "[release-e2e-check] Running e2e smoke tests against the PRODUCTION builds of vulnrap and api-server..."
 echo "[release-e2e-check] (vite preview + bundled dist/index.mjs, not the dev servers)"
+# By default the Playwright webServer chains scripts/build-if-stale.mjs in
+# front of `start`/`serve`, so the vite + esbuild builds are reused when
+# dist/ is newer than every watched source (saves ~15s on back-to-back runs).
+# CI callers that already produced an up-to-date dist/ in a separate stage
+# can short-circuit the freshness check entirely with E2E_SKIP_PROD_BUILD=1;
+# E2E_FORCE_PROD_BUILD=1 forces a rebuild if the heuristic ever looks stale.
+if [ "${E2E_SKIP_PROD_BUILD:-0}" = "1" ]; then
+  echo "[release-e2e-check] E2E_SKIP_PROD_BUILD=1 — trusting existing dist/ (no rebuild)"
+elif [ "${E2E_FORCE_PROD_BUILD:-0}" = "1" ]; then
+  echo "[release-e2e-check] E2E_FORCE_PROD_BUILD=1 — rebuilding both bundles"
+fi
 
 CHROMIUM_PATH="${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-${REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE:-}}"
 if [ -z "${CHROMIUM_PATH}" ] || [ ! -x "${CHROMIUM_PATH}" ]; then
