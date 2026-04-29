@@ -4134,6 +4134,22 @@ function HandwavyPhrasesAdmin() {
                       (m: { phrase: string }) => m.phrase === h.phrase,
                     );
                     const isUndone = h.undone === true;
+                    // Task #179 — flag inner phrases of a batch group whose
+                    // completed remove+reinstate cycle count is >= 2 so a
+                    // bulk-reinstate (which would push them onto the active
+                    // list and start cycle #N+1) doesn't quietly hide the
+                    // thrash signal. Mirrors the per-row badge in the bulk-
+                    // REMOVE preview from Task #151. Only shown for rows the
+                    // batch button would actually flip — already-reinstated
+                    // or already-active rows are no-ops, so adding a badge
+                    // there would be noise.
+                    const HANDWAVY_HIGH_THRASH_MIN = 2;
+                    const cycleCount = thrashByPhrase.get(h.phrase)?.length ?? 0;
+                    const showBatchThrashBadge =
+                      opts.insideBatch === true &&
+                      !h.reinstated &&
+                      !isActive &&
+                      cycleCount >= HANDWAVY_HIGH_THRASH_MIN;
                     return (
                       <div
                         key={`${h.phrase}-${removedAtKey}-${rowIdx}`}
@@ -4147,6 +4163,17 @@ function HandwavyPhrasesAdmin() {
                       >
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-foreground/70 break-all flex-1 line-through">{h.phrase}</span>
+                          {showBatchThrashBadge && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] border-amber-500/40 text-amber-300"
+                              data-testid="handwavy-history-batch-thrash-badge"
+                              aria-label={`Removed and reinstated ${cycleCount} time${cycleCount === 1 ? "" : "s"}`}
+                            >
+                              <RotateCcw className="w-3 h-3 mr-1" />
+                              {cycleCount}× cycles
+                            </Badge>
+                          )}
                           <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
                           {isUndone && (
                             <Badge
@@ -4241,9 +4268,10 @@ function HandwavyPhrasesAdmin() {
                   // Number of inner phrases that aren't already reinstated
                   // AND aren't already in the active list — i.e. what the
                   // batch button would actually re-add.
-                  const remainingCount = group.rows.filter(
+                  const remainingRows = group.rows.filter(
                     (r) => !r.reinstated && !phrases.some((m: { phrase: string }) => m.phrase === r.phrase),
-                  ).length;
+                  );
+                  const remainingCount = remainingRows.length;
                   // Task #177 — when this batch's dry-run preview is open,
                   // surface the per-phrase outcomes inline below the header
                   // so the reviewer can confirm or cancel without losing the
@@ -4253,6 +4281,25 @@ function HandwavyPhrasesAdmin() {
                     reinstatePreview.removedAtIso === group.removedAtIso
                       ? reinstatePreview
                       : null;
+                  // Task #179 — count how many of the rows the batch button
+                  // would actually flip have already cycled (remove +
+                  // reinstate) >= 2 times. Surfaced as a summary line below
+                  // the batch header so a reviewer can't miss the thrash
+                  // signal before the batch fires. Mirrors the bulk-REMOVE
+                  // preview's `handwavy-bulk-preview-thrash-summary` from
+                  // Task #151. We deliberately scope the count to
+                  // `remainingRows` (not `group.rows`) so the summary
+                  // matches the batch button's "Reinstate all N" label.
+                  const HISTORY_HIGH_THRASH_MIN = 2;
+                  const remainingHighThrashCount = remainingRows.reduce(
+                    (acc, r) =>
+                      acc +
+                      ((thrashByPhrase.get(r.phrase)?.length ?? 0) >=
+                      HISTORY_HIGH_THRASH_MIN
+                        ? 1
+                        : 0),
+                    0,
+                  );
                   return (
                     <div
                       key={`batch-${group.removedAtIso}-${gIdx}`}
@@ -4515,6 +4562,25 @@ function HandwavyPhrasesAdmin() {
                           </div>
                         );
                       })()}
+                      {/* Task #179 — high-thrash summary: only rendered when
+                          the batch button has work to do AND at least one of
+                          those rows is high-thrash, so a batch with zero
+                          high-thrash phrases is visually identical to the
+                          pre-#179 layout. */}
+                      {remainingCount > 0 && remainingHighThrashCount > 0 && (
+                        <div
+                          className="px-3 py-1.5 text-[10px] bg-amber-500/5 border-l-2 border-amber-500/40 flex items-start gap-1.5 text-amber-200"
+                          data-testid="handwavy-history-batch-thrash-summary"
+                        >
+                          <RotateCcw className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
+                          <span>
+                            {remainingHighThrashCount} of {remainingCount} selected phrase
+                            {remainingCount === 1 ? "" : "s"}{" "}
+                            {remainingHighThrashCount === 1 ? "has" : "have"} already cycled{" "}
+                            {HISTORY_HIGH_THRASH_MIN}+ times — flagged below.
+                          </span>
+                        </div>
+                      )}
                       <div className="divide-y divide-border/10">
                         {group.rows.map((row, rIdx) =>
                           renderRow(row, rIdx, { insideBatch: true }),
