@@ -779,3 +779,180 @@ describe("GET /api/feedback/analytics — reportId exclusion", () => {
     }
   });
 });
+
+// Task 64 / Task 189: Task 64 added an "AVRI Family Rubric" section to the
+// markdown emitted by GET /reports/:id/triage-report (mirroring the rubric the
+// diagnostics panel renders), but it had no automated coverage. These tests
+// confirm that when the stored report carries an AVRI composite block and an
+// Engine 2 signalBreakdown.avri sub-block, the printable triage report
+// surfaces the family name, gold-hit/miss bullets, absence penalties, and
+// AVRI-prefixed composite overrides — and that legacy reports without any
+// AVRI data have the section omitted entirely.
+describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", () => {
+  async function getText(path: string): Promise<{ status: number; body: string }> {
+    const r = await fetch(`${baseUrl}${path}`);
+    return { status: r.status, body: await r.text() };
+  }
+
+  // Mirrors the fixture shapes used by
+  // artifacts/vulnrap/src/components/diagnostics-panel.test.tsx so the
+  // server-side markdown export and client-side panel agree on the same
+  // AVRI payload contract.
+  const AVRI_VULNRAP_BLOB = {
+    avri: {
+      family: "MEMORY_CORRUPTION",
+      familyName: "Memory corruption / unsafe C",
+      classification: {
+        confidence: "HIGH",
+        reason: "matched member CWE-787",
+        evidence: ["CWE-787"],
+        technology: null,
+      },
+      goldHitCount: 1,
+      velocityPenalty: -10,
+      templatePenalty: 0,
+      rawCompositeBeforeBehavioralPenalties: 42,
+    },
+    engines: [
+      {
+        engine: "Technical Substance Analyzer",
+        score: 38,
+        verdict: "RED",
+        confidence: "MEDIUM",
+        signalBreakdown: {
+          avri: {
+            family: "MEMORY_CORRUPTION",
+            familyName: "Memory corruption / unsafe C",
+            baseScore: 22,
+            goldHitCount: 1,
+            goldTotalCount: 8,
+            goldHits: [
+              {
+                id: "asan_or_sanitizer",
+                description: "AddressSanitizer crash output",
+                points: 22,
+              },
+            ],
+            goldMisses: [
+              {
+                id: "valgrind",
+                description: "Valgrind error trace",
+                points: 18,
+              },
+            ],
+            absencePenalty: -8,
+            absencePenalties: [
+              {
+                id: "no_size_or_offset",
+                description: "No explicit byte/size/offset value",
+                points: 5,
+              },
+            ],
+            contradictions: [],
+            contradictionPenalty: 0,
+            rawAvriScore: 14,
+            legacyScore: 50,
+            blendedScore: 38,
+          },
+        },
+      },
+    ],
+  };
+
+  it("renders the AVRI rubric with family, gold hits/misses, absence penalties, and AVRI composite overrides", async () => {
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "sample report body",
+      vulnrapEngineResults: AVRI_VULNRAP_BLOB,
+      vulnrapOverridesApplied: [
+        "AVRI_NO_GOLD_SIGNALS: zero gold signals for Memory corruption / unsafe C",
+        "AVRI_VELOCITY: same-day submission velocity penalty (-10)",
+        // Non-AVRI override — must NOT appear under the AVRI composite-overrides
+        // bullet list (the route filters by AVRI_* token prefix).
+        "TEMPLATE_DUPLICATE: previously seen template",
+      ],
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+
+    // Section header is present.
+    const sectionIdx = res.body.indexOf("## AVRI Family Rubric");
+    expect(sectionIdx).toBeGreaterThan(-1);
+
+    // Family name + classification metadata mirrored from the composite block.
+    expect(res.body).toContain("- **Family**: Memory corruption / unsafe C");
+    expect(res.body).toContain("- **Classification confidence**: HIGH");
+    expect(res.body).toContain("- **Classification reason**: matched member CWE-787");
+
+    // Gold signals tally combines composite goldHitCount with Engine 2
+    // goldTotalCount.
+    expect(res.body).toContain("- **Gold signals**: 1/8");
+
+    // Gold hits header + bullet (uses + sign and ASCII text).
+    expect(res.body).toContain("- **Gold signals found**:");
+    expect(res.body).toContain(
+      "  - +22 AddressSanitizer crash output (asan_or_sanitizer)",
+    );
+
+    // Gold misses header + bullet (uses unicode minus U+2212, not ASCII hyphen).
+    expect(res.body).toContain("- **Expected signals missing**:");
+    expect(res.body).toContain("  - \u221218 Valgrind error trace (valgrind)");
+
+    // Absence penalties block (haircut comes from the Engine 2 absencePenalty).
+    expect(res.body).toContain("- **Absence penalties applied** (haircut -8):");
+    expect(res.body).toContain(
+      "  - \u22125 No explicit byte/size/offset value (no_size_or_offset)",
+    );
+
+    // AVRI-prefixed composite overrides surfaced under "Composite overrides:".
+    const overridesIdx = res.body.indexOf("- **Composite overrides**:");
+    expect(overridesIdx).toBeGreaterThan(sectionIdx);
+    expect(res.body).toContain(
+      "  - No gold signals for family — `AVRI_NO_GOLD_SIGNALS: zero gold signals for Memory corruption / unsafe C`",
+    );
+    expect(res.body).toContain(
+      "  - Submission-velocity penalty — `AVRI_VELOCITY: same-day submission velocity penalty (-10)`",
+    );
+
+    // Non-AVRI override must not appear inside the AVRI composite-overrides
+    // bullet list (the route only surfaces AVRI_*-prefixed rules here).
+    const avriSectionEnd = res.body.indexOf("\n---", sectionIdx);
+    const avriSection = res.body.slice(sectionIdx, avriSectionEnd > -1 ? avriSectionEnd : undefined);
+    expect(avriSection).not.toContain("TEMPLATE_DUPLICATE");
+
+    // Composite-before-behavioural-penalties trailer is rendered when present.
+    expect(res.body).toContain("- Composite before behavioural penalties: 42");
+  });
+
+  it("omits the AVRI Family Rubric section entirely for legacy reports with no AVRI data", async () => {
+    // Legacy report shape: no avri composite block, no Technical Substance
+    // engine entry with a signalBreakdown.avri sub-block.
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "legacy report body",
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "Some Other Engine",
+            score: 50,
+            verdict: "GREEN",
+            confidence: "LOW",
+            signalBreakdown: {},
+          },
+        ],
+      },
+      vulnrapOverridesApplied: [],
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+
+    // The whole rubric section — header and any of its bullets — must be absent.
+    expect(res.body).not.toContain("## AVRI Family Rubric");
+    expect(res.body).not.toContain("- **Family**:");
+    expect(res.body).not.toContain("- **Gold signals found**:");
+    expect(res.body).not.toContain("- **Expected signals missing**:");
+    expect(res.body).not.toContain("- **Absence penalties applied**");
+  });
+});
