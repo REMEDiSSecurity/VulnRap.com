@@ -721,6 +721,24 @@ const SLOP_CMDI_PROSE_PLACEHOLDER_NOCOLON_FIXTURE = [
   "fleet — please prioritize.",
 ].join("\n");
 
+// SQLi slop fixture using the bare-angle dodge: prose says "the payload
+// <sql payload here> was tried" — no colon AND no backticks. The slot's
+// inner text is slop vocabulary so the bare-angle prose-placeholder
+// check must still revoke `concrete_payload`.
+const SLOP_SQLI_PROSE_PLACEHOLDER_BARE_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query.",
+  "This is the canonical UNION SELECT class of attacks (CWE-89).",
+  "Severity: Critical. Affects all customers in production.",
+  "",
+  "We confirmed the issue end-to-end: the payload <sql payload here>",
+  "was tried against /search and returned the full user table.",
+  "",
+  "Replay against any modern database backend; the response will",
+  "include sensitive rows.",
+].join("\n");
+
 describe("findProsePlaceholderPayloadRanges", () => {
   it("flags Payload:/Inject:/Exec:/Run: <slot> in prose", () => {
     expect(
@@ -820,6 +838,84 @@ describe("findProsePlaceholderPayloadRanges", () => {
     );
     expect(ranges.length).toBe(2);
   });
+
+  it("flags bare-angle <slot> after a payload-context word with no colon and no backticks", () => {
+    // Slop dodge: drop the backticks AND the colon. "the payload <inject>
+    // was sent" still gestures at a payload without naming one. The slot
+    // must contain slop vocabulary for the bare-angle form to fire (no
+    // backtick fence to lean on as a payload-context tell).
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload <inject> was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send <sql payload here> to /search",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "exec <command here> to confirm RCE",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "run <shell command here> on the host",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag bare-angle <slot> when the slot is a neutral identifier", () => {
+    // The bare-angle form is intentionally stricter than the colon and
+    // inline-code forms: without backticks, a bare short identifier in
+    // the slot is NOT enough on its own. "the payload <unknown> was
+    // rejected" legitimately calls out a server-supplied identifier
+    // rather than gesturing at a hidden exploit, and must not be
+    // flagged.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload <unknown> was rejected",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the command <foo> was not recognised",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send <ack> as part of the handshake",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("does not flag bare-angle <slot> without a payload-context word", () => {
+    // The verb/noun list is what makes the slot a payload mention.
+    // Without one of those words in front, the bare angle bracket is
+    // ordinary prose markup and stays safe — even if the slot itself
+    // is slop vocabulary.
+    expect(
+      findProsePlaceholderPayloadRanges("the value <inject> was rejected")
+        .length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("the field <sql payload here> failed")
+        .length,
+    ).toBe(0);
+  });
+
+  it("does not double-count the bare-angle form against the inline-code form", () => {
+    // The bare-angle regex doesn't require backticks, but it does
+    // require whitespace immediately before `<`, so the backticked
+    // form ("the payload `<inject>`") has a backtick between the
+    // verb and `<` and only the inline form matches. Guard against a
+    // future relax that would let both patterns match the same slot.
+    const ranges = findProsePlaceholderPayloadRanges(
+      "the payload `<inject>` was sent",
+    );
+    expect(ranges.length).toBe(1);
+  });
 });
 
 describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
@@ -891,5 +987,26 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
     expect(survivingIds).not.toContain("concrete_payload");
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
     expect(indicators).toContain("FAKE_RAW_HTTP");
+  });
+
+  it("revokes concrete_payload when prose drops backticks too: 'the payload <sql payload here> was tried'", () => {
+    // The bare-angle dodge: no colon, no backticks, just a payload-context
+    // word followed by a slop-vocabulary `<...>` slot. The check must
+    // still revoke `concrete_payload` so the incidental "UNION SELECT"
+    // token in the CWE prose can't carry the slop report past gold.
+    const sig = extractSignals(SLOP_SQLI_PROSE_PLACEHOLDER_BARE_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_SQLI_PROSE_PLACEHOLDER_BARE_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
   });
 });
