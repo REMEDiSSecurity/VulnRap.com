@@ -147,15 +147,21 @@ export async function fetchDiagnostics(reportId: number): Promise<DiagnosticsRes
   return res.json();
 }
 
+export const DIAGNOSTICS_STALE_TIME_MS = 60_000;
+
+export function getDiagnosticsQueryKey(reportId: number): readonly unknown[] {
+  return ["report-diagnostics", reportId] as const;
+}
+
 export function DiagnosticsPanel({ reportId }: { reportId: number }) {
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["report-diagnostics", reportId],
+    queryKey: getDiagnosticsQueryKey(reportId),
     queryFn: () => fetchDiagnostics(reportId),
     enabled: expanded,
-    staleTime: 60_000,
+    staleTime: DIAGNOSTICS_STALE_TIME_MS,
   });
 
   const exportJSON = () => {

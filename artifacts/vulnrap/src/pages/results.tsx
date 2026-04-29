@@ -17,7 +17,8 @@ import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCust
 import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport } from "@/components/evidence-highlighter";
-import { DiagnosticsPanel, fetchDiagnostics, buildMarkdownSummary, type DiagnosticsResponse } from "@/components/diagnostics-panel";
+import { DiagnosticsPanel, fetchDiagnostics, buildMarkdownSummary, getDiagnosticsQueryKey, DIAGNOSTICS_STALE_TIME_MS, type DiagnosticsResponse } from "@/components/diagnostics-panel";
+import { useQueryClient } from "@tanstack/react-query";
 
 function getQualityColor(score: number) {
   if (score >= 70) return "text-green-500";
@@ -1119,10 +1120,19 @@ export default function Results() {
   };
 
   const settings = getSettings();
+  const queryClient = useQueryClient();
 
   const loadDiagnosticsForExport = async (): Promise<DiagnosticsResponse | null> => {
     try {
-      return await fetchDiagnostics(id);
+      // Reuse the diagnostics-panel react-query cache so back-to-back JSON+TXT
+      // exports only hit the server once. Matching the panel's staleTime keeps
+      // behavior consistent: a fresh entry (within 60s) is returned instantly,
+      // and otherwise the response is fetched and cached for the next call.
+      return await queryClient.fetchQuery({
+        queryKey: getDiagnosticsQueryKey(id),
+        queryFn: () => fetchDiagnostics(id),
+        staleTime: DIAGNOSTICS_STALE_TIME_MS,
+      });
     } catch (err) {
       toast({
         title: "Diagnostics unavailable",
