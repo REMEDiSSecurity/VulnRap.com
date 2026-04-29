@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   evaluateRawHttpRequest,
+  evaluateRawHttpResponse,
   findProsePlaceholderPayloadRanges,
   isPlaceholderBody,
+  isSuspiciousJsonBody,
+  stripFakeResponses,
   stripPlaceholderBodies,
 } from "./raw-http.js";
 import { runEngine2Avri } from "./engine2-avri.js";
@@ -12,6 +15,7 @@ import { extractSignals } from "../extractors.js";
 const SMUG = FAMILIES_BY_ID.REQUEST_SMUGGLING;
 const AUTHN = FAMILIES_BY_ID.AUTHN_AUTHZ;
 const INJ = FAMILIES_BY_ID.INJECTION;
+const WEB = FAMILIES_BY_ID.WEB_CLIENT;
 
 // Legitimate TE.CL smuggling fixture: real Host, integer Content-Length,
 // literal "chunked" Transfer-Encoding, CRLFs preserved, smuggled second
@@ -1173,5 +1177,254 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
     expect(survivingIds).not.toContain("concrete_payload");
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
     expect(indicators).toContain("FAKE_RAW_HTTP");
+  });
+});
+
+// =====================================================================
+// Sprint 13B-3 — raw HTTP RESPONSE plausibility tests.
+
+// Calibration fixture: a fabricated SQLi report whose only "evidence"
+// is a trivial `HTTP/1.1 200 OK` block + narrative-tailored JSON body.
+// The response carries no Date, no Server, no incidentals, and a
+// 1-key JSON body whose value is the vulnerability narrative — all
+// four plausibility markers fire.
+const SLOP_FABRICATED_RESPONSE_FIXTURE = [
+  "# Critical SQL injection on /api/users with response proof",
+  "",
+  "Sending the payload below as the q parameter triggers a baseline",
+  "vs injected response that confirms the injection. CWE-89.",
+  "",
+  "Baseline:",
+  "```http",
+  "GET /api/users?q=normal HTTP/1.1",
+  "Host: api.example.com",
+  "",
+  "```",
+  "",
+  "Server returns:",
+  "```http",
+  "HTTP/1.1 200 OK",
+  "Content-Type: application/json",
+  "",
+  '{"error": "SQL injection in users.id parameter exposed by attacker payload"}',
+  "```",
+  "",
+  "Compare with the injected request below — the response leaks the",
+  "users table because of the SQL injection.",
+].join("\n");
+
+// Plausible response excerpt: real headers (Date + Server +",
+// X-Request-Id + Content-Length), a JSON body with incidental id and
+// timestamp fields. Should not fire any markers.
+const PLAUSIBLE_RESPONSE_FIXTURE = [
+  "Server returns:",
+  "```http",
+  "HTTP/1.1 200 OK",
+  "Date: Wed, 21 Oct 2026 07:28:00 GMT",
+  "Server: nginx/1.18.0",
+  "Content-Type: application/json",
+  "Content-Length: 142",
+  "Cache-Control: no-cache, private",
+  "X-Request-Id: 7a8b9c0d-1234-5678-9abc-def012345678",
+  "",
+  '{"id": 4012, "username": "bob", "created_at": "2026-10-21T07:28:00Z"}',
+  "```",
+].join("\n");
+
+describe("isSuspiciousJsonBody", () => {
+  it("flags single-key narrative JSON bodies", () => {
+    expect(
+      isSuspiciousJsonBody(
+        '{"error": "SQL injection in users.id parameter"}',
+      ),
+    ).toBe(true);
+    expect(
+      isSuspiciousJsonBody('{"data": "user account compromised by attacker"}'),
+    ).toBe(true);
+    expect(isSuspiciousJsonBody('["XSS payload reflected"]')).toBe(true);
+  });
+
+  it("does not flag real API responses with incidental fields", () => {
+    expect(
+      isSuspiciousJsonBody(
+        '{"id": 4012, "username": "bob", "balance": 250.00}',
+      ),
+    ).toBe(false);
+    expect(
+      isSuspiciousJsonBody('{"uuid": "a-b-c", "data": "leaked"}'),
+    ).toBe(false);
+    // ≥3 top-level keys — never suspicious regardless of vocab.
+    expect(
+      isSuspiciousJsonBody(
+        '{"a": "vulnerability noted", "b": 1, "c": 2}',
+      ),
+    ).toBe(false);
+  });
+
+  it("does not flag non-JSON bodies, plain prose, or HTML", () => {
+    expect(isSuspiciousJsonBody("")).toBe(false);
+    expect(isSuspiciousJsonBody("plain text response")).toBe(false);
+    expect(isSuspiciousJsonBody("<html><body>...</body></html>")).toBe(false);
+    expect(isSuspiciousJsonBody('{"id": 4012, "name": "alice"}')).toBe(false);
+  });
+});
+
+describe("evaluateRawHttpResponse", () => {
+  it("flags a fabricated response with all four plausibility markers", () => {
+    const r = evaluateRawHttpResponse(SLOP_FABRICATED_RESPONSE_FIXTURE);
+    expect(r.responsesAnalyzed).toBeGreaterThanOrEqual(1);
+    expect(r.responsesFlagged).toBeGreaterThanOrEqual(1);
+    expect(r.responsesMissingDate).toBeGreaterThanOrEqual(1);
+    expect(r.responsesMissingServer).toBeGreaterThanOrEqual(1);
+    expect(r.responsesWithSuspiciousJsonBody).toBeGreaterThanOrEqual(1);
+    expect(r.responsesMissingIncidentals).toBeGreaterThanOrEqual(1);
+    expect(r.isFake).toBe(true);
+    expect(r.reason).toMatch(/fabricated|missing|suspicious|incidentals/i);
+    expect(r.fakeResponseRanges.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not flag a plausible response with Date/Server/X-Request-Id and incidental JSON fields", () => {
+    const r = evaluateRawHttpResponse(PLAUSIBLE_RESPONSE_FIXTURE);
+    expect(r.responsesAnalyzed).toBe(1);
+    expect(r.responsesFlagged).toBe(0);
+    expect(r.responsesMissingDate).toBe(0);
+    expect(r.responsesMissingServer).toBe(0);
+    expect(r.responsesWithSuspiciousJsonBody).toBe(0);
+    expect(r.responsesMissingIncidentals).toBe(0);
+    expect(r.isFake).toBe(false);
+    expect(r.reason).toBeNull();
+  });
+
+  it("returns 0 responses for prose with no HTTP/1.x status line", () => {
+    const r = evaluateRawHttpResponse(
+      "The server returns a 200 OK response.",
+    );
+    expect(r.responsesAnalyzed).toBe(0);
+    expect(r.isFake).toBe(false);
+  });
+
+  it("does not match shell-escaped status lines (printf 'HTTP/1.1 200 OK\\\\r\\\\n...')", () => {
+    const fixture =
+      "Reproduction: printf 'HTTP/1.1 200 OK\\r\\nSet-Cookie: x=1\\r\\n\\r\\n' | nc -l 8080";
+    const r = evaluateRawHttpResponse(fixture);
+    expect(r.responsesAnalyzed).toBe(0);
+    expect(r.isFake).toBe(false);
+  });
+
+  it("strips fake response byte ranges", () => {
+    const r = evaluateRawHttpResponse(SLOP_FABRICATED_RESPONSE_FIXTURE);
+    const stripped = stripFakeResponses(SLOP_FABRICATED_RESPONSE_FIXTURE, r);
+    expect(stripped).not.toContain("SQL injection in users.id parameter");
+    // Surrounding prose survives.
+    expect(stripped).toContain("# Critical SQL injection on /api/users");
+    expect(stripped).toContain("Compare with the injected request below");
+  });
+
+  it("does not flag a response that only fires one marker (missing Date alone)", () => {
+    // Response has Server + Content-Length + Cache-Control — only Date is
+    // missing. Single marker shouldn't trip the fake threshold.
+    const fixture = [
+      "```http",
+      "HTTP/1.1 200 OK",
+      "Server: nginx/1.18.0",
+      "Content-Type: application/json",
+      "Content-Length: 80",
+      "Cache-Control: no-cache",
+      "",
+      '{"id": 1, "name": "alice"}',
+      "```",
+    ].join("\n");
+    const r = evaluateRawHttpResponse(fixture);
+    expect(r.responsesAnalyzed).toBe(1);
+    expect(r.responsesMissingDate).toBe(1);
+    expect(r.isFake).toBe(false);
+  });
+});
+
+describe("runEngine2Avri — INJECTION fabricated-response integration", () => {
+  it("revokes request_response_diff when the only response evidence is a fabricated block", () => {
+    const sig = extractSignals(SLOP_FABRICATED_RESPONSE_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_FABRICATED_RESPONSE_FIXTURE,
+      INJ,
+    );
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeIndObj = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeIndObj?.explanation).toMatch(/FAKE_RAW_HTTP_RESPONSE/);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("request_response_diff");
+  });
+
+  it("does not flag a realistic INJECTION report whose response excerpt has incidental fields", () => {
+    const fixture = [
+      "# SQL injection on POST /search via the q parameter",
+      "",
+      "The `q` form field is concatenated into a SQL query unsanitized.",
+      "CWE-89.",
+      "",
+      "```http",
+      "POST /search HTTP/1.1",
+      "Host: shop.example.com",
+      "Content-Type: application/x-www-form-urlencoded",
+      "Content-Length: 47",
+      "",
+      "q=foo'+UNION+SELECT+password+FROM+users--",
+      "```",
+      "",
+      "Baseline response:",
+      "```http",
+      "HTTP/1.1 200 OK",
+      "Date: Wed, 21 Oct 2026 07:28:00 GMT",
+      "Server: nginx/1.18.0",
+      "Content-Type: application/json",
+      "Content-Length: 87",
+      "Cache-Control: no-cache",
+      "X-Request-Id: 7a8b9c0d-1234",
+      "",
+      '{"id": 4012, "username": "bob", "email": "bob@example.com"}',
+      "```",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, INJ);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).not.toContain("FAKE_RAW_HTTP");
+  });
+});
+
+describe("runEngine2Avri — WEB_CLIENT fabricated-response integration", () => {
+  it("revokes reflection_or_dom_proof when the only DOM/response evidence is a fabricated block", () => {
+    const fixture = [
+      "# Critical reflected XSS in /search response",
+      "",
+      "The q parameter is reflected into the response. CWE-79.",
+      "",
+      "Server returns:",
+      "```http",
+      "HTTP/1.1 200 OK",
+      "Content-Type: text/html",
+      "",
+      '<html><body><input value="<script>alert(\'xss attack injected\')</script>"></body></html>',
+      "```",
+      "",
+      "The XSS payload is reflected in the response above.",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, WEB);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeIndObj = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeIndObj?.explanation).toMatch(/FAKE_RAW_HTTP_RESPONSE/);
+    // The prose "reflected in the response" still survives stripping,
+    // so the signal stays. We only test that FAKE_RAW_HTTP fired and
+    // the response sub-block is populated.
+    const rawHttp = result.engine.signalBreakdown?.avri?.rawHttp;
+    expect(rawHttp?.response?.isFake).toBe(true);
+    expect(rawHttp?.response?.responsesFlagged).toBeGreaterThanOrEqual(1);
   });
 });

@@ -14,10 +14,13 @@ import type { FamilyRubric } from "./families";
 import { evaluateCrashTrace, crashTraceGoldSignalIdsFor, type CrashTraceEvaluation } from "./crash-trace";
 import {
   evaluateRawHttpRequest,
+  evaluateRawHttpResponse,
   rawHttpGoldSignalIdsFor,
   rawHttpBodyPayloadGoldSignalIdsFor,
+  rawHttpResponseGoldSignalIdsFor,
   stripPlaceholderBodies,
   type RawHttpEvaluation,
+  type RawHttpResponseEvaluation,
 } from "./raw-http";
 import { getHandwavyPhrases } from "./handwavy-phrases";
 
@@ -309,6 +312,43 @@ export function runEngine2Avri(
     }
   }
 
+  // 1d. Sprint 13B-3 — raw-HTTP RESPONSE plausibility validation. Several
+  // families award gold points for signals whose evidence depends on a
+  // real-looking server response: INJECTION (`request_response_diff` —
+  // baseline-vs-injected response pair) and WEB_CLIENT
+  // (`reflection_or_dom_proof` — payload reflected in the response body).
+  // Slop authors tack on a fabricated `HTTP/1.1 200 OK` block with a
+  // narrative-tailored JSON body to "show" that response. The validator
+  // counts plausibility markers (missing Date/Server, suspiciously clean
+  // JSON body, no incidental headers); ≥2 markers per response block ⇒
+  // fabricated.
+  //
+  // Revocation strategy mirrors the request-side header-fakeness path
+  // (blanket revoke on `isFake`) rather than the body-payload
+  // strip-and-retest path: the response-class gold signals reward
+  // SHOWING the proof, and a fabricated response is the only thing
+  // those signals were earned from in this report. A legit report
+  // would carry a plausibility-passing response excerpt (with Date /
+  // Server / incidental fields), so this branch never fires there.
+  let rawHttpResponse: RawHttpResponseEvaluation | null = null;
+  const responseGoldIds = rawHttpResponseGoldSignalIdsFor(family.id);
+  if (responseGoldIds) {
+    rawHttpResponse = evaluateRawHttpResponse(fullText);
+    if (rawHttpResponse.isFake) {
+      const remaining: typeof goldHits = [];
+      for (const hit of goldHits) {
+        if (responseGoldIds.has(hit.id)) {
+          revokedRawHttpHits.push(hit);
+          goldTotal -= hit.points;
+        } else {
+          remaining.push(hit);
+        }
+      }
+      goldHits.length = 0;
+      goldHits.push(...remaining);
+    }
+  }
+
   // Normalize gold score: full score (100) requires hitting the rubric's
   // "calibrated maximum" — the sum of the top N highest-weight signals,
   // chosen so a complete report reliably reaches 100 without needing every
@@ -361,8 +401,13 @@ export function runEngine2Avri(
 
   // 3c. Fake-raw-HTTP penalty (out-of-cap), same shape as the stripped
   // trace penalty so a slop smuggling report whose only substance is
-  // fabricated bytes lands below the AVRI YELLOW threshold.
-  const fakeRawHttpPenalty = rawHttp?.isFake ? FAKE_RAW_HTTP_PENALTY : 0;
+  // fabricated bytes lands below the AVRI YELLOW threshold. Sprint
+  // 13B-3: the same penalty also fires when the response-side validator
+  // detects a fabricated `HTTP/1.1 200 OK` block — but it's applied
+  // once even if both sides fired (we don't double-bill the same kind
+  // of fabrication).
+  const anyRawHttpFake = (rawHttp?.isFake ?? false) || (rawHttpResponse?.isFake ?? false);
+  const fakeRawHttpPenalty = anyRawHttpFake ? FAKE_RAW_HTTP_PENALTY : 0;
 
   const rawAvriScore = clamp(
     baseScore -
@@ -395,7 +440,8 @@ export function runEngine2Avri(
     goldHits.length >= 1 &&
     !crashTrace?.isStripped &&
     !crashTrace?.hasStructuralFabrication &&
-    !rawHttp?.isFake
+    !rawHttp?.isFake &&
+    !rawHttpResponse?.isFake
   ) {
     avriWeight = 0.25;
   }
@@ -455,12 +501,28 @@ export function runEngine2Avri(
       explanation: `${crashTrace.structuralMarkers.length} structural fabrication marker(s) — ${crashTrace.structuralMarkers.map((m) => m.description).join("; ")}${penaltyNote}${revokedNote})`,
     });
   }
-  if (rawHttp?.isFake) {
+  if (rawHttp?.isFake || rawHttpResponse?.isFake) {
+    // Sprint 13B-3: surface a single FAKE_RAW_HTTP indicator, with the
+    // explanation enumerating which side(s) fired (REQUEST and/or
+    // RESPONSE — the latter is the new FAKE_RAW_HTTP_RESPONSE sub-flag).
+    const sides: string[] = [];
+    if (rawHttp?.isFake) sides.push("FAKE_RAW_HTTP_REQUEST");
+    if (rawHttpResponse?.isFake) sides.push("FAKE_RAW_HTTP_RESPONSE");
+    const reasonParts: string[] = [];
+    if (rawHttp?.isFake && rawHttp.reason) {
+      reasonParts.push(`request: ${rawHttp.reason}`);
+    }
+    if (rawHttpResponse?.isFake && rawHttpResponse.reason) {
+      reasonParts.push(`response: ${rawHttpResponse.reason}`);
+    }
+    const value = rawHttp
+      ? `${rawHttp.requestsAnalyzed}r/${rawHttp.totalHeaders - rawHttp.placeholderHeaders}g/${rawHttp.placeholderHeaders}p${rawHttpResponse?.isFake ? ` +${rawHttpResponse.responsesFlagged}/${rawHttpResponse.responsesAnalyzed} fake-resp` : ""}`
+      : `${rawHttpResponse?.responsesFlagged ?? 0}/${rawHttpResponse?.responsesAnalyzed ?? 0} fake-resp`;
     indicators.push({
       signal: "FAKE_RAW_HTTP",
-      value: `${rawHttp.requestsAnalyzed}r/${rawHttp.totalHeaders - rawHttp.placeholderHeaders}g/${rawHttp.placeholderHeaders}p`,
+      value,
       strength: "HIGH",
-      explanation: `${rawHttp.reason ?? "Fabricated raw HTTP request"} (-${FAKE_RAW_HTTP_PENALTY}; revoked ${revokedRawHttpHits.length} ${family.id} gold signal(s))`,
+      explanation: `[${sides.join("+")}] ${reasonParts.join("; ") || "Fabricated raw HTTP bytes"} (-${FAKE_RAW_HTTP_PENALTY}; revoked ${revokedRawHttpHits.length} ${family.id} gold signal(s))`,
     });
   }
   // Keep a couple of legacy indicators for continuity.
@@ -525,20 +587,48 @@ export function runEngine2Avri(
               structuralFabricationPenalty: -structuralFabPenalty,
             }
           : null,
-        rawHttp: rawHttp
-          ? {
-              requestsAnalyzed: rawHttp.requestsAnalyzed,
-              totalHeaders: rawHttp.totalHeaders,
-              placeholderHeaders: rawHttp.placeholderHeaders,
-              crlfPresent: rawHttp.crlfPresent,
-              teClConflicts: rawHttp.teClConflicts,
-              teClBroken: rawHttp.teClBroken,
-              isFake: rawHttp.isFake,
-              reason: rawHttp.reason,
-              revokedGoldHits: revokedRawHttpHits.map((r) => ({ id: r.id, points: r.points })),
-              penalty: -fakeRawHttpPenalty,
-            }
-          : null,
+        // Sprint 13B-3: top-level `rawHttp` is the merged view that the
+        // diagnostics panel and printable triage report read. When the
+        // response side fires (with no request-side rawHttp evaluation,
+        // e.g. WEB_CLIENT/INJECTION outside the request-side gold-signal
+        // map), we synthesize zeroed request fields so the existing UI
+        // contract still holds. `isFake`/`reason` are the OR-merged
+        // overall view; per-side details live in `response`.
+        rawHttp:
+          rawHttp || rawHttpResponse
+            ? {
+                requestsAnalyzed: rawHttp?.requestsAnalyzed ?? 0,
+                totalHeaders: rawHttp?.totalHeaders ?? 0,
+                placeholderHeaders: rawHttp?.placeholderHeaders ?? 0,
+                crlfPresent: rawHttp?.crlfPresent ?? false,
+                teClConflicts: rawHttp?.teClConflicts ?? 0,
+                teClBroken: rawHttp?.teClBroken ?? 0,
+                isFake: anyRawHttpFake,
+                reason:
+                  rawHttp?.isFake && rawHttpResponse?.isFake
+                    ? `${rawHttp.reason ?? "Fabricated raw HTTP request"}; ${rawHttpResponse.reason ?? "Fabricated raw HTTP response"}`
+                    : rawHttp?.isFake
+                      ? rawHttp.reason
+                      : rawHttpResponse?.isFake
+                        ? rawHttpResponse.reason
+                        : (rawHttp?.reason ?? null),
+                revokedGoldHits: revokedRawHttpHits.map((r) => ({ id: r.id, points: r.points })),
+                penalty: -fakeRawHttpPenalty,
+                response: rawHttpResponse
+                  ? {
+                      responsesAnalyzed: rawHttpResponse.responsesAnalyzed,
+                      responsesFlagged: rawHttpResponse.responsesFlagged,
+                      totalHeaders: rawHttpResponse.totalHeaders,
+                      responsesMissingDate: rawHttpResponse.responsesMissingDate,
+                      responsesMissingServer: rawHttpResponse.responsesMissingServer,
+                      responsesWithSuspiciousJsonBody: rawHttpResponse.responsesWithSuspiciousJsonBody,
+                      responsesMissingIncidentals: rawHttpResponse.responsesMissingIncidentals,
+                      isFake: rawHttpResponse.isFake,
+                      reason: rawHttpResponse.reason,
+                    }
+                  : null,
+              }
+            : null,
         rawAvriScore: Math.round(rawAvriScore),
         legacyScore: legacy.score,
         blendedScore,

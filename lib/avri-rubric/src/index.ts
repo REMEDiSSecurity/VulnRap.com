@@ -58,6 +58,18 @@ export interface AvriEngine2CrashTrace {
   penalty: number;
 }
 
+export interface AvriEngine2RawHttpResponse {
+  responsesAnalyzed: number;
+  responsesFlagged: number;
+  totalHeaders: number;
+  responsesMissingDate: number;
+  responsesMissingServer: number;
+  responsesWithSuspiciousJsonBody: number;
+  responsesMissingIncidentals: number;
+  isFake: boolean;
+  reason: string | null;
+}
+
 export interface AvriEngine2RawHttp {
   requestsAnalyzed: number;
   totalHeaders: number;
@@ -69,6 +81,10 @@ export interface AvriEngine2RawHttp {
   reason: string | null;
   revokedGoldHits: Array<{ id: string; points: number }>;
   penalty: number;
+  // Sprint 13B-3: nested response-side plausibility evaluation. Present
+  // (but possibly with isFake=false) when the family declares response-
+  // class gold signals (INJECTION, WEB_CLIENT). Null otherwise.
+  response?: AvriEngine2RawHttpResponse | null;
 }
 
 export interface AvriEngine2Block {
@@ -243,12 +259,29 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
   if (engine2?.rawHttp?.isFake) {
     const rh = engine2.rawHttp;
     const goodHeaders = Math.max(0, rh.totalHeaders - rh.placeholderHeaders);
+    // Sprint 13B-3: title now reflects whether the request side, the
+    // response side, or both were fabricated. The single penalty line
+    // covers either source (out-of-cap penalty applied once).
+    const reqFake = rh.requestsAnalyzed > 0 || rh.placeholderHeaders > 0;
+    const respFake = rh.response?.isFake === true;
+    const title =
+      reqFake && respFake
+        ? "Fake raw HTTP request + response"
+        : respFake && !reqFake
+          ? "Fake raw HTTP response"
+          : "Fake raw HTTP request";
     lines.push(
-      `- **Fake raw HTTP request** (penalty ${rh.penalty}): ${rh.reason ?? "fabricated raw HTTP request"} — requests ${rh.requestsAnalyzed}, headers ${goodHeaders}/${rh.totalHeaders} good, placeholder ${rh.placeholderHeaders}, CRLF ${rh.crlfPresent ? "yes" : "no"}, TE/CL conflicts ${rh.teClConflicts} (broken ${rh.teClBroken})`,
+      `- **${title}** (penalty ${rh.penalty}): ${rh.reason ?? "fabricated raw HTTP bytes"} — requests ${rh.requestsAnalyzed}, headers ${goodHeaders}/${rh.totalHeaders} good, placeholder ${rh.placeholderHeaders}, CRLF ${rh.crlfPresent ? "yes" : "no"}, TE/CL conflicts ${rh.teClConflicts} (broken ${rh.teClBroken})`,
     );
+    if (respFake && rh.response) {
+      const r = rh.response;
+      lines.push(
+        `  - Response plausibility: ${r.responsesFlagged}/${r.responsesAnalyzed} flagged — missing Date ${r.responsesMissingDate}, missing Server ${r.responsesMissingServer}, suspicious JSON body ${r.responsesWithSuspiciousJsonBody}, no incidentals ${r.responsesMissingIncidentals}`,
+      );
+    }
     if (rh.revokedGoldHits.length > 0) {
       lines.push(
-        `  - Smuggling gold signals revoked: ${rh.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
+        `  - Gold signals revoked: ${rh.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
       );
     }
   }

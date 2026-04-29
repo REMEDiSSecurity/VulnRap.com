@@ -144,7 +144,7 @@ describe("buildAvriRubricMarkdown", () => {
         "- **Stripped crash trace** (penalty -15): 7 of 8 frames are placeholders — frames 8, good 1, placeholder 7",
         "  - Trace gold signals revoked: asan_trace (−15)",
         "- **Fake raw HTTP request** (penalty -12): headers are placeholders, no CRLF separators — requests 1, headers 1/4 good, placeholder 3, CRLF no, TE/CL conflicts 0 (broken 0)",
-        "  - Smuggling gold signals revoked: te_cl_conflict (−12)",
+        "  - Gold signals revoked: te_cl_conflict (−12)",
         "- **Composite overrides**:",
         "  - No gold signals for family — \`AVRI_NO_GOLD_SIGNALS_TYPE_CONFUSION applied at composite step\`",
         "  - Submission-velocity penalty applied: -5",

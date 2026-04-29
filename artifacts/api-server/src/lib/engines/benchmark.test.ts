@@ -7,6 +7,10 @@ interface Fixture {
   expectMaxScore?: number;
   expectMinScore?: number;
   claimedCwes?: string[];
+  /** Force the AVRI engine path on for this fixture (off by default in
+   * the benchmark battery). Used for fixtures that specifically
+   * exercise AVRI-only validators (e.g. raw-HTTP fakeness checks). */
+  forceAvri?: boolean;
 }
 
 const SLOP_FIXTURES: Fixture[] = [
@@ -85,6 +89,40 @@ realistic attack surface; rebuilding with debug symbols is left as an
 exercise. CVSS 9.8.`,
     expectMaxScore: 35,
     claimedCwes: ["CWE-416"],
+  },
+  // Sprint 13B-3 calibration fixture: slop report whose primary
+  // "evidence" is a fabricated server response. The narrative names a
+  // class of issue and shows a side-by-side baseline / vulnerable
+  // response narrative — but the only response excerpt provided is a
+  // 4-line `HTTP/1.1 200 OK` block with no Date, no Server, no
+  // incidental headers, and a 1-key JSON body whose value is the
+  // vulnerability narrative. The response-side validator must fire
+  // FAKE_RAW_HTTP, revoke the response-class gold hit, and apply the
+  // -18 penalty so the composite stays in slop range (≤35). No
+  // concrete injection payload, no specific endpoint+param, and no
+  // CWE id are mentioned — without those, the only thing that earned
+  // gold was the fabricated response.
+  {
+    name: "slop-10-fabricated-http-response",
+    forceAvri: true,
+    claimedCwes: ["CWE-89"],
+    text: `# SQL injection report with response evidence
+
+There is a SQL injection in the application. I sent a baseline
+request and an injection request and saw the difference in
+behavior — the response below is what the server returned for the
+attack.
+
+\`\`\`http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"error": "sql injection exposed by attacker request to user lookup"}
+\`\`\`
+
+Compare baseline response to injection response above. The
+difference proves the SQL injection. Please award bounty.`,
+    expectMaxScore: 35,
   },
 ];
 
@@ -365,14 +403,14 @@ Cache poisoning, request hijacking, auth bypass. CVSS 9.0.`,
 describe("VulnRap engines benchmark", () => {
   for (const f of SLOP_FIXTURES) {
     it(`slop fixture ${f.name} should score <= ${f.expectMaxScore}`, () => {
-      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes });
+      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes, forceAvri: f.forceAvri });
       expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeLessThanOrEqual(f.expectMaxScore!);
     });
   }
 
   for (const f of LEGIT_FIXTURES) {
     it(`legit fixture ${f.name} should score >= ${f.expectMinScore}`, () => {
-      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes });
+      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes, forceAvri: f.forceAvri });
       expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeGreaterThanOrEqual(f.expectMinScore!);
     });
   }
@@ -404,7 +442,7 @@ describe("VulnRap engines benchmark", () => {
       ...LEGIT_FIXTURES.map(f => ({ ...f, kind: "legit" as const })),
     ];
     const rows = all.map(f => {
-      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes });
+      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes, forceAvri: f.forceAvri });
       return { name: f.name, kind: f.kind, score: r.overallScore, label: r.label, engines: r.engineResults.map(e => `${e.engine}:${e.score}/${e.verdict}`).join(" "), overrides: r.overridesApplied.join(",") };
     });
     // eslint-disable-next-line no-console

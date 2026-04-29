@@ -2201,6 +2201,18 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       reason: string | null;
       revokedGoldHits: Array<{ id: string; points: number }>;
       penalty: number;
+      // Sprint 13B-3: response-side plausibility evaluation.
+      response?: {
+        responsesAnalyzed: number;
+        responsesFlagged: number;
+        totalHeaders: number;
+        responsesMissingDate: number;
+        responsesMissingServer: number;
+        responsesWithSuspiciousJsonBody: number;
+        responsesMissingIncidentals: number;
+        isFake: boolean;
+        reason: string | null;
+      } | null;
     } | null;
   };
   const vulnrapBlob = (report.vulnrapEngineResults ?? {}) as TriageVulnrapBlob;

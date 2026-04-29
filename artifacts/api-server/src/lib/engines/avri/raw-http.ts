@@ -828,3 +828,363 @@ export function rawHttpBodyPayloadGoldSignalIdsFor(
 ): ReadonlySet<string> | null {
   return RAW_HTTP_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY[familyId] ?? null;
 }
+
+// =====================================================================
+// Sprint 13B-3 — raw HTTP RESPONSE plausibility validator.
+//
+// Slop authors learned that a `HTTP/1.1 200 OK` block with a JSON body
+// is enough to "show" the response evidence side of an injection, XSS,
+// or IDOR report — and several family gold signals reward exactly that
+// shape (INJECTION's `request_response_diff` "side-by-side normal vs
+// injected request showing differing behavior" matches when the prose
+// references a baseline + injection pair, and WEB_CLIENT's
+// `reflection_or_dom_proof` matches HTML reflected in the response).
+// A real server response carries enough incidental fields (Date header
+// inserted by the HTTP stack, Server header, X-Request-Id from the
+// front-end LB, Content-Length, Cache-Control, Set-Cookie on stateful
+// endpoints) and a JSON body shape (incidental ids, timestamps, links,
+// pagination meta) that LLM-fabricated narrative-tailored responses
+// cannot reliably synthesize.
+//
+// The validator inspects each `HTTP/1.x 200 OK`-style block and counts
+// four plausibility markers:
+//   1. missing Date header,
+//   2. missing Server header,
+//   3. suspiciously clean JSON body (≤2 top-level fields, no incidental
+//      id/uuid/timestamp/created_at/_links/meta key, value contains
+//      vulnerability narrative vocabulary),
+//   4. incidental-field absence (NONE of X-Request-Id, Content-Length,
+//      Cache-Control, Set-Cookie present).
+//
+// When ≥2 markers fire on a single response block we treat that
+// response as fabricated. The engine then re-tests the family's
+// response-class gold signals against text with the fake response
+// bytes stripped — surviving matches in surrounding prose keep their
+// points; matches that only existed inside the fabricated bytes get
+// revoked.
+
+export interface RawHttpResponseEvaluation {
+  /** Number of `HTTP/1.x NNN ReasonPhrase` response blocks detected
+   * with at least one parseable header line following. */
+  responsesAnalyzed: number;
+  /** Of those, how many fired ≥2 plausibility markers. */
+  responsesFlagged: number;
+  /** Total parsed `Header: value` lines across all analyzed responses. */
+  totalHeaders: number;
+  /** Per-marker counters across all analyzed responses, surfaced in
+   * diagnostics so reviewers see WHICH plausibility check fired most. */
+  responsesMissingDate: number;
+  responsesMissingServer: number;
+  responsesWithSuspiciousJsonBody: number;
+  responsesMissingIncidentals: number;
+  /** True iff at least one analyzed response fired ≥2 markers. */
+  isFake: boolean;
+  /** Human-readable explanation, set when isFake. */
+  reason: string | null;
+  /** Byte ranges (start, end half-open) of response blocks (status line
+   * through end of body) flagged as fabricated. Used by the engine to
+   * strip and re-test response-class gold signals. */
+  fakeResponseRanges: ReadonlyArray<{ start: number; end: number }>;
+}
+
+// HTTP/1.x status-line: `HTTP/1.x SP NNN SP Reason-Phrase CRLF`.
+// We constrain the reason phrase to letters / spaces / dashes / dots,
+// 1–40 chars, so a shell-escaped single-line `printf 'HTTP/1.1 200
+// OK\\r\\n...'` does NOT match (the literal backslashes after "OK"
+// aren't valid reason-phrase characters and the regex requires a true
+// CR/LF immediately after the phrase).
+const RESPONSE_LINE_RE = /(^|\n)HTTP\/1\.[01][ \t]+(\d{3})[ \t]+([A-Za-z][A-Za-z0-9 .\-]{0,40})\r?\n/g;
+
+interface ResponseBlock {
+  /** Offset in `text` of the start of the status-line. */
+  start: number;
+  /** Offset in `text` just past the status-line CRLF/LF. */
+  headerStart: number;
+  /** 3-digit status code parsed from the status-line. */
+  statusCode: number;
+}
+
+function findResponseBlocks(text: string): ResponseBlock[] {
+  const out: ResponseBlock[] = [];
+  RESPONSE_LINE_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = RESPONSE_LINE_RE.exec(text)) !== null) {
+    const leadOffset = m[1] === "\n" ? 1 : 0;
+    const start = m.index + leadOffset;
+    out.push({
+      start,
+      headerStart: m.index + m[0].length,
+      statusCode: Number(m[2]),
+    });
+  }
+  return out;
+}
+
+// Vocabulary that, when seen anywhere inside a JSON response body, marks
+// the body as "narrative-tailored" rather than a real payload an API
+// would emit. Real responses say things like `{"id": 4012, "name":
+// "bob", "balance": 250.00}`; fabricated ones say things like `{"error":
+// "SQL injection in users.id parameter"}` or `{"data": "user account
+// compromised by the attacker"}`. The wordlist mirrors the report-side
+// vulnerability vocabulary so a slop author can't dodge by relabelling.
+const NARRATIVE_BODY_VOCAB =
+  /\b(?:vulnerab|injection|injected|exploit|exploited|attack|attacker|payload|leaked|leak|unauthor|bypass|smuggl|csrf|xss|sqli|rce|breach|compromis|malicious|fabricat|forged|hacked|shell|hijack)/i;
+
+// JSON keys that real APIs almost always include alongside the data
+// they're returning. If any of these are present at the top level of
+// the parsed object, the body is treated as plausible regardless of
+// length.
+const INCIDENTAL_JSON_KEYS = new Set([
+  "id",
+  "uuid",
+  "guid",
+  "_id",
+  "request_id",
+  "requestid",
+  "trace_id",
+  "traceid",
+  "created_at",
+  "updated_at",
+  "createdat",
+  "updatedat",
+  "created",
+  "updated",
+  "timestamp",
+  "ts",
+  "version",
+  "_links",
+  "links",
+  "meta",
+  "metadata",
+  "pagination",
+  "next",
+  "prev",
+  "page",
+  "count",
+  "total",
+  "etag",
+  "self",
+]);
+
+/** True iff the response body is "suspiciously clean" — JSON-shaped with
+ * ≤2 top-level keys, no incidental id/timestamp/links/meta key, and a
+ * value that contains vulnerability-narrative vocabulary. Real API
+ * responses either carry incidental fields or have neutral data; fake
+ * responses are the narrative writer's gloss of what "should" come back.
+ *
+ * Returns false for non-JSON bodies (free text, HTML, binary), bodies
+ * that don't parse as JSON, arrays of non-objects, and any object that
+ * carries an incidental key. Conservative on purpose so a real
+ * `{"id":4012,"username":"bob"}` excerpt isn't mis-flagged. */
+export function isSuspiciousJsonBody(body: string): boolean {
+  const trimmed = body.trim();
+  if (trimmed.length === 0) return false;
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return false;
+  }
+  if (parsed === null || typeof parsed !== "object") return false;
+  // Vulnerability-narrative vocabulary somewhere in the serialized body.
+  const valuesText = JSON.stringify(parsed);
+  if (!NARRATIVE_BODY_VOCAB.test(valuesText)) return false;
+  if (Array.isArray(parsed)) {
+    // A 1-element array carrying a single narrative string is the
+    // common slop shape: `["SQL injection in users.id"]`.
+    return parsed.length <= 1;
+  }
+  const entries = Object.entries(parsed as Record<string, unknown>);
+  if (entries.length === 0) return false;
+  if (entries.length > 2) return false;
+  for (const [k] of entries) {
+    if (INCIDENTAL_JSON_KEYS.has(k.toLowerCase())) return false;
+  }
+  return true;
+}
+
+export function evaluateRawHttpResponse(
+  text: string,
+): RawHttpResponseEvaluation {
+  const blocks = findResponseBlocks(text);
+  const empty: RawHttpResponseEvaluation = {
+    responsesAnalyzed: 0,
+    responsesFlagged: 0,
+    totalHeaders: 0,
+    responsesMissingDate: 0,
+    responsesMissingServer: 0,
+    responsesWithSuspiciousJsonBody: 0,
+    responsesMissingIncidentals: 0,
+    isFake: false,
+    reason: null,
+    fakeResponseRanges: [],
+  };
+  if (blocks.length === 0) return empty;
+
+  let responsesAnalyzed = 0;
+  let responsesFlagged = 0;
+  let totalHeaders = 0;
+  let respMissingDate = 0;
+  let respMissingServer = 0;
+  let respSuspiciousJson = 0;
+  let respMissingIncidentals = 0;
+  const fakeResponseRanges: Array<{ start: number; end: number }> = [];
+  let firstReason: string | null = null;
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const nextBound =
+      i + 1 < blocks.length ? blocks[i + 1].start : text.length;
+    const headerSection = text.slice(block.headerStart, nextBound);
+    const blankMatch = /\r?\n\r?\n/.exec(headerSection);
+    const blankIdx = blankMatch ? blankMatch.index : -1;
+    const headerOnly =
+      blankIdx >= 0 ? headerSection.slice(0, blankIdx) : headerSection;
+
+    // Bound the analyzed block at the first closing markdown fence so
+    // surrounding prose isn't slurped into the body.
+    let blockEnd = nextBound;
+    let bodyStart = nextBound;
+    let body = "";
+    if (blankIdx >= 0 && blankMatch) {
+      bodyStart = block.headerStart + blankIdx + blankMatch[0].length;
+      const bodySlice = text.slice(bodyStart, nextBound);
+      const fenceIdx = bodySlice.search(/(^|\n)```/);
+      if (fenceIdx >= 0) blockEnd = bodyStart + fenceIdx;
+      body = text.slice(bodyStart, blockEnd);
+    } else {
+      // No blank line — bound at fence in the header section itself.
+      const fenceIdx = headerSection.search(/(^|\n)```/);
+      if (fenceIdx >= 0) blockEnd = block.headerStart + fenceIdx;
+    }
+
+    const headerLines = headerOnly
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    const headers = new Map<string, string>();
+    for (const line of headerLines) {
+      const hm = HEADER_LINE_RE.exec(line);
+      if (!hm) continue;
+      headers.set(hm[1].toLowerCase(), hm[2]);
+      totalHeaders++;
+    }
+    // A naked status-line with no parseable headers is not a real
+    // response excerpt — skip it (e.g. a single-line snippet in a
+    // shell command block).
+    if (headers.size === 0) continue;
+    responsesAnalyzed++;
+
+    const missingDate = !headers.has("date");
+    const missingServer = !headers.has("server");
+    const suspiciousJson = isSuspiciousJsonBody(body);
+    const missingIncidentals =
+      !headers.has("x-request-id") &&
+      !headers.has("content-length") &&
+      !headers.has("cache-control") &&
+      !headers.has("set-cookie");
+
+    if (missingDate) respMissingDate++;
+    if (missingServer) respMissingServer++;
+    if (suspiciousJson) respSuspiciousJson++;
+    if (missingIncidentals) respMissingIncidentals++;
+
+    let markerCount = 0;
+    const fired: string[] = [];
+    if (missingDate) {
+      markerCount++;
+      fired.push("missing Date header");
+    }
+    if (missingServer) {
+      markerCount++;
+      fired.push("missing Server header");
+    }
+    if (suspiciousJson) {
+      markerCount++;
+      fired.push("suspiciously clean JSON body");
+    }
+    if (missingIncidentals) {
+      markerCount++;
+      fired.push(
+        "no X-Request-Id/Content-Length/Cache-Control/Set-Cookie",
+      );
+    }
+
+    if (markerCount >= 2) {
+      responsesFlagged++;
+      fakeResponseRanges.push({ start: block.start, end: blockEnd });
+      if (firstReason === null) {
+        firstReason = `Raw HTTP response is fabricated (${fired.join(", ")})`;
+      }
+    }
+  }
+
+  const isFake = responsesFlagged > 0;
+  return {
+    responsesAnalyzed,
+    responsesFlagged,
+    totalHeaders,
+    responsesMissingDate: respMissingDate,
+    responsesMissingServer: respMissingServer,
+    responsesWithSuspiciousJsonBody: respSuspiciousJson,
+    responsesMissingIncidentals: respMissingIncidentals,
+    isFake,
+    reason: firstReason,
+    fakeResponseRanges,
+  };
+}
+
+/** Return `text` with every fabricated-response byte range replaced by
+ * spaces (length-preserving). The engine uses this to re-test
+ * response-class gold signals (`request_response_diff`,
+ * `reflection_or_dom_proof`) against text with the fake response bytes
+ * removed: matches that only existed inside the fabricated block lose
+ * their points; matches in surrounding prose survive. */
+export function stripFakeResponses(
+  text: string,
+  evaluation: RawHttpResponseEvaluation,
+): string {
+  if (evaluation.fakeResponseRanges.length === 0) return text;
+  const chars = text.split("");
+  for (const r of evaluation.fakeResponseRanges) {
+    const end = Math.min(r.end, chars.length);
+    for (let i = r.start; i < end; i++) chars[i] = " ";
+  }
+  return chars.join("");
+}
+
+/** Per-family map of gold-signal IDs whose evidence depends on the raw
+ * HTTP RESPONSE bytes being legitimate. When the response-side
+ * validator flags ≥2 plausibility markers on a response block, the
+ * engine re-tests these signals against text with the fake response
+ * stripped — points whose only match was inside the fabricated bytes
+ * are revoked.
+ *
+ * INJECTION: `request_response_diff` rewards a side-by-side baseline
+ *   vs injected request/response pair. A fabricated response is the
+ *   exact thing slop authors paste to "show" that the injection
+ *   produced different behaviour.
+ *
+ * WEB_CLIENT: `reflection_or_dom_proof` rewards HTML reflected in the
+ *   response (the alternation includes `<input value="<` and prose
+ *   like "reflected in the response"). A fabricated response with the
+ *   payload echoed in the body is the exact slop shape this revocation
+ *   targets. */
+export const RAW_HTTP_RESPONSE_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  INJECTION: new Set([
+    "request_response_diff",
+  ]),
+  WEB_CLIENT: new Set([
+    "reflection_or_dom_proof",
+  ]),
+};
+
+export function rawHttpResponseGoldSignalIdsFor(
+  familyId: string,
+): ReadonlySet<string> | null {
+  return RAW_HTTP_RESPONSE_GOLD_SIGNAL_IDS_BY_FAMILY[familyId] ?? null;
+}

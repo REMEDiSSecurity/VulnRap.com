@@ -503,7 +503,7 @@ describe("DiagnosticsPanel smoke test", () => {
       screen.getByText(/TE\/CL conflicts:\s*1\s*\(broken\s*1\)/i),
     ).toBeInTheDocument();
 
-    expect(screen.getByText(/Smuggling Gold Signals Revoked/i)).toBeInTheDocument();
+    expect(screen.getByText(/Gold Signals Revoked/i)).toBeInTheDocument();
     expect(screen.getByText(/raw_http_te_cl_conflict/)).toBeInTheDocument();
     expect(screen.getByText(/raw_http_request_with_headers/)).toBeInTheDocument();
   });
@@ -949,7 +949,7 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(md).toContain("CRLF no");
     expect(md).toContain("TE/CL conflicts 1 (broken 1)");
     expect(md).toContain(
-      "Smuggling gold signals revoked: raw_http_te_cl_conflict (−22), raw_http_request_with_headers (−14)",
+      "Gold signals revoked: raw_http_te_cl_conflict (−22), raw_http_request_with_headers (−14)",
     );
   });
 

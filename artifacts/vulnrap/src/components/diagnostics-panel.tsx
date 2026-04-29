@@ -604,6 +604,20 @@ interface AvriEngine2Breakdown {
     reason: string | null;
     revokedGoldHits: Array<{ id: string; points: number }>;
     penalty: number;
+    // Sprint 13B-3: response-side plausibility evaluation. Present
+    // (with isFake possibly false) when the family declares response-
+    // class gold signals (INJECTION, WEB_CLIENT). Null otherwise.
+    response?: {
+      responsesAnalyzed: number;
+      responsesFlagged: number;
+      totalHeaders: number;
+      responsesMissingDate: number;
+      responsesMissingServer: number;
+      responsesWithSuspiciousJsonBody: number;
+      responsesMissingIncidentals: number;
+      isFake: boolean;
+      reason: string | null;
+    } | null;
   } | null;
   rawAvriScore?: number;
   legacyScore?: number;
@@ -968,10 +982,49 @@ function AvriFamilySection({
                     TE/CL conflicts: {rawHttp.teClConflicts} (broken {rawHttp.teClBroken})
                   </span>
                 </div>
+                {/*
+                  Sprint 13B-3: response-side plausibility sub-block. Surfaces
+                  WHY a fabricated `HTTP/1.1 200 OK` block was rejected so
+                  reviewers can see the four marker counters at a glance.
+                */}
+                {rawHttp.response?.isFake && (
+                  <div className="rounded border border-red-500/30 bg-red-500/5 px-2 py-1.5 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 h-5 font-mono text-red-400 border-red-500/40"
+                      >
+                        FAKE_RAW_HTTP_RESPONSE
+                      </Badge>
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {rawHttp.response.responsesFlagged}/{rawHttp.response.responsesAnalyzed} response block(s) flagged
+                      </span>
+                    </div>
+                    {rawHttp.response.reason && (
+                      <p className="text-[11px] text-red-300/90 leading-relaxed">
+                        {rawHttp.response.reason}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-3 text-[11px] font-mono text-muted-foreground">
+                      <span className={rawHttp.response.responsesMissingDate > 0 ? "text-red-400/80" : ""}>
+                        missing Date: {rawHttp.response.responsesMissingDate}
+                      </span>
+                      <span className={rawHttp.response.responsesMissingServer > 0 ? "text-red-400/80" : ""}>
+                        missing Server: {rawHttp.response.responsesMissingServer}
+                      </span>
+                      <span className={rawHttp.response.responsesWithSuspiciousJsonBody > 0 ? "text-red-400/80" : ""}>
+                        suspicious JSON: {rawHttp.response.responsesWithSuspiciousJsonBody}
+                      </span>
+                      <span className={rawHttp.response.responsesMissingIncidentals > 0 ? "text-red-400/80" : ""}>
+                        no incidentals: {rawHttp.response.responsesMissingIncidentals}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {rawHttp.revokedGoldHits.length > 0 && (
                   <div>
                     <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
-                      Smuggling Gold Signals Revoked
+                      Gold Signals Revoked
                     </div>
                     <ul className="space-y-0.5">
                       {rawHttp.revokedGoldHits.map((r) => (
