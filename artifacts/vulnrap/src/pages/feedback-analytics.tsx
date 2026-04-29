@@ -1953,7 +1953,12 @@ function HandwavyPhrasesAdmin() {
             the corpus + production impact summary BEFORE the destructive
             action. The "Remove these N" button stays disabled until the
             reviewer ticks the explicit acknowledgment checkbox when valid
-            T3/T4 detections would be lost in either corpus. */}
+            T3/T4 detections would be lost in either corpus.
+            Task #151 — additionally, phrases with >=2 completed
+            remove+reinstate cycles get an amber thrash badge in the
+            per-phrase outcomes list and a summary line at the top of the
+            preview panel, mirroring the per-row warning so a bulk sweep
+            can't quietly take out contentious phrases. */}
         {bulkPreview && (() => {
           const data = bulkPreview.data;
           const corpus = data.dryRunImpact.corpus;
@@ -1974,6 +1979,18 @@ function HandwavyPhrasesAdmin() {
             wouldRemove === 0 ||
             busy === "bulk-remove" ||
             (requiresAck && !bulkPreview.acknowledged);
+          // Task #151 — count selected phrases that have already been
+          // removed and reinstated >= HIGH_THRASH_MIN times. We surface
+          // this both as a summary banner and as per-row badges below so
+          // a reviewer batching 20 phrases can't miss the thrash signal.
+          const HIGH_THRASH_MIN = 2;
+          const highThrashCount = bulkPreview.requestedPhrases.reduce(
+            (acc, p) => {
+              const cycles = thrashByPhrase.get(p)?.length ?? 0;
+              return acc + (cycles >= HIGH_THRASH_MIN ? 1 : 0);
+            },
+            0,
+          );
           return (
           <div
             className={cn(
@@ -2014,6 +2031,20 @@ function HandwavyPhrasesAdmin() {
                 </div>
               </div>
             </div>
+            {highThrashCount > 0 && (
+              <div
+                className="flex items-start gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200"
+                data-testid="handwavy-bulk-preview-thrash-summary"
+              >
+                <RotateCcw className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
+                <span>
+                  {highThrashCount} of {bulkPreview.requestedPhrases.length} selected phrase
+                  {bulkPreview.requestedPhrases.length === 1 ? "" : "s"}{" "}
+                  {highThrashCount === 1 ? "has" : "have"} been removed and reinstated{" "}
+                  {HIGH_THRASH_MIN}+ times — flagged below.
+                </span>
+              </div>
+            )}
             <div
               className="grid grid-cols-1 lg:grid-cols-2 gap-3"
               data-testid="handwavy-bulk-preview-impact"
@@ -2079,11 +2110,20 @@ function HandwavyPhrasesAdmin() {
                           color: "text-yellow-400",
                           icon: <AlertTriangle className="w-3 h-3" />,
                         };
+                  // Task #151 — flag rows whose phrase has >=2 completed
+                  // remove+reinstate cycles so a reviewer can spot
+                  // contentious phrases inside this preview list too.
+                  const cycleCount = thrashByPhrase.get(r.raw)?.length ?? 0;
+                  const isHighThrash = cycleCount >= HIGH_THRASH_MIN;
                   return (
                     <li
                       key={`${r.raw}-${idx}`}
                       className="flex items-start gap-2 text-[11px]"
-                      data-testid="handwavy-bulk-preview-result-row"
+                      data-testid={
+                        isHighThrash
+                          ? "handwavy-bulk-preview-result-row-thrash"
+                          : "handwavy-bulk-preview-result-row"
+                      }
                       data-outcome={r.removed ? "would-remove" : r.reason ?? "unknown"}
                     >
                       <span className={cn("flex items-center gap-1 w-28 shrink-0", cfg.color)}>
@@ -2095,6 +2135,17 @@ function HandwavyPhrasesAdmin() {
                       <span className="font-mono text-foreground/80 break-all flex-1">
                         {r.raw}
                       </span>
+                      {isHighThrash && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-amber-500/40 text-amber-300 font-sans shrink-0"
+                          data-testid="handwavy-bulk-preview-thrash-badge"
+                          aria-label={`Removed and reinstated ${cycleCount} time${cycleCount === 1 ? "" : "s"}`}
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1" />
+                          {cycleCount}× cycles
+                        </Badge>
+                      )}
                     </li>
                   );
                 })}
