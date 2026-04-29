@@ -4,6 +4,10 @@ import {
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
   useGetScoringConfig, getGetScoringConfigQueryKey,
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
+  useGetAvriDriftNotifications, getGetAvriDriftNotificationsQueryKey,
+  rearmAvriDriftNotifications,
+  ApiError,
+  type AvriDriftNotificationRecord,
   useGetCalibrationAuthStatus, getGetCalibrationAuthStatusQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
   useListHandwavyPhraseRemovalBatches, getListHandwavyPhraseRemovalBatchesQueryKey,
@@ -5358,6 +5362,210 @@ function GapSparkline({ weeks, gapWarn }: { weeks: AvriDriftWeekBucket[]; gapWar
   );
 }
 
+// Task #196 — Persisted dedup state for AVRI drift notifications. Each
+// entry represents a flag that has already been dispatched to the
+// reviewer webhook and would be silently suppressed on the next dispatch
+// run. The "Re-arm" button POSTs the entry's `key` back to the server so
+// the matching flag fires again on the next call to
+// /feedback/calibration/avri-drift/notify.
+function NotifiedFlagsPanel({
+  authState,
+  notificationsQueryKey,
+  driftReportQueryKey,
+}: {
+  authState: CalibrationAuthState;
+  notificationsQueryKey: ReturnType<typeof getGetAvriDriftNotificationsQueryKey>;
+  driftReportQueryKey: ReturnType<typeof getGetAvriDriftReportQueryKey>;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  // The list endpoint uses requireCalibrationAuthStrict, which 401s
+  // unconditionally unless CALIBRATION_TOKEN is set on the server AND
+  // the request supplies a matching token — even in "open" mode (where
+  // the server has no token configured) the strict gate still rejects
+  // the read. So only fire the request when we know the reviewer's
+  // build is shipping a valid token; everything else gets a static
+  // explainer instead of a load error.
+  const enabled = authState.kind === "valid";
+  const { data, isLoading, isError, refetch } = useGetAvriDriftNotifications({
+    query: {
+      queryKey: notificationsQueryKey,
+      refetchInterval: 300_000,
+      enabled,
+      retry: 1,
+    },
+  });
+
+  if (!enabled) {
+    let message: string;
+    switch (authState.kind) {
+      case "loading":
+        message = "Checking reviewer auth before loading the dedup state…";
+        break;
+      case "open":
+        message =
+          "The dedup state is only viewable when a reviewer token is configured on both the server (CALIBRATION_TOKEN) and the dashboard (VITE_CALIBRATION_TOKEN). The server currently has no token configured, so this read is gated off.";
+        break;
+      case "missing":
+      case "invalid":
+        message =
+          "A valid reviewer token is required to view or re-arm previously-notified drift flags.";
+        break;
+      case "probe-failed":
+        message =
+          "Could not reach the reviewer auth probe — the dedup state read is gated off until auth status is known.";
+        break;
+      default:
+        message =
+          "A valid reviewer token is required to view or re-arm previously-notified drift flags.";
+    }
+    return (
+      <p className="text-[11px] text-muted-foreground/60 italic leading-relaxed">
+        {message}
+      </p>
+    );
+  }
+
+  if (isLoading) {
+    return <Skeleton className="h-16 rounded-md" />;
+  }
+  if (isError || !data) {
+    return (
+      <p className="text-[11px] text-red-400/80 italic leading-relaxed">
+        Could not load the AVRI drift notification dedup state.
+      </p>
+    );
+  }
+  const notified: AvriDriftNotificationRecord[] = data.notified ?? [];
+  if (notified.length === 0) {
+    return (
+      <p className="text-[11px] text-muted-foreground/60 italic flex items-center gap-2">
+        <CheckCircle2 className="w-3 h-3 text-green-400" />
+        No previously-notified flags are currently being suppressed.
+      </p>
+    );
+  }
+
+  // Newest-first so the most recently dispatched entries are at the top.
+  const sorted = [...notified].sort((a, b) => {
+    const ta = new Date(a.notifiedAt).getTime();
+    const tb = new Date(b.notifiedAt).getTime();
+    if (Number.isFinite(ta) && Number.isFinite(tb)) return tb - ta;
+    return 0;
+  });
+
+  const handleRearm = async (record: AvriDriftNotificationRecord) => {
+    const key = record.key;
+    setBusyKey(key);
+    try {
+      const resp = await rearmAvriDriftNotifications({ keys: [key] });
+      toast({
+        title: "Drift flag re-armed",
+        description: `"${record.detail}" will fire again on the next dispatch run.`,
+      });
+      // Defensive: a 200 with rearmed===0 shouldn't happen for a single
+      // known key, but if the backend ever changes its mind we still
+      // surface the divergence rather than silently swallowing it.
+      if (resp.rearmed === 0) {
+        toast({
+          title: "Nothing to re-arm",
+          description:
+            "The dedup entry was already gone — refreshing the dashboard to catch up.",
+        });
+      }
+      // Refresh both the dedup state (to drop the row) and the drift
+      // report itself (so the flag re-appears in the active flag list
+      // immediately when the next /notify dispatch repopulates it).
+      queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
+      queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
+      await refetch();
+    } catch (err) {
+      // The backend returns 404 when none of the requested keys matched
+      // (e.g. another reviewer already re-armed it, or the dedup file
+      // was pruned out-of-band). That's an expected business outcome
+      // for a stale row, not a hard failure — surface it as an info
+      // toast and refresh the panel so the row disappears.
+      if (err instanceof ApiError && err.status === 404) {
+        toast({
+          title: "Already re-armed",
+          description:
+            "This entry was already gone from the dedup state — refreshing the list.",
+        });
+        queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
+        queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
+        await refetch();
+      } else {
+        const msg = err instanceof Error ? err.message : "Failed to re-arm flag.";
+        toast({ title: "Re-arm failed", description: msg, variant: "destructive" });
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  return (
+    <ul className="space-y-1.5">
+      {sorted.map((record) => {
+        const isBusy = busyKey === record.key;
+        const notifiedAt = new Date(record.notifiedAt);
+        const notifiedAtLabel = Number.isFinite(notifiedAt.getTime())
+          ? notifiedAt.toISOString().replace("T", " ").slice(0, 16) + "Z"
+          : record.notifiedAt;
+        const kindLabel =
+          record.kind === "GAP_BELOW_45" ? "Gap < threshold" : "Family shift";
+        const kindColor =
+          record.kind === "GAP_BELOW_45"
+            ? "text-red-400 bg-red-400/10 border-red-400/30"
+            : "text-orange-400 bg-orange-400/10 border-orange-400/30";
+        return (
+          <li
+            key={record.key}
+            className="flex items-start gap-2 text-xs p-2 rounded-md border border-border/40 bg-muted/[0.03]"
+          >
+            <Badge
+              variant="outline"
+              className={cn("text-[10px] gap-1 font-mono shrink-0", kindColor)}
+            >
+              <AlertTriangle className="w-3 h-3" /> {kindLabel}
+            </Badge>
+            <div className="flex-1 min-w-0 space-y-0.5">
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono">
+                <span>week {record.weekStart}</span>
+                <span className="text-muted-foreground/40">·</span>
+                <span title={record.notifiedAt}>notified {notifiedAtLabel}</span>
+              </div>
+              <div className="text-foreground/80 leading-relaxed break-words">
+                {record.detail}
+              </div>
+              <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
+                key: {record.key}
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-[11px] gap-1 shrink-0"
+              disabled={isBusy || !authState.mutationsAllowed}
+              onClick={() => handleRearm(record)}
+              title={
+                authState.mutationsAllowed
+                  ? "Remove this entry from the dedup state so the flag re-pages reviewers on the next dispatch run."
+                  : "A valid reviewer token is required to re-arm flags."
+              }
+            >
+              <RotateCcw className="w-3 h-3" />
+              {isBusy ? "Re-arming…" : "Re-arm"}
+            </Button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function FamilyMeansTable({ rows, bucket }: { rows: AvriDriftFamilyMean[]; bucket: "T1" | "T3" }) {
   if (rows.length === 0) {
     return <p className="text-[10px] text-muted-foreground/40 italic">No {bucket} reports this week</p>;
@@ -5959,9 +6167,12 @@ function AvriDriftSection() {
   };
 
   const params = { weeks };
+  const driftReportQueryKey = getGetAvriDriftReportQueryKey(params);
+  const notificationsQueryKey = getGetAvriDriftNotificationsQueryKey();
+  const authState = useCalibrationAuthState();
   const { data, isLoading, isFetching, error } = useGetAvriDriftReport(params, {
     query: {
-      queryKey: getGetAvriDriftReportQueryKey(params),
+      queryKey: driftReportQueryKey,
       refetchInterval: 300_000,
     },
   });
@@ -6176,6 +6387,20 @@ function AvriDriftSection() {
               })}
             </div>
           )}
+        </div>
+
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+            <span>Notified flags (suppressed from re-paging)</span>
+            <span className="text-muted-foreground/40 normal-case font-normal italic">
+              re-arm to re-fire on the next dispatch run
+            </span>
+          </div>
+          <NotifiedFlagsPanel
+            authState={authState}
+            notificationsQueryKey={notificationsQueryKey}
+            driftReportQueryKey={driftReportQueryKey}
+          />
         </div>
 
         <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed border-t border-border/30 pt-3">

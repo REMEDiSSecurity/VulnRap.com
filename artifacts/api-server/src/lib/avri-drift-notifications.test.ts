@@ -8,6 +8,8 @@ import {
   notifyDriftFlagsIfNew,
   runDriftNotificationCheck,
   startDriftNotificationScheduler,
+  listNotifiedFlags,
+  removeNotifiedFlags,
   __testing,
   type WebhookDispatcher,
   type WebhookPayload,
@@ -524,5 +526,203 @@ describe("startDriftNotificationScheduler", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await flushTick();
     expect(calls).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task #196 — listNotifiedFlags / removeNotifiedFlags drive the calibration
+// UI's "re-arm a notified flag" button. removeNotifiedFlags must be a true
+// inverse of notifyDriftFlagsIfNew: after removing a key the next dispatch
+// run sees the matching flag as never-notified and re-fires the webhook.
+// ---------------------------------------------------------------------------
+
+describe("listNotifiedFlags / removeNotifiedFlags", () => {
+  let tmpDir: string;
+  let statePath: string;
+  let originalStatePath: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "avri-drift-rearm-"));
+    statePath = path.join(tmpDir, "notifications.json");
+    originalStatePath = process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = statePath;
+    __testing.resetResolvedPath();
+  });
+
+  afterEach(() => {
+    if (originalStatePath === undefined)
+      delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    else process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = originalStatePath;
+    __testing.resetResolvedPath();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function seedState(records: NotifiedFlagRecord[]) {
+    writeFileSync(statePath, JSON.stringify({ notified: records }));
+  }
+
+  it("listNotifiedFlags returns an empty array when the state file does not exist", () => {
+    expect(listNotifiedFlags()).toEqual([]);
+  });
+
+  it("listNotifiedFlags returns a deep copy so callers cannot mutate persisted state", () => {
+    seedState([
+      {
+        key: "2026-04-20|GAP_BELOW_45",
+        weekStart: "2026-04-20",
+        kind: "GAP_BELOW_45",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "old",
+      },
+    ]);
+    const snap = listNotifiedFlags();
+    expect(snap).toHaveLength(1);
+    snap[0]!.detail = "MUTATED";
+    const second = listNotifiedFlags();
+    expect(second[0]!.detail).toBe("old");
+  });
+
+  it("removeNotifiedFlags drops matching entries and reports remaining count", () => {
+    seedState([
+      {
+        key: "2026-04-20|GAP_BELOW_45",
+        weekStart: "2026-04-20",
+        kind: "GAP_BELOW_45",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "gap detail",
+      },
+      {
+        key: "2026-04-20|FAMILY_MEAN_SHIFT|T1|INJECTION",
+        weekStart: "2026-04-20",
+        kind: "FAMILY_MEAN_SHIFT",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "fam detail",
+      },
+      {
+        key: "2026-04-13|GAP_BELOW_45",
+        weekStart: "2026-04-13",
+        kind: "GAP_BELOW_45",
+        notifiedAt: "2026-04-14T00:00:00.000Z",
+        detail: "old gap",
+      },
+    ]);
+
+    const result = removeNotifiedFlags(["2026-04-20|GAP_BELOW_45"]);
+    expect(result.removed.map((r) => r.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(result.notFound).toEqual([]);
+    expect(result.remaining).toBe(2);
+
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      notified: NotifiedFlagRecord[];
+    };
+    expect(persisted.notified.map((n) => n.key)).toEqual([
+      "2026-04-20|FAMILY_MEAN_SHIFT|T1|INJECTION",
+      "2026-04-13|GAP_BELOW_45",
+    ]);
+  });
+
+  it("removeNotifiedFlags reports unknown keys without modifying state", () => {
+    seedState([
+      {
+        key: "2026-04-20|GAP_BELOW_45",
+        weekStart: "2026-04-20",
+        kind: "GAP_BELOW_45",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "gap",
+      },
+    ]);
+    const result = removeNotifiedFlags(["does-not-exist"]);
+    expect(result.removed).toEqual([]);
+    expect(result.notFound).toEqual(["does-not-exist"]);
+    expect(result.remaining).toBe(1);
+    // Untouched on no-op so we don't churn the file mtime.
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      notified: NotifiedFlagRecord[];
+    };
+    expect(persisted.notified).toHaveLength(1);
+  });
+
+  it("removeNotifiedFlags collapses duplicate input keys", () => {
+    seedState([
+      {
+        key: "2026-04-20|GAP_BELOW_45",
+        weekStart: "2026-04-20",
+        kind: "GAP_BELOW_45",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "gap",
+      },
+    ]);
+    const result = removeNotifiedFlags([
+      "2026-04-20|GAP_BELOW_45",
+      "2026-04-20|GAP_BELOW_45",
+    ]);
+    expect(result.removed).toHaveLength(1);
+    expect(result.notFound).toEqual([]);
+    expect(result.remaining).toBe(0);
+  });
+
+  it("removeNotifiedFlags ignores empty / non-string inputs", () => {
+    seedState([
+      {
+        key: "2026-04-20|GAP_BELOW_45",
+        weekStart: "2026-04-20",
+        kind: "GAP_BELOW_45",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "gap",
+      },
+    ]);
+    const result = removeNotifiedFlags(["", "   ", "2026-04-20|GAP_BELOW_45"]);
+    expect(result.removed.map((r) => r.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(result.notFound).toEqual([]);
+  });
+
+  it("re-armed flags fire on the next dispatch run (round-trip with notifyDriftFlagsIfNew)", async () => {
+    // Step 1: seed the state as if reviewers had already been paged about
+    // the gap flag.
+    seedState([
+      {
+        key: "2026-04-20|GAP_BELOW_45",
+        weekStart: "2026-04-20",
+        kind: "GAP_BELOW_45",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "old gap",
+      },
+    ]);
+    const calls: Array<{ url: string; payload: WebhookPayload }> = [];
+    const dispatch: WebhookDispatcher = async (url, payload) => {
+      calls.push({ url, payload });
+      return { ok: true, status: 200 };
+    };
+
+    // Pre-condition: dispatching now suppresses the gap flag.
+    let outcome = await notifyDriftFlagsIfNew(makeReport({ flags: [GAP_FLAG] }), {
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+    });
+    expect(outcome.dispatched).toBe(false);
+    expect(calls).toHaveLength(0);
+
+    // Step 2: re-arm the gap key via the new lib function.
+    const removeResult = removeNotifiedFlags(["2026-04-20|GAP_BELOW_45"]);
+    expect(removeResult.removed).toHaveLength(1);
+    expect(removeResult.remaining).toBe(0);
+
+    // Step 3: the next dispatch run must re-fire the webhook for it.
+    outcome = await notifyDriftFlagsIfNew(makeReport({ flags: [GAP_FLAG] }), {
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+    });
+    expect(outcome.dispatched).toBe(true);
+    expect(outcome.notified.map((f) => f.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.payload.flags.map((f) => f.key)).toEqual([
+      "2026-04-20|GAP_BELOW_45",
+    ]);
+
+    // And the dedup state has been re-recorded with a fresh notifiedAt so
+    // subsequent runs go back to suppressing it.
+    const refreshed = listNotifiedFlags();
+    expect(refreshed.map((r) => r.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(refreshed[0]!.notifiedAt).not.toBe("2026-04-21T00:00:00.000Z");
   });
 });

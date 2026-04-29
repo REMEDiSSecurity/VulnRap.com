@@ -479,6 +479,81 @@ paths:
               schema:
                 $ref: "#/components/schemas/AvriDriftReport"
 
+  /feedback/calibration/avri-drift/notifications:
+    get:
+      operationId: getAvriDriftNotifications
+      tags: [feedback]
+      summary: List the persisted AVRI drift notification dedup state
+      description: |
+        Task #196 — Returns the per-flag dedup records that have already been
+        dispatched via `POST /feedback/calibration/avri-drift/notify` (or the
+        in-process auto-trigger). Each entry would silently suppress its
+        corresponding flag on the next dispatch run unless re-armed via
+        `/feedback/calibration/avri-drift/notifications/rearm`. The endpoint
+        is auth-gated (strict) because the records include the original flag
+        `detail` string.
+      responses:
+        "200":
+          description: Persisted dedup state snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvriDriftNotificationsList"
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /feedback/calibration/avri-drift/notifications/rearm:
+    post:
+      operationId: rearmAvriDriftNotifications
+      tags: [feedback]
+      summary: Re-arm one or more previously-notified AVRI drift flags
+      description: |
+        Task #196 — Removes one or more entries from the AVRI drift
+        notification dedup state by `key` so the next dispatch run treats
+        the matching flags as never-seen and re-fires the webhook. Useful
+        for the "acknowledged-but-not-fixed by the fix-by date" workflow,
+        where reviewers want a flag re-paged after the fix window lapses
+        without hand-editing `data/avri-drift-notifications.json`.
+
+        Unknown keys are reported back via `notFound` (mirroring the
+        per-phrase removal pattern); the request returns 200 when at least
+        one entry was re-armed and 404 only when nothing matched.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvriDriftRearmBody"
+      responses:
+        "200":
+          description: At least one entry was re-armed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvriDriftRearmResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No entries matched any of the supplied keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvriDriftRearmResponse"
+
   /feedback/calibration/config:
     get:
       operationId: getScoringConfig
@@ -3130,6 +3205,82 @@ components:
         runbookPath:
           type: string
       required: [generatedAt, weeksRequested, totalReportsScanned, cohort, bucketingNote, thresholds, weeks, flags, runbookPath]
+
+    AvriDriftNotificationRecord:
+      type: object
+      description: |
+        Single dedup entry from `data/avri-drift-notifications.json`. The
+        `key` is the stable per-flag identifier (week + kind, plus bucket +
+        family for `FAMILY_MEAN_SHIFT`) used to suppress repeat
+        notifications.
+      properties:
+        key:
+          type: string
+          description: Stable per-flag dedup key. Pass this back to /rearm to re-arm the flag.
+        weekStart:
+          type: string
+          description: ISO date (YYYY-MM-DD) for the Monday that started the flag's week.
+        kind:
+          type: string
+          enum: [GAP_BELOW_45, FAMILY_MEAN_SHIFT]
+        notifiedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the flag was first dispatched.
+        detail:
+          type: string
+          description: Original flag detail string at the time of the first notification.
+      required: [key, weekStart, kind, notifiedAt, detail]
+
+    AvriDriftNotificationsList:
+      type: object
+      properties:
+        notified:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftNotificationRecord"
+        total:
+          type: integer
+      required: [notified, total]
+
+    AvriDriftRearmBody:
+      type: object
+      properties:
+        keys:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: string
+            minLength: 1
+          description: Dedup keys (from AvriDriftNotificationRecord.key) to re-arm.
+      required: [keys]
+
+    AvriDriftRearmResponse:
+      type: object
+      properties:
+        rearmed:
+          type: integer
+          description: Number of dedup entries that were re-armed (i.e. removed from the dedup state).
+        notFound:
+          type: array
+          items:
+            type: string
+          description: Keys from the request that did not match any persisted entry.
+        remaining:
+          type: integer
+          description: Total entries left in the dedup state after the re-arm.
+        removed:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftNotificationRecord"
+          description: Full records that were re-armed, in the order they appeared in the dedup state.
+        notified:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftNotificationRecord"
+          description: Refreshed dedup state snapshot after the re-arm so the UI can update without an extra GET.
+      required: [rearmed, notFound, remaining, removed, notified]
 
     CalibrationReport:
       type: object

@@ -597,6 +597,80 @@ export function startDriftNotificationScheduler(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Task #196 — Reviewer-driven re-arm of previously-notified flags.
+//
+// `notifyDriftFlagsIfNew` records every dispatched flag in the dedup state
+// so the same flag for the same week never re-pages reviewers. That is the
+// right default, but it leaves no recovery path for the
+// "acknowledged-but-not-fixed by the fix-by date" workflow: the flag sits
+// silently in the dedup file and reviewers have to hand-edit the JSON to
+// re-page themselves once the fix-by lapses.
+//
+// `listNotifiedFlags()` and `removeNotifiedFlags()` give the calibration UI
+// (and any future cron) a programmatic way to inspect and prune the dedup
+// state. Removing an entry by key is exactly equivalent to "I never saw
+// this flag" — the next dispatch run will treat it as new and re-fire the
+// webhook, then re-record the entry with a fresh `notifiedAt`.
+// ---------------------------------------------------------------------------
+
+/**
+ * Snapshot of the persisted dedup state — the flags that have already
+ * been dispatched and would NOT re-page reviewers on the next run unless
+ * they're re-armed via `removeNotifiedFlags`.
+ *
+ * Returns a fresh array on every call (no shared references with the
+ * on-disk file) so callers can safely mutate the result.
+ */
+export function listNotifiedFlags(): NotifiedFlagRecord[] {
+  return readState().notified.map((n) => ({ ...n }));
+}
+
+export interface RemoveNotifiedFlagsResult {
+  /** Records that were found and removed (one per matched key). */
+  removed: NotifiedFlagRecord[];
+  /** Keys that were requested but did not match any persisted entry. */
+  notFound: string[];
+  /** Total entries remaining in the dedup state after the removal. */
+  remaining: number;
+}
+
+/**
+ * Remove one or more entries from the persisted dedup state by key. The
+ * next dispatch run will treat any matching flag as never-notified and
+ * re-fire the webhook for it.
+ *
+ * Duplicate keys in the input are de-duped before lookup, so passing the
+ * same key twice still only counts as one removal.
+ */
+export function removeNotifiedFlags(keys: string[]): RemoveNotifiedFlagsResult {
+  const requested = new Set<string>();
+  for (const k of keys) {
+    if (typeof k === "string" && k.trim().length > 0) {
+      requested.add(k);
+    }
+  }
+  const state = readState();
+  const removed: NotifiedFlagRecord[] = [];
+  const kept: NotifiedFlagRecord[] = [];
+  for (const entry of state.notified) {
+    if (requested.has(entry.key)) {
+      removed.push(entry);
+    } else {
+      kept.push(entry);
+    }
+  }
+  const matchedKeys = new Set(removed.map((r) => r.key));
+  const notFound: string[] = [];
+  for (const k of requested) {
+    if (!matchedKeys.has(k)) notFound.push(k);
+  }
+  if (removed.length > 0) {
+    writeState({ _meta: state._meta, notified: kept });
+  }
+  return { removed, notFound, remaining: kept.length };
+}
+
 // Exported for unit tests so they can pin internal state without
 // reaching into module internals directly.
 export const __testing = {

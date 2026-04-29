@@ -2352,6 +2352,149 @@ export const GetAvriDriftReportResponse = zod.object({
 });
 
 /**
+ * Task #196 — Returns the per-flag dedup records that have already been
+dispatched via `POST /feedback/calibration/avri-drift/notify` (or the
+in-process auto-trigger). Each entry would silently suppress its
+corresponding flag on the next dispatch run unless re-armed via
+`/feedback/calibration/avri-drift/notifications/rearm`. The endpoint
+is auth-gated (strict) because the records include the original flag
+`detail` string.
+
+ * @summary List the persisted AVRI drift notification dedup state
+ */
+export const GetAvriDriftNotificationsResponse = zod.object({
+  notified: zod.array(
+    zod
+      .object({
+        key: zod
+          .string()
+          .describe(
+            "Stable per-flag dedup key. Pass this back to \/rearm to re-arm the flag.",
+          ),
+        weekStart: zod
+          .string()
+          .describe(
+            "ISO date (YYYY-MM-DD) for the Monday that started the flag's week.",
+          ),
+        kind: zod.enum(["GAP_BELOW_45", "FAMILY_MEAN_SHIFT"]),
+        notifiedAt: zod.coerce
+          .date()
+          .describe("ISO 8601 timestamp when the flag was first dispatched."),
+        detail: zod
+          .string()
+          .describe(
+            "Original flag detail string at the time of the first notification.",
+          ),
+      })
+      .describe(
+        "Single dedup entry from `data\/avri-drift-notifications.json`. The\n`key` is the stable per-flag identifier (week + kind, plus bucket +\nfamily for `FAMILY_MEAN_SHIFT`) used to suppress repeat\nnotifications.\n",
+      ),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * Task #196 — Removes one or more entries from the AVRI drift
+notification dedup state by `key` so the next dispatch run treats
+the matching flags as never-seen and re-fires the webhook. Useful
+for the "acknowledged-but-not-fixed by the fix-by date" workflow,
+where reviewers want a flag re-paged after the fix window lapses
+without hand-editing `data/avri-drift-notifications.json`.
+
+Unknown keys are reported back via `notFound` (mirroring the
+per-phrase removal pattern); the request returns 200 when at least
+one entry was re-armed and 404 only when nothing matched.
+
+ * @summary Re-arm one or more previously-notified AVRI drift flags
+ */
+
+export const rearmAvriDriftNotificationsBodyKeysMax = 200;
+
+export const RearmAvriDriftNotificationsBody = zod.object({
+  keys: zod
+    .array(zod.string().min(1))
+    .min(1)
+    .max(rearmAvriDriftNotificationsBodyKeysMax)
+    .describe("Dedup keys (from AvriDriftNotificationRecord.key) to re-arm."),
+});
+
+export const RearmAvriDriftNotificationsResponse = zod.object({
+  rearmed: zod
+    .number()
+    .describe(
+      "Number of dedup entries that were re-armed (i.e. removed from the dedup state).",
+    ),
+  notFound: zod
+    .array(zod.string())
+    .describe("Keys from the request that did not match any persisted entry."),
+  remaining: zod
+    .number()
+    .describe("Total entries left in the dedup state after the re-arm."),
+  removed: zod
+    .array(
+      zod
+        .object({
+          key: zod
+            .string()
+            .describe(
+              "Stable per-flag dedup key. Pass this back to \/rearm to re-arm the flag.",
+            ),
+          weekStart: zod
+            .string()
+            .describe(
+              "ISO date (YYYY-MM-DD) for the Monday that started the flag's week.",
+            ),
+          kind: zod.enum(["GAP_BELOW_45", "FAMILY_MEAN_SHIFT"]),
+          notifiedAt: zod.coerce
+            .date()
+            .describe("ISO 8601 timestamp when the flag was first dispatched."),
+          detail: zod
+            .string()
+            .describe(
+              "Original flag detail string at the time of the first notification.",
+            ),
+        })
+        .describe(
+          "Single dedup entry from `data\/avri-drift-notifications.json`. The\n`key` is the stable per-flag identifier (week + kind, plus bucket +\nfamily for `FAMILY_MEAN_SHIFT`) used to suppress repeat\nnotifications.\n",
+        ),
+    )
+    .describe(
+      "Full records that were re-armed, in the order they appeared in the dedup state.",
+    ),
+  notified: zod
+    .array(
+      zod
+        .object({
+          key: zod
+            .string()
+            .describe(
+              "Stable per-flag dedup key. Pass this back to \/rearm to re-arm the flag.",
+            ),
+          weekStart: zod
+            .string()
+            .describe(
+              "ISO date (YYYY-MM-DD) for the Monday that started the flag's week.",
+            ),
+          kind: zod.enum(["GAP_BELOW_45", "FAMILY_MEAN_SHIFT"]),
+          notifiedAt: zod.coerce
+            .date()
+            .describe("ISO 8601 timestamp when the flag was first dispatched."),
+          detail: zod
+            .string()
+            .describe(
+              "Original flag detail string at the time of the first notification.",
+            ),
+        })
+        .describe(
+          "Single dedup entry from `data\/avri-drift-notifications.json`. The\n`key` is the stable per-flag identifier (week + kind, plus bucket +\nfamily for `FAMILY_MEAN_SHIFT`) used to suppress repeat\nnotifications.\n",
+        ),
+    )
+    .describe(
+      "Refreshed dedup state snapshot after the re-arm so the UI can update without an extra GET.",
+    ),
+});
+
+/**
  * Returns the active scoring config version and full version history.
  * @summary Get current and historical scoring configurations
  */

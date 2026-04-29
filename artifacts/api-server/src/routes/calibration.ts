@@ -4,7 +4,11 @@ import { and, isNotNull, sql } from "drizzle-orm";
 import { generateCalibrationReport, type BucketAnalysis } from "../lib/calibration";
 import { getCurrentConfig, getConfigHistory, applyNewConfig } from "../lib/scoring-config";
 import { generateAvriDriftReport } from "../lib/avri-drift";
-import { notifyDriftFlagsIfNew } from "../lib/avri-drift-notifications";
+import {
+  notifyDriftFlagsIfNew,
+  listNotifiedFlags,
+  removeNotifiedFlags,
+} from "../lib/avri-drift-notifications";
 import {
   getHandwavyPhrases,
   getHandwavyPhraseHistory,
@@ -542,6 +546,88 @@ router.post(
     } catch (err) {
       req.log?.error(err, "Failed to dispatch AVRI drift notifications");
       res.status(500).json({ error: "Failed to dispatch AVRI drift notifications." });
+    }
+  },
+);
+
+// Task #196 — Surface the persisted dedup state so reviewers can see which
+// flags would be silently suppressed on the next dispatch run, and re-arm
+// any of them. Strict-auth because the response includes the original
+// `detail` string (reviewer-facing context that we don't want exposed
+// publicly when CALIBRATION_TOKEN is unset, matching the policy used by
+// the hand-wavy phrase list).
+router.get(
+  "/feedback/calibration/avri-drift/notifications",
+  requireCalibrationAuthStrict,
+  (req, res) => {
+    try {
+      const notified = listNotifiedFlags();
+      res.json({ notified, total: notified.length });
+    } catch (err) {
+      req.log?.error(err, "Failed to read AVRI drift notification dedup state");
+      res
+        .status(500)
+        .json({ error: "Failed to read AVRI drift notification dedup state." });
+    }
+  },
+);
+
+// Task #196 — Re-arm one or more previously-notified drift flags by
+// removing their entries from the persisted dedup state. The next
+// dispatch run will treat them as never-seen and re-fire the webhook.
+//
+// Mutation gate (`requireCalibrationAuth`) so reviewers can't be re-paged
+// by an unauthenticated caller; the same gate also lets the existing
+// per-IP throttle catch wrong-token bursts. Body shape is
+// `{ keys: string[] }`. Unknown keys are reported back via `notFound`
+// (mirroring the per-phrase removal pattern) instead of failing the
+// whole request — partial success is the common case when the file has
+// already been pruned by a teammate.
+router.post(
+  "/feedback/calibration/avri-drift/notifications/rearm",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const body = (req.body ?? {}) as { keys?: unknown };
+      const rawKeys = body.keys;
+      if (!Array.isArray(rawKeys) || rawKeys.length === 0) {
+        res
+          .status(400)
+          .json({ error: "Body must include a non-empty 'keys' string array." });
+        return;
+      }
+      if (rawKeys.length > 200) {
+        res
+          .status(400)
+          .json({ error: "'keys' batch is capped at 200 entries per request." });
+        return;
+      }
+      const cleaned: string[] = [];
+      for (const k of rawKeys) {
+        if (typeof k !== "string" || k.trim().length === 0) {
+          res
+            .status(400)
+            .json({ error: "Every entry in 'keys' must be a non-empty string." });
+          return;
+        }
+        cleaned.push(k);
+      }
+      const result = removeNotifiedFlags(cleaned);
+      // 200 when at least one entry was re-armed (even if some keys
+      // were unknown); 404 only when nothing matched at all so the
+      // reviewer's UI can distinguish "stale picker — refresh" from
+      // "partial success".
+      const status = result.removed.length > 0 ? 200 : 404;
+      res.status(status).json({
+        rearmed: result.removed.length,
+        notFound: result.notFound,
+        remaining: result.remaining,
+        removed: result.removed,
+        notified: listNotifiedFlags(),
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to re-arm AVRI drift notifications");
+      res.status(500).json({ error: "Failed to re-arm AVRI drift notifications." });
     }
   },
 );

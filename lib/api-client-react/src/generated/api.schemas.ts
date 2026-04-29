@@ -1586,6 +1586,60 @@ export interface AvriDriftReport {
   runbookPath: string;
 }
 
+export type AvriDriftNotificationRecordKind =
+  (typeof AvriDriftNotificationRecordKind)[keyof typeof AvriDriftNotificationRecordKind];
+
+export const AvriDriftNotificationRecordKind = {
+  GAP_BELOW_45: "GAP_BELOW_45",
+  FAMILY_MEAN_SHIFT: "FAMILY_MEAN_SHIFT",
+} as const;
+
+/**
+ * Single dedup entry from `data/avri-drift-notifications.json`. The
+`key` is the stable per-flag identifier (week + kind, plus bucket +
+family for `FAMILY_MEAN_SHIFT`) used to suppress repeat
+notifications.
+
+ */
+export interface AvriDriftNotificationRecord {
+  /** Stable per-flag dedup key. Pass this back to /rearm to re-arm the flag. */
+  key: string;
+  /** ISO date (YYYY-MM-DD) for the Monday that started the flag's week. */
+  weekStart: string;
+  kind: AvriDriftNotificationRecordKind;
+  /** ISO 8601 timestamp when the flag was first dispatched. */
+  notifiedAt: string;
+  /** Original flag detail string at the time of the first notification. */
+  detail: string;
+}
+
+export interface AvriDriftNotificationsList {
+  notified: AvriDriftNotificationRecord[];
+  total: number;
+}
+
+export interface AvriDriftRearmBody {
+  /**
+   * Dedup keys (from AvriDriftNotificationRecord.key) to re-arm.
+   * @minItems 1
+   * @maxItems 200
+   */
+  keys: string[];
+}
+
+export interface AvriDriftRearmResponse {
+  /** Number of dedup entries that were re-armed (i.e. removed from the dedup state). */
+  rearmed: number;
+  /** Keys from the request that did not match any persisted entry. */
+  notFound: string[];
+  /** Total entries left in the dedup state after the re-arm. */
+  remaining: number;
+  /** Full records that were re-armed, in the order they appeared in the dedup state. */
+  removed: AvriDriftNotificationRecord[];
+  /** Refreshed dedup state snapshot after the re-arm so the UI can update without an extra GET. */
+  notified: AvriDriftNotificationRecord[];
+}
+
 export type CalibrationReportOverallHealth =
   (typeof CalibrationReportOverallHealth)[keyof typeof CalibrationReportOverallHealth];
 

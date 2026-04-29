@@ -19,6 +19,9 @@ import type {
 import type {
   ApplyCalibrationBody,
   ApplyCalibrationResponse,
+  AvriDriftNotificationsList,
+  AvriDriftRearmBody,
+  AvriDriftRearmResponse,
   AvriDriftReport,
   CalibrationAuthStatus,
   CalibrationReport,
@@ -1406,6 +1409,196 @@ export function useGetAvriDriftReport<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Task #196 — Returns the per-flag dedup records that have already been
+dispatched via `POST /feedback/calibration/avri-drift/notify` (or the
+in-process auto-trigger). Each entry would silently suppress its
+corresponding flag on the next dispatch run unless re-armed via
+`/feedback/calibration/avri-drift/notifications/rearm`. The endpoint
+is auth-gated (strict) because the records include the original flag
+`detail` string.
+
+ * @summary List the persisted AVRI drift notification dedup state
+ */
+export const getGetAvriDriftNotificationsUrl = () => {
+  return `/api/feedback/calibration/avri-drift/notifications`;
+};
+
+export const getAvriDriftNotifications = async (
+  options?: RequestInit,
+): Promise<AvriDriftNotificationsList> => {
+  return customFetch<AvriDriftNotificationsList>(
+    getGetAvriDriftNotificationsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetAvriDriftNotificationsQueryKey = () => {
+  return [`/api/feedback/calibration/avri-drift/notifications`] as const;
+};
+
+export const getGetAvriDriftNotificationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAvriDriftNotifications>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftNotifications>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAvriDriftNotificationsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAvriDriftNotifications>>
+  > = ({ signal }) => getAvriDriftNotifications({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftNotifications>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAvriDriftNotificationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAvriDriftNotifications>>
+>;
+export type GetAvriDriftNotificationsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List the persisted AVRI drift notification dedup state
+ */
+
+export function useGetAvriDriftNotifications<
+  TData = Awaited<ReturnType<typeof getAvriDriftNotifications>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftNotifications>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAvriDriftNotificationsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #196 — Removes one or more entries from the AVRI drift
+notification dedup state by `key` so the next dispatch run treats
+the matching flags as never-seen and re-fires the webhook. Useful
+for the "acknowledged-but-not-fixed by the fix-by date" workflow,
+where reviewers want a flag re-paged after the fix window lapses
+without hand-editing `data/avri-drift-notifications.json`.
+
+Unknown keys are reported back via `notFound` (mirroring the
+per-phrase removal pattern); the request returns 200 when at least
+one entry was re-armed and 404 only when nothing matched.
+
+ * @summary Re-arm one or more previously-notified AVRI drift flags
+ */
+export const getRearmAvriDriftNotificationsUrl = () => {
+  return `/api/feedback/calibration/avri-drift/notifications/rearm`;
+};
+
+export const rearmAvriDriftNotifications = async (
+  avriDriftRearmBody: AvriDriftRearmBody,
+  options?: RequestInit,
+): Promise<AvriDriftRearmResponse> => {
+  return customFetch<AvriDriftRearmResponse>(
+    getRearmAvriDriftNotificationsUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(avriDriftRearmBody),
+    },
+  );
+};
+
+export const getRearmAvriDriftNotificationsMutationOptions = <
+  TError = ErrorType<ErrorResponse | AvriDriftRearmResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rearmAvriDriftNotifications>>,
+    TError,
+    { data: BodyType<AvriDriftRearmBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rearmAvriDriftNotifications>>,
+  TError,
+  { data: BodyType<AvriDriftRearmBody> },
+  TContext
+> => {
+  const mutationKey = ["rearmAvriDriftNotifications"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rearmAvriDriftNotifications>>,
+    { data: BodyType<AvriDriftRearmBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return rearmAvriDriftNotifications(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RearmAvriDriftNotificationsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rearmAvriDriftNotifications>>
+>;
+export type RearmAvriDriftNotificationsMutationBody =
+  BodyType<AvriDriftRearmBody>;
+export type RearmAvriDriftNotificationsMutationError = ErrorType<
+  ErrorResponse | AvriDriftRearmResponse
+>;
+
+/**
+ * @summary Re-arm one or more previously-notified AVRI drift flags
+ */
+export const useRearmAvriDriftNotifications = <
+  TError = ErrorType<ErrorResponse | AvriDriftRearmResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rearmAvriDriftNotifications>>,
+    TError,
+    { data: BodyType<AvriDriftRearmBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rearmAvriDriftNotifications>>,
+  TError,
+  { data: BodyType<AvriDriftRearmBody> },
+  TContext
+> => {
+  return useMutation(getRearmAvriDriftNotificationsMutationOptions(options));
+};
 
 /**
  * Returns the active scoring config version and full version history.
