@@ -6,6 +6,7 @@ import {
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   useGetCalibrationAuthStatus, getGetCalibrationAuthStatusQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
+  useListHandwavyPhraseRemovalBatches, getListHandwavyPhraseRemovalBatchesQueryKey,
   addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, reinstateHandwavyPhrasesBatch,
   editHandwavyPhrase, undoHandwavyPhrase,
   revertHandwavyPhraseEdit,
@@ -16,6 +17,7 @@ import {
   type HandwavyPhraseBatchRemoveDryRunResponse,
   type HandwavyPhraseBatchRemoveDryRunImpact,
   type HandwavyPhraseBatchRemoveResultEntry,
+  type HandwavyPhraseRemovalBatchSummary,
   type HandwavyHistoryEntry,
   type HandwavyEditEntry,
   type HandwavyCategory,
@@ -1521,6 +1523,15 @@ function HandwavyPhrasesAdmin() {
     query: { queryKey: getGetHandwavyPhrasesQueryKey() },
   });
 
+  // Task #175 — fetch the slim "recent batch removals" summary for the
+  // dedicated picker panel below. Sourced from the Task #160 endpoint that
+  // also feeds the reinstate-batch CLI picker. Newest batches first.
+  const removalBatchesQuery = useListHandwavyPhraseRemovalBatches(undefined, {
+    query: { queryKey: getListHandwavyPhraseRemovalBatchesQueryKey() },
+  });
+  const removalBatches: HandwavyPhraseRemovalBatchSummary[] =
+    removalBatchesQuery.data?.batches ?? [];
+
   const phrases = data?.phrases ?? [];
   const history = data?.history ?? [];
   const [draftCategory, setDraftCategory] = useState<"absence" | "hedging" | "buzzword">("absence");
@@ -1556,6 +1567,12 @@ function HandwavyPhrasesAdmin() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: getGetHandwavyPhrasesQueryKey() });
+    // Task #175 — also refresh the dedicated removal-batches picker so the
+    // "already reinstated" badge / disabled state flips in lock-step with
+    // the active phrase list after any add/remove/reinstate round-trip.
+    queryClient.invalidateQueries({
+      queryKey: getListHandwavyPhraseRemovalBatchesQueryKey(),
+    });
   };
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -3652,6 +3669,119 @@ function HandwavyPhrasesAdmin() {
               );
             })}
             </div>
+          </div>
+        )}
+        {/* Task #175 — dedicated "Recent batch removals" picker, sourced
+            from GET /feedback/calibration/handwavy-phrases/removal-batches.
+            Shows the same data the Task #160 reinstate-batch CLI picker
+            uses (timestamp, reviewer, phrase count, sample phrases,
+            already-reinstated badge) so reviewers can pick a batch and
+            reinstate it without scrolling the full removal-history panel
+            below. The button reuses handleReinstateBatch (Task #144), so
+            after a successful round-trip both this panel and the active
+            phrase list refresh through the same `refresh()` call. */}
+        {(removalBatchesQuery.isLoading ||
+          removalBatchesQuery.isError ||
+          removalBatchesQuery.isSuccess) && (
+          <div
+            className="pt-2 border-t border-border/20"
+            data-testid="handwavy-removal-batches-panel"
+          >
+            <div className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider flex items-center gap-1 mb-2">
+              <Layers className="w-3 h-3 text-primary/80" />
+              Recent batch removals
+              {removalBatchesQuery.data &&
+                typeof removalBatchesQuery.data.totalBatches === "number" &&
+                removalBatchesQuery.data.totalBatches > removalBatches.length && (
+                  <span className="ml-1 text-muted-foreground/70 normal-case font-normal">
+                    (showing {removalBatches.length} of {removalBatchesQuery.data.totalBatches})
+                  </span>
+                )}
+            </div>
+            {removalBatchesQuery.isLoading ? (
+              <div className="text-[11px] text-muted-foreground italic">Loading recent batches…</div>
+            ) : removalBatchesQuery.isError ? (
+              <div className="text-[11px] text-destructive">
+                Failed to load recent batch removals.
+              </div>
+            ) : removalBatches.length === 0 ? (
+              <div
+                className="text-[11px] text-muted-foreground italic"
+                data-testid="handwavy-removal-batches-empty"
+              >
+                No recent batch removals.
+              </div>
+            ) : (
+              <div
+                className="border border-border/20 rounded-md divide-y divide-border/10 max-h-64 overflow-y-auto"
+                data-testid="handwavy-removal-batches-list"
+              >
+                {removalBatches.map((b) => {
+                  const removedAtIso = String(b.removedAt);
+                  const batchKey = `reinstate-batch:${removedAtIso}`;
+                  const phraseCount = b.phraseCount ?? 0;
+                  const samples = Array.isArray(b.samplePhrases) ? b.samplePhrases : [];
+                  const hiddenSampleCount = Math.max(0, phraseCount - samples.length);
+                  return (
+                    <div
+                      key={removedAtIso}
+                      className="px-3 py-2 text-[11px] space-y-1"
+                      data-testid="handwavy-removal-batches-row"
+                      data-batch-removed-at={removedAtIso}
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-foreground/80 flex-1 min-w-0">
+                          <strong className="text-foreground">{phraseCount}</strong>{" "}
+                          phrase{phraseCount === 1 ? "" : "s"} removed by{" "}
+                          <span className="text-foreground/90">{b.removedBy || "anonymous"}</span>
+                          {" • "}
+                          {formatAuditTimestamp(b.removedAt) ?? "unknown date"}
+                        </span>
+                        {b.reinstated ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-emerald-500/40 text-emerald-300"
+                            data-testid="handwavy-removal-batches-reinstated"
+                          >
+                            Already reinstated
+                          </Badge>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                            disabled={busy === batchKey}
+                            onClick={() => handleReinstateBatch(removedAtIso, phraseCount)}
+                            data-testid="handwavy-removal-batches-reinstate"
+                            aria-label={`Reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`}
+                          >
+                            <RotateCcw className="w-3 h-3 mr-1" />
+                            {busy === batchKey ? "Reinstating…" : "Reinstate this batch"}
+                          </Button>
+                        )}
+                      </div>
+                      {samples.length > 0 && (
+                        <ul
+                          className="pl-4 list-disc text-foreground/70 space-y-0.5 marker:text-muted-foreground/40"
+                          data-testid="handwavy-removal-batches-samples"
+                        >
+                          {samples.map((p, i) => (
+                            <li key={`${removedAtIso}-sample-${i}`} className="font-mono break-all">
+                              {p}
+                            </li>
+                          ))}
+                          {hiddenSampleCount > 0 && (
+                            <li className="list-none italic text-muted-foreground/70 not-italic-break">
+                              + {hiddenSampleCount} more
+                            </li>
+                          )}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
         {sortedHistoryGroups.length > 0 && (
