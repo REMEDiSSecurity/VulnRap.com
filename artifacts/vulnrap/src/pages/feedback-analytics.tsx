@@ -3166,6 +3166,42 @@ interface ArchetypeHistoryResponse {
   archetypes: Array<{ archetype: string; snapshots: ArchetypeHistorySnapshot[] }>;
 }
 
+/**
+ * Task #98 — derive a human-readable date range and day span from a
+ * series of archetype-history snapshots. Returns null when the series
+ * is empty so callers can opt out of rendering the chip / appendix.
+ *
+ * All calendar math uses UTC so that aggregated rows stored at
+ * `YYYY-MM-DDT00:00:00.000Z` render as the same day for every viewer,
+ * regardless of local timezone. Otherwise reviewers in negative-UTC
+ * timezones would see the day label slip backwards by one.
+ */
+function formatHistoryRange(
+  snapshots: ArchetypeHistorySnapshot[],
+): { startLabel: string; endLabel: string; days: number; label: string } | null {
+  if (snapshots.length === 0) return null;
+  const first = new Date(snapshots[0]!.timestamp);
+  const last = new Date(snapshots[snapshots.length - 1]!.timestamp);
+  if (Number.isNaN(first.getTime()) || Number.isNaN(last.getTime())) return null;
+  // Force UTC so the label matches the UTC day key the backend uses
+  // when rolling up older snapshots.
+  const fmt: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", timeZone: "UTC" };
+  const startLabel = first.toLocaleDateString(undefined, fmt);
+  const endLabel = last.toLocaleDateString(undefined, fmt);
+  // Compute an inclusive day span from the UTC calendar dates of the
+  // endpoints, not the raw ms delta. This avoids ±1 drift from
+  // sub-day timestamps or DST boundaries in the viewer's locale.
+  const startDay = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate());
+  const endDay = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate());
+  const dayMs = 24 * 60 * 60 * 1000;
+  const days = Math.max(1, Math.round((endDay - startDay) / dayMs) + 1);
+  const label =
+    snapshots.length === 1 || startLabel === endLabel
+      ? startLabel
+      : `${startLabel} → ${endLabel}`;
+  return { startLabel, endLabel, days, label };
+}
+
 function HeadroomSparkline({ snapshots, ceiling }: {
   snapshots: ArchetypeHistorySnapshot[];
   ceiling: number;
@@ -3225,7 +3261,13 @@ function HeadroomSparkline({ snapshots, ceiling }: {
   if (rawCount > 0 || aggregatedCount === 0) {
     parts.push(`${rawCount} recent`);
   }
-  const tooltip = `${parts.join(" + ")}: ${ys[0]!.toFixed(1)}pt → ${last.toFixed(1)}pt headroom`;
+  // Task #98 — surface the date range covered so reviewers can tell at
+  // a glance how far back the trend extends, distinct from the raw vs.
+  // aggregated point counts.
+  const range = formatHistoryRange(snapshots);
+  const tooltip =
+    `${parts.join(" + ")}: ${ys[0]!.toFixed(1)}pt → ${last.toFixed(1)}pt headroom` +
+    (range ? ` (${range.label})` : "");
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-24 h-7" role="img" aria-label={tooltip}>
@@ -3347,6 +3389,23 @@ function ArchetypeRowView({
                 <span className="tabular-nums">{history.length}</span> snapshot{history.length === 1 ? "" : "s"}
               </>
             )}
+            {(() => {
+              // Task #98 — show the date span covered by the trend so
+              // reviewers can see at a glance how far back history goes,
+              // distinct from the raw vs. aggregated counts already in
+              // the sparkline tooltip.
+              const range = formatHistoryRange(history);
+              if (!range) return null;
+              return (
+                <>
+                  {" · "}
+                  <span className="tabular-nums">{range.days}</span> day{range.days === 1 ? "" : "s"}
+                  {" ("}
+                  <span className="tabular-nums">{range.label}</span>
+                  {")"}
+                </>
+              );
+            })()}
           </div>
         </div>
         <div className="w-24 shrink-0">
