@@ -2163,6 +2163,20 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     if (referencedChecks.length + fallbackChecks.length > 0) {
       const verifiedReferenced = referencedChecks.filter(c => c.result === "verified").length;
       lines.push(`- verified ${verifiedReferenced}/${referencedChecks.length} · referenced: ${referencedChecks.length} · search-fallback: ${fallbackChecks.length}`);
+      // Task 188: mirror the in-app "Learn more →" link from the submitter
+      // results page (results.tsx ~L240) so a downloaded/exported markdown
+      // report still points readers at the docs that explain referenced vs.
+      // search-fallback verification. Prefer the canonical PUBLIC_URL so the
+      // link survives being pasted into trackers / emails; fall back to the
+      // request-derived origin (and finally vulnrap.com) so self-hosted
+      // installs still get a working link. Build the request-origin candidate
+      // only when req.get("host") is actually present — otherwise the
+      // interpolated string would be truthy ("http://undefined") and
+      // shadow the canonical fallback.
+      const reqHost = req.get("host");
+      const docsBase = process.env.PUBLIC_URL
+        || (reqHost ? `${req.protocol}://${reqHost}` : "https://vulnrap.com");
+      lines.push(`- _Learn more about referenced vs. search-fallback verification: ${docsBase.replace(/\/$/, "")}/changelog#verification-sources_`);
       lines.push("");
     }
     lines.push(`| Check | Status | Source | Detail |`);

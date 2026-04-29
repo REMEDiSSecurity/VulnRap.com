@@ -616,6 +616,106 @@ describe("GET /api/reports/:id/triage-report — verification mode header", () =
     expect(freshRes.body).toContain(expected);
     expect(cachedRes.body).toContain(expected);
   });
+
+  it("emits a docs link under the verified/referenced/search-fallback breakdown", async () => {
+    // Task 188: the submitter results UI links the breakdown line to
+    // /changelog#verification-sources via a "Learn more →" affordance. The
+    // markdown export shares that same line, so a downloaded report shared
+    // outside the app should carry an inline pointer to the same docs section
+    // — otherwise the breakdown is opaque to anyone reading the export in
+    // isolation.
+    const av = await import("../lib/active-verification");
+    vi.mocked(av.performActiveVerification).mockResolvedValueOnce({
+      checks: [
+        {
+          type: "github_file_verified",
+          target: "example/foo:src/parse.c",
+          result: "verified",
+          detail: "File path exists",
+          weight: -8,
+          source: "referenced_in_report",
+        },
+        {
+          type: "github_repo_search",
+          target: "fooproj",
+          result: "warning",
+          detail: "Guessed from project keyword",
+          weight: 0,
+          source: "search_fallback",
+        },
+      ],
+      summary: { verified: 1, notFound: 0, warnings: 1, errors: 0 },
+      triageNotes: [],
+      score: -8,
+      detectedProjects: [],
+      mode: "SOURCE_CODE",
+      familyName: "Memory corruption / unsafe C",
+    });
+
+    const previousPublicUrl = process.env.PUBLIC_URL;
+    process.env.PUBLIC_URL = "https://vulnrap.com";
+    try {
+      const r = seedReport({ showInFeed: true, redactedText: "sample text" });
+      const res = await getText(`/api/reports/${r.id}/triage-report`);
+      expect(res.status).toBe(200);
+
+      const breakdownIdx = res.body.indexOf(
+        "- verified 1/1 · referenced: 1 · search-fallback: 1",
+      );
+      const docsIdx = res.body.indexOf(
+        "- _Learn more about referenced vs. search-fallback verification: https://vulnrap.com/changelog#verification-sources_",
+      );
+      expect(breakdownIdx).toBeGreaterThan(-1);
+      expect(docsIdx).toBeGreaterThan(breakdownIdx);
+      // Docs link must sit above the per-check verification table.
+      expect(docsIdx).toBeLessThan(res.body.indexOf("| Check | Status |"));
+    } finally {
+      if (previousPublicUrl === undefined) delete process.env.PUBLIC_URL;
+      else process.env.PUBLIC_URL = previousPublicUrl;
+    }
+  });
+
+  it("falls back to the request-derived origin when PUBLIC_URL is unset", async () => {
+    // Self-hosted installs that do not configure PUBLIC_URL should still get
+    // a working docs link in the exported markdown — the route falls back to
+    // the request's protocol+host so the link points back at the same origin
+    // the submitter downloaded the report from.
+    const av = await import("../lib/active-verification");
+    vi.mocked(av.performActiveVerification).mockResolvedValueOnce({
+      checks: [
+        {
+          type: "github_file_verified",
+          target: "example/foo:src/parse.c",
+          result: "verified",
+          detail: "File path exists",
+          weight: -8,
+          source: "referenced_in_report",
+        },
+      ],
+      summary: { verified: 1, notFound: 0, warnings: 0, errors: 0 },
+      triageNotes: [],
+      score: -8,
+      detectedProjects: [],
+      mode: "SOURCE_CODE",
+      familyName: "Memory corruption / unsafe C",
+    });
+
+    const previousPublicUrl = process.env.PUBLIC_URL;
+    delete process.env.PUBLIC_URL;
+    try {
+      const r = seedReport({ showInFeed: true, redactedText: "sample text" });
+      const res = await getText(`/api/reports/${r.id}/triage-report`);
+      expect(res.status).toBe(200);
+      // The test server binds to 127.0.0.1; the link must use the request
+      // origin (not a hard-coded vulnrap.com) so self-hosted exports work.
+      expect(res.body).toMatch(
+        /- _Learn more about referenced vs\. search-fallback verification: http:\/\/127\.0\.0\.1:\d+\/changelog#verification-sources_/,
+      );
+    } finally {
+      if (previousPublicUrl === undefined) delete process.env.PUBLIC_URL;
+      else process.env.PUBLIC_URL = previousPublicUrl;
+    }
+  });
 });
 
 describe("GET /api/reports/:id/compare/:matchId — showInFeed enforcement", () => {
