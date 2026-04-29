@@ -25,13 +25,15 @@ echo "[release-e2e-check] Using Chromium at: ${CHROMIUM_PATH}"
 
 # Specs that must pass against the PRODUCTION builds before a release ships.
 # Keep this list in sync with the user flows we consider release-blocking:
-#   - diagnostics-panel.spec.ts        : the diagnostics panel + bundled api-server contract
-#   - handwavy-undo.spec.ts            : the FLAT hand-wavy phrase add+undo flow
-#   - handwavy-reinstate-batch.spec.ts : the "Reinstate all" batch flow
+#   - diagnostics-panel.spec.ts                   : the diagnostics panel + bundled api-server contract
+#   - handwavy-undo.spec.ts                       : the FLAT hand-wavy phrase add+undo flow
+#   - handwavy-reinstate-batch.spec.ts            : the "Reinstate all" batch flow
+#   - handwavy-production-scan-limit.spec.ts      : Task #125 production-scan window control (input + warning + persistence + subtitle)
 RELEASE_SPECS=(
   diagnostics-panel.spec.ts
   handwavy-undo.spec.ts
   handwavy-reinstate-batch.spec.ts
+  handwavy-production-scan-limit.spec.ts
 )
 
 if ! pnpm --filter @workspace/vulnrap exec playwright test \
