@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey,
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
@@ -1943,6 +1943,56 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     () => detectHandwavyHistoryOverlaps(draft, history),
     [draft, history],
   );
+  // Task #220 — let reviewers jump from the inline overlap hint straight to
+  // the colliding row in the active list. The hint already names the entry
+  // (Task #129); this state + helper turns that name into a click target
+  // that scrolls the matching row into view and gives it a brief highlight
+  // pulse so it's obvious which row matched. The active list can be 200+
+  // entries on a busy reviewer day, so closing this loop saves a long scroll
+  // and a Ctrl-F. The phrase store key is the normalized phrase string —
+  // `m.phrase` on the row matches `draftOverlaps[i].phrase`.
+  const [highlightedPhrase, setHighlightedPhrase] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current !== null) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
+  const jumpToActivePhrase = (phrase: string) => {
+    if (highlightTimeoutRef.current !== null) {
+      clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = null;
+    }
+    setHighlightedPhrase(phrase);
+    if (typeof window !== "undefined") {
+      // Defer the DOM lookup so the highlight class is applied on the row
+      // before we scroll, otherwise the eye gets pulled to a row that
+      // hasn't visibly changed yet.
+      window.requestAnimationFrame(() => {
+        try {
+          const escaped =
+            typeof CSS !== "undefined" && typeof CSS.escape === "function"
+              ? CSS.escape(phrase)
+              : phrase.replace(/(["\\])/g, "\\$1");
+          const el = document.querySelector(
+            `[data-handwavy-phrase="${escaped}"]`,
+          ) as HTMLElement | null;
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        } catch {
+          // querySelector can throw on exotic phrase content; the highlight
+          // still pulses on the row even if scroll fails.
+        }
+      });
+    }
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedPhrase(null);
+      highlightTimeoutRef.current = null;
+    }, 2500);
+  };
   const CATEGORY_LABELS: Record<"absence" | "hedging" | "buzzword", string> = {
     absence: "Self-admitted absence of evidence",
     hedging: "Generic hedging",
@@ -3183,7 +3233,19 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
               </span>{" "}
               <span data-testid="handwavy-overlap-hint-top">
                 {describeHandwavyOverlapRelation(draftOverlaps[0].relation)}{" "}
-                <span className="font-mono">&ldquo;{draftOverlaps[0].phrase}&rdquo;</span>{" "}
+                {/* Task #220 — clickable jump target. Works the same way for
+                    all three overlap relations (equal / broader / covered)
+                    because the hint always names a single concrete colliding
+                    phrase, regardless of which relation surfaced it. */}
+                <button
+                  type="button"
+                  onClick={() => jumpToActivePhrase(draftOverlaps[0].phrase)}
+                  className="font-mono underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm"
+                  data-testid="handwavy-overlap-hint-jump"
+                  aria-label={`Jump to "${draftOverlaps[0].phrase}" in the active phrase list`}
+                >
+                  &ldquo;{draftOverlaps[0].phrase}&rdquo;
+                </button>{" "}
                 <span className="text-amber-200/70">
                   [{CATEGORY_LABELS[draftOverlaps[0].category]}]
                 </span>
@@ -4157,11 +4219,24 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
               const categoryFlips = editsList.filter(
                 (e) => e.category && e.category.from !== e.category.to,
               );
+              // Task #220 — when a reviewer clicks an entry name in the
+              // pre-preview overlap hint we set `highlightedPhrase` to that
+              // phrase for ~2.5s so the matching row pulses amber. The
+              // `data-handwavy-phrase` hook gives the jump helper a stable
+              // selector to scroll into view (the row's React key already
+              // uses the phrase string but isn't queryable from the DOM).
+              const isHighlighted = highlightedPhrase === m.phrase;
               return (
                 <div
                   key={m.phrase}
-                  className="flex flex-col gap-1 px-3 py-2 text-xs"
+                  className={cn(
+                    "flex flex-col gap-1 px-3 py-2 text-xs transition-colors duration-700",
+                    isHighlighted &&
+                      "bg-amber-500/15 ring-1 ring-amber-400/60 ring-inset",
+                  )}
                   data-testid="handwavy-row"
+                  data-handwavy-phrase={m.phrase}
+                  data-highlighted={isHighlighted ? "true" : undefined}
                 >
                   <div className="flex items-center gap-3">
                     <input
