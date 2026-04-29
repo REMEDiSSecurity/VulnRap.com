@@ -55,6 +55,162 @@ const SLOP_FIXTURES: Fixture[] = [
   },
 ];
 
+// Sprint 13B Task 204: real-world curl HackerOne slop corpus.
+// These five reports were flagged as slop by curl maintainers on HackerOne. The
+// last full LLM-enhanced re-benchmark of the engine pipeline against them was
+// at v3.2.1 (Sprint 8); since then v3.6.0 (calibration), v3.7.0 (AVRI),
+// v3.7.1 (E3 substance gate), v3.8.0 (behavioral match reward + reweighting)
+// and the "AVRI on by default" flip have shipped. Lock in the v3.8.0 actual
+// composite for each report so future regressions surface in CI. Composite is
+// 0..100 with higher = more legitimate, so slop must score LOW (mirroring
+// SLOP_FIXTURES above). Scores are measured under the default AVRI-on path
+// (`VULNRAP_USE_AVRI` unset → defaults to "true").
+//
+// Three numbers are tracked per fixture in the inline comment:
+//   - v3.2.1 baseline (the score from the last full re-benchmark)
+//   - Task #204 target (where Sprint 13B detector tightening should land)
+//   - v3.8.0 actual (today's score, encoded as the regression-alarm assertion)
+// When the actual already meets the target, the assertion is set to the target.
+// When it does not, the assertion is set to the actual + a small headroom and
+// the tightening expectation is encoded as an `it.skip` below — flip the
+// `.skip` off once the corresponding Sprint 13B detector work lands.
+const CURL_SLOP_FIXTURES: Fixture[] = [
+  {
+    // HackerOne #2298307 — generic strcpy template aimed at curl's WebSocket
+    // code. v3.2.1: 37  | task target: ≤25  | v3.8.0 actual: 8 ✓ (well under
+    // target — AVRI's "no gold signals for memory corruption" check fires).
+    name: "curl-slop-h1-2298307-strcpy-template",
+    claimedCwes: ["CWE-122"],
+    text: `Hello security team, Hope you are doing well :) I would like to report a potential security vulnerability in the WebSocket handling code of the curl library. The issue is related to the usage of the strcpy function, which can lead to a buffer overflow if the length of the input is not properly checked. The vulnerable code snippet is located at this link.
+
+Steps To Reproduce: Trigger the WebSocket functionality with a crafted request. Provide a base64-encoded nonce value that exceeds the buffer size. Observe that the strcpy function is used without proper bounds checking.
+
+Fix: To address this issue, it is recommended to replace the strcpy function with the safer alternative strncpy and explicitly specify the maximum length to copy.
+
+Reference: https://cwe.mitre.org/data/definitions/122.html
+
+Impact: This vulnerability may allow an attacker to execute arbitrary code, potentially leading to a compromise of the application or system. An attacker could exploit this weakness by providing a specially crafted WebSocket request, causing a buffer overflow and overwriting adjacent memory.`,
+    expectMaxScore: 25,
+  },
+  {
+    // HackerOne #3295650 — gitleaks on test certs + AI self-disclosure.
+    // v3.2.1: 19  | task target: ≤25  | v3.8.0 actual: 33 ✗ (regression vs
+    // v3.2.1; tightening tracked by skipped test below). The AI self-disclosure
+    // ("prepared using an AI security assistant") is not yet recognised as a
+    // signal by the engines, and Engine 2 awards the report ~25 substance points
+    // for the gitleaks command + file paths. AVRI's slop-signal layer didn't
+    // help here — the report doesn't trip any vulnerability-family heuristics.
+    // Sprint 13B handwavy-phrase / template-fingerprint tightening is expected
+    // to drag this back into the ≤25 band.
+    name: "curl-slop-h1-3295650-gitleaks-test-certs",
+    text: `Multiple private/test RSA keys and example credentials were discovered embedded in the public curl source repository and associated documentation. These sensitive secrets were detected using automated tools (gitleaks) and manual review. Their presence could allow attackers to impersonate trusted curl infrastructure, decrypt traffic, or pivot into build or CI systems if reused, creating a severe supply chain risk. Such exposures also risk compliance violations (e.g., GDPR, PCI-DSS, HIPAA) and undermine trust in open source releases. This report, including the verification steps and analysis, was prepared using an AI security assistant to ensure comprehensive and reproducible results.
+
+Steps To Reproduce: Clone the curl repository: git clone https://github.com/curl/curl.git. Run a secret scanning tool (e.g., gitleaks detect --source=.) to identify hard-coded secrets. Alternatively, search for likely private key and credential strings with: grep -r '-----BEGIN' ./tests/ and grep -r 'password' ./docs/examples/. Review identified files to confirm the presence of full private keys or functional credential examples, such as tests/data/testprivkey.pem or docs/examples/http-auth-example.txt. See .gitleaks/report.json for a consolidated findings report.
+
+Impact Summary: The security impact of this vulnerability is severe and multi-faceted: Impersonation and Privilege Escalation, Data Decryption, Credential Stuffing and Service Hijack, Supply Chain Attacks, Regulatory and Compliance Risks.`,
+    expectMaxScore: 35,
+  },
+  {
+    // HackerOne #3116935 — DES in NTLM flagged as broken crypto without
+    // acknowledging that NTLMv1 mandates DES.
+    // v3.2.1: 19  | task target: ≤30  | v3.8.0 actual: 41 ✗ (regression vs both
+    // v3.2.1 and the AVRI-off baseline of 18). Flipping AVRI on by default
+    // moved this fixture in the WRONG direction: the AVRI Engine 2 substance
+    // score jumped from 17 to 51 because real file paths + the kCCAlgorithmDES
+    // constant trigger memory-corruption-family substance credit; the only
+    // counter-balance is `AVRI_FABRICATED_PATCH` (-10). Sprint 13B detector
+    // tightening (vulnerability-name soft-cite + better DES-in-NTLM context
+    // recognition) needs to bring this back into the ≤30 band.
+    name: "curl-slop-h1-3116935-des-ntlm-broken-crypto",
+    claimedCwes: ["CWE-327"],
+    text: `Summary: The DES cipher (Data Encryption Standard) is used in the curl_ntlm_core.c file of libcurl. DES is considered insecure due to its short key length (56 bits) and its susceptibility to brute-force attacks. Modern cryptographic standards recommend replacing DES with AES (Advanced Encryption Standard), which is more robust and secure.
+
+Steps To Reproduce: Inspect the lib/curl_ntlm_core.c file of the libcurl source code. Locate the use of the kCCAlgorithmDES constant, which corresponds to the DES cipher. Verify that DES is being used for cryptographic operations in NTLM authentication (NTLMv1).
+
+Impact Summary: Using DES compromises the security of the application due to the following points: Brute-force attacks: The short key length makes it possible to brute-force DES keys in a reasonable amount of time with modern hardware. Cryptographic weaknesses: DES is vulnerable to various cryptanalysis techniques, such as differential and linear cryptanalysis. Compliance risks: DES does not meet modern cryptographic standards and could lead to non-compliance with security regulations. An attacker exploiting this vulnerability could: Intercept and decrypt sensitive data during NTLM authentication. Execute man-in-the-middle (MITM) attacks to impersonate a user or server. Gain unauthorized access to systems relying on NTLM authentication.
+
+Recommended Fix: Replace the use of kCCAlgorithmDES with kCCAlgorithmAES, which supports stronger encryption standards (e.g., AES-128, AES-256).`,
+    expectMaxScore: 45,
+  },
+  {
+    // HackerOne #3125832 — fabricated pentest narrative referencing functions
+    // that don't exist in curl.
+    // v3.2.1: 17  | task target: ≤25  | v3.8.0 actual: 16 ✓ (meets target —
+    // AVRI's "no gold signals for Injection family" check pushes this well
+    // below 25, even though the report mentions HTTP/3 + a pasted SIGSEGV).
+    name: "curl-slop-h1-3125832-fabricated-pentest",
+    text: `Penetration Testing Report: HTTP/3 Stream Dependency Cycle Exploit
+
+0x00 Overview
+A novel exploit leveraging stream dependency cycles in the HTTP/3 protocol stack was discovered, resulting in memory corruption and potential denial-of-service or remote code execution scenarios when used against HTTP/3-capable clients such as curl (tested on version 8.13.0). This report details a practical proof of concept, required environment setup, attack execution, and crash analysis.
+
+0x01 Environment Setup - Malicious Server Setup (aioquic modified): Clone aioquic, apply patch to enable cyclic stream dependency injection. The patch adds a new method (send_cyclic_priority) to the QuicConnection class to create cyclic stream dependencies.
+
+0x02 Proof-of-Concept Code - Malicious HTTP/3 Server: ExploitServer class that opens 100 streams for heap shaping, injects cyclic dependency between stream 3 and 7, triggers parsing logic.
+
+0x03 Crash Analysis Guide - Expected Output: Program received signal SIGSEGV, Segmentation fault. 0x00007ffff7e3b120 in ngtcp2_http3_handle_priority_frame(). Signs of memory overwrite: r15 shows 0x4141414141414141. Recursive calls to same handler.
+
+0x06 Risk Summary - Affected Software: curl 8.13.0 (HTTP/3 enabled). Trigger: Stream dependency loop. Result: Heap layout corruption, segmentation fault, denial-of-service. Risk: High (pre-authentication, remote-triggerable).`,
+    expectMaxScore: 25,
+  },
+  {
+    // HackerOne #3340109 — fabricated AddressSanitizer trace; the PoC code the
+    // submitter pasted does NOT call curl at all.
+    // v3.2.1: 20  | task target this sprint: ≤30  | post 13B-2 target: ≤20  |
+    // v3.8.0 actual: 62 ✗ (label flips all the way to "REASONABLE"). This is
+    // the worst regression of the cohort: AVRI's `BEHAVIORAL_MATCH_REWARD`
+    // gives the report Engine 2 gold-evidence credit because the fabricated
+    // ASan trace (stack-buffer-overflow, READ of size 8193) PERFECTLY matches
+    // the CWE-121 family pattern, and Engine 3 coheres with the claimed CWE.
+    // The PoC's `cookie_vulnerability_hunter.c` filename and the inverted
+    // offset format (`+0x1b0`) aren't yet recognised as fabrication signals.
+    // Sprint 13B-2's structural-ASan detector (Task #205) is exactly the
+    // detector that will counter-balance this. Two skipped tightening tests
+    // follow this fixture.
+    name: "curl-slop-h1-3340109-fabricated-asan",
+    claimedCwes: ["CWE-121"],
+    text: `Summary: I discovered a critical stack-based buffer overflow vulnerability in cURL's cookie parsing mechanism that can lead to remote code execution. The vulnerability occurs when processing maliciously crafted HTTP cookies, affecting all applications that use libcurl for HTTP requests.
+
+Description: During security research on cURL's cookie handling implementation, I identified a stack buffer overflow in the cookie parsing logic. The vulnerability allows remote attackers to trigger memory corruption by sending oversized cookie data through HTTP responses.
+
+Technical Details - Vulnerability Location: The vulnerability occurs in the cookie parsing functionality where string length calculations exceed allocated stack buffer boundaries. Root Cause Analysis: Buffer Size Mismatch: Cookie processing code reads beyond allocated stack buffer. Unsafe String Operations: strlen() operation on cookie data exceeds buffer boundaries. Stack Memory Corruption: Read of 8,193 bytes in a buffer allocated for 8,192 bytes. Multi-threaded Context: Issue manifests in threaded environments.
+
+AddressSanitizer Detection: ERROR: AddressSanitizer: stack-buffer-overflow on address 0x00016f00a5c0. READ of size 8193 at 0x00016f00a5c0 thread T1. #0 0x000101676c34 in strlen+0x1b0. #1 0x000100f94c38 in cookie_overflow_hunter cookie_vulnerability_hunter.c:121.
+
+CVSS 3.1 Assessment: Base Score: 9.8 (CRITICAL). Vector String: AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H.
+
+Verified POC Code creates a local buffer of 8192 bytes, fills it without null terminator, calls strlen() which reads past the buffer. This code does NOT call curl.`,
+    expectMaxScore: 65,
+  },
+];
+
+// Tightening targets from Task #204 that v3.8.0 does not yet meet. These flip
+// on as the corresponding Sprint 13B detector work lands and become real
+// regression assertions. Each entry references the fixture by name so the
+// fixture body and these expectations stay in sync.
+const CURL_SLOP_TIGHTENING_TARGETS: Array<{ name: string; expectMaxScore: number; reason: string }> = [
+  {
+    name: "curl-slop-h1-3295650-gitleaks-test-certs",
+    expectMaxScore: 25,
+    reason: "Sprint 13B handwavy-phrase + AI-self-disclosure tightening",
+  },
+  {
+    name: "curl-slop-h1-3116935-des-ntlm-broken-crypto",
+    expectMaxScore: 30,
+    reason: "Sprint 13B context-aware DES-in-NTLM tightening (AVRI regression recovery)",
+  },
+  {
+    name: "curl-slop-h1-3340109-fabricated-asan",
+    expectMaxScore: 30,
+    reason: "Sprint 13B-2 fabricated-ASan structural detection (Task #205)",
+  },
+  {
+    name: "curl-slop-h1-3340109-fabricated-asan",
+    expectMaxScore: 20,
+    reason: "post Sprint 13B-2 fabricated-ASan structural detection (deeper pass)",
+  },
+];
+
 const LEGIT_FIXTURES: Fixture[] = [
   {
     name: "legit-01-cve-2025-0725-curl",
@@ -188,8 +344,32 @@ describe("VulnRap engines benchmark", () => {
     });
   }
 
+  for (const f of CURL_SLOP_FIXTURES) {
+    it(`curl HackerOne slop fixture ${f.name} should score <= ${f.expectMaxScore}`, () => {
+      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes });
+      expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeLessThanOrEqual(f.expectMaxScore!);
+    });
+  }
+
+  // Tightening targets from Task #204 that v3.8.0 does not yet meet. Each one
+  // is gated as `it.skip` until the corresponding Sprint 13B detector tightening
+  // lands; flipping `.skip` off is then a single-line change that turns the
+  // aspirational target into a real regression assertion.
+  for (const t of CURL_SLOP_TIGHTENING_TARGETS) {
+    it.skip(`tightening target (${t.reason}): ${t.name} should score <= ${t.expectMaxScore}`, () => {
+      const f = CURL_SLOP_FIXTURES.find(x => x.name === t.name);
+      expect(f, `tightening target references unknown fixture ${t.name}`).toBeTruthy();
+      const r = analyzeWithEngines(f!.text, { claimedCwes: f!.claimedCwes });
+      expect(r.overallScore, `${t.name} composite=${r.overallScore} label=${r.label}`).toBeLessThanOrEqual(t.expectMaxScore);
+    });
+  }
+
   it("benchmark summary report (always passes, prints scores)", () => {
-    const all = [...SLOP_FIXTURES.map(f => ({ ...f, kind: "slop" as const })), ...LEGIT_FIXTURES.map(f => ({ ...f, kind: "legit" as const }))];
+    const all = [
+      ...SLOP_FIXTURES.map(f => ({ ...f, kind: "slop" as const })),
+      ...CURL_SLOP_FIXTURES.map(f => ({ ...f, kind: "curl-slop" as const })),
+      ...LEGIT_FIXTURES.map(f => ({ ...f, kind: "legit" as const })),
+    ];
     const rows = all.map(f => {
       const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes });
       return { name: f.name, kind: f.kind, score: r.overallScore, label: r.label, engines: r.engineResults.map(e => `${e.engine}:${e.score}/${e.verdict}`).join(" "), overrides: r.overridesApplied.join(",") };
@@ -198,9 +378,9 @@ describe("VulnRap engines benchmark", () => {
     console.log("\n=== VulnRap Engines Benchmark ===");
     for (const row of rows) {
       // eslint-disable-next-line no-console
-      console.log(`[${row.kind.padEnd(5)}] ${row.name.padEnd(36)} score=${String(row.score).padStart(3)} label=${row.label.padEnd(15)} ${row.engines}${row.overrides ? " | " + row.overrides : ""}`);
+      console.log(`[${row.kind.padEnd(9)}] ${row.name.padEnd(40)} score=${String(row.score).padStart(3)} label=${row.label.padEnd(15)} ${row.engines}${row.overrides ? " | " + row.overrides : ""}`);
     }
-    expect(rows.length).toBe(11);
+    expect(rows.length).toBe(SLOP_FIXTURES.length + CURL_SLOP_FIXTURES.length + LEGIT_FIXTURES.length);
   });
 });
 
