@@ -14,6 +14,11 @@ import {
   appendArchetypeSnapshots,
   readArchetypeHistory,
 } from "../lib/archetype-history";
+import {
+  discover as discoverDatasets,
+  iterateCuratedV2,
+  type CuratedReport,
+} from "../lib/engines/dataset-loader";
 
 const router: IRouter = Router();
 
@@ -2171,6 +2176,144 @@ function summarizeMode(
   };
 }
 
+// Task #47 — when the curated dataset (vuln_reports_dataset_v2.json.gz) is
+// mounted at /mnt/vulnrap/data (or VULNRAP_DATASETS_DIR), augment each
+// cohort with up to N sampled real reports and report them under a separate
+// `datasetSamples` block. Sampled reports do NOT contribute to the
+// per-fixture pass/fail accounting of the hand-written battery — instead
+// they are graded cohort-level (mean composite + T1−T3 gap) so calibration
+// drift catches on a much larger sample without conflating with synthetic
+// fixture asserts. When the dataset is absent the block is still present
+// on the response with `{ available: false }` so consumers can branch on a
+// stable shape; no other field of the response payload changes.
+
+const DATASET_SAMPLE_LIMIT_PER_LABEL = 25;
+
+// Minimum T1−T3 composite-mean gap we expect on the curated dataset.
+// Mirrors the Gate 2 target asserted in dataset-validation.test.ts (which
+// uses median, not mean — the looser cohort-level mean check here keeps the
+// dev-only smoke endpoint fast while still surfacing distribution drift).
+const DATASET_GAP_TARGET = 15;
+
+const DATASET_LABEL_TO_TIER: Record<string, Tier> = {
+  human_authentic: "T1_LEGIT",
+  borderline: "T2_BORDERLINE",
+  ai_slop: "T3_SLOP",
+};
+
+interface DatasetSampleRow {
+  id: string;
+  label: string;
+  tier: Tier;
+  composite: number;
+  e1: number | null;
+  e2: number | null;
+  e3: number | null;
+  triage: string;
+}
+
+interface DatasetCohortRow {
+  tier: Tier;
+  label: string;
+  count: number;
+  compositeMean: number | null;
+  compositeMin: number | null;
+  compositeMax: number | null;
+  engine2Mean: number | null;
+}
+
+// Cache the raw sampled reports across requests so we don't re-read and
+// re-parse the ~1.5K-entry JSON every call. Engine analysis is still
+// re-run on each request so calibration drift remains observable.
+let datasetSampleCache: {
+  sourcePath: string;
+  samples: CuratedReport[];
+} | null = null;
+
+async function loadDatasetSamples(
+  perLabel: number,
+): Promise<{ sourcePath: string | null; samples: CuratedReport[] }> {
+  const sourcePath = discoverDatasets().curatedV2;
+  if (!sourcePath) return { sourcePath: null, samples: [] };
+  if (datasetSampleCache && datasetSampleCache.sourcePath === sourcePath) {
+    return { sourcePath, samples: datasetSampleCache.samples };
+  }
+  const counts: Record<string, number> = {};
+  const collected: CuratedReport[] = [];
+  const labels = Object.keys(DATASET_LABEL_TO_TIER);
+  for await (const r of iterateCuratedV2()) {
+    const label = r.label ?? "borderline";
+    if (!(label in DATASET_LABEL_TO_TIER)) continue;
+    if ((counts[label] ?? 0) >= perLabel) continue;
+    counts[label] = (counts[label] ?? 0) + 1;
+    collected.push(r);
+    if (labels.every(l => (counts[l] ?? 0) >= perLabel)) break;
+  }
+  datasetSampleCache = { sourcePath, samples: collected };
+  return { sourcePath, samples: collected };
+}
+
+function analyzeDatasetSample(r: CuratedReport): DatasetSampleRow {
+  const label = r.label ?? "borderline";
+  const tier = DATASET_LABEL_TO_TIER[label]!;
+  const traced = analyzeWithEnginesTraced(r.text, { claimedCwes: r.cwes });
+  const composite = traced.composite.overallScore;
+  const e1 = traced.composite.engineResults.find(e => e.engine === "AI Authorship Detector")?.score ?? null;
+  const e2Engine = traced.composite.engineResults.find(e => e.engine === "Technical Substance Analyzer");
+  const e2 = e2Engine?.score ?? null;
+  const e3 = traced.composite.engineResults.find(e => e.engine === "CWE Coherence Checker")?.score ?? null;
+  // Active verification is intentionally skipped for dataset samples: it is
+  // network-bound and would dominate the smoke-test runtime. Cohort-level
+  // composite distribution is what we're checking here, not per-report
+  // verification behavior. Pass null to generateTriageRecommendation so the
+  // triage label still reflects the composite path.
+  const slopScore = Math.max(0, 100 - composite);
+  const triage = generateTriageRecommendation(
+    slopScore,
+    0.7,
+    null,
+    [],
+    {
+      compositeScore: composite,
+      engine2Score: e2 ?? 50,
+      strongEvidenceCount: 0,
+      verificationRatio: 0,
+    },
+  );
+  return {
+    id: r.id || "(unknown)",
+    label,
+    tier,
+    composite,
+    e1,
+    e2,
+    e3,
+    triage: triage.action,
+  };
+}
+
+function summarizeDatasetCohorts(rows: DatasetSampleRow[]): DatasetCohortRow[] {
+  return Object.entries(DATASET_LABEL_TO_TIER).map(([label, tier]) => {
+    const subset = rows.filter(r => r.label === label);
+    const composites = subset.map(r => r.composite);
+    // Only count samples whose Engine 2 score actually reported a number
+    // toward the mean — using `?? 0` would drag the mean downward whenever
+    // E2 is missing, which is misleading for calibration drift.
+    const e2s = subset.map(r => r.e2).filter((v): v is number => v != null);
+    const mean = (xs: number[]): number | null =>
+      xs.length === 0 ? null : Number((xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1));
+    return {
+      tier,
+      label,
+      count: subset.length,
+      compositeMean: mean(composites),
+      compositeMin: composites.length ? Math.min(...composites) : null,
+      compositeMax: composites.length ? Math.max(...composites) : null,
+      engine2Mean: mean(e2s),
+    };
+  });
+}
+
 router.get("/test/run", async (_req, res) => {
   if (process.env.NODE_ENV === "production") {
     res.status(404).json({ error: "Not available in production." });
@@ -2365,6 +2508,57 @@ router.get("/test/run", async (_req, res) => {
     // Persistence failures are non-fatal for the dev smoke endpoint.
   }
 
+  // Task #47 — augment cohorts with sampled real reports from the curated
+  // dataset when it's mounted. Reported separately from the synthetic
+  // battery so per-fixture pass/fail isn't conflated; cohort-level mean +
+  // gap is the only assert. Wrapped in try/catch so any read/parse failure
+  // on the dataset side cannot break the smoke endpoint.
+  let datasetSamples:
+    | {
+        available: true;
+        sourcePath: string;
+        sampleSizeRequestedPerLabel: number;
+        sampleCount: number;
+        cohorts: DatasetCohortRow[];
+        legitMean: number | null;
+        slopMean: number | null;
+        gap: number | null;
+        gapTarget: number;
+        gapMeetsTarget: boolean;
+        samples: DatasetSampleRow[];
+      }
+    | { available: false } = { available: false };
+  try {
+    const { sourcePath: dsPath, samples: rawSamples } =
+      await loadDatasetSamples(DATASET_SAMPLE_LIMIT_PER_LABEL);
+    if (dsPath && rawSamples.length > 0) {
+      const sampleRows = rawSamples.map(analyzeDatasetSample);
+      const cohorts = summarizeDatasetCohorts(sampleRows);
+      const dsLegit = cohorts.find(c => c.tier === "T1_LEGIT")?.compositeMean ?? null;
+      const dsSlop = cohorts.find(c => c.tier === "T3_SLOP")?.compositeMean ?? null;
+      const dsGap =
+        dsLegit != null && dsSlop != null
+          ? Number((dsLegit - dsSlop).toFixed(1))
+          : null;
+      datasetSamples = {
+        available: true,
+        sourcePath: dsPath,
+        sampleSizeRequestedPerLabel: DATASET_SAMPLE_LIMIT_PER_LABEL,
+        sampleCount: sampleRows.length,
+        cohorts,
+        legitMean: dsLegit,
+        slopMean: dsSlop,
+        gap: dsGap,
+        gapTarget: DATASET_GAP_TARGET,
+        gapMeetsTarget: dsGap != null && dsGap >= DATASET_GAP_TARGET,
+        samples: sampleRows,
+      };
+    }
+  } catch {
+    // Dataset read/parse failures must not break the smoke endpoint.
+    datasetSamples = { available: false };
+  }
+
   res.json({
     fixtureCount: FIXTURES.length,
     passed: allFixturesPassed && gap >= 25,
@@ -2381,6 +2575,7 @@ router.get("/test/run", async (_req, res) => {
       target: ">= 25pt gap between T1_LEGIT and T3_SLOP composite means; every fixture must pass its composite + Engine 2 + triage assertions",
     },
     avriComparison,
+    datasetSamples,
   });
 });
 

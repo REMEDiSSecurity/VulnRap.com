@@ -235,3 +235,83 @@ describe("GET /api/test/archetype-history — Sprint 13 trend persistence", () =
     }
   }, 90_000);
 });
+
+// Task #47 — when the curated dataset isn't mounted (the default in CI/dev)
+// the response must still expose a `datasetSamples` block so consumers can
+// branch on `available`. When it is mounted, the block must include a
+// per-cohort summary and the T1−T3 mean gap.
+describe("GET /api/test/run — Task #47 dataset samples block", () => {
+  interface DatasetCohort {
+    tier: string;
+    label: string;
+    count: number;
+    compositeMean: number | null;
+    compositeMin: number | null;
+    compositeMax: number | null;
+    engine2Mean: number | null;
+  }
+  interface DatasetSamplesAbsent { available: false }
+  interface DatasetSamplesPresent {
+    available: true;
+    sourcePath: string;
+    sampleSizeRequestedPerLabel: number;
+    sampleCount: number;
+    cohorts: DatasetCohort[];
+    legitMean: number | null;
+    slopMean: number | null;
+    gap: number | null;
+    gapTarget: number;
+    gapMeetsTarget: boolean;
+    samples: Array<{
+      id: string; label: string; tier: string;
+      composite: number; e1: number | null; e2: number | null; e3: number | null;
+      triage: string;
+    }>;
+  }
+  type DatasetSamples = DatasetSamplesAbsent | DatasetSamplesPresent;
+
+  it("always includes the datasetSamples block and matches its declared shape", async () => {
+    const body = await fetchJson<{ datasetSamples: DatasetSamples }>("/api/test/run");
+    expect(body.datasetSamples).toBeDefined();
+    const ds = body.datasetSamples;
+    if (!ds.available) {
+      // Default in CI/dev: dataset is not mounted, block reports unavailability.
+      expect(ds).toEqual({ available: false });
+      return;
+    }
+    // When mounted, the block must expose the cohort-level shape.
+    expect(typeof ds.sourcePath).toBe("string");
+    expect(ds.sampleSizeRequestedPerLabel).toBeGreaterThan(0);
+    expect(ds.sampleCount).toBe(ds.samples.length);
+    expect(ds.cohorts.map(c => c.tier).sort()).toEqual(
+      ["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"],
+    );
+    for (const c of ds.cohorts) {
+      // Each cohort caps at the requested sample size.
+      expect(c.count).toBeLessThanOrEqual(ds.sampleSizeRequestedPerLabel);
+      // Cross-check that the per-label slice in `samples` also obeys the
+      // cap — c.count is computed from `samples`, but we want a direct
+      // assertion in case the cohort-summary path ever drifts.
+      const perLabelSamples = ds.samples.filter(s => s.label === c.label);
+      expect(perLabelSamples.length).toBeLessThanOrEqual(
+        ds.sampleSizeRequestedPerLabel,
+      );
+      expect(perLabelSamples.length).toBe(c.count);
+    }
+    expect(ds.gapTarget).toBeGreaterThan(0);
+    if (ds.legitMean != null && ds.slopMean != null) {
+      expect(ds.gap).toBeCloseTo(
+        Number((ds.legitMean - ds.slopMean).toFixed(1)),
+        1,
+      );
+      expect(ds.gapMeetsTarget).toBe(ds.gap! >= ds.gapTarget);
+    }
+    // Per-fixture asserts are intentionally absent on dataset samples — only
+    // the engine output is reported so cohort drift can be observed without
+    // conflating with synthetic-fixture pass/fail accounting.
+    for (const s of ds.samples) {
+      expect(["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"]).toContain(s.tier);
+      expect(typeof s.composite).toBe("number");
+    }
+  }, 60_000);
+});
