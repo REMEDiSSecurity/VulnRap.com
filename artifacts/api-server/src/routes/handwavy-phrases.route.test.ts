@@ -84,7 +84,8 @@ function request<T>(method: string, urlPath: string, body?: unknown): Promise<Ht
         method,
         hostname: url.hostname,
         port: url.port,
-        path: url.pathname,
+        // Preserve query strings (Task #160 picker GET takes ?limit=N).
+        path: `${url.pathname}${url.search}`,
         headers: {
           ...(data ? { "Content-Type": "application/json", "Content-Length": String(data.length) } : {}),
           // Task #163 — include the calibration token so GET (now strict-auth) works.
@@ -1213,6 +1214,124 @@ describe("/feedback/calibration/handwavy-phrases", () => {
         {},
       );
       expect(r.status).toBe(400);
+    });
+  });
+
+  // Task #160 — slim picker-friendly summary of recent batch removal entries.
+  // The reinstate-batch CLI fetches this so reviewers can pick a batch by
+  // number instead of copy/pasting an ISO `removedAt`.
+  describe("Task #160 GET /removal-batches", () => {
+    it("returns recent BATCH removals newest first with phrase counts and reinstated flags", async () => {
+      // Two batch removals + one single removal (which should be filtered out).
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 b" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 c" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 d" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 single" });
+
+      const firstBatch = await request<{ historyEntry: { removedAt: string } }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrases: ["rb160 a", "rb160 b"], reviewer: "alice@team.com" },
+      );
+      // Force the second batch to occur with a strictly later timestamp so we
+      // can deterministically assert ordering. setTimeout is not available
+      // here; use a tiny await loop.
+      await new Promise((r) => setTimeout(r, 5));
+      const secondBatch = await request<{ historyEntry: { removedAt: string } }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrases: ["rb160 c", "rb160 d"], reviewer: "bob@team.com" },
+      );
+      // Single removal — should NOT appear in the batches list.
+      await request("DELETE", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 single" });
+
+      const r = await request<{
+        limit: number;
+        totalBatches: number;
+        batches: Array<{
+          removedAt: string;
+          removedBy?: string;
+          phraseCount: number;
+          reinstated: boolean;
+          samplePhrases: string[];
+        }>;
+      }>("GET", "/feedback/calibration/handwavy-phrases/removal-batches");
+
+      expect(r.status).toBe(200);
+      expect(r.body.limit).toBe(10);
+      expect(r.body.totalBatches).toBeGreaterThanOrEqual(2);
+      // Newest first.
+      expect(r.body.batches[0].removedAt).toBe(secondBatch.body.historyEntry.removedAt);
+      expect(r.body.batches[0].removedBy).toBe("bob@team.com");
+      expect(r.body.batches[0].phraseCount).toBe(2);
+      expect(r.body.batches[0].reinstated).toBe(false);
+      expect(r.body.batches[0].samplePhrases).toEqual(
+        expect.arrayContaining(["rb160 c", "rb160 d"]),
+      );
+      const second = r.body.batches.find((b) => b.removedAt === firstBatch.body.historyEntry.removedAt);
+      expect(second).toBeDefined();
+      expect(second?.removedBy).toBe("alice@team.com");
+      expect(second?.phraseCount).toBe(2);
+      // None of the listed entries are the single-phrase removal — the
+      // picker is explicitly batch-only (single removals are excluded so
+      // reviewers don't accidentally reinstate a one-off correction).
+      const allSamples = r.body.batches.flatMap((b) => b.samplePhrases);
+      expect(allSamples).not.toContain("rb160 single");
+      for (const batch of r.body.batches) {
+        expect(batch.phraseCount).toBeGreaterThanOrEqual(2);
+      }
+    });
+
+    it("flips the reinstated flag once the matching batch has been fully reinstated", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 reins a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 reins b" });
+      const batch = await request<{ historyEntry: { removedAt: string } }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrases: ["rb160 reins a", "rb160 reins b"] },
+      );
+      await request("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
+        removedAt: batch.body.historyEntry.removedAt,
+      });
+      const r = await request<{
+        batches: Array<{ removedAt: string; reinstated: boolean }>;
+      }>("GET", "/feedback/calibration/handwavy-phrases/removal-batches");
+      const entry = r.body.batches.find((b) => b.removedAt === batch.body.historyEntry.removedAt);
+      expect(entry?.reinstated).toBe(true);
+    });
+
+    it("honors ?limit=N and rejects non-positive limits with 400", async () => {
+      // Add a few batches so we have something to limit.
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 lim a" });
+      await request("DELETE", "/feedback/calibration/handwavy-phrases", { phrases: ["rb160 lim a"] });
+      const ok = await request<{ limit: number; batches: unknown[] }>(
+        "GET",
+        "/feedback/calibration/handwavy-phrases/removal-batches?limit=1",
+      );
+      expect(ok.status).toBe(200);
+      expect(ok.body.limit).toBe(1);
+      expect(ok.body.batches.length).toBeLessThanOrEqual(1);
+
+      const bad = await request<{ error: string }>(
+        "GET",
+        "/feedback/calibration/handwavy-phrases/removal-batches?limit=0",
+      );
+      expect(bad.status).toBe(400);
+      expect(bad.body.error).toMatch(/positive integer/);
+    });
+
+    it("returns an empty list (no error) when no batch removals exist", async () => {
+      // Fresh state — only single-phrase activity.
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 lone" });
+      await request("DELETE", "/feedback/calibration/handwavy-phrases", { phrase: "rb160 lone" });
+      const r = await request<{
+        totalBatches: number;
+        batches: unknown[];
+      }>("GET", "/feedback/calibration/handwavy-phrases/removal-batches");
+      expect(r.status).toBe(200);
+      expect(r.body.totalBatches).toBe(0);
+      expect(r.body.batches).toEqual([]);
     });
   });
 

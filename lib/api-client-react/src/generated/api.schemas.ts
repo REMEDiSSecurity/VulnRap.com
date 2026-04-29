@@ -1711,6 +1711,43 @@ metadata and per-phrase reinstate state.
   phrases?: HandwavyBatchHistoryPhrase[];
 }
 
+/**
+ * Task #160 — Slim summary of one BATCH removal entry from the hand-wavy
+phrase history log, scoped to the fields the reinstate-batch CLI
+picker needs to show (timestamp, reviewer, phrase count,
+already-reinstated flag, plus a small sample of removed phrases).
+
+ */
+export interface HandwavyPhraseRemovalBatchSummary {
+  /** ISO 8601 timestamp of the batch removal entry. Pass back to /reinstate-batch as `removedAt`. */
+  removedAt: string;
+  /** Reviewer name or email recorded on the batch removal. Omitted if the original removal didn't supply one. */
+  removedBy?: string;
+  /** Number of phrases that were removed in this batch. */
+  phraseCount: number;
+  /** Aggregate flag — true once every inner phrase from this batch has already been reinstated. */
+  reinstated: boolean;
+  /**
+   * First few removed phrases (capped at 5), shown in the picker so reviewers can identify the batch at a glance.
+   * @maxItems 5
+   */
+  samplePhrases: string[];
+}
+
+/**
+ * Task #160 — Response from GET
+/feedback/calibration/handwavy-phrases/removal-batches. Newest batches
+are returned first.
+
+ */
+export interface HandwavyPhraseRemovalBatchesList {
+  /** Effective page size used for this response. */
+  limit: number;
+  /** Total number of batch removal entries in the history log (regardless of `limit`). */
+  totalBatches: number;
+  batches: HandwavyPhraseRemovalBatchSummary[];
+}
+
 export interface HandwavyPhrasesList {
   phrases: HandwavyMarker[];
   total: number;
@@ -2306,6 +2343,15 @@ export type GetAvriDriftReportParams = {
    * @maximum 26
    */
   weeks?: number;
+};
+
+export type ListHandwavyPhraseRemovalBatchesParams = {
+  /**
+   * Maximum number of batch entries to return (newest first). Defaults to 10, capped at 50.
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: number;
 };
 
 export type GetTrendsParams = {

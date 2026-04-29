@@ -41,11 +41,13 @@ import type {
   HandwavyPhraseReinstateBatchBody,
   HandwavyPhraseReinstateBatchResponse,
   HandwavyPhraseReinstateBody,
+  HandwavyPhraseRemovalBatchesList,
   HandwavyPhraseRevertEditBody,
   HandwavyPhraseUndoBody,
   HandwavyPhrasesList,
   HashLookupResult,
   HealthStatus,
+  ListHandwavyPhraseRemovalBatchesParams,
   PlatformStats,
   RecentActivity,
   ReportAnalysis,
@@ -1943,6 +1945,124 @@ export const useRemoveHandwavyPhrase = <
 > => {
   return useMutation(getRemoveHandwavyPhraseMutationOptions(options));
 };
+
+/**
+ * Task #160 — Slim summary of the most recent batch removal entries from
+the hand-wavy phrase removal-history log, intended for the
+reinstate-batch CLI's interactive picker. Single-phrase removal
+entries are omitted because they're not reinstatable through the
+/reinstate-batch endpoint. Newest entries are returned first; default
+page size is 10, capped at 50 via the `limit` query parameter.
+
+ * @summary List recent FLAT hand-wavy phrase BATCH removal entries (picker-friendly summary)
+ */
+export const getListHandwavyPhraseRemovalBatchesUrl = (
+  params?: ListHandwavyPhraseRemovalBatchesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/feedback/calibration/handwavy-phrases/removal-batches?${stringifiedParams}`
+    : `/api/feedback/calibration/handwavy-phrases/removal-batches`;
+};
+
+export const listHandwavyPhraseRemovalBatches = async (
+  params?: ListHandwavyPhraseRemovalBatchesParams,
+  options?: RequestInit,
+): Promise<HandwavyPhraseRemovalBatchesList> => {
+  return customFetch<HandwavyPhraseRemovalBatchesList>(
+    getListHandwavyPhraseRemovalBatchesUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListHandwavyPhraseRemovalBatchesQueryKey = (
+  params?: ListHandwavyPhraseRemovalBatchesParams,
+) => {
+  return [
+    `/api/feedback/calibration/handwavy-phrases/removal-batches`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListHandwavyPhraseRemovalBatchesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listHandwavyPhraseRemovalBatches>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListHandwavyPhraseRemovalBatchesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listHandwavyPhraseRemovalBatches>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getListHandwavyPhraseRemovalBatchesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listHandwavyPhraseRemovalBatches>>
+  > = ({ signal }) =>
+    listHandwavyPhraseRemovalBatches(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listHandwavyPhraseRemovalBatches>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListHandwavyPhraseRemovalBatchesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listHandwavyPhraseRemovalBatches>>
+>;
+export type ListHandwavyPhraseRemovalBatchesQueryError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary List recent FLAT hand-wavy phrase BATCH removal entries (picker-friendly summary)
+ */
+
+export function useListHandwavyPhraseRemovalBatches<
+  TData = Awaited<ReturnType<typeof listHandwavyPhraseRemovalBatches>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListHandwavyPhraseRemovalBatchesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listHandwavyPhraseRemovalBatches>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListHandwavyPhraseRemovalBatchesQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * Task #130 — mirror of /reinstate. A reviewer who just added a phrase

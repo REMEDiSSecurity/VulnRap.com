@@ -5769,6 +5769,80 @@ export const RemoveHandwavyPhraseResponse = zod.union([
 ]);
 
 /**
+ * Task #160 — Slim summary of the most recent batch removal entries from
+the hand-wavy phrase removal-history log, intended for the
+reinstate-batch CLI's interactive picker. Single-phrase removal
+entries are omitted because they're not reinstatable through the
+/reinstate-batch endpoint. Newest entries are returned first; default
+page size is 10, capped at 50 via the `limit` query parameter.
+
+ * @summary List recent FLAT hand-wavy phrase BATCH removal entries (picker-friendly summary)
+ */
+export const listHandwavyPhraseRemovalBatchesQueryLimitDefault = 10;
+export const listHandwavyPhraseRemovalBatchesQueryLimitMax = 50;
+
+export const ListHandwavyPhraseRemovalBatchesQueryParams = zod.object({
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listHandwavyPhraseRemovalBatchesQueryLimitMax)
+    .default(listHandwavyPhraseRemovalBatchesQueryLimitDefault)
+    .describe(
+      "Maximum number of batch entries to return (newest first). Defaults to 10, capped at 50.",
+    ),
+});
+
+export const listHandwavyPhraseRemovalBatchesResponseBatchesItemSamplePhrasesMax = 5;
+
+export const ListHandwavyPhraseRemovalBatchesResponse = zod
+  .object({
+    limit: zod.number().describe("Effective page size used for this response."),
+    totalBatches: zod
+      .number()
+      .describe(
+        "Total number of batch removal entries in the history log (regardless of `limit`).",
+      ),
+    batches: zod.array(
+      zod
+        .object({
+          removedAt: zod.coerce
+            .date()
+            .describe(
+              "ISO 8601 timestamp of the batch removal entry. Pass back to \/reinstate-batch as `removedAt`.",
+            ),
+          removedBy: zod
+            .string()
+            .optional()
+            .describe(
+              "Reviewer name or email recorded on the batch removal. Omitted if the original removal didn't supply one.",
+            ),
+          phraseCount: zod
+            .number()
+            .describe("Number of phrases that were removed in this batch."),
+          reinstated: zod
+            .boolean()
+            .describe(
+              "Aggregate flag — true once every inner phrase from this batch has already been reinstated.",
+            ),
+          samplePhrases: zod
+            .array(zod.string())
+            .max(
+              listHandwavyPhraseRemovalBatchesResponseBatchesItemSamplePhrasesMax,
+            )
+            .describe(
+              "First few removed phrases (capped at 5), shown in the picker so reviewers can identify the batch at a glance.",
+            ),
+        })
+        .describe(
+          "Task #160 — Slim summary of one BATCH removal entry from the hand-wavy\nphrase history log, scoped to the fields the reinstate-batch CLI\npicker needs to show (timestamp, reviewer, phrase count,\nalready-reinstated flag, plus a small sample of removed phrases).\n",
+        ),
+    ),
+  })
+  .describe(
+    "Task #160 — Response from GET\n\/feedback\/calibration\/handwavy-phrases\/removal-batches. Newest batches\nare returned first.\n",
+  );
+
+/**
  * Task #130 — mirror of /reinstate. A reviewer who just added a phrase
 can press Undo within a short server-side window (default 5 minutes)
 and the marker is removed. The resulting history row is tagged

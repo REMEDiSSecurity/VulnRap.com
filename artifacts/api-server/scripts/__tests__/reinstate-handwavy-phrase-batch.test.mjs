@@ -14,6 +14,7 @@ let state;
 function resetState() {
   state = {
     postResponses: [],
+    getResponses: [],
     requireToken: null,
     requests: [],
   };
@@ -35,6 +36,27 @@ beforeAll(async () => {
         token,
         body: parsedBody,
       });
+
+      // Task #160 — CLI picker hits the new GET endpoint to populate the menu.
+      if (
+        req.method === "GET" &&
+        req.url.startsWith("/api/feedback/calibration/handwavy-phrases/removal-batches")
+      ) {
+        if (state.requireToken && token !== state.requireToken) {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "unauthorized" }));
+          return;
+        }
+        const next = state.getResponses.shift();
+        if (!next) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "no scripted GET response" }));
+          return;
+        }
+        res.writeHead(next.status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(next.body ?? {}));
+        return;
+      }
 
       if (req.url !== "/api/feedback/calibration/handwavy-phrases/reinstate-batch") {
         res.writeHead(404, { "Content-Type": "application/json" });
@@ -209,6 +231,248 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     const posts = state.requests.filter((r) => r.method === "POST");
     expect(posts).toHaveLength(0);
     expect(res.stdout).toMatch(/Aborted/);
+  });
+
+  // Task #160 — interactive picker so reviewers don't have to copy/paste an
+  // ISO removedAt from the calibration UI.
+  describe("--pick interactive batch picker", () => {
+    it("lists recent batches, picks one by number, and POSTs to its removedAt", async () => {
+      state.getResponses = [
+        {
+          status: 200,
+          body: {
+            limit: 10,
+            totalBatches: 2,
+            batches: [
+              {
+                removedAt: "2026-04-22T12:34:56.000Z",
+                removedBy: "alice@team.com",
+                phraseCount: 3,
+                reinstated: false,
+                samplePhrases: ["pick a", "pick b", "pick c"],
+              },
+              {
+                removedAt: "2026-04-20T10:00:00.000Z",
+                removedBy: "bob@team.com",
+                phraseCount: 1,
+                reinstated: true,
+                samplePhrases: ["pick old"],
+              },
+            ],
+          },
+        },
+      ];
+      state.postResponses = [
+        {
+          status: 201,
+          body: {
+            reinstated: true,
+            batch: true,
+            removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 3,
+            skipped: 0,
+            total: 9,
+            results: [
+              { phrase: "pick a", reinstated: true },
+              { phrase: "pick b", reinstated: true },
+              { phrase: "pick c", reinstated: true },
+            ],
+            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
+            phrases: [],
+            history: [],
+          },
+        },
+      ];
+
+      // Pick batch #1 from the menu; --yes skips the secondary confirmation
+      // prompt so the picker → POST flow can be exercised end-to-end with a
+      // single line of stdin.
+      const res = await runScript(["--pick", "--reviewer", "carol@team.com", "--yes"], {
+        stdin: "1\n",
+      });
+      expect(res.code).toBe(0);
+      const gets = state.requests.filter((r) => r.method === "GET");
+      const posts = state.requests.filter((r) => r.method === "POST");
+      expect(gets).toHaveLength(1);
+      expect(gets[0].url).toMatch(/\/removal-batches/);
+      expect(posts).toHaveLength(1);
+      expect(posts[0].body).toEqual({
+        removedAt: "2026-04-22T12:34:56.000Z",
+        reviewer: "carol@team.com",
+      });
+      // Menu is rendered with the timestamps, reviewer, count, and reinstated tag.
+      expect(res.stdout).toMatch(/Recent batch removals/);
+      expect(res.stdout).toMatch(/2026-04-22T12:34:56\.000Z/);
+      expect(res.stdout).toMatch(/alice@team\.com/);
+      expect(res.stdout).toMatch(/3 phrases/);
+      expect(res.stdout).toMatch(/already reinstated/);
+      expect(res.stdout).toMatch(/Reinstated:\s+3/);
+    });
+
+    it("forwards --limit as a query string parameter", async () => {
+      state.getResponses = [
+        {
+          status: 200,
+          body: {
+            limit: 3,
+            totalBatches: 1,
+            batches: [
+              {
+                removedAt: "2026-04-22T12:34:56.000Z",
+                phraseCount: 1,
+                reinstated: false,
+                samplePhrases: ["only one"],
+              },
+            ],
+          },
+        },
+      ];
+      state.postResponses = [
+        {
+          status: 201,
+          body: {
+            reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 1, skipped: 0, total: 5,
+            results: [{ phrase: "only one", reinstated: true }],
+            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
+            phrases: [], history: [],
+          },
+        },
+      ];
+      const res = await runScript(["--pick", "--limit", "3", "--yes"], { stdin: "1\n" });
+      expect(res.code).toBe(0);
+      const gets = state.requests.filter((r) => r.method === "GET");
+      expect(gets).toHaveLength(1);
+      expect(gets[0].url).toBe("/api/feedback/calibration/handwavy-phrases/removal-batches?limit=3");
+    });
+
+    it("aborts cleanly when the picker prompt is answered with q (no POST issued)", async () => {
+      state.getResponses = [
+        {
+          status: 200,
+          body: {
+            limit: 10,
+            totalBatches: 1,
+            batches: [
+              {
+                removedAt: "2026-04-22T12:34:56.000Z",
+                phraseCount: 2,
+                reinstated: false,
+                samplePhrases: ["x", "y"],
+              },
+            ],
+          },
+        },
+      ];
+      const res = await runScript(["--pick"], { stdin: "q\n" });
+      expect(res.code).toBe(1);
+      expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(0);
+      expect(res.stdout).toMatch(/Aborted/);
+    });
+
+    it("exits 1 with a clear message when the picker returns no batches", async () => {
+      state.getResponses = [
+        { status: 200, body: { limit: 10, totalBatches: 0, batches: [] } },
+      ];
+      const res = await runScript(["--pick"]);
+      expect(res.code).toBe(1);
+      expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(0);
+      expect(res.stdout).toMatch(/No batch removals found/);
+    });
+
+    it("exits 1 with a clear error when the picker selection is out of range", async () => {
+      state.getResponses = [
+        {
+          status: 200,
+          body: {
+            limit: 10,
+            totalBatches: 1,
+            batches: [
+              {
+                removedAt: "2026-04-22T12:34:56.000Z",
+                phraseCount: 1,
+                reinstated: false,
+                samplePhrases: ["only"],
+              },
+            ],
+          },
+        },
+      ];
+      const res = await runScript(["--pick"], { stdin: "5\n" });
+      expect(res.code).toBe(1);
+      expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(0);
+      expect(res.stderr).toMatch(/Invalid selection/);
+    });
+
+    it("non-TTY invocation without --removed-at AND without --pick still errors out (no surprise prompt)", async () => {
+      // The test harness pipes stdin (so isTTY is false). Without --pick or
+      // --removed-at the script must exit 2 with the existing message and
+      // must NOT issue any HTTP request — auto-engagement of the picker is
+      // gated on TTY so cron jobs/scripts don't silently start prompting.
+      const res = await runScript([]);
+      expect(res.code).toBe(2);
+      expect(state.requests).toHaveLength(0);
+      expect(res.stderr).toMatch(/--removed-at/);
+    });
+
+    it("explicit --pick is still allowed in non-TTY contexts (scripted usage)", async () => {
+      // Locks the documented contract: auto-engagement is TTY-only, but
+      // when an operator explicitly opts in with --pick (e.g. piping a
+      // selection from a wrapper script: `echo 1 | ... --pick --yes`) the
+      // picker must run regardless of TTY status.
+      state.getResponses = [
+        {
+          status: 200,
+          body: {
+            limit: 10,
+            totalBatches: 1,
+            batches: [
+              {
+                removedAt: "2026-04-22T12:34:56.000Z",
+                phraseCount: 2,
+                reinstated: false,
+                samplePhrases: ["scripted a", "scripted b"],
+              },
+            ],
+          },
+        },
+      ];
+      state.postResponses = [
+        {
+          status: 201,
+          body: {
+            reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 2, skipped: 0, total: 4,
+            results: [
+              { phrase: "scripted a", reinstated: true },
+              { phrase: "scripted b", reinstated: true },
+            ],
+            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
+            phrases: [], history: [],
+          },
+        },
+      ];
+      const res = await runScript(["--pick", "--yes"], { stdin: "1\n" });
+      expect(res.code).toBe(0);
+      const posts = state.requests.filter((r) => r.method === "POST");
+      expect(posts).toHaveLength(1);
+      expect(posts[0].body.removedAt).toBe("2026-04-22T12:34:56.000Z");
+    });
+
+    it("rejects non-positive --limit with exit code 2 before hitting the network", async () => {
+      const res = await runScript(["--pick", "--limit", "0"], { stdin: "1\ny\n" });
+      expect(res.code).toBe(2);
+      expect(state.requests).toHaveLength(0);
+      expect(res.stderr).toMatch(/--limit must be a positive integer/);
+    });
+
+    it("propagates a 401 from the picker GET as an unauthorized message", async () => {
+      state.getResponses = [{ status: 401, body: { error: "unauthorized" } }];
+      const res = await runScript(["--pick"], { stdin: "1\ny\n" });
+      expect(res.code).toBe(1);
+      expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(0);
+      expect(res.stderr).toMatch(/rejected as unauthorized/);
+    });
   });
 
   it("--yes skips the interactive prompt", async () => {

@@ -582,6 +582,59 @@ router.get("/feedback/calibration/handwavy-phrases", requireCalibrationAuthStric
   }
 });
 
+// Task #160 — Slim, picker-friendly summary of recent BATCH removal entries
+// from the hand-wavy phrase history log. The reinstate-batch CLI fetches this
+// to render a numbered menu so reviewers don't have to copy/paste an ISO
+// `removedAt` from the calibration UI history pane. Single-phrase removal
+// entries are excluded because they're not reinstatable through the
+// /reinstate-batch endpoint.
+const REMOVAL_BATCHES_DEFAULT_LIMIT = 10;
+const REMOVAL_BATCHES_MAX_LIMIT = 50;
+const REMOVAL_BATCHES_SAMPLE_SIZE = 5;
+
+router.get(
+  "/feedback/calibration/handwavy-phrases/removal-batches",
+  requireCalibrationAuthStrict,
+  (req, res) => {
+    try {
+      const rawLimit = req.query.limit;
+      let limit = REMOVAL_BATCHES_DEFAULT_LIMIT;
+      if (typeof rawLimit === "string" && rawLimit.length > 0) {
+        const parsed = Number.parseInt(rawLimit, 10);
+        if (!Number.isFinite(parsed) || parsed < 1) {
+          res.status(400).json({ error: "limit must be a positive integer." });
+          return;
+        }
+        limit = Math.min(parsed, REMOVAL_BATCHES_MAX_LIMIT);
+      }
+      const history = getHandwavyPhraseHistory();
+      // Newest first — the history log itself is append-only / oldest-first.
+      const batches = history
+        .filter((h) => Array.isArray(h.phrases) && h.phrases.length > 0)
+        .reverse()
+        .slice(0, limit)
+        .map((h) => {
+          const phrases = h.phrases ?? [];
+          return {
+            removedAt: h.removedAt,
+            removedBy: h.removedBy,
+            phraseCount: phrases.length,
+            reinstated: h.reinstated === true,
+            samplePhrases: phrases.slice(0, REMOVAL_BATCHES_SAMPLE_SIZE).map((p) => p.phrase),
+          };
+        });
+      res.json({
+        limit,
+        totalBatches: history.filter((h) => Array.isArray(h.phrases) && h.phrases.length > 0).length,
+        batches,
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to list hand-wavy removal batches");
+      res.status(500).json({ error: "Failed to list hand-wavy removal batches." });
+    }
+  },
+);
+
 router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, async (req, res) => {
   try {
     const { phrase, category, dryRun, reviewer, rationale } = (req.body ?? {}) as {
