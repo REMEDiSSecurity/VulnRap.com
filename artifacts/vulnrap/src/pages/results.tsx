@@ -18,6 +18,7 @@ import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport } from "@/components/evidence-highlighter";
 import { DiagnosticsPanel, fetchDiagnostics, buildMarkdownSummary, getDiagnosticsQueryKey, DIAGNOSTICS_STALE_TIME_MS, type DiagnosticsResponse } from "@/components/diagnostics-panel";
+import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { useQueryClient } from "@tanstack/react-query";
 
 function getQualityColor(score: number) {
@@ -1390,6 +1391,7 @@ export default function Results() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
+      <DriftFlagsBanner />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-4 sm:pb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold uppercase tracking-tight flex items-center gap-2 glow-text">

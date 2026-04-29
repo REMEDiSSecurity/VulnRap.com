@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle, Trash2, Mail, BrainCircuit, ShieldOff, Users, TrendingUp, TrendingDown } from "lucide-react";
 import { LogoBeams } from "@/components/laser-effects";
 import { CrawlingBugs } from "@/components/crawling-bugs";
+import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed, getGetReportFeedQueryKey, useGetVisitorStats, getGetVisitorStatsQueryKey, recordVisit } from "@workspace/api-client-react";
 import { addHistoryEntry } from "@/lib/history";
 import { Button } from "@/components/ui/button";
@@ -1269,6 +1270,7 @@ export default function Home() {
   return (
     <div className="max-w-4xl mx-auto space-y-8 sm:space-y-10">
       <CrawlingBugs />
+      <DriftFlagsBanner />
       {!mirrorBannerDismissed && (
         <div className="relative mt-2 sm:mt-4 mx-auto max-w-3xl rounded-lg border border-primary/20 bg-primary/5 backdrop-blur-sm px-3 sm:px-4 py-3 flex items-start gap-2.5 sm:gap-3 text-sm">
           <Info className="w-4 h-4 text-primary mt-0.5 shrink-0" />
