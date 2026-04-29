@@ -19,8 +19,18 @@
 // down-sampled to one row per (UTC day, archetype) on every append.
 // Aggregated rows carry `aggregated: true` so the dashboard can render
 // them with a different stroke than the raw recent points.
+//
+// Task #99 — the compaction window is now reviewer-tunable via the
+// calibration dashboard. The effective value is sourced from
+// archetype-history-config (env var > persisted JSON > built-in
+// default) so reviewers can trade trend resolution for storage without
+// a redeploy.
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import {
+  DEFAULT_COMPACT_AFTER_DAYS,
+  getEffectiveCompactAfterDays,
+} from "./archetype-history-config";
 
 export interface ArchetypeSnapshot {
   /** ISO-8601 timestamp of the test run that produced this snapshot. */
@@ -46,7 +56,6 @@ export interface ArchetypeHistoryFile {
 }
 
 const MAX_SNAPSHOTS = 2_000;
-const DEFAULT_COMPACT_AFTER_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_PATH = path.resolve(
   process.cwd(),
@@ -58,10 +67,7 @@ function historyPath(): string {
 }
 
 function compactAfterDays(): number {
-  const raw = process.env.ARCHETYPE_HISTORY_COMPACT_DAYS;
-  if (raw === undefined) return DEFAULT_COMPACT_AFTER_DAYS;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_COMPACT_AFTER_DAYS;
+  return getEffectiveCompactAfterDays();
 }
 
 async function readFromDisk(p: string): Promise<ArchetypeHistoryFile> {
@@ -208,3 +214,8 @@ export const __testing = {
   historyPath,
   compactAfterDays,
 };
+
+// Re-exported so callers (route handlers, tests) only need to import
+// from this module to learn the default window value used by the
+// compaction pass.
+export { DEFAULT_COMPACT_AFTER_DAYS };

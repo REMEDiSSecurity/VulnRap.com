@@ -25,6 +25,7 @@ import {
   type AvriDriftWeekBucket,
   type AvriDriftFlag,
   type AvriDriftFamilyMean,
+  getCalibrationToken,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -3432,6 +3433,20 @@ function ArchetypeRowView({
 }
 
 const ARCHETYPE_HISTORY_QUERY_KEY = ["test-run-archetype-history"] as const;
+const ARCHETYPE_HISTORY_CONFIG_QUERY_KEY = ["test-run-archetype-history-config"] as const;
+
+// Task #99 — shape returned by GET /api/test/archetype-history/config so the
+// reviewer can see *why* the effective compaction window is what it is
+// (env var override, persisted reviewer setting, or the built-in default).
+interface ArchetypeHistoryConfigResponse {
+  effectiveDays: number;
+  source: "env" | "persisted" | "default";
+  envOverride: number | null;
+  persistedDays: number | null;
+  defaultDays: number;
+  min: number;
+  max: number;
+}
 
 const AVRI_DRIFT_RUNBOOK_REPO_BASE =
   "https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/";
@@ -3536,6 +3551,7 @@ function EmergingArchetypesSection() {
   const [threshold, setThreshold] = useState(5);
   const [declineThreshold, setDeclineThreshold] = useState(5);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data, isLoading, isError, dataUpdatedAt } = useQuery<TestRunResponse>({
     queryKey: ["test-run-archetypes"],
@@ -3573,6 +3589,79 @@ function EmergingArchetypesSection() {
     // Refetch right after a /test/run completes so the new snapshot lands.
     enabled: !isError,
   });
+
+  // Task #99 — read the effective compaction window so the reviewer can
+  // both see what's currently in force and edit the persisted value
+  // inline. The endpoint is dev-only (404s in production) and shares the
+  // same gating as the rest of this section, so we tolerate failures
+  // silently rather than rendering a noisy error.
+  const { data: configData } = useQuery<ArchetypeHistoryConfigResponse>({
+    queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY,
+    queryFn: async () => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/test/archetype-history/config`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 300_000,
+    retry: false,
+    enabled: !isError,
+  });
+
+  // Local draft for the compaction window so the reviewer can type a new
+  // value without firing a PUT on every keystroke. We sync it with the
+  // server-reported effective value whenever that changes.
+  const [compactDraft, setCompactDraft] = useState<string>("");
+  const [compactSaving, setCompactSaving] = useState(false);
+  useEffect(() => {
+    if (configData) setCompactDraft(String(configData.effectiveDays));
+  }, [configData?.effectiveDays]);
+
+  const compactMin = configData?.min ?? 7;
+  const compactMax = configData?.max ?? 365;
+  const compactDraftNum = Number(compactDraft);
+  const compactDraftValid =
+    Number.isFinite(compactDraftNum)
+    && Number.isInteger(compactDraftNum)
+    && compactDraftNum >= compactMin
+    && compactDraftNum <= compactMax;
+  const compactDraftDirty =
+    configData != null && compactDraftValid && compactDraftNum !== configData.effectiveDays;
+  const envLocked = configData?.envOverride != null;
+
+  async function saveCompactWindow() {
+    if (!compactDraftValid || compactSaving || envLocked) return;
+    setCompactSaving(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      const tok = getCalibrationToken();
+      if (tok) headers["x-calibration-token"] = tok;
+      const res = await fetch(`${baseUrl}/api/test/archetype-history/config`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ compactAfterDays: compactDraftNum }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        effectiveDays?: number;
+      };
+      if (!res.ok) {
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
+      toast({
+        title: "Compaction window updated",
+        description: `Snapshots older than ${body.effectiveDays}d will be rolled up to one row per day on the next /api/test/run.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_QUERY_KEY });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to update the compaction window.";
+      toast({ title: "Could not save", description: msg, variant: "destructive" });
+    } finally {
+      setCompactSaving(false);
+    }
+  }
 
   if (isLoading) {
     return <Skeleton className="h-48 rounded-xl" />;
@@ -3657,6 +3746,78 @@ function EmergingArchetypesSection() {
           The sparkline plots persisted headroom over the last {historyData?.totalSnapshots ?? 0} run snapshots,
           and rows where headroom shrank by ≥ {declineThreshold}pt are flagged.
         </CardDescription>
+        {configData && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">Compaction window</span>
+            <input
+              type="number"
+              min={compactMin}
+              max={compactMax}
+              step={1}
+              value={compactDraft}
+              disabled={envLocked || compactSaving}
+              onChange={e => setCompactDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void saveCompactWindow();
+                }
+              }}
+              aria-label="Compaction window in days"
+              className={cn(
+                "w-16 px-2 py-1 rounded-md bg-background border text-foreground tabular-nums text-xs",
+                compactDraft.length > 0 && !compactDraftValid
+                  ? "border-red-400/60"
+                  : "border-border",
+                (envLocked || compactSaving) && "opacity-60 cursor-not-allowed",
+              )}
+            />
+            <span>days</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-[11px]"
+              disabled={!compactDraftDirty || compactSaving || envLocked}
+              onClick={() => void saveCompactWindow()}
+            >
+              {compactSaving ? "Saving…" : "Save"}
+            </Button>
+            <span className="text-muted-foreground/70">
+              effective <span className="font-mono text-foreground">{configData.effectiveDays}d</span>
+              {" · "}
+              {configData.source === "env" && (
+                <>source <span className="font-mono">env</span> (ARCHETYPE_HISTORY_COMPACT_DAYS)</>
+              )}
+              {configData.source === "persisted" && (
+                <>source <span className="font-mono">reviewer setting</span></>
+              )}
+              {configData.source === "default" && (
+                <>source <span className="font-mono">default ({configData.defaultDays}d)</span></>
+              )}
+            </span>
+            {envLocked && (
+              <Badge
+                variant="outline"
+                className="text-[10px] gap-1 text-orange-400 bg-orange-400/10 border-orange-400/30"
+              >
+                <AlertTriangle className="w-3 h-3" />
+                env override active — reviewer changes won't take effect until ARCHETYPE_HISTORY_COMPACT_DAYS is unset
+              </Badge>
+            )}
+            {!envLocked
+              && configData.persistedDays != null
+              && configData.persistedDays !== configData.effectiveDays && (
+                <span className="text-muted-foreground/60">
+                  (persisted: {configData.persistedDays}d)
+                </span>
+              )}
+            {compactDraft.length > 0 && !compactDraftValid && (
+              <span className="text-red-400">
+                Enter a whole number between {compactMin} and {compactMax}.
+              </span>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {rows.map(r => (

@@ -15,6 +15,12 @@ import {
   readArchetypeHistory,
 } from "../lib/archetype-history";
 import {
+  CompactWindowValidationError,
+  getCompactAfterDaysSetting,
+  setPersistedCompactAfterDays,
+} from "../lib/archetype-history-config";
+import { requireCalibrationAuth } from "../middlewares/require-calibration-auth";
+import {
   discover as discoverDatasets,
   iterateCuratedV2,
   type CuratedReport,
@@ -2603,5 +2609,46 @@ router.get("/test/archetype-history", async (_req, res) => {
     archetypes,
   });
 });
+
+// Task #99 — reviewer-tunable compaction window. The dashboard reads
+// the GET to render the current effective value (and *why* it's that
+// value — env override vs. persisted setting vs. default) and PUTs a
+// new value to update the persisted JSON. Mutation is gated behind the
+// shared calibration token so the endpoint can be safely exposed
+// publicly once the namespace is locked down. Both endpoints return 404
+// in production because the surrounding /test/* surface is dev-only.
+router.get("/test/archetype-history/config", (_req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not available in production." });
+    return;
+  }
+  res.json(getCompactAfterDaysSetting());
+});
+
+router.put(
+  "/test/archetype-history/config",
+  requireCalibrationAuth,
+  async (req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      res.status(404).json({ error: "Not available in production." });
+      return;
+    }
+    try {
+      const next = await setPersistedCompactAfterDays(
+        (req.body as { compactAfterDays?: unknown } | null | undefined)
+          ?.compactAfterDays,
+      );
+      res.json(next);
+    } catch (err) {
+      if (err instanceof CompactWindowValidationError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      res
+        .status(500)
+        .json({ error: (err as Error)?.message ?? "Failed to update compaction window." });
+    }
+  },
+);
 
 export default router;

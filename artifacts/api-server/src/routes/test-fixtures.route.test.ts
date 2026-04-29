@@ -43,13 +43,20 @@ let baseUrl: string;
 let tmpDir: string;
 const previousNodeEnv = process.env.NODE_ENV;
 const previousHistoryPath = process.env.ARCHETYPE_HISTORY_PATH;
+const previousHistoryConfigPath = process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
+const previousCalibrationToken = process.env.CALIBRATION_TOKEN;
 
 beforeAll(async () => {
   delete process.env.NODE_ENV; // route 404s in production
+  delete process.env.CALIBRATION_TOKEN; // PUT /test/archetype-history/config is open in single-reviewer mode
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "archetype-history-"));
   process.env.ARCHETYPE_HISTORY_PATH = path.join(tmpDir, "archetype-history.json");
+  process.env.ARCHETYPE_HISTORY_CONFIG_PATH = path.join(tmpDir, "archetype-history-config.json");
   const { default: testFixturesRouter } = await import("./test-fixtures");
   const app = express();
+  // express.json() is needed for PUT /test/archetype-history/config; the
+  // GET endpoints do not require it but it's harmless to mount globally.
+  app.use(express.json());
   app.use("/api", testFixturesRouter);
   await new Promise<void>(resolve => {
     server = app.listen(0, "127.0.0.1", () => resolve());
@@ -63,6 +70,10 @@ afterAll(async () => {
   else process.env.NODE_ENV = previousNodeEnv;
   if (previousHistoryPath === undefined) delete process.env.ARCHETYPE_HISTORY_PATH;
   else process.env.ARCHETYPE_HISTORY_PATH = previousHistoryPath;
+  if (previousHistoryConfigPath === undefined) delete process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
+  else process.env.ARCHETYPE_HISTORY_CONFIG_PATH = previousHistoryConfigPath;
+  if (previousCalibrationToken === undefined) delete process.env.CALIBRATION_TOKEN;
+  else process.env.CALIBRATION_TOKEN = previousCalibrationToken;
   await new Promise<void>(resolve => server.close(() => resolve()));
   try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
 });
@@ -314,4 +325,99 @@ describe("GET /api/test/run — Task #47 dataset samples block", () => {
       expect(typeof s.composite).toBe("number");
     }
   }, 60_000);
+});
+
+// Task #99 — reviewer-tunable archetype-history compaction window.
+describe("/api/test/archetype-history/config — reviewer-tunable compaction window", () => {
+  interface CompactWindow {
+    effectiveDays: number;
+    source: "env" | "persisted" | "default";
+    envOverride: number | null;
+    persistedDays: number | null;
+    defaultDays: number;
+    min: number;
+    max: number;
+  }
+
+  function putJson<T>(urlPath: string, body: unknown): Promise<{ status: number; body: T }> {
+    return new Promise((resolve, reject) => {
+      const data = Buffer.from(JSON.stringify(body), "utf-8");
+      const url = new URL(`${baseUrl}${urlPath}`);
+      const req = http.request(
+        {
+          method: "PUT",
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+          headers: {
+            "content-type": "application/json",
+            "content-length": String(data.length),
+          },
+        },
+        res => {
+          const chunks: Buffer[] = [];
+          res.on("data", c => chunks.push(c));
+          res.on("end", () => {
+            try {
+              const parsed = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+              resolve({ status: res.statusCode ?? 0, body: parsed as T });
+            } catch (err) {
+              reject(err);
+            }
+          });
+        },
+      );
+      req.on("error", reject);
+      req.write(data);
+      req.end();
+    });
+  }
+
+  it("GET reports the default window when nothing is configured", async () => {
+    // The shared beforeAll points ARCHETYPE_HISTORY_CONFIG_PATH at a fresh
+    // tmpdir file that doesn't exist yet, so source must be "default".
+    const cfg = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    expect(cfg.source).toBe("default");
+    expect(cfg.effectiveDays).toBe(cfg.defaultDays);
+    expect(cfg.envOverride).toBeNull();
+    expect(cfg.persistedDays).toBeNull();
+    expect(cfg.min).toBeGreaterThan(0);
+    expect(cfg.max).toBeGreaterThan(cfg.min);
+  });
+
+  it("PUT persists a reviewer-supplied window and GET reflects it", async () => {
+    const put = await putJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+      { compactAfterDays: 60 },
+    );
+    expect(put.status).toBe(200);
+    expect(put.body.effectiveDays).toBe(60);
+    expect(put.body.source).toBe("persisted");
+    expect(put.body.persistedDays).toBe(60);
+
+    const get = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    expect(get.effectiveDays).toBe(60);
+    expect(get.source).toBe("persisted");
+  });
+
+  it("PUT rejects out-of-range values with a 400 and a helpful error message", async () => {
+    const tooLow = await putJson<{ error: string }>(
+      "/api/test/archetype-history/config",
+      { compactAfterDays: 1 },
+    );
+    expect(tooLow.status).toBe(400);
+    expect(tooLow.body.error).toMatch(/between/i);
+
+    const tooHigh = await putJson<{ error: string }>(
+      "/api/test/archetype-history/config",
+      { compactAfterDays: 10_000 },
+    );
+    expect(tooHigh.status).toBe(400);
+
+    const notNumber = await putJson<{ error: string }>(
+      "/api/test/archetype-history/config",
+      { compactAfterDays: "abc" },
+    );
+    expect(notNumber.status).toBe(400);
+  });
 });

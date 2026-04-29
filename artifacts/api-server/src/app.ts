@@ -91,8 +91,13 @@ app.use(cors({
       callback(null, false);
     }
   },
-  methods: ["GET", "POST", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  // PUT is allowed for the calibration-tunable admin endpoints
+  // (e.g. /api/test/archetype-history/config) so reviewer-driven config
+  // updates also work in cross-origin setups, not only same-origin
+  // proxied ones. The custom x-calibration-token header is the gating
+  // credential read by requireCalibrationAuth.
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Calibration-Token"],
   maxAge: 86400,
 }));
 
