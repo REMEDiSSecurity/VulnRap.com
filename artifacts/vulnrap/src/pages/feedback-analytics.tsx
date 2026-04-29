@@ -3673,10 +3673,15 @@ function EmergingArchetypesSection() {
   );
 }
 
+const AVRI_DRIFT_LOOKBACK_OPTIONS = [4, 8, 13, 26] as const;
+type AvriDriftLookbackWeeks = (typeof AVRI_DRIFT_LOOKBACK_OPTIONS)[number];
+
 function AvriDriftSection() {
-  const { data, isLoading, error } = useGetAvriDriftReport(undefined, {
+  const [weeks, setWeeks] = useState<AvriDriftLookbackWeeks>(8);
+  const params = { weeks };
+  const { data, isLoading, isFetching, error } = useGetAvriDriftReport(params, {
     query: {
-      queryKey: getGetAvriDriftReportQueryKey(),
+      queryKey: getGetAvriDriftReportQueryKey(params),
       refetchInterval: 300_000,
     },
   });
@@ -3711,8 +3716,38 @@ function AvriDriftSection() {
           <CardTitle className="text-base flex items-center gap-2">
             <Activity className="w-4 h-4 text-primary" />
             AVRI Drift Dashboard
+            <span className="text-[10px] font-normal text-muted-foreground tabular-nums">
+              · last {report.weeksRequested} weeks
+            </span>
           </CardTitle>
           <div className="flex items-center gap-2">
+            <div
+              role="radiogroup"
+              aria-label="Lookback window (weeks)"
+              className="inline-flex items-center rounded-md border border-border/50 bg-muted/20 p-0.5"
+            >
+              {AVRI_DRIFT_LOOKBACK_OPTIONS.map(opt => {
+                const active = opt === weeks;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    disabled={isFetching && active}
+                    onClick={() => setWeeks(opt)}
+                    className={cn(
+                      "px-2 py-0.5 text-[10px] font-mono rounded-sm transition-colors tabular-nums",
+                      active
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                    )}
+                  >
+                    {opt}w
+                  </button>
+                );
+              })}
+            </div>
             <Badge variant="outline" className={cn("text-[10px] gap-1", headerColor)}>
               <Shield className="w-3 h-3" />
               {flaggedCount === 0 ? "No drift flags" : `${flaggedCount} flag${flaggedCount === 1 ? "" : "s"}`}
