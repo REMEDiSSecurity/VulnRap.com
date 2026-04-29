@@ -723,6 +723,21 @@ const HANDWAVY_PRODUCTION_SCAN_LIMIT_DEFAULT = 2000;
 const HANDWAVY_PRODUCTION_SCAN_LIMIT_MIN = 100;
 const HANDWAVY_PRODUCTION_SCAN_LIMIT_MAX = 10000;
 
+// Task #140 — render the remaining undo window for the inline countdown on
+// the Undo button (e.g. "4m 12s", "45s"). Math.ceil keeps the displayed
+// value monotonically counting down without prematurely showing "0s" while
+// fractional time still remains, so the button only ever flips to hidden
+// at the true 0-mark.
+function formatUndoRemaining(ms: number): string {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  if (totalSec >= 60) {
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}m ${s.toString().padStart(2, "0")}s`;
+  }
+  return `${totalSec}s`;
+}
+
 function formatAuditTimestamp(iso: string | undefined | null): string | null {
   if (!iso) return null;
   const t = Date.parse(iso);
@@ -1935,35 +1950,90 @@ function HandwavyPhrasesAdmin() {
   // that have aged out of the window or were never reviewer-added (curated
   // defaults).
   const UNDO_WINDOW_MS = 5 * 60 * 1000;
-  // Re-render every ~15s while at least one fresh add exists so each row's
-  // Undo button visibly disappears as its individual window elapses
-  // (rather than waiting for the next click somewhere on the panel).
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = window.setInterval(() => setTick((n) => n + 1), 15_000);
-    return () => window.clearInterval(id);
-  }, []);
-  // Map of phrase -> { addedAtIso } for every marker still inside its
-  // individual undo window. Curated defaults (no `addedAt`) are skipped —
-  // they were never "added" by a reviewer in the first place, so there's
-  // nothing to undo. Keyed by phrase because each row's lookup is by phrase
-  // and `phrases` already deduplicates active markers by phrase.
-  const undoCandidates = useMemo(() => {
+  // Task #140 — when a row's undo window has fewer than this many ms
+  // remaining its Undo button switches from amber to red + pulse so
+  // reviewers see the urgency at a glance.
+  const UNDO_URGENT_MS = 30 * 1000;
+  // Task #130 + Task #141 — Map of phrase -> { addedAtIso, addedAtMs } for
+  // every active marker that was added by a reviewer (curated defaults
+  // have no `addedAt` so they're skipped — there's nothing to undo on
+  // them). Whether each entry is still inside its 5-minute undo window is
+  // decided LIVE in `undoCandidates` below, off Date.now() + the 1Hz
+  // tick, so per-row buttons can disappear at the exact 0s mark instead
+  // of waiting for the next phrases refresh. Task #141 keyed this by
+  // phrase (instead of "single most recent" as in Task #130) so a
+  // reviewer who fires multiple adds back-to-back can roll back any of
+  // them through the audit-friendly undo path; Task #140 layered the
+  // live countdown + urgent styling on top of that per-row.
+  const reviewerAddedByPhrase = useMemo(() => {
     const map = new Map<string, { addedAtIso: string; addedAtMs: number }>();
-    const now = Date.now();
     for (const m of phrases) {
       if (!m.addedAt) continue;
       const iso = String(m.addedAt);
       const ms = Date.parse(iso);
       if (!Number.isFinite(ms)) continue;
-      if (now - ms > UNDO_WINDOW_MS) continue;
       map.set(m.phrase, { addedAtIso: iso, addedAtMs: ms });
     }
     return map;
-    // The tick state forces this to re-evaluate periodically so the window
-    // expires visually; phrases.length covers add/remove/refresh changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phrases]);
+  // Task #140 — re-render every second while at least one reviewer-added
+  // phrase is still inside its 5-minute undo window so each row's
+  // countdown ("Undo (4m 12s)" → "(4m 11s)" → …) ticks down live and the
+  // button vanishes cleanly the moment that row's window elapses, rather
+  // than waiting for a 15s poll. The interval is gated on the LATEST
+  // expiry across all reviewer-added phrases (not just the map being
+  // non-empty) so panels whose newest reviewer add is already past
+  // expiry don't pay a permanent 1Hz render cost. The interval also
+  // self-clears once every candidate has expired so the final render
+  // flips the buttons to hidden cleanly without flashing.
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const latestExpiryMs = useMemo(() => {
+    let best = 0;
+    for (const entry of reviewerAddedByPhrase.values()) {
+      const expires = entry.addedAtMs + UNDO_WINDOW_MS;
+      if (expires > best) best = expires;
+    }
+    return best;
+  }, [reviewerAddedByPhrase, UNDO_WINDOW_MS]);
+  useEffect(() => {
+    if (latestExpiryMs === 0) return;
+    const initialNow = Date.now();
+    setNowMs(initialNow);
+    if (initialNow >= latestExpiryMs) {
+      // Every reviewer-added phrase is already past its window — nothing
+      // to count down, so don't arm the 1Hz ticker at all.
+      return;
+    }
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setNowMs(now);
+      if (now >= latestExpiryMs) {
+        window.clearInterval(id);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [latestExpiryMs]);
+  // Per-phrase undo entries that are still INSIDE their window, keyed by
+  // phrase so each row's lookup is O(1). Each value carries the live
+  // remainingMs so the row can render its own countdown text + urgent
+  // styling without recomputing Date.now() at the call site. Entries
+  // whose window has elapsed are dropped here so the per-row check
+  // (`undoCandidates.get(m.phrase)`) doubles as the show/hide gate.
+  const undoCandidates = useMemo(() => {
+    const map = new Map<
+      string,
+      { addedAtIso: string; addedAtMs: number; remainingMs: number }
+    >();
+    for (const [phrase, entry] of reviewerAddedByPhrase) {
+      const remainingMs = Math.max(
+        0,
+        entry.addedAtMs + UNDO_WINDOW_MS - nowMs,
+      );
+      if (remainingMs <= 0) continue;
+      map.set(phrase, { ...entry, remainingMs });
+    }
+    return map;
+  }, [reviewerAddedByPhrase, nowMs, UNDO_WINDOW_MS]);
 
   const handleUndo = async (phrase: string, addedAtIso: string) => {
     const key = `undo:${phrase}:${addedAtIso}`;
@@ -2953,11 +3023,17 @@ function HandwavyPhrasesAdmin() {
               // most-recent one), so a reviewer who fired two adds back-to-
               // back can roll back either of them through the audit-friendly
               // undo path. Look the row up by phrase in `undoCandidates`.
+              // Task #140 — the entry also carries its own live `remainingMs`
+              // so this row's countdown text + urgent styling tick down
+              // independently of every other row.
               const undoEntry = undoCandidates.get(m.phrase) ?? null;
               const isUndoTarget = undoEntry !== null;
               const undoBusyKey = undoEntry
                 ? `undo:${m.phrase}:${undoEntry.addedAtIso}`
                 : null;
+              const undoRemainingMs = undoEntry?.remainingMs ?? 0;
+              const undoIsUrgent =
+                undoEntry !== null && undoRemainingMs <= UNDO_URGENT_MS;
               // Task #131 — count of completed remove+reinstate cycles for
               // this phrase, derived from the existing history log. Surfaced
               // as a hover-able badge so reviewers can spot contentious
@@ -3083,15 +3159,24 @@ function HandwavyPhrasesAdmin() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-[10px] text-amber-300 hover:text-amber-200"
+                            className={cn(
+                              "h-7 px-2 text-[10px]",
+                              undoIsUrgent
+                                ? "text-red-400 hover:text-red-300 animate-pulse"
+                                : "text-amber-300 hover:text-amber-200",
+                            )}
                             disabled={editing !== null || busy === undoBusyKey}
                             onClick={() => handleUndo(m.phrase, undoEntry.addedAtIso)}
                             data-testid="handwavy-undo"
-                            aria-label={`Undo adding phrase ${m.phrase}`}
-                            title="Undo this brand-new add (within 5 minutes)"
+                            data-undo-remaining-ms={undoRemainingMs}
+                            data-undo-urgent={undoIsUrgent ? "true" : "false"}
+                            aria-label={`Undo adding phrase ${m.phrase} (${formatUndoRemaining(undoRemainingMs)} left)`}
+                            title={`Undo this brand-new add — ${formatUndoRemaining(undoRemainingMs)} left in the 5-minute window`}
                           >
                             <RotateCcw className="w-3 h-3 mr-1" />
-                            {busy === undoBusyKey ? "Undoing…" : "Undo"}
+                            {busy === undoBusyKey
+                              ? "Undoing…"
+                              : `Undo (${formatUndoRemaining(undoRemainingMs)})`}
                           </Button>
                         )}
                         <Button

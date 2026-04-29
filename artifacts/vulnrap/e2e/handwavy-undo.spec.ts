@@ -106,6 +106,26 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await expect(undoBtn).toBeVisible();
       await expect(undoBtn).toBeEnabled();
 
+      // Task #140 — the button surfaces a live countdown in the form
+      // "Undo (Xm YYs)" so reviewers know how much of the 5-minute
+      // window remains. A fresh add starts well above 60s so the
+      // minutes/seconds form must be present (the bare "Undo" of the
+      // pre-#140 UI would no longer match this regex).
+      await expect(undoBtn).toHaveText(/^Undo \(\d+m \d{2}s\)$/);
+      // While the window is still wide open the button must NOT be
+      // flagged as urgent (urgent kicks in inside the last ~30s).
+      await expect(undoBtn).toHaveAttribute("data-undo-urgent", "false");
+      // The remaining-ms data attribute is exposed for tests/automation
+      // and must be a positive integer well above the urgent threshold
+      // immediately after a fresh add.
+      const remainingAttr = await undoBtn.getAttribute(
+        "data-undo-remaining-ms",
+      );
+      expect(remainingAttr).not.toBeNull();
+      const remainingMs = Number(remainingAttr);
+      expect(Number.isFinite(remainingMs)).toBe(true);
+      expect(remainingMs).toBeGreaterThan(60_000);
+
       await undoBtn.click();
 
       // After the undo round-trip the active list should no longer
