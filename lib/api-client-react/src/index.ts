@@ -4,5 +4,7 @@ export {
   setCalibrationToken,
   getCalibrationToken,
   addRateLimitObserver,
+  ApiError,
   type RateLimitNotice,
+  type ErrorType,
 } from "./custom-fetch";

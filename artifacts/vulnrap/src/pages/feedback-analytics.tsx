@@ -326,7 +326,7 @@ function BucketRow({ bucket }: { bucket: BucketAnalysis }) {
   );
 }
 
-function SuggestionCard({ suggestion, onApply, applying, cooldownActive, cooldownSecondsRemaining }: {
+function SuggestionCard({ suggestion, onApply, applying, cooldownActive, cooldownSecondsRemaining, mutationsAllowed }: {
   suggestion: CalibrationSuggestion;
   onApply: (s: CalibrationSuggestion) => void;
   applying: boolean;
@@ -335,6 +335,10 @@ function SuggestionCard({ suggestion, onApply, applying, cooldownActive, cooldow
   // requests at a bucket the limiter is already rejecting.
   cooldownActive: boolean;
   cooldownSecondsRemaining: number;
+  // Task #214 — when false, the Apply button is disabled with a tooltip
+  // pointing reviewers back at the auth banner instead of letting them
+  // burn a click on a guaranteed-401 round-trip.
+  mutationsAllowed: boolean;
 }) {
   const confColor = suggestion.confidence === "high" ? "text-green-400" : suggestion.confidence === "medium" ? "text-yellow-400" : "text-muted-foreground";
 
@@ -369,8 +373,10 @@ function SuggestionCard({ suggestion, onApply, applying, cooldownActive, cooldow
         variant="outline"
         className="gap-2 text-xs"
         onClick={() => onApply(suggestion)}
-        disabled={applying || cooldownActive}
-        data-testid="apply-suggestion-button"
+        disabled={applying || cooldownActive || !mutationsAllowed}
+        title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+        data-testid="calibration-suggestion-apply"
+        data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
       >
         <Play className="w-3 h-3" />
         {buttonLabel}
@@ -406,6 +412,14 @@ interface CalibrationAuthState {
   // case (mutations actually fail) still shows the existing 401 toast.
   mutationsAllowed: boolean;
 }
+
+// Task #214 — shared tooltip text for any mutating control that the
+// useCalibrationAuthState() probe has determined would be rejected by the
+// API server. Pointing reviewers back at the warning banner above the card
+// keeps the disabled-control hover discoverable without each call site
+// having to spell out the full diagnosis.
+const MUTATIONS_BLOCKED_TITLE =
+  "Calibration mutations are blocked: the reviewer token is missing or invalid (see the warning banner above the calibration card).";
 
 function useCalibrationAuthState(): CalibrationAuthState {
   // Refetch periodically so a reviewer who configures the server token while
@@ -684,13 +698,14 @@ function CalibrationSection() {
                 applying={applying}
                 cooldownActive={cooldown.active}
                 cooldownSecondsRemaining={cooldown.secondsRemaining}
+                mutationsAllowed={authState.mutationsAllowed}
               />
             ))}
           </CardContent>
         </Card>
       )}
 
-      <HandwavyPhrasesAdmin />
+      <HandwavyPhrasesAdmin mutationsAllowed={authState.mutationsAllowed} />
 
       {configData && configData.history.length > 1 && (
         <Card className="glass-card rounded-xl">
@@ -1480,6 +1495,7 @@ function renderHandwavyEditEntries({
   editing,
   busy,
   onRevertClick,
+  mutationsAllowed,
   showHistoryTestIds,
 }: {
   editsList: HandwavyEditEntry[];
@@ -1495,6 +1511,9 @@ function renderHandwavyEditEntries({
   // than calling the API directly, so the helper just forwards the entry
   // and lets the caller decide what to do with it.
   onRevertClick: (entry: HandwavyEditEntry) => void;
+  // Task #214 — when false, every Revert button is disabled with a tooltip
+  // pointing at the auth banner, since the eventual PATCH mutation would 401.
+  mutationsAllowed: boolean;
   showHistoryTestIds?: boolean;
 }): ReactNode[] {
   return editsList
@@ -1565,19 +1584,30 @@ function renderHandwavyEditEntries({
             variant="ghost"
             size="sm"
             className="h-6 px-1.5 text-[10px] text-amber-300 hover:text-amber-200 shrink-0 disabled:text-muted-foreground/60"
-            disabled={editing !== null || busy === revertKey || busy === `rm:${phrase}` || isNoop}
+            disabled={
+              editing !== null ||
+              busy === revertKey ||
+              busy === `rm:${phrase}` ||
+              isNoop ||
+              !mutationsAllowed
+            }
             onClick={() => onRevertClick(entry)}
             data-testid="handwavy-revert-edit"
             data-noop={isNoop ? "true" : "false"}
+            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
             aria-label={
-              isNoop
-                ? `Revert unavailable for ${phrase}: the marker already matches this edit's prior state.`
-                : `Revert edit on ${phrase} from ${editedAtLabel ?? entry.editedAt}`
+              !mutationsAllowed
+                ? `Revert blocked for ${phrase}: reviewer token missing or invalid.`
+                : isNoop
+                  ? `Revert unavailable for ${phrase}: the marker already matches this edit's prior state.`
+                  : `Revert edit on ${phrase} from ${editedAtLabel ?? entry.editedAt}`
             }
             title={
-              isNoop
-                ? "Already at this state — nothing to revert."
-                : "Restore the values from before this edit (recorded as a new audit entry)."
+              !mutationsAllowed
+                ? MUTATIONS_BLOCKED_TITLE
+                : isNoop
+                  ? "Already at this state — nothing to revert."
+                  : "Restore the values from before this edit (recorded as a new audit entry)."
             }
           >
             <Undo2 className="w-3 h-3 mr-1" />
@@ -1592,7 +1622,12 @@ function renderHandwavyEditEntries({
     });
 }
 
-function HandwavyPhrasesAdmin() {
+function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean }) {
+  // Task #214 — when the calibration auth probe says mutations would be
+  // rejected (reviewer token missing or invalid), every mutating control on
+  // this admin panel is disabled with a tooltip pointing reviewers back at
+  // the warning banner above the calibration card. Cancel / dismiss / read-
+  // only controls stay enabled so the panel remains usable for inspection.
   const { toast } = useToast();
   const queryClient = useQueryClient();
   // Task #215 — reuse the reviewer-token probe from CalibrationSection so a
@@ -3049,8 +3084,17 @@ function HandwavyPhrasesAdmin() {
             <Button
               type="submit"
               size="sm"
-              disabled={busy === "preview" || busy === "confirm" || preview !== null || draft.trim().length < 3 || cooldown.active}
+              disabled={
+                busy === "preview" ||
+                busy === "confirm" ||
+                preview !== null ||
+                draft.trim().length < 3 ||
+                cooldown.active ||
+                !mutationsAllowed
+              }
+              title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
               data-testid="handwavy-add"
+              data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
             >
               <Plus className="w-3.5 h-3.5 mr-1" />
               {cooldown.active
@@ -3304,8 +3348,10 @@ function HandwavyPhrasesAdmin() {
                 size="sm"
                 variant={hasWarning ? "destructive" : "default"}
                 onClick={handleConfirmPreview}
-                disabled={busy === "confirm" || cooldown.active}
+                disabled={busy === "confirm" || cooldown.active || !mutationsAllowed}
+                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                 data-testid="handwavy-preview-confirm"
+                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
               >
                 {cooldown.active
                   ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
@@ -3624,8 +3670,10 @@ function HandwavyPhrasesAdmin() {
                 size="sm"
                 variant={requiresAck ? "destructive" : "default"}
                 onClick={confirmBulkRemoveFromPreview}
-                disabled={removalDisabled}
+                disabled={removalDisabled || !mutationsAllowed}
+                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                 data-testid="handwavy-bulk-preview-confirm"
+                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
               >
                 {cooldown.active
                   ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
@@ -3701,9 +3749,12 @@ function HandwavyPhrasesAdmin() {
                 onClick={confirmRemoveAnyway}
                 disabled={
                   busy === `rm:${removeConfirm.phrase}` ||
-                  busy === `rm-preview:${removeConfirm.phrase}`
+                  busy === `rm-preview:${removeConfirm.phrase}` ||
+                  !mutationsAllowed
                 }
+                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                 data-testid="handwavy-remove-confirm-go"
+                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
               >
                 Remove anyway
               </Button>
@@ -3834,8 +3885,10 @@ function HandwavyPhrasesAdmin() {
                   size="sm"
                   variant="destructive"
                   onClick={confirmRemoveFromPreview}
-                  disabled={inFlight || (requireAck && !acknowledged)}
+                  disabled={inFlight || (requireAck && !acknowledged) || !mutationsAllowed}
+                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                   data-testid="handwavy-remove-preview-confirm"
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                 >
                   Remove anyway
                 </Button>
@@ -3900,8 +3953,10 @@ function HandwavyPhrasesAdmin() {
                   size="sm"
                   className="ml-auto h-7 px-2 text-[11px]"
                   onClick={handleUndoBulkBatch}
-                  disabled={undoBusy}
+                  disabled={undoBusy || !mutationsAllowed}
+                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                   data-testid="handwavy-bulk-undo"
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                 >
                   <Undo2 className="w-3 h-3 mr-1" />
                   {undoBusy
@@ -4034,11 +4089,17 @@ function HandwavyPhrasesAdmin() {
                   selectedInList.length === 0 ||
                   busy === "bulk-remove" ||
                   busy === "bulk-preview" ||
-                  bulkPreview !== null
+                  bulkPreview !== null ||
+                  !mutationsAllowed
                 }
                 onClick={handlePreviewBulkRemove}
                 data-testid="handwavy-bulk-remove"
-                title="Open the side-by-side removal preview. You'll see how many active phrases would be removed, plus how many flagged reports would lose their flag, before anything is committed."
+                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                title={
+                  !mutationsAllowed
+                    ? MUTATIONS_BLOCKED_TITLE
+                    : "Open the side-by-side removal preview. You'll see how many active phrases would be removed, plus how many flagged reports would lose their flag, before anything is committed."
+                }
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 {busy === "bulk-preview"
@@ -4257,9 +4318,11 @@ function HandwavyPhrasesAdmin() {
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-emerald-300 hover:text-emerald-200"
-                          disabled={busy === `edit:${m.phrase}`}
+                          disabled={busy === `edit:${m.phrase}` || !mutationsAllowed}
+                          title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                           onClick={handleSaveEdit}
                           data-testid="handwavy-edit-save"
+                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                           aria-label={`Save edit for ${m.phrase}`}
                         >
                           <Save className="w-3.5 h-3.5" />
@@ -4288,13 +4351,22 @@ function HandwavyPhrasesAdmin() {
                                 ? "text-red-400 hover:text-red-300 animate-pulse"
                                 : "text-amber-300 hover:text-amber-200",
                             )}
-                            disabled={editing !== null || busy === undoBusyKey}
+                            disabled={
+                              editing !== null ||
+                              busy === undoBusyKey ||
+                              !mutationsAllowed
+                            }
                             onClick={() => handleUndo(m.phrase, undoEntry.addedAtIso)}
                             data-testid="handwavy-undo"
                             data-undo-remaining-ms={undoRemainingMs}
                             data-undo-urgent={undoIsUrgent ? "true" : "false"}
+                            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                             aria-label={`Undo adding phrase ${m.phrase} (${formatUndoRemaining(undoRemainingMs)} left)`}
-                            title={`Undo this brand-new add — ${formatUndoRemaining(undoRemainingMs)} left in the 5-minute window`}
+                            title={
+                              !mutationsAllowed
+                                ? MUTATIONS_BLOCKED_TITLE
+                                : `Undo this brand-new add — ${formatUndoRemaining(undoRemainingMs)} left in the 5-minute window`
+                            }
                           >
                             <RotateCcw className="w-3 h-3 mr-1" />
                             {busy === undoBusyKey
@@ -4310,10 +4382,13 @@ function HandwavyPhrasesAdmin() {
                             editing !== null ||
                             busy === `rm:${m.phrase}` ||
                             busy === `rm-preview:${m.phrase}` ||
-                            bulkBusy
+                            bulkBusy ||
+                            !mutationsAllowed
                           }
+                          title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                           onClick={() => handleStartEdit(m.phrase, m.category, m.rationale)}
                           data-testid="handwavy-edit"
+                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                           aria-label={`Edit phrase ${m.phrase}`}
                         >
                           <Pencil className="w-3.5 h-3.5" />
@@ -4326,10 +4401,13 @@ function HandwavyPhrasesAdmin() {
                             editing !== null ||
                             busy === `rm:${m.phrase}` ||
                             busy === `rm-preview:${m.phrase}` ||
-                            bulkBusy
+                            bulkBusy ||
+                            !mutationsAllowed
                           }
+                          title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                           onClick={() => requestRemove(m.phrase, cycles)}
                           data-testid="handwavy-remove"
+                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                           aria-label={`Remove phrase ${m.phrase}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -4406,6 +4484,7 @@ function HandwavyPhrasesAdmin() {
                           busy,
                           onRevertClick: (entry) =>
                             setRevertConfirm({ phrase: m.phrase, entry }),
+                          mutationsAllowed,
                         })}
                       </ul>
                     </details>
@@ -4433,6 +4512,7 @@ function HandwavyPhrasesAdmin() {
                           busy,
                           onRevertClick: (entry) =>
                             setRevertConfirm({ phrase: m.phrase, entry }),
+                          mutationsAllowed,
                           showHistoryTestIds: true,
                         })}
                       </ul>
@@ -4546,9 +4626,11 @@ function HandwavyPhrasesAdmin() {
                             variant="ghost"
                             size="sm"
                             className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                            disabled={busy === batchKey}
+                            disabled={busy === batchKey || !mutationsAllowed}
+                            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                             onClick={() => handleReinstateBatch(removedAtIso, phraseCount)}
                             data-testid="handwavy-removal-batches-reinstate"
+                            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                             aria-label={`Reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`}
                           >
                             <RotateCcw className="w-3 h-3 mr-1" />
@@ -4683,9 +4765,11 @@ function HandwavyPhrasesAdmin() {
                               variant="ghost"
                               size="sm"
                               className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                              disabled={busy === reinstateKey}
+                              disabled={busy === reinstateKey || !mutationsAllowed}
+                              title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                               onClick={() => setReinstateConfirm(h)}
                               data-testid="handwavy-reinstate"
+                              data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                               aria-label={`Reinstate phrase ${h.phrase}`}
                             >
                               <RotateCcw className="w-3 h-3 mr-1" />
@@ -4829,11 +4913,13 @@ function HandwavyPhrasesAdmin() {
                               variant="ghost"
                               size="sm"
                               className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200"
-                              disabled={busy === previewKey || busy === batchKey}
+                              disabled={busy === previewKey || busy === batchKey || !mutationsAllowed}
+                              title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                               onClick={() =>
                                 handlePreviewReinstateBatch(group.removedAtIso)
                               }
                               data-testid="handwavy-reinstate-batch-preview"
+                              data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                               aria-label={`Preview reinstate of ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
                             >
                               <Info className="w-3 h-3 mr-1" />
@@ -4845,7 +4931,9 @@ function HandwavyPhrasesAdmin() {
                               variant="ghost"
                               size="sm"
                               className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                              disabled={busy === batchKey || busy === previewKey}
+                              disabled={busy === batchKey || busy === previewKey || !mutationsAllowed}
+                              title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                              data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                               onClick={() => {
                                 // Task #180 — gate the direct "Reinstate all"
                                 // click behind a confirmation dialog
@@ -5018,8 +5106,9 @@ function HandwavyPhrasesAdmin() {
                                 size="sm"
                                 className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
                                 disabled={
-                                  confirming || wouldReinstateCount === 0
+                                  confirming || wouldReinstateCount === 0 || !mutationsAllowed
                                 }
+                                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                                 onClick={() =>
                                   handleReinstateBatch(
                                     group.removedAtIso,
@@ -5027,6 +5116,7 @@ function HandwavyPhrasesAdmin() {
                                   )
                                 }
                                 data-testid="handwavy-reinstate-batch-preview-confirm"
+                                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                                 aria-label={`Confirm reinstate of ${wouldReinstateCount} ${noun} from this batch`}
                               >
                                 <RotateCcw className="w-3 h-3 mr-1" />
@@ -5156,6 +5246,9 @@ function HandwavyPhrasesAdmin() {
           </AlertDialogCancel>
           <AlertDialogAction
             data-testid="handwavy-revert-confirm-confirm"
+            disabled={!mutationsAllowed}
+            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
             onClick={() => {
               if (revertConfirm) {
                 const { phrase, entry } = revertConfirm;
@@ -5230,6 +5323,9 @@ function HandwavyPhrasesAdmin() {
           </AlertDialogCancel>
           <AlertDialogAction
             data-testid="handwavy-reinstate-confirm-confirm"
+            disabled={!mutationsAllowed}
+            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
             onClick={() => {
               if (reinstateConfirm) {
                 const entry = reinstateConfirm;
@@ -5319,6 +5415,9 @@ function HandwavyPhrasesAdmin() {
           </AlertDialogCancel>
           <AlertDialogAction
             data-testid="handwavy-reinstate-batch-confirm-confirm"
+            disabled={!mutationsAllowed}
+            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
             onClick={() => {
               if (reinstateBatchConfirm) {
                 const { removedAtIso, batchSize } = reinstateBatchConfirm;
