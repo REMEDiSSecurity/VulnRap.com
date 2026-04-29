@@ -4676,8 +4676,37 @@ interface ArchetypeRow {
   fixtures: ArchetypeFixture[];
 }
 
+// Task #47 — `/api/test/run` augments cohorts with sampled real reports
+// from the curated dataset when it's mounted. Mirrors the response shape
+// asserted in test-fixtures.route.test.ts.
+interface DatasetCohort {
+  tier: string;
+  label: string;
+  count: number;
+  compositeMean: number | null;
+  compositeMin: number | null;
+  compositeMax: number | null;
+  engine2Mean: number | null;
+}
+
+type DatasetSamples =
+  | { available: false }
+  | {
+      available: true;
+      sourcePath: string;
+      sampleSizeRequestedPerLabel: number;
+      sampleCount: number;
+      cohorts: DatasetCohort[];
+      legitMean: number | null;
+      slopMean: number | null;
+      gap: number | null;
+      gapTarget: number;
+      gapMeetsTarget: boolean;
+    };
+
 interface TestRunResponse {
   archetypes?: ArchetypeRow[];
+  datasetSamples?: DatasetSamples;
 }
 
 interface ArchetypeHistorySnapshot {
@@ -5365,6 +5394,135 @@ function EmergingArchetypesSection() {
   );
 }
 
+// Task #186 — render the dataset cohort means + T1−T3 gap from
+// `/api/test/run`'s `datasetSamples` block. Mirrors the gating used by
+// EmergingArchetypesSection (dev-only endpoint, hidden in prod) and
+// shares its query cache so both components consume one fetch. When the
+// dataset isn't mounted the section still renders, surfacing a short
+// "dataset not mounted" hint instead of being hidden — that distinguishes
+// "no curated data on disk" from "endpoint unavailable".
+const DATASET_COHORT_TIER_LABELS: Record<string, string> = {
+  T1_LEGIT: "T1 · Legit",
+  T2_BORDERLINE: "T2 · Borderline",
+  T3_SLOP: "T3 · Slop",
+};
+const DATASET_COHORT_ORDER = ["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"] as const;
+
+function DatasetCohortMeansSection() {
+  const { data, isLoading, isError } = useQuery<TestRunResponse>({
+    queryKey: ["test-run-archetypes"],
+    queryFn: async () => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/test/run`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 300_000,
+    retry: false,
+  });
+
+  if (isLoading) return <Skeleton className="h-40 rounded-xl" />;
+  // /api/test/run is dev-only; in production the endpoint 404s. Hide
+  // the panel rather than surface a noisy error to reviewers.
+  if (isError || !data?.datasetSamples) return null;
+
+  const ds = data.datasetSamples;
+
+  if (!ds.available) {
+    return (
+      <Card className="glass-card rounded-xl border-primary/10">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Layers className="w-4 h-4 text-primary" />
+            Curated Dataset Cohort Means
+          </CardTitle>
+          <CardDescription>
+            Per-cohort composite means and the T1−T3 gap from up to 75 sampled real reports.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 text-[11px] text-muted-foreground">
+            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground/70" />
+            <span>
+              Dataset not mounted — set <span className="font-mono">VULNRAP_DATASETS_DIR</span> (or
+              place <span className="font-mono">vuln_reports_dataset_v2.json.gz</span> at
+              {" "}<span className="font-mono">/mnt/vulnrap/data</span>) to surface drift on real reports.
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const cohortByTier = new Map(ds.cohorts.map(c => [c.tier, c]));
+  const orderedCohorts = DATASET_COHORT_ORDER
+    .map(t => cohortByTier.get(t))
+    .filter((c): c is DatasetCohort => c != null);
+
+  const gapText = ds.gap != null ? `${ds.gap.toFixed(1)}pt` : "n/a";
+  const gapColor = ds.gap == null
+    ? "text-muted-foreground bg-muted/20 border-border/40"
+    : ds.gapMeetsTarget
+      ? "text-green-400 bg-green-400/10 border-green-400/30"
+      : "text-orange-400 bg-orange-400/10 border-orange-400/30";
+
+  return (
+    <Card className="glass-card rounded-xl border-primary/10">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Layers className="w-4 h-4 text-primary" />
+            Curated Dataset Cohort Means
+            <Badge variant="secondary" className="text-[10px]">{ds.sampleCount} samples</Badge>
+          </CardTitle>
+          <Badge variant="outline" className={cn("text-[10px] gap-1 tabular-nums", gapColor)}>
+            <Shield className="w-3 h-3" />
+            T1−T3 gap {gapText} (target ≥{ds.gapTarget}pt)
+          </Badge>
+        </div>
+        <CardDescription>
+          Per-cohort composite means and the T1−T3 gap from up to {ds.sampleSizeRequestedPerLabel} sampled
+          real reports per label. Drawn live from the curated dataset on each run, so calibration drift
+          shows up on a much larger sample than the {data.archetypes?.reduce((n, a) => n + a.count, 0) ?? 0}-fixture
+          synthetic battery.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {orderedCohorts.map(c => (
+            <div
+              key={c.tier}
+              className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2"
+            >
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span className="font-mono">{DATASET_COHORT_TIER_LABELS[c.tier] ?? c.tier}</span>
+                <span className="tabular-nums text-muted-foreground/60">n={c.count}</span>
+              </div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-lg font-semibold tabular-nums text-foreground">
+                  {c.compositeMean != null ? c.compositeMean.toFixed(1) : "—"}
+                </span>
+                <span className="text-[10px] text-muted-foreground">composite mean</span>
+              </div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground/70 tabular-nums">
+                {c.compositeMin != null && c.compositeMax != null
+                  ? <>range {c.compositeMin.toFixed(1)}–{c.compositeMax.toFixed(1)}</>
+                  : "no samples"}
+                {c.engine2Mean != null && (
+                  <> · E2 mean {c.engine2Mean.toFixed(1)}</>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="text-[10px] text-muted-foreground/70 font-mono break-all">
+          source: {ds.sourcePath}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 const AVRI_DRIFT_LOOKBACK_OPTIONS = [4, 8, 13, 26] as const;
 type AvriDriftLookbackWeeks = (typeof AVRI_DRIFT_LOOKBACK_OPTIONS)[number];
 
@@ -5754,6 +5912,8 @@ export default function FeedbackAnalytics() {
       <CalibrationSection />
 
       <EmergingArchetypesSection />
+
+      <DatasetCohortMeansSection />
 
       {dailyTrend.length > 0 && (
         <Card className="glass-card rounded-xl">
