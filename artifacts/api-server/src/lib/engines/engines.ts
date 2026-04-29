@@ -644,40 +644,23 @@ function getCompositeLabel(score: number): string {
 // and score in the 50s — well above the LIKELY-INVALID band where they
 // belong.
 //
-// Two of the detector's signals — `incomplete_asan` and `fabricated_pid`
-// — fire on real reports too (legit ASan excerpts truncate the SUMMARY
-// line, and the textbook example PID `12345` is widely used in real bug
-// reports). We treat them as CORROBORATING signals only: their weight
-// counts toward the tier, but they cannot single-handedly trigger the
-// penalty. At least one PRIMARY fabrication signal (anything other than
-// the corroborating set) must be present.
-//
-// The composite penalty is tiered on `totalWeight` so that:
-//   - 12+ totalWeight (≈ two corroborating signals) → -10
+// The composite penalty is tiered purely on `totalWeight`:
+//   - 12+ totalWeight (≈ two moderate signals) → -10
 //   - 20+ totalWeight (≈ a strong-fabrication cluster) → -15
 //   - 30+ totalWeight (overwhelming fabrication evidence) → -25
 //
+// v3.8.0 (Task #192): the previous CORROBORATING_HALLUCINATION_TYPES
+// allowlist (which exempted `incomplete_asan` and `fabricated_pid` from
+// being able to trigger the penalty on their own) was removed once those
+// two signals were tightened at the detector layer to stop false-positive
+// firing on real bug reports. Both rules now require a real fabrication
+// context to fire, so totalWeight tiers can speak for themselves.
+//
 // The chosen tier is recorded in `applied` so the triage UI can surface
 // the override note alongside CONVERGENT_NEGATIVE etc.
-const CORROBORATING_HALLUCINATION_TYPES = new Set([
-  "incomplete_asan",
-  "fabricated_pid",
-]);
-
 function hallucinationOverridePoints(
   result: HallucinationResult,
 ): { points: number; note: string | null } {
-  // Require at least one PRIMARY (non-corroborating) fabrication signal so
-  // a truncated-ASan-only or magic-PID-only legit report does not get
-  // penalized. This guards T1 fixtures (T1-01-uaf-libfoo,
-  // T1-AVRI-firefox-uaf, T1-AVRI-cve-2025-0725-curl) which only carry
-  // corroborating signals while still catching every T4 fabrication
-  // fixture that pairs the noisy signals with a real one.
-  const hasPrimary = result.signals.some(
-    (s) => !CORROBORATING_HALLUCINATION_TYPES.has(s.type),
-  );
-  if (!hasPrimary) return { points: 0, note: null };
-
   const w = result.totalWeight;
   if (w >= 30) {
     return {

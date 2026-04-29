@@ -79,26 +79,35 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     });
   }
 
+  // v3.8.0 (Task #192): incomplete_asan used to fire on any report that
+  // mentioned "AddressSanitizer" but didn't include the trailing
+  // `SUMMARY: AddressSanitizer ...` line. Real bug reports routinely excerpt
+  // only the lines around the bug (the ERROR header, the offending stack
+  // frames, the freed-by/previously-allocated trailers) and drop the SUMMARY
+  // line, so the rule produced false positives on legit T1 reports
+  // (T1-01-uaf-libfoo, T1-AVRI-firefox-uaf, T1-AVRI-cve-2025-0725-curl).
+  // We now suppress it whenever the text shows other authentic ASan-context
+  // markers that hand-rolled fabrications almost never include verbatim:
+  //   - the "==N==ERROR: AddressSanitizer:" header line
+  //   - resolved stack frames with file:line (`#0 0x... in foo bar/baz.c:42`)
+  //   - the "READ/WRITE of size N at 0x..." access-size header
+  //   - the "freed by thread T0 here" / "previously allocated by thread"
+  //     trailers ASan emits between dump sections
   const hasAsan = /AddressSanitizer/i.test(text);
   const hasAsanDetails = /SUMMARY:\s*AddressSanitizer/i.test(text);
-  if (hasAsan && !hasAsanDetails) {
+  const hasAsanErrorHeader = /==\d+==\s*ERROR:\s*AddressSanitizer\s*:/i.test(text);
+  const hasResolvedFrame = /#\d+\s+0x[0-9a-f]+\s+in\s+\S[^\n]*\.[A-Za-z0-9_+-]+:\d+/i.test(text);
+  const hasReadWriteSize = /(?:READ|WRITE)\s+of\s+size\s+\d+\s+at\s+0x[0-9a-f]+/i.test(text);
+  const hasFreedBy = /freed\s+by\s+thread\s+T\d+\s+here/i.test(text);
+  const hasPrevAllocated = /previously\s+allocated\s+by\s+thread/i.test(text);
+  const hasRealAsanContext =
+    hasAsanErrorHeader || hasResolvedFrame || hasReadWriteSize || hasFreedBy || hasPrevAllocated;
+  if (hasAsan && !hasAsanDetails && !hasRealAsanContext) {
     signals.push({
       type: "incomplete_asan",
-      description: "ASan output appears truncated/fabricated — missing SUMMARY section that real ASan always produces",
+      description: "ASan output appears truncated/fabricated — missing SUMMARY section AND no ERROR header, resolved frames, or freed-by trailer that real ASan produces",
       weight: 12,
     });
-  }
-
-  const pids = text.match(/==(\d+)==/g) || [];
-  if (pids.length > 0 && pids[0]) {
-    const pid = pids[0].replace(/==/g, "");
-    if (/^(12345|11111|99999|10000|54321)$/.test(pid)) {
-      signals.push({
-        type: "fabricated_pid",
-        description: `Process ID "${pid}" appears fabricated — real PIDs are arbitrary numbers`,
-        weight: 6,
-      });
-    }
   }
 
   const functionRefs = text.match(/\b(\w+(?:_\w+)+)\s*\(/g) || [];
@@ -115,6 +124,48 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
         type: "phantom_functions",
         description: `References ${phantomFunctions.length} specific functions but provides no code showing them — claims may be fabricated`,
         weight: 10,
+      });
+    }
+  }
+
+  // v3.8.0 (Task #192): the magic-PID rule used to fire on any single
+  // textbook PID in `==N==` form (12345, 11111, 99999, 10000, 54321). Those
+  // numbers — especially 12345 — are widely used as placeholder PIDs in real
+  // bug reports (the curl, libcurl, and Firefox legit fixtures all use one).
+  // We now require either:
+  //   (a) two or more distinct magic PIDs in the same report, or
+  //   (b) a single magic PID accompanied by another fabrication signal
+  //       already detected above (fabricated stack trace, fabricated/round
+  //       addresses, phantom exploit script, phantom functions).
+  // This keeps the rule firing on every T4 fabrication fixture that ever
+  // tripped it before while sparing legit ASan excerpts that just happen to
+  // pick a textbook PID. Note: this block runs AFTER `phantom_functions` is
+  // computed so that signal can also corroborate a magic PID.
+  const MAGIC_PIDS = new Set(["12345", "11111", "99999", "10000", "54321"]);
+  const PRIMARY_FABRICATION_TYPES = new Set([
+    "fabricated_stack_trace",
+    "fabricated_addresses",
+    "phantom_exploit_script",
+    "phantom_functions",
+  ]);
+  const pidMatches = text.match(/==(\d+)==/g) || [];
+  const distinctMagicPids = new Set(
+    pidMatches.map((p) => p.replace(/==/g, "")).filter((p) => MAGIC_PIDS.has(p)),
+  );
+  if (distinctMagicPids.size >= 2) {
+    signals.push({
+      type: "fabricated_pid",
+      description: `Multiple textbook PIDs (${[...distinctMagicPids].join(", ")}) appear in the same report — real crashes have arbitrary numbers`,
+      weight: 6,
+    });
+  } else if (distinctMagicPids.size === 1) {
+    const hasOtherFabrication = signals.some((s) => PRIMARY_FABRICATION_TYPES.has(s.type));
+    if (hasOtherFabrication) {
+      const pid = [...distinctMagicPids][0];
+      signals.push({
+        type: "fabricated_pid",
+        description: `Process ID "${pid}" is a textbook example PID and the report carries other fabrication signals`,
+        weight: 6,
       });
     }
   }

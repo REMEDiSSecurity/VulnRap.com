@@ -165,13 +165,15 @@ Working PoC in exploit.py (private). Working PoC in exploit.py (private).
     expect(after.overridesApplied.some((o) => o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"))).toBe(true);
   });
 
-  it("does NOT fire when only corroborating signals are present (legit truncated ASan + magic PID)", () => {
+  it("does NOT fire on a legit truncated ASan excerpt that uses the textbook PID 12345", () => {
     // Mirrors the T1-AVRI-cve-2025-0725-curl fixture pattern: a legit
     // report that excerpts an ASan line without the SUMMARY block AND
-    // happens to use the textbook PID `12345`. detectHallucinationSignals
-    // returns totalWeight=18 (incomplete_asan + fabricated_pid) but both
-    // are "corroborating only" — the composite override must abstain
-    // here or it would unfairly penalize real bug reports.
+    // happens to use the textbook PID `12345`. As of v3.8.0 (Task #192)
+    // detectHallucinationSignals tightens both rules at the source —
+    // `incomplete_asan` is suppressed by the `==N==ERROR: AddressSanitizer:`
+    // header, and `fabricated_pid` only fires when the magic PID is paired
+    // with another fabrication signal (or a second magic PID). Neither
+    // signal fires here, so the composite override must abstain.
     const text = `
 # Heap-buffer-overflow in libcurl gzip decoding
 
