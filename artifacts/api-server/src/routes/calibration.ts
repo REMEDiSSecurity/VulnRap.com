@@ -46,6 +46,13 @@ interface DryRunMatches {
   corpusSize: number;
   sampleMatches: Array<{ id: string; tier: CorpusTier }>;
   warning: string | null;
+  // Task #124 — for production scans, the createdAt range of the scanned
+  // sample so reviewers can tell whether the false-positive signal reflects
+  // recent reporter behavior or a long-stale archive. ISO-8601 timestamps,
+  // or `null` when the scan was empty / not applicable (e.g. the curated
+  // benchmark fixtures don't have a wall-clock timestamp).
+  oldestCreatedAt: string | null;
+  newestCreatedAt: string | null;
 }
 
 function tallyMatches(
@@ -89,7 +96,18 @@ function previewHandwavyPhrase(phrase: string): DryRunMatches {
     const noun = falsePositives === 1 ? "legitimate report" : "legitimate reports";
     warning = `This phrase would have flagged ${falsePositives} ${noun} (${byTier.t1Legit} GREEN, ${byTier.t2Borderline} YELLOW) in the curated benchmark corpus — consider rewording.`;
   }
-  return { total, byTier, falsePositives, corpusSize, sampleMatches, warning };
+  // Curated fixtures have no wall-clock timestamp — Task #124's date-range
+  // fields are production-only.
+  return {
+    total,
+    byTier,
+    falsePositives,
+    corpusSize,
+    sampleMatches,
+    warning,
+    oldestCreatedAt: null,
+    newestCreatedAt: null,
+  };
 }
 
 // Task #119 — Map a persisted vulnrap composite label to the same T1–T4 tier
@@ -139,14 +157,35 @@ const PRODUCTION_PREVIEW_LIMIT_MAX = 10000;
 // drizzle layer.
 function scoreProductionRows(
   phrase: string,
-  rows: Array<{ id: number | string; label: string | null; contentText: string | null }>,
+  rows: Array<{
+    id: number | string;
+    label: string | null;
+    contentText: string | null;
+    // Task #124 — Optional so existing callers/tests that don't care about
+    // the date-range surface can keep passing rows without timestamps; in
+    // that case the oldest/newest fields stay null.
+    createdAt?: Date | string | null;
+  }>,
 ): DryRunMatches {
   const needle = normalizeForMatch(phrase);
   const tiered: Array<{ id: string; tier: CorpusTier; text: string }> = [];
+  // Task #124 — track the createdAt window of the rows that actually made it
+  // into the scanned sample (i.e. survived the label/content filter). This is
+  // the same population reflected in `corpusSize`, so the reported range
+  // matches what the UI describes as "scanned N reports".
+  let oldestMs: number | null = null;
+  let newestMs: number | null = null;
   for (const r of rows) {
     const tier = productionLabelToTier(r.label);
     if (!tier || r.contentText == null) continue;
     tiered.push({ id: String(r.id), tier, text: r.contentText });
+    if (r.createdAt != null) {
+      const t = r.createdAt instanceof Date ? r.createdAt.getTime() : new Date(r.createdAt).getTime();
+      if (Number.isFinite(t)) {
+        if (oldestMs === null || t < oldestMs) oldestMs = t;
+        if (newestMs === null || t > newestMs) newestMs = t;
+      }
+    }
   }
   const { total, byTier, sampleMatches } = tallyMatches(needle, tiered);
   const falsePositives = byTier.t1Legit + byTier.t2Borderline;
@@ -155,7 +194,16 @@ function scoreProductionRows(
     const noun = falsePositives === 1 ? "legitimate report" : "legitimate reports";
     warning = `This phrase would have flagged ${falsePositives} ${noun} (${byTier.t1Legit} GREEN, ${byTier.t2Borderline} YELLOW) in the most recent ${tiered.length} production reports — consider rewording.`;
   }
-  return { total, byTier, falsePositives, corpusSize: tiered.length, sampleMatches, warning };
+  return {
+    total,
+    byTier,
+    falsePositives,
+    corpusSize: tiered.length,
+    sampleMatches,
+    warning,
+    oldestCreatedAt: oldestMs === null ? null : new Date(oldestMs).toISOString(),
+    newestCreatedAt: newestMs === null ? null : new Date(newestMs).toISOString(),
+  };
 }
 
 async function previewHandwavyPhraseAgainstProduction(
@@ -167,6 +215,9 @@ async function previewHandwavyPhraseAgainstProduction(
       id: reportsTable.id,
       label: reportsTable.vulnrapCompositeLabel,
       contentText: reportsTable.contentText,
+      // Task #124 — pull createdAt so the dry-run can surface the date range
+      // the production sample actually covers.
+      createdAt: reportsTable.createdAt,
     })
     .from(reportsTable)
     .where(

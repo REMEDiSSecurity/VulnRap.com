@@ -3242,6 +3242,18 @@ export const AddHandwavyPhraseResponse = zod.object({
         .describe(
           "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
         ),
+      oldestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+        ),
+      newestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+        ),
     })
     .optional()
     .describe(
@@ -3485,6 +3497,18 @@ export const AddHandwavyPhraseResponse = zod.object({
         .nullish()
         .describe(
           "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+      oldestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+        ),
+      newestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
         ),
     })
     .describe(
@@ -4090,6 +4114,18 @@ export const EditHandwavyPhraseResponse = zod.object({
         .describe(
           "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
         ),
+      oldestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+        ),
+      newestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+        ),
     })
     .optional()
     .describe(
@@ -4333,6 +4369,18 @@ export const EditHandwavyPhraseResponse = zod.object({
         .nullish()
         .describe(
           "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+      oldestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+        ),
+      newestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
         ),
     })
     .describe(
@@ -4983,6 +5031,18 @@ export const RemoveHandwavyPhraseResponse = zod.union([
           .describe(
             "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
           ),
+        oldestCreatedAt: zod.coerce
+          .date()
+          .nullable()
+          .describe(
+            'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+          ),
+        newestCreatedAt: zod.coerce
+          .date()
+          .nullable()
+          .describe(
+            "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+          ),
       })
       .optional()
       .describe(
@@ -5226,6 +5286,18 @@ export const RemoveHandwavyPhraseResponse = zod.union([
           .nullish()
           .describe(
             "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+          ),
+        oldestCreatedAt: zod.coerce
+          .date()
+          .nullable()
+          .describe(
+            'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+          ),
+        newestCreatedAt: zod.coerce
+          .date()
+          .nullable()
+          .describe(
+            "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
           ),
       })
       .describe(
@@ -6538,6 +6610,18 @@ export const UndoHandwavyPhraseResponse = zod.object({
         .describe(
           "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
         ),
+      oldestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+        ),
+      newestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+        ),
     })
     .optional()
     .describe(
@@ -6781,6 +6865,18 @@ export const UndoHandwavyPhraseResponse = zod.object({
         .nullish()
         .describe(
           "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+      oldestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+        ),
+      newestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
         ),
     })
     .describe(
@@ -8385,6 +8481,18 @@ export const RevertHandwavyPhraseEditResponse = zod.object({
         .describe(
           "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
         ),
+      oldestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+        ),
+      newestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+        ),
     })
     .optional()
     .describe(
@@ -8628,6 +8736,18 @@ export const RevertHandwavyPhraseEditResponse = zod.object({
         .nullish()
         .describe(
           "Reviewer-facing warning string when the phrase would flag legitimate reports\n(`falsePositives > 0`). Null when there are no GREEN\/YELLOW hits.\n",
+        ),
+      oldestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          'Task #124 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers can tell whether the false-positive signal reflects current\nreporter behavior or a long-stale archive (e.g. \"scanned 2000 reports\nfrom 2026-02-01 to 2026-04-22\"). Null on the curated benchmark block\n(fixtures have no wall-clock timestamp) and when the scan was empty.\n',
+        ),
+      newestCreatedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "Task #124 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
         ),
     })
     .describe(

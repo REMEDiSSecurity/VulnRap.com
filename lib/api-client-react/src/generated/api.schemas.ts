@@ -2169,6 +2169,20 @@ export interface HandwavyPhraseDryRunMatches {
 (`falsePositives > 0`). Null when there are no GREEN/YELLOW hits.
  */
   warning?: string | null;
+  /** Task #124 — For production scans, the earliest `createdAt` among the rows
+actually included in the scanned sample (i.e. survived the label/content
+filter, so the same population reflected in `corpusSize`). Reported so
+reviewers can tell whether the false-positive signal reflects current
+reporter behavior or a long-stale archive (e.g. "scanned 2000 reports
+from 2026-02-01 to 2026-04-22"). Null on the curated benchmark block
+(fixtures have no wall-clock timestamp) and when the scan was empty.
+ */
+  oldestCreatedAt: string | null;
+  /** Task #124 — For production scans, the most recent `createdAt` among the
+rows actually included in the scanned sample. See `oldestCreatedAt` for
+details. Null on the curated benchmark block and when the scan was empty.
+ */
+  newestCreatedAt: string | null;
 }
 
 /**

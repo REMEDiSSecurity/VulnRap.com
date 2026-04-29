@@ -672,6 +672,27 @@ function formatAuditTimestamp(iso: string | undefined | null): string | null {
   });
 }
 
+// Task #124 — Format the production scan's createdAt window into a compact
+// "scanned N reports from <oldest> to <newest>" line. We collapse to a single
+// "on <date>" when both endpoints fall on the same calendar day so the UI
+// doesn't render a confusing same-day range. Returns null when the scan
+// produced no usable timestamps (curated block, empty production scan, or
+// rows without createdAt) so the caller can omit the line entirely.
+function formatProductionScanRange(
+  oldestIso: string | null | undefined,
+  newestIso: string | null | undefined,
+): string | null {
+  if (!oldestIso || !newestIso) return null;
+  const oldest = new Date(oldestIso);
+  const newest = new Date(newestIso);
+  if (Number.isNaN(oldest.getTime()) || Number.isNaN(newest.getTime())) return null;
+  const fmt: Intl.DateTimeFormatOptions = { year: "numeric", month: "short", day: "numeric" };
+  const oldestStr = oldest.toLocaleDateString(undefined, fmt);
+  const newestStr = newest.toLocaleDateString(undefined, fmt);
+  if (oldestStr === newestStr) return `on ${oldestStr}`;
+  return `from ${oldestStr} to ${newestStr}`;
+}
+
 // Task #119 — Side-by-side render of one dry-run match block (curated vs.
 // production). Identical visual shape so reviewers can read both signals at
 // a glance; the `kind` prop only changes the leading icon and label noun.
@@ -688,6 +709,9 @@ function PreviewMatchBlock({
   matches: HandwavyPhraseDryRunMatches;
   emptyHint: string;
 }) {
+  // Task #124 — only the production block carries a createdAt window; the
+  // curated block has no wall-clock timestamps so this returns null there.
+  const scanRange = formatProductionScanRange(matches.oldestCreatedAt, matches.newestCreatedAt);
   const fp = matches.falsePositives;
   const sourceNoun = kind === "curated" ? "fixture" : "report";
   return (
@@ -706,6 +730,15 @@ function PreviewMatchBlock({
           {subtitle}
         </Badge>
       </div>
+      {scanRange && (
+        <div
+          className="text-[10px] text-muted-foreground"
+          data-testid={`handwavy-preview-${kind}-range`}
+        >
+          Scanned {matches.corpusSize} {sourceNoun}
+          {matches.corpusSize === 1 ? "" : "s"} {scanRange}
+        </div>
+      )}
       {matches.warning ? (
         <div
           className="text-red-200 text-[11px]"

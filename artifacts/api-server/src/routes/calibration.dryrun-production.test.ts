@@ -103,6 +103,53 @@ describe("scoreProductionRows", () => {
       corpusSize: 0,
       sampleMatches: [],
       warning: null,
+      // Task #124 — empty scan means no createdAt window to report.
+      oldestCreatedAt: null,
+      newestCreatedAt: null,
+    });
+  });
+
+  // Task #124 — date-range surface
+  describe("createdAt window", () => {
+    it("reports oldest/newest createdAt over rows that survive label/content filtering", () => {
+      const out = scoreProductionRows("xxx-no-match-xxx", [
+        { id: 1, label: "STRONG", contentText: "alpha", createdAt: new Date("2026-04-22T10:00:00Z") },
+        { id: 2, label: "REASONABLE", contentText: "beta", createdAt: new Date("2026-02-01T08:30:00Z") },
+        { id: 3, label: "HIGH RISK", contentText: "gamma", createdAt: new Date("2026-03-15T14:45:00Z") },
+        // Filtered out — should NOT widen the window.
+        { id: 4, label: null, contentText: "delta", createdAt: new Date("2020-01-01T00:00:00Z") },
+        { id: 5, label: "STRONG", contentText: null, createdAt: new Date("2030-01-01T00:00:00Z") },
+        { id: 6, label: "WAT", contentText: "epsilon", createdAt: new Date("2050-01-01T00:00:00Z") },
+      ]);
+      expect(out.corpusSize).toBe(3);
+      expect(out.oldestCreatedAt).toBe("2026-02-01T08:30:00.000Z");
+      expect(out.newestCreatedAt).toBe("2026-04-22T10:00:00.000Z");
+    });
+
+    it("collapses to a single instant when only one eligible row contributes", () => {
+      const out = scoreProductionRows("anything", [
+        { id: 1, label: "STRONG", contentText: "only one", createdAt: new Date("2026-04-22T10:00:00Z") },
+      ]);
+      expect(out.oldestCreatedAt).toBe("2026-04-22T10:00:00.000Z");
+      expect(out.newestCreatedAt).toBe("2026-04-22T10:00:00.000Z");
+    });
+
+    it("accepts ISO-string createdAt values too (not just Date instances)", () => {
+      const out = scoreProductionRows("anything", [
+        { id: 1, label: "STRONG", contentText: "one", createdAt: "2026-04-22T10:00:00Z" },
+        { id: 2, label: "STRONG", contentText: "two", createdAt: "2026-02-01T00:00:00Z" },
+      ]);
+      expect(out.oldestCreatedAt).toBe("2026-02-01T00:00:00.000Z");
+      expect(out.newestCreatedAt).toBe("2026-04-22T10:00:00.000Z");
+    });
+
+    it("leaves the window null when eligible rows have no createdAt", () => {
+      const out = scoreProductionRows("anything", [
+        { id: 1, label: "STRONG", contentText: "no timestamp" },
+      ]);
+      expect(out.corpusSize).toBe(1);
+      expect(out.oldestCreatedAt).toBeNull();
+      expect(out.newestCreatedAt).toBeNull();
     });
   });
 

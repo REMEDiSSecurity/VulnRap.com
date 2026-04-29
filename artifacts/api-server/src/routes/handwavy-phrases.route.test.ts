@@ -380,6 +380,9 @@ describe("/feedback/calibration/handwavy-phrases", () => {
           corpusSize: number;
           sampleMatches: Array<{ id: string; tier: string }>;
           warning: string | null;
+          // Task #124 — sample createdAt window (ISO timestamps or null).
+          oldestCreatedAt: string | null;
+          newestCreatedAt: string | null;
         } | null;
         dryRunMatchesProductionError: string | null;
         dryRunMatchesProductionLimit: number;
@@ -413,6 +416,23 @@ describe("/feedback/calibration/handwavy-phrases", () => {
           t4Hallucinated: expect.any(Number),
         });
         expect(r.body.dryRunMatchesProduction.sampleMatches.length).toBeLessThanOrEqual(12);
+        // Task #124 — date-range fields are ALWAYS present so the UI can render
+        // a "scanned N reports from <oldest> to <newest>" line. Either both are
+        // ISO-8601 timestamps (when the scan included rows with createdAt) or
+        // both are null (empty scan / no createdAt). They must never be a
+        // mixed/partial pair.
+        expect(r.body.dryRunMatchesProduction).toHaveProperty("oldestCreatedAt");
+        expect(r.body.dryRunMatchesProduction).toHaveProperty("newestCreatedAt");
+        const oldest = r.body.dryRunMatchesProduction.oldestCreatedAt;
+        const newest = r.body.dryRunMatchesProduction.newestCreatedAt;
+        if (oldest === null) {
+          expect(newest).toBeNull();
+        } else {
+          expect(typeof oldest).toBe("string");
+          expect(typeof newest).toBe("string");
+          // Newest must be >= oldest.
+          expect(Date.parse(newest!)).toBeGreaterThanOrEqual(Date.parse(oldest));
+        }
       } else {
         expect(typeof r.body.dryRunMatchesProductionError).toBe("string");
       }
