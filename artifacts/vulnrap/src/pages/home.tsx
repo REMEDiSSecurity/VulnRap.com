@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle, Trash2, Mail, BrainCircuit, ShieldOff, Users } from "lucide-react";
+import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Zap, Eye, HelpCircle, Lock, Fingerprint, ShieldCheck, Volume2, VolumeX, ClipboardPaste, Clock, ExternalLink, Info, X, Link2, ChevronDown, Play, AlertTriangle, Trash2, Mail, BrainCircuit, ShieldOff, Users, TrendingUp, TrendingDown } from "lucide-react";
 import { LogoBeams } from "@/components/laser-effects";
 import { CrawlingBugs } from "@/components/crawling-bugs";
 import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed, getGetReportFeedQueryKey, useGetVisitorStats, getGetVisitorStatsQueryKey, recordVisit } from "@workspace/api-client-react";
@@ -137,7 +137,8 @@ function AutoRedactionCard() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer"
+        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer group/card"
+        aria-expanded={expanded}
       >
         <div className="p-2 sm:p-2.5 rounded-lg icon-glow-green flex-shrink-0">
           <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
@@ -145,7 +146,7 @@ function AutoRedactionCard() {
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
             Auto-Redaction
-            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+            <ChevronDown className={`w-4 h-4 text-green-400/50 group-hover/card:text-green-400 transition-all duration-200 ${expanded ? "rotate-180 text-green-400" : ""}`} />
           </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">PII, secrets, and company names are scrubbed from submitted reports before storage or comparison. Tap to see exactly what gets caught.</p>
         </div>
@@ -259,7 +260,8 @@ function SectionHashingCard() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer"
+        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer group/card"
+        aria-expanded={expanded}
       >
         <div className="p-2 sm:p-2.5 rounded-lg icon-glow-cyan flex-shrink-0">
           <Fingerprint className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
@@ -267,7 +269,7 @@ function SectionHashingCard() {
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
             Section Hashing
-            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+            <ChevronDown className={`w-4 h-4 text-cyan-400/50 group-hover/card:text-cyan-400 transition-all duration-200 ${expanded ? "rotate-180 text-cyan-400" : ""}`} />
           </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">Each section is hashed independently, detecting partial matches across reports your team has received. Tap to see how.</p>
         </div>
@@ -402,7 +404,8 @@ function SlopDetectionCard() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer"
+        className="flex items-start gap-3 p-4 sm:p-5 w-full text-left cursor-pointer group/card"
+        aria-expanded={expanded}
       >
         <div className="p-2 sm:p-2.5 rounded-lg icon-glow-violet flex-shrink-0">
           <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-violet-400" />
@@ -410,7 +413,7 @@ function SlopDetectionCard() {
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
             Validity Scoring
-            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+            <ChevronDown className={`w-4 h-4 text-violet-400/50 group-hover/card:text-violet-400 transition-all duration-200 ${expanded ? "rotate-180 text-violet-400" : ""}`} />
           </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">Three-engine composite scoring: Technical Substance (60%), CWE Coherence (35%), and AI Authorship (5%) vote with different weights and fuse into a single composite score and triage label. CWE Coherence is capped when Substance reports near-zero evidence, so a report can't earn 24 composite points just for naming the right CWE number. Tap to see how.</p>
         </div>
@@ -1077,6 +1080,33 @@ export default function Home() {
     };
   }, []);
 
+  // Scroll-triggered fade-in for major glass-card sections.
+  // Elements tagged with `data-scroll-fade` are observed; when they intersect
+  // the viewport they get `is-visible` and the CSS transition runs.
+  // We only add the `scroll-fade-in` class via JS so that users on browsers
+  // without IntersectionObserver (or with JS off entirely) still see content.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof IntersectionObserver === "undefined") return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) return;
+    const els = Array.from(document.querySelectorAll<HTMLElement>("[data-scroll-fade]"));
+    if (els.length === 0) return;
+    els.forEach((el) => el.classList.add("scroll-fade-in"));
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.08, rootMargin: "0px 0px -40px 0px" }
+    );
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+
   const submitMutation = useSubmitReport({
     mutation: {
       onMutate: () => {
@@ -1560,11 +1590,14 @@ export default function Home() {
         <SlopDetectionCard />
       </div>
 
-      <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5">
-        <h2 className="text-lg font-bold flex items-center gap-2">
-          <Zap className="w-5 h-5 text-primary" />
-          How It Works
-        </h2>
+      <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5" data-scroll-fade>
+        <div className="space-y-1">
+          <span className="eyebrow-label">Section 01 · Workflow</span>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Zap className="w-5 h-5 text-primary" />
+            How It Works
+          </h2>
+        </div>
         {/*
           Each step now leads with a colored icon badge using the same
           icon-glow vocabulary as the feature cards above (Auto-Redaction,
@@ -1645,8 +1678,9 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5" data-testid="section-methodology">
+      <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5" data-testid="section-methodology" data-scroll-fade>
         <div className="space-y-1">
+          <span className="eyebrow-label">Section 02 · Methodology</span>
           <h2 className="text-lg font-bold flex items-center gap-2">
             <BrainCircuit className="w-5 h-5 text-primary" />
             What happens around the engines
@@ -1657,7 +1691,12 @@ export default function Home() {
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground/90">How we check the claims (validation sources)</h3>
+          <h3 className="text-sm font-semibold text-foreground/90 flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-md icon-glow-green flex-shrink-0">
+              <ShieldCheck className="w-3.5 h-3.5 text-green-400" />
+            </span>
+            How we check the claims (validation sources)
+          </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">
             Engine scoring tells us if the report <em>looks</em> real. Active verification tells us if it <em>is</em> real. Anything we can verify, we go check live:
           </p>
@@ -1686,47 +1725,77 @@ export default function Home() {
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground/90">Evidence multipliers — what bumps the score up or down</h3>
+          <h3 className="text-sm font-semibold text-foreground/90 flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-md icon-glow-amber flex-shrink-0">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+            </span>
+            Evidence multipliers — what bumps the score up or down
+          </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">
             On top of the engine vote, certain pieces of evidence get an outsized effect because they were the most reliable signal in our calibration data:
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-3 space-y-1.5">
-              <h4 className="text-xs font-bold text-green-400">Pulls the score toward "looks real"</h4>
-              <ul className="space-y-1 text-[11px] text-muted-foreground">
-                <li>• A CVE ID that resolves and matches the described bug</li>
-                <li>• A real commit SHA on the affected repo</li>
-                <li>• Real file paths with real line numbers</li>
-                <li>• A working command-line PoC with actual output</li>
-                <li>• Tight CWE/PoC alignment</li>
+            <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-3 space-y-2">
+              <h4 className="text-xs font-bold text-green-400 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" />
+                Pulls the score toward "looks real"
+              </h4>
+              <ul className="space-y-1.5 text-[11px] text-muted-foreground">
+                {[
+                  "A CVE ID that resolves and matches the described bug",
+                  "A real commit SHA on the affected repo",
+                  "Real file paths with real line numbers",
+                  "A working command-line PoC with actual output",
+                  "Tight CWE/PoC alignment",
+                ].map((item) => (
+                  <li key={item} className="flex gap-1.5 items-start">
+                    <CheckCircle className="w-3 h-3 text-green-400/80 mt-0.5 flex-shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
               </ul>
             </div>
-            <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3 space-y-1.5">
-              <h4 className="text-xs font-bold text-red-400">Pulls the score toward "likely slop"</h4>
-              <ul className="space-y-1 text-[11px] text-muted-foreground">
-                <li>• Hallucinated CVE IDs or non-existent paths</li>
-                <li>• Generic "an attacker could…" speculation with no PoC</li>
-                <li>• Title CWE doesn't match the evidence shown</li>
-                <li>• Section-for-section duplicate of an earlier report</li>
-                <li>• Test/example certificates being claimed as live findings</li>
+            <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3 space-y-2">
+              <h4 className="text-xs font-bold text-red-400 flex items-center gap-1.5">
+                <TrendingDown className="w-3.5 h-3.5" />
+                Pulls the score toward "likely slop"
+              </h4>
+              <ul className="space-y-1.5 text-[11px] text-muted-foreground">
+                {[
+                  "Hallucinated CVE IDs or non-existent paths",
+                  "Generic \"an attacker could…\" speculation with no PoC",
+                  "Title CWE doesn't match the evidence shown",
+                  "Section-for-section duplicate of an earlier report",
+                  "Test/example certificates being claimed as live findings",
+                ].map((item) => (
+                  <li key={item} className="flex gap-1.5 items-start">
+                    <XCircle className="w-3 h-3 text-red-400/80 mt-0.5 flex-shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
               </ul>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4" data-testid="section-methodology-origin">
-        <h2 className="text-lg font-bold flex items-center gap-2">
-          <Search className="w-5 h-5 text-primary" />
-          How we landed on this methodology — and how to make it better
-        </h2>
+      <div className="glass-card rounded-xl p-4 sm:p-6 space-y-4" data-testid="section-methodology-origin" data-scroll-fade>
+        <div className="space-y-1">
+          <span className="eyebrow-label">Section 03 · Origin Story</span>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Search className="w-5 h-5 text-primary" />
+            How we landed on this methodology — and how to make it better
+          </h2>
+        </div>
         <div className="space-y-3 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-          <p>
-            These weights and signals didn't come out of thin air. We worked through a large corpus of real-world vulnerability submissions — a mix of well-known confirmed reports, public bug-bounty disclosures, and the increasingly familiar wave of LLM-generated slop that PSIRT inboxes have been flooded with over the last two years. For each report we recorded what humans ultimately decided about it (real, duplicate, or noise), then tuned the engine weights and the evidence multipliers until the model's verdicts lined up with the human verdicts.
-          </p>
-          <p>
-            That's how we ended up at the 60% / 35% / 5% split (refined from an earlier 55% / 40% / 5% as the substance-vs-coherence calibration matured through Sprint 12): substance-of-PoC and CWE-coherence were the two signals that consistently separated real submissions from generated ones, while pure linguistic "this sounds like an LLM wrote it" cues turned out to be much noisier than they look in isolation. The blog post on the field test walks through specific examples from that round of calibration if you want to see the receipts.
-          </p>
+          <div className="pull-quote space-y-3">
+            <p>
+              These weights and signals didn't come out of thin air. We worked through a large corpus of real-world vulnerability submissions — a mix of well-known confirmed reports, public bug-bounty disclosures, and the increasingly familiar wave of LLM-generated slop that PSIRT inboxes have been flooded with over the last two years. For each report we recorded what humans ultimately decided about it (real, duplicate, or noise), then tuned the engine weights and the evidence multipliers until the model's verdicts lined up with the human verdicts.
+            </p>
+            <p>
+              That's how we ended up at the <span className="text-foreground font-semibold">60% / 35% / 5%</span> split (refined from an earlier 55% / 40% / 5% as the substance-vs-coherence calibration matured through Sprint 12): substance-of-PoC and CWE-coherence were the two signals that consistently separated real submissions from generated ones, while pure linguistic "this sounds like an LLM wrote it" cues turned out to be much noisier than they look in isolation. The blog post on the field test walks through specific examples from that round of calibration if you want to see the receipts.
+            </p>
+          </div>
           <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 space-y-3">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <Mail className="w-4 h-4 text-primary" />
@@ -1802,13 +1871,17 @@ function TransparencySection() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 sm:p-6 flex items-center justify-between text-left cursor-pointer"
+        className="w-full p-4 sm:p-6 flex items-center justify-between text-left cursor-pointer group/card"
+        aria-expanded={expanded}
       >
-        <h2 className="text-lg font-bold flex items-center gap-2">
-          <Lock className="w-5 h-5 text-primary" />
-          Transparency: Where Your Data Goes
-        </h2>
-        <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+        <div className="space-y-1">
+          <span className="eyebrow-label">Section 04 · Privacy</span>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Lock className="w-5 h-5 text-primary" />
+            Transparency: Where Your Data Goes
+          </h2>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-cyan-400/50 group-hover/card:text-cyan-400 transition-all duration-200 ${expanded ? "rotate-180 text-cyan-400" : ""}`} />
       </button>
 
       {expanded && (
@@ -1941,27 +2014,51 @@ function RecentReportsFeed() {
 
   if (isLoading) {
     return (
-      <div className="glass-card rounded-xl p-6 space-y-4">
-        <h2 className="text-lg font-bold flex items-center gap-2">
-          <Clock className="w-5 h-5 text-primary" />
-          Recent Reports
-        </h2>
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-14 rounded-lg bg-muted/20 animate-pulse" />
+      <div className="glass-card rounded-xl p-6 space-y-4" data-scroll-fade>
+        <div className="space-y-1">
+          <span className="eyebrow-label">Section 05 · Live Activity</span>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Clock className="w-5 h-5 text-primary" />
+            Recent Reports
+          </h2>
+        </div>
+        {/* Structured skeleton mirroring the actual report row layout
+            (mono code chunk, badge, score progress, time-ago) so the loading
+            state previews real content shape rather than flat bars. */}
+        <div className="space-y-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-2 p-3 rounded-lg glass-card animate-pulse"
+              aria-hidden="true"
+            >
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="h-3.5 w-20 sm:w-24 rounded bg-primary/15" />
+                <div className="h-3 w-12 rounded bg-muted/30 hidden md:block" />
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <div className="h-1.5 w-16 rounded-full bg-muted/30 hidden sm:block" />
+                <div className="h-3 w-6 rounded bg-muted/40" />
+                <div className="h-3 w-10 rounded bg-muted/25" />
+              </div>
+            </div>
           ))}
         </div>
+        <span className="sr-only">Loading recent reports…</span>
       </div>
     );
   }
 
   if (!reports || reports.length === 0) {
     return (
-      <div className="glass-card rounded-xl p-6 space-y-4">
-        <h2 className="text-lg font-bold flex items-center gap-2">
-          <Clock className="w-5 h-5 text-primary" />
-          Recent Reports
-        </h2>
+      <div className="glass-card rounded-xl p-6 space-y-4" data-scroll-fade>
+        <div className="space-y-1">
+          <span className="eyebrow-label">Section 05 · Live Activity</span>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Clock className="w-5 h-5 text-primary" />
+            Recent Reports
+          </h2>
+        </div>
         <p className="text-sm text-muted-foreground text-center py-6">
           No public reports yet. Be the first to share one with the community.
         </p>
@@ -1970,13 +2067,16 @@ function RecentReportsFeed() {
   }
 
   return (
-    <div className="glass-card rounded-xl p-4 sm:p-6 space-y-3 sm:space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base sm:text-lg font-bold flex items-center gap-2">
-          <Clock className="w-4 sm:w-5 h-4 sm:h-5 text-primary" />
-          Recent Reports
-        </h2>
-        <span className="text-[10px] sm:text-xs text-muted-foreground">{total} public report{total !== 1 ? "s" : ""}</span>
+    <div className="glass-card rounded-xl p-4 sm:p-6 space-y-3 sm:space-y-4" data-scroll-fade>
+      <div className="flex items-start sm:items-center justify-between gap-3">
+        <div className="space-y-1">
+          <span className="eyebrow-label">Section 05 · Live Activity</span>
+          <h2 className="text-base sm:text-lg font-bold flex items-center gap-2">
+            <Clock className="w-4 sm:w-5 h-4 sm:h-5 text-primary" />
+            Recent Reports
+          </h2>
+        </div>
+        <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap mt-1">{total} public report{total !== 1 ? "s" : ""}</span>
       </div>
       <div className="space-y-2">
         {reports.map((report) => (

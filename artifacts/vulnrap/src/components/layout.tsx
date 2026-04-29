@@ -325,54 +325,84 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      <footer className="footer-gradient py-8 sm:py-10 mt-auto">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col items-center gap-4 text-xs text-muted-foreground">
-          <div className="flex flex-col items-center gap-4 w-full">
-            <div className="flex items-center gap-2.5 text-center">
-              <img src={logoSrc} alt="" className="w-5 h-5 rounded-sm opacity-50 shrink-0" />
-              <span className="text-muted-foreground/70 leading-relaxed">VulnRap // Free & Anonymous Vulnerability Report Validation — made by and for frustrated PSIRTlings</span>
+      <footer className="footer-gradient py-8 sm:py-12 mt-auto">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 text-xs text-muted-foreground">
+          {/* Top row: brand block + 3 link columns. Stacks on mobile,
+              becomes a 4-column grid from sm+ so the footer reads as an
+              organized site map instead of a wall of inline links. */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-8">
+            <div className="col-span-2 sm:col-span-1 flex flex-col items-start gap-2.5">
+              <Link to="/" className="flex items-center gap-2 group">
+                <img src={logoSrc} alt="" className="w-6 h-6 rounded-sm opacity-70 group-hover:opacity-100 transition-opacity shrink-0" />
+                <span className="font-bold text-sm tracking-tight uppercase text-primary/80 group-hover:text-primary transition-colors">VulnRap</span>
+              </Link>
+              <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+                Free &amp; anonymous vulnerability report validation — made by and for frustrated PSIRTlings.
+              </p>
+              <Link
+                to="/changelog"
+                className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground/50 hover:text-primary/80 transition-colors font-mono group mt-1"
+                title={`Released ${RELEASE_DATE}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary/40 group-hover:bg-primary/80 transition-colors" />
+                v{CURRENT_VERSION}
+              </Link>
             </div>
-            <div className="flex flex-wrap gap-x-4 sm:gap-x-5 gap-y-1.5 justify-center">
-              <Link to="/use-cases" className="hover:text-primary transition-colors">Use Cases</Link>
-              <Link to="/developers" className="hover:text-primary transition-colors">API Docs</Link>
-              <Link to="/blog" className="hover:text-primary transition-colors">Blog</Link>
-              <Link to="/security" className="hover:text-primary transition-colors">Security</Link>
-              <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
-              <Link to="/terms" className="hover:text-primary transition-colors">Terms</Link>
-              <Link to="/stats" className="hover:text-primary transition-colors">Stats</Link>
-              <Link to="/transparency" className="hover:text-primary transition-colors">Impact</Link>
-              <Link to="/changelog" className="hover:text-primary transition-colors">Changelog</Link>
+
+            <div className="flex flex-col gap-2">
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">Product</h4>
+              <Link to="/" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Submit</Link>
+              <Link to="/check" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Check</Link>
+              <Link to="/batch" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Batch</Link>
+              <Link to="/compare" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Compare</Link>
+              <Link to="/use-cases" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Use Cases</Link>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">Resources</h4>
+              <Link to="/developers" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">API Docs</Link>
+              <Link to="/blog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Blog</Link>
+              <Link to="/changelog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Changelog</Link>
+              <Link to="/stats" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Stats</Link>
+              <Link to="/transparency" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Impact</Link>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">Legal</h4>
+              <Link to="/security" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Security</Link>
+              <Link to="/privacy" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Privacy</Link>
+              <Link to="/terms" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Terms</Link>
+              <a
+                href="https://github.com/REMEDiSSecurity/VulnRap.Com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit inline-flex items-center gap-1.5"
+              >
+                <Github className="w-3 h-3" />
+                GitHub
+              </a>
             </div>
           </div>
-          <div className="w-16 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-          <a
-            href={feedbackMailto(pathname)}
-            className="inline-flex items-center gap-1.5 text-muted-foreground/50 hover:text-primary transition-colors group"
-          >
-            <MessageSquare className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
-            <span>Send us feedback</span>
-          </a>
-          <div className="w-16 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-          <Link
-            to="/changelog"
-            className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground/40 hover:text-primary/70 transition-colors font-mono group"
-            title={`Released ${RELEASE_DATE}`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-primary/40 group-hover:bg-primary/80 transition-colors" />
-            v{CURRENT_VERSION}
-            <span className="text-muted-foreground/25 group-hover:text-primary/40 transition-colors">— view changelog</span>
-          </Link>
-          <a
-            href="https://github.com/REMEDiSSecurity/VulnRap.Com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-muted-foreground/50 hover:text-primary transition-colors group"
-          >
-            <Github className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
-            <span>Open Source on GitHub</span>
-          </a>
-          <div className="w-16 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-          <span className="text-[10px] text-muted-foreground/30 text-center leading-relaxed">Funded and developed by the creators of <a href="https://complitt.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/50 transition-colors">COMPLiTT.com</a> and <a href="https://remedissecurity.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/50 transition-colors">REMEDiSSecurity.com</a></span>
+
+          {/* Divider */}
+          <div className="mt-8 mb-5 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+
+          {/* Bottom row: feedback CTA + attribution */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-[10px] text-muted-foreground/50">
+            <a
+              href={feedbackMailto(pathname)}
+              className="inline-flex items-center gap-1.5 hover:text-primary transition-colors group"
+            >
+              <MessageSquare className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+              <span>Send us feedback</span>
+            </a>
+            <span className="text-muted-foreground/40 text-center leading-relaxed">
+              Funded and developed by the creators of{" "}
+              <a href="https://complitt.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/70 transition-colors">COMPLiTT.com</a>
+              {" "}and{" "}
+              <a href="https://remedissecurity.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/70 transition-colors">REMEDiSSecurity.com</a>
+            </span>
+          </div>
         </div>
       </footer>
     </div>
