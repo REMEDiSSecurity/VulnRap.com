@@ -1175,18 +1175,60 @@ function describeOverlapRelation(rel: HandwavyPhraseDryRunOverlapsMatchesItemRel
   }
 }
 
+// Task #227 — singular/plural noun for each overlap subgroup header. Reads
+// naturally with the count prefix (e.g. "1 exact duplicate", "5 already
+// covered"). Kept in sync with `describeOverlapRelation` above so the
+// per-row phrasing matches the bucket label.
+function describeOverlapBucketNoun(
+  rel: HandwavyPhraseDryRunOverlapsMatchesItemRelation,
+  count: number,
+): string {
+  const plural = count !== 1;
+  switch (rel) {
+    case "equal":
+      return plural ? "exact duplicates" : "exact duplicate";
+    case "candidate-contains-existing":
+      // Reads naturally with either count (e.g. "1 broader (would supersede)").
+      return "broader (would supersede)";
+    case "existing-contains-candidate":
+      // Reads naturally with either count (e.g. "5 already covered").
+      return "already covered";
+    default:
+      return plural ? "overlaps" : "overlap";
+  }
+}
+
 // Task #128 — render the curated-phrase overlap callout inside the add
 // preview panel. Mirrors the CLI's `renderOverlaps` block (the same
 // equal / broader / narrower phrasing) and uses the GREEN/YELLOW
 // false-positive callout's visual language so reviewers can spot the
 // signal at a glance. Returns null when there are no overlaps so the
 // panel stays compact for the common case.
+//
+// Task #227 — bucket the matches by relation (equal / broader /
+// already-covered) with a counted header per bucket so reviewers can
+// scan a 20-overlap block at a glance instead of reading a flat wall of
+// rows. Empty buckets are hidden; existing per-row testids/markup are
+// preserved so existing tests still work.
 function PreviewOverlapsBlock({ overlaps, candidate }: {
   overlaps: HandwavyPhraseDryRunOverlaps | null;
   candidate: string;
 }) {
   if (!overlaps || overlaps.matches.length === 0) return null;
   const noun = overlaps.total === 1 ? "entry" : "entries";
+  const bucketOrder: HandwavyPhraseDryRunOverlapsMatchesItemRelation[] = [
+    "equal",
+    "candidate-contains-existing",
+    "existing-contains-candidate",
+  ];
+  const buckets = bucketOrder
+    .map((relation) => ({
+      relation,
+      matches: overlaps.matches.filter(
+        (m: HandwavyPhraseDryRunOverlapsMatchesItem) => m.relation === relation,
+      ),
+    }))
+    .filter((bucket) => bucket.matches.length > 0);
   return (
     <div
       className="rounded-md border border-red-500/40 bg-red-500/10 p-2.5 space-y-1.5 text-xs text-red-100"
@@ -1204,24 +1246,41 @@ function PreviewOverlapsBlock({ overlaps, candidate }: {
           </div>
         </div>
       </div>
-      <ul className="ml-1 space-y-1">
-        {overlaps.matches.map((o: HandwavyPhraseDryRunOverlapsMatchesItem) => (
-          <li
-            key={`${o.relation}::${o.phrase}`}
-            className="flex items-start gap-1.5"
-            data-testid="handwavy-preview-overlap-row"
+      <div className="space-y-1.5">
+        {buckets.map((bucket) => (
+          <div
+            key={bucket.relation}
+            data-testid="handwavy-preview-overlap-bucket"
+            data-relation={bucket.relation}
           >
-            <span className="text-red-300/80 select-none">•</span>
-            <span className="flex-1">
-              <span className="text-red-200 font-medium">{describeOverlapRelation(o.relation)}</span>{" "}
-              <span className="text-foreground/90">&ldquo;{o.phrase}&rdquo;</span>{" "}
-              <span className="text-[10px] text-red-200/70 uppercase tracking-wide">
-                [{o.category}]
-              </span>
-            </span>
-          </li>
+            <div
+              className="text-[10px] font-semibold text-red-200/90 uppercase tracking-wide"
+              data-testid="handwavy-preview-overlap-bucket-header"
+            >
+              {bucket.matches.length}{" "}
+              {describeOverlapBucketNoun(bucket.relation, bucket.matches.length)}
+            </div>
+            <ul className="ml-1 space-y-1 mt-0.5">
+              {bucket.matches.map((o: HandwavyPhraseDryRunOverlapsMatchesItem) => (
+                <li
+                  key={`${o.relation}::${o.phrase}`}
+                  className="flex items-start gap-1.5"
+                  data-testid="handwavy-preview-overlap-row"
+                >
+                  <span className="text-red-300/80 select-none">•</span>
+                  <span className="flex-1">
+                    <span className="text-red-200 font-medium">{describeOverlapRelation(o.relation)}</span>{" "}
+                    <span className="text-foreground/90">&ldquo;{o.phrase}&rdquo;</span>{" "}
+                    <span className="text-[10px] text-red-200/70 uppercase tracking-wide">
+                      [{o.category}]
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
