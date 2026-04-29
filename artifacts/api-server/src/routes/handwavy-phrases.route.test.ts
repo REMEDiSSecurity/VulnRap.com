@@ -231,6 +231,8 @@ describe("/feedback/calibration/handwavy-phrases", () => {
           corpusSize: number;
           sampleMatches: Array<{ id: string; tier: string }>;
           warning: string | null;
+          oldestCreatedAt: string | null;
+          newestCreatedAt: string | null;
         };
         production: {
           total: number;
@@ -240,6 +242,10 @@ describe("/feedback/calibration/handwavy-phrases", () => {
           corpusSize: number;
           sampleMatches: Array<{ id: string; tier: string }>;
           warning: string | null;
+          // Task #218 — bulk-removal preview surfaces the same scan-range
+          // signal as the add-time preview (Task #124).
+          oldestCreatedAt: string | null;
+          newestCreatedAt: string | null;
         } | null;
         productionError: string | null;
         productionLimit: number;
@@ -329,6 +335,11 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       // Production scan is skipped entirely when nothing would be removed.
       expect(r.body.dryRunImpact.production).not.toBeNull();
       expect(r.body.dryRunImpact.production?.total).toBe(0);
+      // Task #218 — even the skipped/zero-impact production placeholder
+      // returns the date-range fields with both ends null so the UI can
+      // render a uniform shape (mirrors the batch path).
+      expect(r.body.dryRunImpact.production?.oldestCreatedAt ?? null).toBeNull();
+      expect(r.body.dryRunImpact.production?.newestCreatedAt ?? null).toBeNull();
     });
 
     it("DELETE single-phrase dryRun=true normalizes the phrase before previewing (mixed case + extra whitespace)", async () => {
@@ -1380,7 +1391,7 @@ describe("/feedback/calibration/handwavy-phrases", () => {
         notFound: number;
         dryRunImpact: {
           corpus: { total: number; warning: string | null };
-          production: { total: number } | null;
+          production: { total: number; oldestCreatedAt: string | null; newestCreatedAt: string | null } | null;
           productionError: string | null;
         };
       }>("DELETE", "/feedback/calibration/handwavy-phrases", {
@@ -1394,6 +1405,60 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       expect(r.body.notFound).toBe(2);
       expect(r.body.dryRunImpact.corpus.total).toBe(0);
       expect(r.body.dryRunImpact.corpus.warning).toBeNull();
+      // Task #218 — the skipped production block (no removal candidates) still
+      // returns the date-range fields with both ends null so the UI can render
+      // a uniform shape.
+      expect(r.body.dryRunImpact.production).not.toBeNull();
+      expect(r.body.dryRunImpact.production?.oldestCreatedAt).toBeNull();
+      expect(r.body.dryRunImpact.production?.newestCreatedAt).toBeNull();
+    });
+
+    // Task #218 — the bulk-removal preview's production block must surface
+    // the same `Scanned N reports from <oldest> to <newest>` signal that the
+    // add-time preview already returns (Task #124). Reviewers using the
+    // bulk-retire flow have the same "is this signal current or stale?"
+    // question and should not have to guess from raw counts.
+    it("DELETE batch dryRun=true returns oldestCreatedAt/newestCreatedAt on the production block", async () => {
+      // Seed a phrase so removedNormalized is non-empty and the route
+      // actually performs the production scan (instead of short-circuiting
+      // to the zero-impact placeholder).
+      await request("POST", "/feedback/calibration/handwavy-phrases", {
+        phrase: "batch dryrun range probe",
+        category: "absence",
+      });
+      const r = await request<{
+        dryRunImpact: {
+          production: {
+            corpusSize: number;
+            oldestCreatedAt: string | null;
+            newestCreatedAt: string | null;
+          } | null;
+          productionError: string | null;
+        };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["batch dryrun range probe"],
+        dryRun: true,
+      });
+      expect(r.status).toBe(200);
+      // Production block must always carry the date-range fields. Either
+      // both are ISO-8601 timestamps (rows with createdAt) or both are null
+      // (empty scan / no createdAt). Mixed/partial pairs are not allowed.
+      if (r.body.dryRunImpact.production != null) {
+        expect(r.body.dryRunImpact.production).toHaveProperty("oldestCreatedAt");
+        expect(r.body.dryRunImpact.production).toHaveProperty("newestCreatedAt");
+        const oldest = r.body.dryRunImpact.production.oldestCreatedAt;
+        const newest = r.body.dryRunImpact.production.newestCreatedAt;
+        if (oldest === null) {
+          expect(newest).toBeNull();
+        } else {
+          expect(typeof oldest).toBe("string");
+          expect(typeof newest).toBe("string");
+          // Newest must be >= oldest.
+          expect(Date.parse(newest!)).toBeGreaterThanOrEqual(Date.parse(oldest));
+        }
+      } else {
+        expect(typeof r.body.dryRunImpact.productionError).toBe("string");
+      }
     });
 
     it("DELETE batch supports per-phrase reinstate via the existing /reinstate endpoint", async () => {

@@ -6041,6 +6041,18 @@ export const RemoveHandwavyPhraseResponse = zod.union([
               }),
             ),
             warning: zod.union([zod.string(), zod.null()]),
+            oldestCreatedAt: zod.coerce
+              .date()
+              .nullable()
+              .describe(
+                'Task #218 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers using the bulk-retire flow can tell whether the impact signal\nreflects current reporter behavior or a long-stale archive (e.g. \"scanned\n2000 reports from 2026-02-01 to 2026-04-22\"). Null on the curated\nbenchmark block (fixtures have no wall-clock timestamp) and when the\nscan was empty. Mirrors the add-time `HandwavyPhraseDryRunMatches`\nfield of the same name (Task #124).\n',
+              ),
+            newestCreatedAt: zod.coerce
+              .date()
+              .nullable()
+              .describe(
+                "Task #218 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+              ),
           })
           .describe(
             "Task #145 — projected impact of a bulk removal against a single\ncorpus (curated benchmark fixtures or recent production reports).\n`total` counts fixtures that are flagged today but would NOT be\nflagged after the removal, broken down by tier. `validDetectionsLost`\nis `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).\n`falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`\n(informational good news). `warning` is set when valid detections\nwould be lost; null otherwise.\n",
@@ -6071,6 +6083,18 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                   }),
                 ),
                 warning: zod.union([zod.string(), zod.null()]),
+                oldestCreatedAt: zod.coerce
+                  .date()
+                  .nullable()
+                  .describe(
+                    'Task #218 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers using the bulk-retire flow can tell whether the impact signal\nreflects current reporter behavior or a long-stale archive (e.g. \"scanned\n2000 reports from 2026-02-01 to 2026-04-22\"). Null on the curated\nbenchmark block (fixtures have no wall-clock timestamp) and when the\nscan was empty. Mirrors the add-time `HandwavyPhraseDryRunMatches`\nfield of the same name (Task #124).\n',
+                  ),
+                newestCreatedAt: zod.coerce
+                  .date()
+                  .nullable()
+                  .describe(
+                    "Task #218 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+                  ),
               })
               .describe(
                 "Task #145 — projected impact of a bulk removal against a single\ncorpus (curated benchmark fixtures or recent production reports).\n`total` counts fixtures that are flagged today but would NOT be\nflagged after the removal, broken down by tier. `validDetectionsLost`\nis `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).\n`falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`\n(informational good news). `warning` is set when valid detections\nwould be lost; null otherwise.\n",
@@ -6240,6 +6264,18 @@ export const RemoveHandwavyPhraseResponse = zod.union([
               }),
             ),
             warning: zod.union([zod.string(), zod.null()]),
+            oldestCreatedAt: zod.coerce
+              .date()
+              .nullable()
+              .describe(
+                'Task #218 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers using the bulk-retire flow can tell whether the impact signal\nreflects current reporter behavior or a long-stale archive (e.g. \"scanned\n2000 reports from 2026-02-01 to 2026-04-22\"). Null on the curated\nbenchmark block (fixtures have no wall-clock timestamp) and when the\nscan was empty. Mirrors the add-time `HandwavyPhraseDryRunMatches`\nfield of the same name (Task #124).\n',
+              ),
+            newestCreatedAt: zod.coerce
+              .date()
+              .nullable()
+              .describe(
+                "Task #218 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+              ),
           })
           .describe(
             "Task #145 — projected impact of a bulk removal against a single\ncorpus (curated benchmark fixtures or recent production reports).\n`total` counts fixtures that are flagged today but would NOT be\nflagged after the removal, broken down by tier. `validDetectionsLost`\nis `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).\n`falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`\n(informational good news). `warning` is set when valid detections\nwould be lost; null otherwise.\n",
@@ -6270,6 +6306,18 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                   }),
                 ),
                 warning: zod.union([zod.string(), zod.null()]),
+                oldestCreatedAt: zod.coerce
+                  .date()
+                  .nullable()
+                  .describe(
+                    'Task #218 — For production scans, the earliest `createdAt` among the rows\nactually included in the scanned sample (i.e. survived the label\/content\nfilter, so the same population reflected in `corpusSize`). Reported so\nreviewers using the bulk-retire flow can tell whether the impact signal\nreflects current reporter behavior or a long-stale archive (e.g. \"scanned\n2000 reports from 2026-02-01 to 2026-04-22\"). Null on the curated\nbenchmark block (fixtures have no wall-clock timestamp) and when the\nscan was empty. Mirrors the add-time `HandwavyPhraseDryRunMatches`\nfield of the same name (Task #124).\n',
+                  ),
+                newestCreatedAt: zod.coerce
+                  .date()
+                  .nullable()
+                  .describe(
+                    "Task #218 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+                  ),
               })
               .describe(
                 "Task #145 — projected impact of a bulk removal against a single\ncorpus (curated benchmark fixtures or recent production reports).\n`total` counts fixtures that are flagged today but would NOT be\nflagged after the removal, broken down by tier. `validDetectionsLost`\nis `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).\n`falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`\n(informational good news). `warning` is set when valid detections\nwould be lost; null otherwise.\n",

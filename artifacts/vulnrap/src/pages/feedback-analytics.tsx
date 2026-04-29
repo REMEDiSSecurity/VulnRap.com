@@ -1061,6 +1061,14 @@ function BulkRemovalImpactBlock({
   const lost = impact.validDetectionsLost;
   const dropped = impact.falsePositivesDropped;
   const sourceNoun = kind === "curated" ? "fixture" : "report";
+  // Task #218 — only the production block carries a createdAt window; the
+  // curated block has no wall-clock timestamps so this returns null there.
+  // Mirrors the add-time `PreviewMatchBlock` (Task #124) so reviewers see
+  // the same "is this signal current or stale?" answer on both flows.
+  const scanRange = formatProductionScanRange(
+    impact.oldestCreatedAt,
+    impact.newestCreatedAt,
+  );
   return (
     <div
       className={cn(
@@ -1079,6 +1087,15 @@ function BulkRemovalImpactBlock({
           {subtitle}
         </Badge>
       </div>
+      {scanRange && (
+        <div
+          className="text-[10px] text-muted-foreground"
+          data-testid={`handwavy-bulk-preview-${kind}-range`}
+        >
+          Scanned {impact.corpusSize} {sourceNoun}
+          {impact.corpusSize === 1 ? "" : "s"} {scanRange}
+        </div>
+      )}
       {impact.warning ? (
         <div
           className="text-red-200 text-[11px]"

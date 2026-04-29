@@ -3733,7 +3733,29 @@ components:
           oneOf:
             - type: string
             - type: "null"
-      required: [total, byTier, validDetectionsLost, falsePositivesDropped, corpusSize, sampleMatches, warning]
+        oldestCreatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Task #218 — For production scans, the earliest `createdAt` among the rows
+            actually included in the scanned sample (i.e. survived the label/content
+            filter, so the same population reflected in `corpusSize`). Reported so
+            reviewers using the bulk-retire flow can tell whether the impact signal
+            reflects current reporter behavior or a long-stale archive (e.g. "scanned
+            2000 reports from 2026-02-01 to 2026-04-22"). Null on the curated
+            benchmark block (fixtures have no wall-clock timestamp) and when the
+            scan was empty. Mirrors the add-time `HandwavyPhraseDryRunMatches`
+            field of the same name (Task #124).
+        newestCreatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Task #218 — For production scans, the most recent `createdAt` among the
+            rows actually included in the scanned sample. See `oldestCreatedAt` for
+            details. Null on the curated benchmark block and when the scan was empty.
+      required: [total, byTier, validDetectionsLost, falsePositivesDropped, corpusSize, sampleMatches, warning, oldestCreatedAt, newestCreatedAt]
 
     HandwavyPhraseBatchRemoveDryRunResponse:
       type: object

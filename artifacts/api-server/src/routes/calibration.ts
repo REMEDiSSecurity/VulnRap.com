@@ -301,6 +301,14 @@ interface RemovalImpact {
   corpusSize: number;
   sampleMatches: Array<{ id: string; tier: CorpusTier }>;
   warning: string | null;
+  // Task #218 — for production scans, the createdAt range of the scanned
+  // sample so reviewers using the bulk-retire flow have the same "is this
+  // signal current or stale?" answer that the add-time preview already
+  // surfaces (Task #124). ISO-8601 timestamps, or `null` when the scan was
+  // empty / not applicable (e.g. the curated benchmark fixtures don't have
+  // a wall-clock timestamp).
+  oldestCreatedAt: string | null;
+  newestCreatedAt: string | null;
 }
 
 function fixtureMatchesAny(haystackNormalized: string, phrases: Iterable<string>): boolean {
@@ -314,16 +322,40 @@ function fixtureMatchesAny(haystackNormalized: string, phrases: Iterable<string>
 function computeRemovalImpactOnRows(
   removedPhrases: string[],
   remainingPhrases: string[],
-  rows: Array<{ id: string; tier: CorpusTier; text: string }>,
+  rows: Array<{
+    id: string;
+    tier: CorpusTier;
+    text: string;
+    // Task #218 — Optional so existing callers (curated fixtures) can keep
+    // passing rows without timestamps; in that case the oldest/newest fields
+    // stay null. Production callers thread the row's `createdAt` through so
+    // the same scan-range line the add-time preview shows can also render
+    // on the bulk-removal preview.
+    createdAt?: Date | string | null;
+  }>,
   contextLabel: string,
 ): RemovalImpact {
   const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
   const sampleMatches: Array<{ id: string; tier: CorpusTier }> = [];
   let total = 0;
+  // Task #218 — track the createdAt window of the rows that actually made it
+  // into the scanned sample (i.e. survived the label/content filter at the
+  // caller, so the same population reflected in `corpusSize`). Mirrors
+  // `scoreProductionRows` from the add-time preview path: the reported range
+  // matches what the UI describes as "scanned N reports".
+  let oldestMs: number | null = null;
+  let newestMs: number | null = null;
   // Skip work when nothing would actually be removed.
   const removedSet = removedPhrases.filter((p) => p.length > 0);
   for (const r of rows) {
-    if (removedSet.length === 0) break;
+    if (r.createdAt != null) {
+      const t = r.createdAt instanceof Date ? r.createdAt.getTime() : new Date(r.createdAt).getTime();
+      if (Number.isFinite(t)) {
+        if (oldestMs === null || t < oldestMs) oldestMs = t;
+        if (newestMs === null || t > newestMs) newestMs = t;
+      }
+    }
+    if (removedSet.length === 0) continue;
     const haystack = r.text.toLowerCase().replace(/\s+/g, " ");
     const wasFlagged = fixtureMatchesAny(haystack, removedSet) ||
       fixtureMatchesAny(haystack, remainingPhrases);
@@ -352,6 +384,8 @@ function computeRemovalImpactOnRows(
     corpusSize: rows.length,
     sampleMatches,
     warning,
+    oldestCreatedAt: oldestMs === null ? null : new Date(oldestMs).toISOString(),
+    newestCreatedAt: newestMs === null ? null : new Date(newestMs).toISOString(),
   };
 }
 
@@ -382,6 +416,9 @@ async function previewRemovalAgainstProduction(
       id: reportsTable.id,
       label: reportsTable.vulnrapCompositeLabel,
       contentText: reportsTable.contentText,
+      // Task #218 — pull createdAt so the bulk-removal preview can surface
+      // the same date range as the add-time preview (Task #124).
+      createdAt: reportsTable.createdAt,
     })
     .from(reportsTable)
     .where(
@@ -392,11 +429,21 @@ async function previewRemovalAgainstProduction(
     )
     .orderBy(sql`${reportsTable.createdAt} DESC`)
     .limit(limit);
-  const tiered: Array<{ id: string; tier: CorpusTier; text: string }> = [];
+  const tiered: Array<{
+    id: string;
+    tier: CorpusTier;
+    text: string;
+    createdAt: Date | string | null;
+  }> = [];
   for (const r of rows) {
     const tier = productionLabelToTier(r.label);
     if (!tier || r.contentText == null) continue;
-    tiered.push({ id: String(r.id), tier, text: r.contentText });
+    tiered.push({
+      id: String(r.id),
+      tier,
+      text: r.contentText,
+      createdAt: r.createdAt ?? null,
+    });
   }
   return computeRemovalImpactOnRows(
     removedPhrases,
@@ -1494,6 +1541,10 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
             corpusSize: 0,
             sampleMatches: [],
             warning: null,
+            // Task #218 — empty/skipped scan has no createdAt window to
+            // report; mirrors `scoreProductionRows` for a zero-row scan.
+            oldestCreatedAt: null,
+            newestCreatedAt: null,
           };
         } else {
           try {
@@ -1581,6 +1632,10 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
           corpusSize: 0,
           sampleMatches: [],
           warning: null,
+          // Task #218 — empty/skipped scan has no createdAt window to
+          // report; mirrors `scoreProductionRows` for a zero-row scan.
+          oldestCreatedAt: null,
+          newestCreatedAt: null,
         };
       } else {
         try {
