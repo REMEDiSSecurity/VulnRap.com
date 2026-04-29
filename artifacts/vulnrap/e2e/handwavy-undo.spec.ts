@@ -12,6 +12,19 @@ import { randomUUID } from "node:crypto";
 
 const API_PORT = Number(process.env.E2E_API_PORT || 8080);
 const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
+// Mirror playwright.config.ts default so the strict-auth gate on the
+// hand-wavy phrase routes (Task #163 + Task #152's CALIBRATION_TOKEN setup)
+// accepts our direct API calls in seed/cleanup. CI overrides via
+// E2E_CALIBRATION_TOKEN.
+const CALIBRATION_TOKEN =
+  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
+
+function newApiContext() {
+  return request.newContext({
+    baseURL: API_BASE,
+    extraHTTPHeaders: { "X-Calibration-Token": CALIBRATION_TOKEN },
+  });
+}
 
 function uniquePhrase(): string {
   // randomUUID keeps each run independent of leftover data in the dev DB /
@@ -36,7 +49,7 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
   test("adding a phrase shows the Undo button on its row, and clicking it logs an 'Undone' history entry instead of a manual removal", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const apiCtx = await newApiContext();
     const phrase = uniquePhrase();
 
     try {
