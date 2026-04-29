@@ -72,6 +72,11 @@ function parseArgs(argv) {
     pick: false,
     limit: null,
     dryRun: false,
+    // Task #176 — preview the full inner phrase list before the final
+    // confirmation prompt. Defaults to ON; reviewers wanting the legacy
+    // "trust the picker sample / removed-at flag and skip the extra
+    // round-trip" behavior pass `--no-preview`.
+    noPreview: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -83,6 +88,7 @@ function parseArgs(argv) {
     else if (a === "--pick") args.pick = true;
     else if (a === "--limit") args.limit = argv[++i];
     else if (a === "--dry-run" || a === "--dryrun") args.dryRun = true;
+    else if (a === "--no-preview" || a === "--noPreview") args.noPreview = true;
     else if (a === "--help" || a === "-h") args.help = true;
     else {
       console.error(`Unknown argument: ${a}`);
@@ -127,6 +133,15 @@ Options:
                        active list or removal-history log. Exits 0 when the
                        server returned a preview, 1 on transport / auth /
                        lookup failure.
+      --no-preview     Skip the extra "show me every phrase in this batch
+                       before I confirm" round-trip. By default the CLI
+                       fetches the batch detail and prints the full inner
+                       phrase list before the confirmation prompt so
+                       reviewers can spot a mistakenly-picked batch (this
+                       matters most for large batches where the picker's
+                       5-phrase sample isn't enough). The preview step is
+                       skipped automatically for --dry-run (the dry-run
+                       response itself already lists every inner phrase).
   -h, --help           Show this help
 
 Examples:
@@ -243,6 +258,82 @@ async function pickRemovedAtInteractively(baseUrl, token, limit) {
   return picked.removedAt;
 }
 
+// Task #176 — Fetch the FULL inner phrase list for a single batch removal
+// entry from the sibling detail endpoint. This powers the "preview" step
+// the CLI runs between picker/--removed-at and the final confirmation
+// prompt: reviewers see every phrase that would be reinstated (not just
+// the picker's 5-phrase sample), so a mistakenly-selected batch can be
+// caught before any mutation.
+//
+// Throws on transport / auth / lookup failure so main() can surface the
+// error message to the operator. The error's `.code` field encodes the
+// failure category so callers can format a more specific hint:
+//   "auth"            — 401/403 from the detail endpoint
+//   "history-not-found" — no batch entry matches the removedAt
+//   "not-a-batch"     — entry exists but is a single-phrase removal
+async function fetchBatchDetail(baseUrl, token, removedAt) {
+  const detailUrl = `${baseUrl}/api/feedback/calibration/handwavy-phrases/removal-batches/${encodeURIComponent(removedAt)}`;
+  console.log(color("dim", `→ GET ${detailUrl} ...`));
+  const resp = await request("GET", detailUrl, undefined, token);
+  if (resp.status === 401 || resp.status === 403) {
+    const err = new Error(`Batch detail rejected as unauthorized (HTTP ${resp.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`);
+    err.code = "auth";
+    throw err;
+  }
+  if (resp.status === 404) {
+    const reason = resp.payload && typeof resp.payload === "object" ? resp.payload.reason : null;
+    const msg = resp.payload && typeof resp.payload === "object" && "error" in resp.payload
+      ? resp.payload.error
+      : `HTTP ${resp.status}`;
+    const err = new Error(`Batch detail failed: ${msg}`);
+    err.code = reason === "not-a-batch" ? "not-a-batch" : "history-not-found";
+    throw err;
+  }
+  if (!resp.ok) {
+    const msg = resp.payload && typeof resp.payload === "object" && "error" in resp.payload
+      ? resp.payload.error
+      : `HTTP ${resp.status}`;
+    throw new Error(`Batch detail failed: ${msg}`);
+  }
+  return resp.payload;
+}
+
+// Task #176 — Render the fetched batch detail as a human-readable preview:
+// header (timestamp + reviewer + counts), then the full numbered phrase
+// list with per-phrase category and a "[reinstated]" tag for inner
+// phrases that have already been pulled back. Designed to be skimmed
+// quickly so a reviewer can spot the wrong batch before pressing y.
+function printBatchPreview(detail) {
+  const phrases = Array.isArray(detail.phrases) ? detail.phrases : [];
+  const reinstatedCount = typeof detail.reinstatedCount === "number"
+    ? detail.reinstatedCount
+    : phrases.filter((p) => p && p.reinstated === true).length;
+  const remaining = phrases.length - reinstatedCount;
+  console.log("");
+  console.log(color("bold", `Batch removed at ${detail.removedAt ?? "(unknown)"}${detail.removedBy ? ` by ${detail.removedBy}` : ""}`));
+  console.log(`  Total phrases:        ${phrases.length}`);
+  console.log(`  Already reinstated:   ${reinstatedCount}`);
+  console.log(`  Would be reinstated:  ${color("green", remaining)}`);
+  if (detail.reinstated === true) {
+    console.log(color("yellow", "  (this batch is already fully flagged reinstated — proceeding would be a no-op)"));
+  }
+  if (phrases.length > 0) {
+    console.log("");
+    console.log(color("bold", `All ${phrases.length} phrase${phrases.length === 1 ? "" : "s"} in this batch:`));
+    const width = String(phrases.length).length;
+    phrases.forEach((p, i) => {
+      const idx = String(i + 1).padStart(width, " ");
+      const phraseStr = typeof p?.phrase === "string" ? p.phrase : "(unknown)";
+      const cat = typeof p?.category === "string" ? color("dim", `[${p.category}]`) : "";
+      const flag = p && p.reinstated === true
+        ? color("yellow", " [already reinstated]")
+        : "";
+      console.log(`  ${color("cyan", idx)}. ${JSON.stringify(phraseStr)} ${cat}${flag}`);
+    });
+  }
+  console.log("");
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { printHelp(); process.exit(0); }
@@ -290,6 +381,32 @@ async function main() {
       process.exit(2);
     }
     removedAt = removedAtFlag;
+  }
+
+  // Task #176 — Preview the full inner phrase list before the confirmation
+  // prompt. Default ON; reviewers wanting the legacy "trust the picker
+  // sample / removed-at flag and skip the extra round-trip" behavior pass
+  // `--no-preview`. We skip the preview round-trip automatically for
+  // `--dry-run` because the dry-run response from /reinstate-batch already
+  // returns every inner phrase (with the per-phrase outcome shown right
+  // after the request), so a separate preview fetch would just be noise.
+  // Auth/lookup failures here are fatal — we'd rather block the reinstate
+  // than charge ahead blindly with a batch that we couldn't even confirm
+  // the contents of.
+  if (!args.dryRun && !args.noPreview) {
+    let detail;
+    try {
+      detail = await fetchBatchDetail(baseUrl, token, removedAt);
+    } catch (err) {
+      console.error(color("red", err.message));
+      if (err.code === "not-a-batch") {
+        console.error(color("dim", "  (the matched history entry is a single-phrase removal — use the per-phrase /reinstate endpoint instead)"));
+      } else if (err.code === "history-not-found") {
+        console.error(color("dim", "  (no removal-history entry matched that --removed-at value)"));
+      }
+      process.exit(1);
+    }
+    printBatchPreview(detail);
   }
 
   // Task #159 — `--dry-run` skips the interactive confirmation prompt

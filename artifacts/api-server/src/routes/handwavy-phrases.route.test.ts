@@ -1767,6 +1767,145 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     });
   });
 
+  // Task #176 — Sibling detail endpoint that returns the FULL inner phrase
+  // list for a single batch removal entry. The picker's 5-phrase sample
+  // isn't enough for a 10+ phrase batch, so the CLI fetches the detail
+  // here before the confirmation prompt to render every phrase the
+  // reinstate would touch (and let reviewers spot a wrong batch before
+  // any mutation runs).
+  describe("Task #176 GET /removal-batches/:removedAt", () => {
+    it("returns every inner phrase with its per-phrase audit metadata for a batch entry", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb176 a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb176 b" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb176 c" });
+      const batch = await request<{ historyEntry: { removedAt: string } }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrases: ["rb176 a", "rb176 b", "rb176 c"], reviewer: "alice@team.com" },
+      );
+      const removedAt = batch.body.historyEntry.removedAt;
+
+      const r = await request<{
+        removedAt: string;
+        removedBy?: string;
+        reinstated: boolean;
+        phraseCount: number;
+        reinstatedCount: number;
+        phrases: Array<{ phrase: string; category?: string; reinstated?: boolean }>;
+      }>(
+        "GET",
+        `/feedback/calibration/handwavy-phrases/removal-batches/${encodeURIComponent(removedAt)}`,
+      );
+
+      expect(r.status).toBe(200);
+      expect(r.body.removedAt).toBe(removedAt);
+      expect(r.body.removedBy).toBe("alice@team.com");
+      expect(r.body.reinstated).toBe(false);
+      expect(r.body.phraseCount).toBe(3);
+      expect(r.body.reinstatedCount).toBe(0);
+      expect(r.body.phrases.map((p) => p.phrase).sort()).toEqual(["rb176 a", "rb176 b", "rb176 c"]);
+      // Per-phrase audit metadata is echoed (not just the bare phrase
+      // string) so a UI can show category badges next to each entry.
+      for (const p of r.body.phrases) {
+        expect(typeof p.category === "string" || p.category === undefined).toBe(true);
+      }
+    });
+
+    it("flips per-phrase reinstated flags + reinstatedCount once a partial reinstate has happened", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb176 part a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb176 part b" });
+      const batch = await request<{ historyEntry: { removedAt: string } }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrases: ["rb176 part a", "rb176 part b"] },
+      );
+      const removedAt = batch.body.historyEntry.removedAt;
+      // Reinstate just one of the two inner phrases via the per-phrase
+      // endpoint so the entry sits in a partially-reinstated state. The
+      // per-phrase endpoint requires both the phrase and the parent
+      // batch's removedAt to disambiguate inner-batch entries from
+      // standalone single-phrase removals.
+      await request("POST", "/feedback/calibration/handwavy-phrases/reinstate", {
+        phrase: "rb176 part a",
+        removedAt,
+      });
+
+      const r = await request<{
+        reinstated: boolean;
+        reinstatedCount: number;
+        phraseCount: number;
+        phrases: Array<{ phrase: string; reinstated?: boolean }>;
+      }>(
+        "GET",
+        `/feedback/calibration/handwavy-phrases/removal-batches/${encodeURIComponent(removedAt)}`,
+      );
+      expect(r.status).toBe(200);
+      expect(r.body.phraseCount).toBe(2);
+      expect(r.body.reinstatedCount).toBe(1);
+      // Aggregate flag is still false — at least one inner phrase is still
+      // un-reinstated.
+      expect(r.body.reinstated).toBe(false);
+      const a = r.body.phrases.find((p) => p.phrase === "rb176 part a");
+      const b = r.body.phrases.find((p) => p.phrase === "rb176 part b");
+      expect(a?.reinstated).toBe(true);
+      expect(b?.reinstated).not.toBe(true);
+    });
+
+    it("returns 404 history-not-found when no removal entry matches the given removedAt", async () => {
+      const r = await request<{ error: string; reason: string }>(
+        "GET",
+        `/feedback/calibration/handwavy-phrases/removal-batches/${encodeURIComponent("2099-01-01T00:00:00.000Z")}`,
+      );
+      expect(r.status).toBe(404);
+      expect(r.body.reason).toBe("history-not-found");
+      expect(r.body.error).toMatch(/No matching removal-history entry/);
+    });
+
+    it("returns 404 not-a-batch when the matched entry is a single-phrase removal", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb176 lone" });
+      const single = await request<{ historyEntry: { removedAt: string } }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "rb176 lone" },
+      );
+      const removedAt = single.body.historyEntry.removedAt;
+
+      const r = await request<{ error: string; reason: string }>(
+        "GET",
+        `/feedback/calibration/handwavy-phrases/removal-batches/${encodeURIComponent(removedAt)}`,
+      );
+      expect(r.status).toBe(404);
+      expect(r.body.reason).toBe("not-a-batch");
+      expect(r.body.error).toMatch(/single-phrase removal/);
+    });
+
+    it("rejects unauthenticated requests with 401 (auth-gated like the picker list endpoint)", async () => {
+      // The shared `request()` helper above always sends the test token —
+      // here we issue a raw request without it to exercise the auth gate.
+      const removedAt = "2026-04-22T12:34:56.000Z";
+      const url = new URL(
+        `${baseUrl}/feedback/calibration/handwavy-phrases/removal-batches/${encodeURIComponent(removedAt)}`,
+      );
+      const status = await new Promise<number>((resolveStatus, rejectStatus) => {
+        const req = http.request(
+          {
+            method: "GET",
+            hostname: url.hostname,
+            port: url.port,
+            path: `${url.pathname}${url.search}`,
+          },
+          (res) => {
+            res.resume();
+            res.on("end", () => resolveStatus(res.statusCode ?? 0));
+          },
+        );
+        req.on("error", rejectStatus);
+        req.end();
+      });
+      expect(status).toBe(401);
+    });
+  });
+
   it("restoreDefaults helper rewrites the file with the curated defaults", () => {
     __restoreDefaults();
     // Sanity: the restore helper does not throw and the file now contains

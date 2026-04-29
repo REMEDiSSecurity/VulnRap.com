@@ -15,6 +15,11 @@ function resetState() {
   state = {
     postResponses: [],
     getResponses: [],
+    // Task #176 — separate queue for the new GET /removal-batches/:removedAt
+    // detail endpoint that powers the preview step. Tests that exercise the
+    // preview path queue a response here; tests that pass --no-preview don't
+    // need to touch this queue.
+    getDetailResponses: [],
     requireToken: null,
     requests: [],
   };
@@ -36,6 +41,32 @@ beforeAll(async () => {
         token,
         body: parsedBody,
       });
+
+      // Task #176 — CLI preview step hits the new sibling detail endpoint
+      // /removal-batches/:removedAt to fetch the full inner phrase list
+      // before the confirmation prompt. The detail path always has a
+      // segment AFTER `/removal-batches/`, while the picker GET hits the
+      // bare `/removal-batches` (optionally with `?limit=`). Match the
+      // detail URL first so it doesn't fall through to the picker handler.
+      if (
+        req.method === "GET" &&
+        /^\/api\/feedback\/calibration\/handwavy-phrases\/removal-batches\/[^?]+/.test(req.url)
+      ) {
+        if (state.requireToken && token !== state.requireToken) {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "unauthorized" }));
+          return;
+        }
+        const next = state.getDetailResponses.shift();
+        if (!next) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "no scripted GET detail response" }));
+          return;
+        }
+        res.writeHead(next.status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(next.body ?? {}));
+        return;
+      }
 
       // Task #160 — CLI picker hits the new GET endpoint to populate the menu.
       if (
@@ -141,10 +172,14 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
       },
     ];
 
+    // Task #176 — `--no-preview` keeps this test focused on the reinstate
+    // round-trip itself; the preview path has its own dedicated coverage
+    // further down.
     const res = await runScript([
       "--removed-at", "2026-04-22T12:34:56.000Z",
       "--reviewer", "carol@team.com",
       "--yes",
+      "--no-preview",
     ]);
 
     expect(res.code).toBe(0);
@@ -184,7 +219,7 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
       },
     ];
 
-    const res = await runScript(["--removed-at", "2026-04-22T01:02:03.000Z", "--yes"]);
+    const res = await runScript(["--removed-at", "2026-04-22T01:02:03.000Z", "--yes", "--no-preview"]);
     expect(res.code).toBe(0);
     expect(res.stdout).toMatch(/Reinstated:\s+0/);
     expect(res.stdout).toMatch(/Skipped:\s+2/);
@@ -196,7 +231,7 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     state.postResponses = [
       { status: 404, body: { error: "No matching removal-history entry found for that removedAt.", reason: "history-not-found" } },
     ];
-    const res = await runScript(["--removed-at", "2099-01-01T00:00:00.000Z", "--yes"]);
+    const res = await runScript(["--removed-at", "2099-01-01T00:00:00.000Z", "--yes", "--no-preview"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toMatch(/No matching removal-history entry/);
     expect(res.stderr).toMatch(/no removal-history entry matched/);
@@ -206,7 +241,7 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     state.postResponses = [
       { status: 409, body: { error: "That history entry is not a batch removal — use /reinstate for single-phrase entries.", reason: "not-a-batch" } },
     ];
-    const res = await runScript(["--removed-at", "2026-01-01T00:00:00.000Z", "--yes"]);
+    const res = await runScript(["--removed-at", "2026-01-01T00:00:00.000Z", "--yes", "--no-preview"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toMatch(/not a batch removal/);
     expect(res.stderr).toMatch(/use the per-phrase \/reinstate endpoint/);
@@ -214,7 +249,7 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
 
   it("exits 1 when the calibration token is rejected (401)", async () => {
     state.postResponses = [{ status: 401, body: { error: "unauthorized" } }];
-    const res = await runScript(["--removed-at", "2026-01-01T00:00:00.000Z", "--yes"]);
+    const res = await runScript(["--removed-at", "2026-01-01T00:00:00.000Z", "--yes", "--no-preview"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toMatch(/rejected as unauthorized/);
   });
@@ -226,6 +261,20 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
   });
 
   it("declining at the prompt aborts without issuing the POST", async () => {
+    // Task #176 — preview is on by default; queue a detail response so the
+    // confirm prompt still fires after the preview render and we can
+    // exercise the "answer N → no POST" path.
+    state.getDetailResponses = [
+      {
+        status: 200,
+        body: {
+          removedAt: "2026-04-22T12:34:56.000Z",
+          phraseCount: 1,
+          reinstatedCount: 0,
+          phrases: [{ phrase: "preview decline", category: "absence" }],
+        },
+      },
+    ];
     const res = await runScript(["--removed-at", "2026-04-22T12:34:56.000Z"], { stdin: "n\n" });
     expect(res.code).toBe(1);
     const posts = state.requests.filter((r) => r.method === "POST");
@@ -285,11 +334,13 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
       ];
 
       // Pick batch #1 from the menu; --yes skips the secondary confirmation
-      // prompt so the picker → POST flow can be exercised end-to-end with a
-      // single line of stdin.
-      const res = await runScript(["--pick", "--reviewer", "carol@team.com", "--yes"], {
-        stdin: "1\n",
-      });
+      // prompt and --no-preview skips the (Task #176) preview round-trip so
+      // the picker → POST flow can be exercised end-to-end with a single
+      // line of stdin and no extra detail mock.
+      const res = await runScript(
+        ["--pick", "--reviewer", "carol@team.com", "--yes", "--no-preview"],
+        { stdin: "1\n" },
+      );
       expect(res.code).toBe(0);
       const gets = state.requests.filter((r) => r.method === "GET");
       const posts = state.requests.filter((r) => r.method === "POST");
@@ -339,7 +390,10 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
           },
         },
       ];
-      const res = await runScript(["--pick", "--limit", "3", "--yes"], { stdin: "1\n" });
+      const res = await runScript(
+        ["--pick", "--limit", "3", "--yes", "--no-preview"],
+        { stdin: "1\n" },
+      );
       expect(res.code).toBe(0);
       const gets = state.requests.filter((r) => r.method === "GET");
       expect(gets).toHaveLength(1);
@@ -452,7 +506,7 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
           },
         },
       ];
-      const res = await runScript(["--pick", "--yes"], { stdin: "1\n" });
+      const res = await runScript(["--pick", "--yes", "--no-preview"], { stdin: "1\n" });
       expect(res.code).toBe(0);
       const posts = state.requests.filter((r) => r.method === "POST");
       expect(posts).toHaveLength(1);
@@ -488,7 +542,11 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
         },
       },
     ];
-    const res = await runScript(["--removed-at", "2026-04-22T12:34:56.000Z", "--yes"]);
+    const res = await runScript([
+      "--removed-at", "2026-04-22T12:34:56.000Z",
+      "--yes",
+      "--no-preview",
+    ]);
     expect(res.code).toBe(0);
     expect(res.stdout).not.toMatch(/\[y\/N\]/);
   });
@@ -547,5 +605,186 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     // Per-phrase rendering uses the dry-run verb.
     expect(res.stdout).toMatch(/would reinstate.*"rb dry a"/);
     expect(res.stdout).toMatch(/already-reinstated.*"rb dry c"/);
+  });
+
+  // Task #176 — Reviewers picking the wrong batch from the menu (or pasting
+  // the wrong --removed-at) was the leading cause of "oops, I reinstated a
+  // batch I didn't mean to" reports. The preview step renders the FULL
+  // inner phrase list before the confirmation prompt so a mistake can be
+  // spotted while the operator is still able to answer "n".
+  describe("--no-preview / preview step", () => {
+    it("by default fetches the batch detail and prints every inner phrase before the confirm prompt", async () => {
+      state.getDetailResponses = [
+        {
+          status: 200,
+          body: {
+            removedAt: "2026-04-22T12:34:56.000Z",
+            removedBy: "alice@team.com",
+            reinstated: false,
+            phraseCount: 3,
+            reinstatedCount: 1,
+            phrases: [
+              { phrase: "preview phrase one", category: "absence", reinstated: false },
+              { phrase: "preview phrase two", category: "hedging", reinstated: true, reinstatedAt: "2026-04-23T00:00:00.000Z", reinstatedBy: "carol@team.com" },
+              { phrase: "preview phrase three", category: "buzzword", reinstated: false },
+            ],
+          },
+        },
+      ];
+      state.postResponses = [
+        {
+          status: 200,
+          body: {
+            reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 2, skipped: 1, total: 7,
+            results: [
+              { phrase: "preview phrase one", reinstated: true },
+              { phrase: "preview phrase two", reinstated: false, reason: "already-reinstated" },
+              { phrase: "preview phrase three", reinstated: true },
+            ],
+            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
+            phrases: [], history: [],
+          },
+        },
+      ];
+
+      const res = await runScript([
+        "--removed-at", "2026-04-22T12:34:56.000Z",
+        "--reviewer", "carol@team.com",
+        "--yes",
+      ]);
+      expect(res.code).toBe(0);
+
+      // Detail GET fired with the URL-encoded removedAt.
+      const gets = state.requests.filter((r) => r.method === "GET");
+      expect(gets).toHaveLength(1);
+      expect(gets[0].url).toBe(
+        "/api/feedback/calibration/handwavy-phrases/removal-batches/" +
+          encodeURIComponent("2026-04-22T12:34:56.000Z"),
+      );
+
+      // Preview header surfaces timestamp + reviewer + counts.
+      expect(res.stdout).toMatch(/Batch removed at 2026-04-22T12:34:56\.000Z by alice@team\.com/);
+      expect(res.stdout).toMatch(/Total phrases:\s+3/);
+      expect(res.stdout).toMatch(/Already reinstated:\s+1/);
+      expect(res.stdout).toMatch(/Would be reinstated:\s+2/);
+
+      // FULL inner phrase list rendered (not just a 5-phrase sample).
+      expect(res.stdout).toMatch(/All 3 phrases in this batch/);
+      expect(res.stdout).toMatch(/"preview phrase one"/);
+      expect(res.stdout).toMatch(/"preview phrase two".*already reinstated/);
+      expect(res.stdout).toMatch(/"preview phrase three"/);
+
+      const posts = state.requests.filter((r) => r.method === "POST");
+      expect(posts).toHaveLength(1);
+      expect(posts[0].body).toEqual({
+        removedAt: "2026-04-22T12:34:56.000Z",
+        reviewer: "carol@team.com",
+      });
+    });
+
+    it("--no-preview skips the detail GET entirely (legacy fast path)", async () => {
+      state.postResponses = [
+        {
+          status: 200,
+          body: {
+            reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 1, skipped: 0, total: 5,
+            results: [{ phrase: "skip preview", reinstated: true }],
+            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
+            phrases: [], history: [],
+          },
+        },
+      ];
+
+      const res = await runScript([
+        "--removed-at", "2026-04-22T12:34:56.000Z",
+        "--yes",
+        "--no-preview",
+      ]);
+      expect(res.code).toBe(0);
+
+      expect(state.requests.filter((r) => r.method === "GET")).toHaveLength(0);
+      expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(1);
+      expect(res.stdout).not.toMatch(/All \d+ phrases in this batch/);
+      expect(res.stdout).not.toMatch(/Would be reinstated:/);
+    });
+
+    it("--dry-run automatically skips the preview round-trip", async () => {
+      state.postResponses = [
+        {
+          status: 200,
+          body: {
+            dryRun: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 1, skipped: 0, total: 5,
+            results: [{ phrase: "dr only", reinstated: true }],
+            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: false, phrases: [] },
+            phrases: [], history: [],
+          },
+        },
+      ];
+
+      const res = await runScript([
+        "--removed-at", "2026-04-22T12:34:56.000Z",
+        "--dry-run",
+      ]);
+      expect(res.code).toBe(0);
+      expect(state.requests.filter((r) => r.method === "GET")).toHaveLength(0);
+      expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(1);
+    });
+
+    it("exits 1 with a clear message when the preview detail fetch returns 404 history-not-found", async () => {
+      state.getDetailResponses = [
+        {
+          status: 404,
+          body: {
+            error: "No matching removal-history entry found for that removedAt.",
+            reason: "history-not-found",
+          },
+        },
+      ];
+
+      const res = await runScript([
+        "--removed-at", "2099-01-01T00:00:00.000Z",
+        "--yes",
+      ]);
+      expect(res.code).toBe(1);
+      expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(0);
+      expect(res.stderr).toMatch(/Batch detail failed/);
+      expect(res.stderr).toMatch(/no removal-history entry matched/);
+    });
+
+    it("exits 1 with the per-phrase /reinstate hint when the preview detail fetch returns 404 not-a-batch", async () => {
+      state.getDetailResponses = [
+        {
+          status: 404,
+          body: {
+            error: "That history entry is a single-phrase removal — use /reinstate for single-phrase entries.",
+            reason: "not-a-batch",
+          },
+        },
+      ];
+
+      const res = await runScript([
+        "--removed-at", "2026-04-22T12:34:56.000Z",
+        "--yes",
+      ]);
+      expect(res.code).toBe(1);
+      expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(0);
+      expect(res.stderr).toMatch(/Batch detail failed/);
+      expect(res.stderr).toMatch(/single-phrase removal/);
+      expect(res.stderr).toMatch(/use the per-phrase \/reinstate endpoint/);
+    });
+
+    it("exits 1 with an unauthorized message when the preview detail fetch returns 401", async () => {
+      state.getDetailResponses = [{ status: 401, body: { error: "unauthorized" } }];
+      const res = await runScript([
+        "--removed-at", "2026-04-22T12:34:56.000Z",
+        "--yes",
+      ]);
+      expect(res.code).toBe(1);
+      expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(0);
+      expect(res.stderr).toMatch(/Batch detail rejected as unauthorized/);
+    });
   });
 });

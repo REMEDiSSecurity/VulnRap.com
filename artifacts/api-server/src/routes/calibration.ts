@@ -765,6 +765,73 @@ router.get(
   },
 );
 
+// Task #176 — Sibling detail endpoint that returns the FULL inner phrase list
+// for a single batch removal entry. The list endpoint above returns at most
+// REMOVAL_BATCHES_SAMPLE_SIZE sample strings per batch so the picker stays
+// compact; reviewers who want to eyeball every phrase before reinstating
+// (especially for big batches) call this endpoint to fetch the complete
+// inventory plus the per-phrase audit metadata (category, original adder,
+// per-phrase reinstated flag, etc.). The reinstate-batch CLI uses this to
+// render a "preview" step between the picker / --removed-at flag and the
+// final confirmation prompt. A future inline picker UI can also call it to
+// power a "Show all N phrases" expand toggle on each batch entry.
+//
+// `:removedAt` is the parent entry's ISO 8601 timestamp (matches the
+// parent's `removedAt` field in the removal-history log). It must be
+// URL-encoded (`%3A`, etc.) by the caller. Single-phrase removal entries
+// are NOT addressable here — they return 404 reason:"not-a-batch" so the
+// CLI surfaces a clear "use /reinstate" hint instead of mysteriously
+// finding nothing.
+router.get(
+  "/feedback/calibration/handwavy-phrases/removal-batches/:removedAt",
+  requireCalibrationAuthStrict,
+  (req, res) => {
+    try {
+      const removedAtParam = req.params.removedAt;
+      if (typeof removedAtParam !== "string" || removedAtParam.trim().length === 0) {
+        res.status(400).json({ error: "removedAt path parameter is required." });
+        return;
+      }
+      const history = getHandwavyPhraseHistory();
+      const entry = history.find((h) => h.removedAt === removedAtParam);
+      if (!entry) {
+        res.status(404).json({
+          error: "No matching removal-history entry found for that removedAt.",
+          reason: "history-not-found",
+        });
+        return;
+      }
+      if (!Array.isArray(entry.phrases) || entry.phrases.length === 0) {
+        // Single-phrase legacy entry — not addressable through this batch
+        // detail endpoint. The CLI maps this to a "use /reinstate" hint.
+        res.status(404).json({
+          error: "That history entry is a single-phrase removal — use /reinstate for single-phrase entries.",
+          reason: "not-a-batch",
+        });
+        return;
+      }
+      // Echo the full inner list with all per-phrase audit metadata. We
+      // copy the entries so callers can't accidentally mutate the cached
+      // history through the response shape.
+      const phrases = entry.phrases.map((p) => ({ ...p }));
+      const reinstatedCount = phrases.filter((p) => p.reinstated === true).length;
+      res.json({
+        removedAt: entry.removedAt,
+        removedBy: entry.removedBy,
+        reinstated: entry.reinstated === true,
+        reinstatedAt: entry.reinstatedAt,
+        reinstatedBy: entry.reinstatedBy,
+        phraseCount: phrases.length,
+        reinstatedCount,
+        phrases,
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to fetch hand-wavy removal batch detail");
+      res.status(500).json({ error: "Failed to fetch hand-wavy removal batch detail." });
+    }
+  },
+);
+
 router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, async (req, res) => {
   try {
     const { phrase, category, dryRun, reviewer, rationale, productionScanLimit } = (req.body ?? {}) as {
