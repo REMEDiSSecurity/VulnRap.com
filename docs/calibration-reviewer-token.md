@@ -151,3 +151,31 @@ To turn protection **off** entirely (e.g. reverting to single-reviewer
 local dev): unset `CALIBRATION_TOKEN` on the API and restart it. The
 mutation gate becomes a no-op again; the strict read gate stays closed
 until you set a token.
+
+## Local dev default (Task #232)
+
+The `dev` scripts in `artifacts/api-server/package.json` and
+`artifacts/vulnrap/package.json` default both `CALIBRATION_TOKEN` (api
+server, runtime) and `VITE_CALIBRATION_TOKEN` (vulnrap, baked by Vite
+at dev time) to the literal string **`e2e-calibration-token`** — the
+same value `artifacts/vulnrap/playwright.config.ts` already pins for
+the e2e suite. This is what makes the FLAT hand-wavy phrase panel on
+`/feedback-analytics` work out of the box on a fresh `pnpm dev`
+without any manual env setup.
+
+The defaults use the shell `${VAR:-default}` form, so any value you
+export in your shell (or pass on the command line) takes precedence —
+including the empty string if you want to exercise the
+"unconfigured token" code path locally:
+
+```bash
+# Use a different token for local dev:
+CALIBRATION_TOKEN=my-dev-token VITE_CALIBRATION_TOKEN=my-dev-token pnpm dev
+
+# Force the strict read gate to fail closed for testing:
+CALIBRATION_TOKEN= pnpm --filter @workspace/api-server run dev
+```
+
+Production / CI continue to receive their own value through the
+deployment env (api server) and the production build env (vulnrap);
+the dev-script default never reaches a deployed environment.
