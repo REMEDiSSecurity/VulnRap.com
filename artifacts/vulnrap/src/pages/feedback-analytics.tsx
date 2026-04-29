@@ -18,6 +18,8 @@ import {
   type HandwavyPhraseBatchRemoveDryRunImpact,
   type HandwavyPhraseBatchRemoveResultEntry,
   type HandwavyPhraseRemovalBatchSummary,
+  type HandwavyPhraseReinstateBatchDryRunResponse,
+  type HandwavyPhraseReinstateBatchEntryResult,
   type HandwavyHistoryEntry,
   type HandwavyEditEntry,
   type HandwavyCategory,
@@ -1348,6 +1350,17 @@ function HandwavyPhrasesAdmin() {
   const [reinstateConfirm, setReinstateConfirm] = useState<
     DisplayHistoryRow | null
   >(null);
+  // Task #177 — dry-run preview for the per-batch "Reinstate all" flow. The
+  // server's /reinstate-batch endpoint accepts `dryRun: true` (Task #159) and
+  // returns the same per-phrase outcome shape as the mutating call without
+  // touching the active list or the audit log. This state holds the preview
+  // response for the batch the reviewer is currently inspecting; `null` =
+  // no preview open. Confirming from the panel runs the real (non-dry-run)
+  // call and clears this state.
+  const [reinstatePreview, setReinstatePreview] = useState<{
+    removedAtIso: string;
+    data: HandwavyPhraseReinstateBatchDryRunResponse;
+  } | null>(null);
   // Task #134 + Task #154 — bulk-remove state. `selected` is the set of
   // currently-checked phrases (keyed by the normalized `phrase` string
   // the server stores). Bulk removal goes through the side-by-side
@@ -2125,10 +2138,63 @@ function HandwavyPhrasesAdmin() {
             ? `${reinstatedCount} of ${batchSize} ${noun} from this batch are back on the active list${skipNote}.`
             : `Every phrase in this batch was already accounted for${skipNote}.`,
       });
+      // Task #177 — close any open dry-run preview for this batch once the
+      // real call has fired so the panel doesn't linger with stale data.
+      setReinstatePreview((prev) =>
+        prev && prev.removedAtIso === removedAtIso ? null : prev,
+      );
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to reinstate batch.";
       toast({ title: "Batch reinstate failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Task #177 — fetch a dry-run preview of /reinstate-batch so the reviewer
+  // can inspect the per-phrase outcome (would reinstate / already reinstated /
+  // already active) before committing. Mirrors the bulk-remove preview flow:
+  // the actual mutating call only fires when the reviewer presses the
+  // "Confirm reinstate" button rendered inside the preview panel.
+  const handlePreviewReinstateBatch = async (removedAtIso: string) => {
+    const key = `reinstate-batch-preview:${removedAtIso}`;
+    setBusy(key);
+    // Drop any in-flight preview for this batch up front so a failed
+    // refresh doesn't leave a stale (and possibly misleading) panel
+    // visible while the reviewer figures out what went wrong.
+    setReinstatePreview((prev) =>
+      prev && prev.removedAtIso === removedAtIso ? null : prev,
+    );
+    try {
+      const resp = await reinstateHandwavyPhrasesBatch({
+        removedAt: removedAtIso,
+        reviewer: reviewer.trim() || undefined,
+        dryRun: true,
+      });
+      // The discriminated response uses `dryRun: true` to mark the preview
+      // path. Bail loudly if the server somehow ran the mutating path so we
+      // don't silently render a confirm button that double-applies.
+      if (
+        !("dryRun" in resp) ||
+        (resp as HandwavyPhraseReinstateBatchDryRunResponse).dryRun !== true
+      ) {
+        throw new Error(
+          "Server did not honor dryRun: refusing to render preview.",
+        );
+      }
+      setReinstatePreview({
+        removedAtIso,
+        data: resp as HandwavyPhraseReinstateBatchDryRunResponse,
+      });
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to preview reinstate.";
+      toast({
+        title: "Reinstate preview failed",
+        description: msg,
+        variant: "destructive",
+      });
     } finally {
       setBusy(null);
     }
@@ -3916,12 +3982,25 @@ function HandwavyPhrasesAdmin() {
                   // "Reinstate all" button, then the inner per-phrase rows
                   // beneath it (still independently reinstateable).
                   const batchKey = `reinstate-batch:${group.removedAtIso}`;
+                  // Task #177 — busy key for the dry-run preview fetch. Kept
+                  // distinct from the mutating key so the spinner only blocks
+                  // the button the reviewer actually pressed.
+                  const previewKey = `reinstate-batch-preview:${group.removedAtIso}`;
                   // Number of inner phrases that aren't already reinstated
                   // AND aren't already in the active list — i.e. what the
                   // batch button would actually re-add.
                   const remainingCount = group.rows.filter(
                     (r) => !r.reinstated && !phrases.some((m: { phrase: string }) => m.phrase === r.phrase),
                   ).length;
+                  // Task #177 — when this batch's dry-run preview is open,
+                  // surface the per-phrase outcomes inline below the header
+                  // so the reviewer can confirm or cancel without losing the
+                  // surrounding history context.
+                  const previewForGroup =
+                    reinstatePreview &&
+                    reinstatePreview.removedAtIso === group.removedAtIso
+                      ? reinstatePreview
+                      : null;
                   return (
                     <div
                       key={`batch-${group.removedAtIso}-${gIdx}`}
@@ -3961,22 +4040,200 @@ function HandwavyPhrasesAdmin() {
                             Nothing to reinstate
                           </Badge>
                         ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                            disabled={busy === batchKey}
-                            onClick={() => handleReinstateBatch(group.removedAtIso, group.batchSize)}
-                            data-testid="handwavy-reinstate-batch"
-                            aria-label={`Reinstate all ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
-                          >
-                            <RotateCcw className="w-3 h-3 mr-1" />
-                            {busy === batchKey
-                              ? "Reinstating…"
-                              : `Reinstate all ${remainingCount}`}
-                          </Button>
+                          <>
+                            {/* Task #177 — dry-run preview affordance next
+                                to "Reinstate all". Calls /reinstate-batch
+                                with `dryRun: true` so the reviewer can see
+                                per-phrase outcomes (would-reinstate /
+                                already-reinstated / already-active) before
+                                committing. The mutating call still lives
+                                on the existing button next to it. */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200"
+                              disabled={busy === previewKey || busy === batchKey}
+                              onClick={() =>
+                                handlePreviewReinstateBatch(group.removedAtIso)
+                              }
+                              data-testid="handwavy-reinstate-batch-preview"
+                              aria-label={`Preview reinstate of ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
+                            >
+                              <Info className="w-3 h-3 mr-1" />
+                              {busy === previewKey
+                                ? "Previewing…"
+                                : "Preview reinstate"}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                              disabled={busy === batchKey || busy === previewKey}
+                              onClick={() => handleReinstateBatch(group.removedAtIso, group.batchSize)}
+                              data-testid="handwavy-reinstate-batch"
+                              aria-label={`Reinstate all ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
+                            >
+                              <RotateCcw className="w-3 h-3 mr-1" />
+                              {busy === batchKey
+                                ? "Reinstating…"
+                                : `Reinstate all ${remainingCount}`}
+                            </Button>
+                          </>
                         )}
                       </div>
+                      {previewForGroup && (() => {
+                        const data = previewForGroup.data;
+                        const wouldReinstateCount =
+                          typeof data.reinstatedCount === "number"
+                            ? data.reinstatedCount
+                            : 0;
+                        const skippedCount =
+                          typeof data.skipped === "number" ? data.skipped : 0;
+                        const projectedTotal =
+                          typeof data.total === "number" ? data.total : null;
+                        const results: HandwavyPhraseReinstateBatchEntryResult[] =
+                          Array.isArray(data.results) ? data.results : [];
+                        const noun =
+                          wouldReinstateCount === 1 ? "phrase" : "phrases";
+                        const confirming = busy === batchKey;
+                        return (
+                          <div
+                            className="px-3 py-2 border-l-2 border-sky-500/40 bg-sky-500/5 space-y-2"
+                            data-testid="handwavy-reinstate-batch-preview-panel"
+                            data-batch-removed-at={group.removedAtIso}
+                          >
+                            <div className="flex items-start gap-2">
+                              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-sky-300" />
+                              <div className="flex-1 text-[11px]">
+                                <div className="font-semibold text-foreground">
+                                  Reinstate preview for {group.batchSize}{" "}
+                                  {group.batchSize === 1 ? "phrase" : "phrases"}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground mt-0.5">
+                                  <span className="text-foreground/90">
+                                    {wouldReinstateCount}
+                                  </span>{" "}
+                                  of {group.batchSize} {noun} would be
+                                  reinstated
+                                  {skippedCount > 0 && (
+                                    <>
+                                      ,{" "}
+                                      <span className="text-foreground/90">
+                                        {skippedCount}
+                                      </span>{" "}
+                                      skipped (already reinstated or already
+                                      active)
+                                    </>
+                                  )}
+                                  .{" "}
+                                  {projectedTotal != null && (
+                                    <>
+                                      The active list would grow to{" "}
+                                      <span className="text-foreground/90">
+                                        {projectedTotal}
+                                      </span>{" "}
+                                      phrases.{" "}
+                                    </>
+                                  )}
+                                  Nothing has changed yet.
+                                </div>
+                              </div>
+                            </div>
+                            <ul
+                              className="max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
+                              data-testid="handwavy-reinstate-batch-preview-results"
+                            >
+                              {results.map((r, idx) => {
+                                const cfg = r.reinstated
+                                  ? {
+                                      label: "would reinstate",
+                                      color: "text-emerald-400",
+                                      icon: <CheckCircle2 className="w-3 h-3" />,
+                                    }
+                                  : r.reason === "already-reinstated"
+                                    ? {
+                                        label: "already reinstated",
+                                        color: "text-muted-foreground",
+                                        icon: <CheckCircle2 className="w-3 h-3" />,
+                                      }
+                                    : r.reason === "already-active"
+                                      ? {
+                                          label: "already active",
+                                          color: "text-amber-300",
+                                          icon: <Info className="w-3 h-3" />,
+                                        }
+                                      : {
+                                          label: "skipped",
+                                          color: "text-yellow-400",
+                                          icon: <AlertTriangle className="w-3 h-3" />,
+                                        };
+                                return (
+                                  <li
+                                    key={`${r.phrase}-${idx}`}
+                                    className="flex items-start gap-2 text-[11px]"
+                                    data-testid="handwavy-reinstate-batch-preview-row"
+                                    data-outcome={
+                                      r.reinstated
+                                        ? "would-reinstate"
+                                        : r.reason ?? "unknown"
+                                    }
+                                  >
+                                    <span
+                                      className={cn(
+                                        "flex items-center gap-1 w-32 shrink-0",
+                                        cfg.color,
+                                      )}
+                                    >
+                                      {cfg.icon}
+                                      <span className="uppercase tracking-wide font-bold text-[9px]">
+                                        {cfg.label}
+                                      </span>
+                                    </span>
+                                    <span className="font-mono text-foreground/80 break-all flex-1">
+                                      {r.phrase}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                                disabled={confirming}
+                                onClick={() => setReinstatePreview(null)}
+                                data-testid="handwavy-reinstate-batch-preview-cancel"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                                disabled={
+                                  confirming || wouldReinstateCount === 0
+                                }
+                                onClick={() =>
+                                  handleReinstateBatch(
+                                    group.removedAtIso,
+                                    group.batchSize,
+                                  )
+                                }
+                                data-testid="handwavy-reinstate-batch-preview-confirm"
+                                aria-label={`Confirm reinstate of ${wouldReinstateCount} ${noun} from this batch`}
+                              >
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                {confirming
+                                  ? "Reinstating…"
+                                  : wouldReinstateCount > 0
+                                    ? `Confirm reinstate (${wouldReinstateCount})`
+                                    : "Nothing to reinstate"}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                       <div className="divide-y divide-border/10">
                         {group.rows.map((row, rIdx) =>
                           renderRow(row, rIdx, { insideBatch: true }),
