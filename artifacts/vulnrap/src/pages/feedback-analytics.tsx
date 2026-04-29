@@ -1162,7 +1162,7 @@ function PreviewMatchBlock({
 // for the preview callout. Mirrors `describeOverlapRelation` in the CLI
 // script (preview-handwavy-phrase.mjs) so the web UI and the CLI surface
 // the same wording for the same `relation` value.
-function describeOverlapRelation(rel: HandwavyPhraseDryRunOverlapsMatchesItemRelation): string {
+export function describeOverlapRelation(rel: HandwavyPhraseDryRunOverlapsMatchesItemRelation): string {
   switch (rel) {
     case "equal":
       return "exact duplicate of";
@@ -1210,7 +1210,7 @@ function describeOverlapBucketNoun(
 // scan a 20-overlap block at a glance instead of reading a flat wall of
 // rows. Empty buckets are hidden; existing per-row testids/markup are
 // preserved so existing tests still work.
-function PreviewOverlapsBlock({ overlaps, candidate }: {
+export function PreviewOverlapsBlock({ overlaps, candidate }: {
   overlaps: HandwavyPhraseDryRunOverlaps | null;
   candidate: string;
 }) {
