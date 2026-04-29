@@ -1990,7 +1990,67 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   // Surface backfill-vulnrap reconstructions in the markdown export so the
   // exported triage report carries the same "approximate" warning that the UI
   // shows. Mirrors VulnrapPanelData.reconstructed in routes/reports.ts above.
-  const vulnrapBlob = (report.vulnrapEngineResults ?? {}) as { reconstructed?: boolean };
+  // Also pulls the AVRI composite block (family classification + behavioural
+  // penalties) and the Engine 2 signalBreakdown.avri sub-block (gold hits,
+  // absence penalties, contradictions, stripped-trace / fake-raw-HTTP) so we
+  // can render the same "AVRI Family Rubric" section the diagnostics export
+  // does. Task 64: keep offline triage exports in sync with the panel/MD.
+  type TriageVulnrapBlob = {
+    reconstructed?: boolean;
+    avri?: TriageAvriComposite;
+    engines?: Array<{
+      engine: string;
+      signalBreakdown?: Record<string, unknown> & { avri?: TriageAvriEngine2 };
+    }>;
+  };
+  type TriageAvriComposite = {
+    family?: string;
+    familyName?: string;
+    classification?: { confidence?: string; reason?: string };
+    goldHitCount?: number;
+    velocityPenalty?: number;
+    templatePenalty?: number;
+    rawCompositeBeforeBehavioralPenalties?: number;
+  };
+  type TriageHandwavyCategory = "absence" | "hedging" | "buzzword";
+  type TriageAvriEngine2 = {
+    family?: string;
+    familyName?: string;
+    goldHitCount?: number;
+    goldTotalCount?: number;
+    goldHits?: Array<{ id: string; description: string; points: number }>;
+    goldMisses?: Array<{ id: string; description: string; points: number }>;
+    absencePenalty?: number;
+    absencePenalties?: Array<{
+      id: string;
+      description: string;
+      points: number;
+      flatHandwavyCategory?: TriageHandwavyCategory;
+    }>;
+    contradictions?: string[];
+    crashTrace?: {
+      framesAnalyzed: number;
+      goodFrames: number;
+      placeholderFrames: number;
+      isStripped: boolean;
+      reason: string | null;
+      revokedGoldHits: Array<{ id: string; points: number }>;
+      penalty: number;
+    } | null;
+    rawHttp?: {
+      requestsAnalyzed: number;
+      totalHeaders: number;
+      placeholderHeaders: number;
+      crlfPresent: boolean;
+      teClConflicts: number;
+      teClBroken: number;
+      isFake: boolean;
+      reason: string | null;
+      revokedGoldHits: Array<{ id: string; points: number }>;
+      penalty: number;
+    } | null;
+  };
+  const vulnrapBlob = (report.vulnrapEngineResults ?? {}) as TriageVulnrapBlob;
   const vulnrapReconstructed =
     vulnrapBlob.reconstructed === true ||
     (report.vulnrapCorrelationId?.startsWith("recon-") ?? false);
@@ -2236,6 +2296,208 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
         lines.push("");
       }
     }
+  }
+
+  // Task 64: render the AVRI family rubric used for this report so the offline
+  // triage export carries the same family classification, gold-hit/miss list,
+  // absence penalties, and AVRI-related composite overrides that the
+  // diagnostics panel and its markdown export already render. Mirrors the
+  // markdown emitted by `buildDiagnosticsMarkdown` in
+  // artifacts/vulnrap/src/components/diagnostics-panel.tsx so reviewers see the
+  // same AVRI rubric in either export. Only emitted when an AVRI block (either
+  // the composite-level family classification or the Engine 2 sub-block) is
+  // available on the stored report.
+  const avriComposite = vulnrapBlob.avri ?? null;
+  const e2AvriEntry = (vulnrapBlob.engines ?? []).find((e) =>
+    /Technical Substance/i.test(e.engine ?? ""),
+  );
+  const e2Avri = e2AvriEntry?.signalBreakdown?.avri ?? null;
+  if (avriComposite || e2Avri) {
+    const familyName =
+      avriComposite?.familyName ??
+      e2Avri?.familyName ??
+      avriComposite?.family ??
+      e2Avri?.family ??
+      "—";
+    const familyId = avriComposite?.family ?? e2Avri?.family ?? null;
+    const goldHits = e2Avri?.goldHits ?? [];
+    const goldMisses = e2Avri?.goldMisses ?? [];
+    const absencePenalties = e2Avri?.absencePenalties ?? [];
+    const goldHitCount =
+      e2Avri?.goldHitCount ?? avriComposite?.goldHitCount ?? 0;
+    // Prefer the Engine 2 totalCount (authoritative); fall back to hit+miss
+    // list length when present. When neither is available (composite-only
+    // AVRI block without an Engine 2 breakdown — e.g., reconstructed reports)
+    // leave the total undefined so we don't print a confusing "3/0" line.
+    const computedTotal = goldHits.length + goldMisses.length;
+    const goldTotalCount =
+      e2Avri?.goldTotalCount ?? (computedTotal > 0 ? computedTotal : null);
+
+    lines.push("## AVRI Family Rubric");
+    lines.push("");
+    lines.push(`- **Family**: ${familyName}`);
+    if (avriComposite?.classification?.confidence) {
+      lines.push(
+        `- **Classification confidence**: ${avriComposite.classification.confidence}`,
+      );
+    }
+    if (avriComposite?.classification?.reason) {
+      lines.push(
+        `- **Classification reason**: ${avriComposite.classification.reason}`,
+      );
+    }
+    if (goldTotalCount != null) {
+      lines.push(`- **Gold signals**: ${goldHitCount}/${goldTotalCount}`);
+    } else if (goldHitCount > 0) {
+      lines.push(`- **Gold signals**: ${goldHitCount}`);
+    }
+    if (goldHits.length > 0) {
+      lines.push("- **Gold signals found**:");
+      for (const g of goldHits) {
+        lines.push(`  - +${g.points} ${g.description} (${g.id})`);
+      }
+    }
+    if (goldMisses.length > 0) {
+      lines.push("- **Expected signals missing**:");
+      for (const g of goldMisses) {
+        lines.push(`  - −${g.points} ${g.description} (${g.id})`);
+      }
+    }
+    if (absencePenalties.length > 0) {
+      lines.push(
+        `- **Absence penalties applied** (haircut ${e2Avri?.absencePenalty ?? 0}):`,
+      );
+      // Mirror the FLAT-grouping the diagnostics markdown does (Task 110): bucket
+      // categorized hand-wavy phrases by theme so a slop FLAT export doesn't dump
+      // every phrase as one ungrouped scroll. Uncategorized entries (legacy
+      // payloads / non-FLAT families) keep the existing flat list.
+      const categorized = absencePenalties.filter(
+        (a) => a.flatHandwavyCategory != null,
+      );
+      const uncategorized = absencePenalties.filter(
+        (a) => a.flatHandwavyCategory == null,
+      );
+      const HANDWAVY_LABELS: Record<TriageHandwavyCategory, string> = {
+        absence: "Self-admitted absence of evidence",
+        hedging: "Generic hedging (\"may / appears\")",
+        buzzword: "Buzzword-soup framings",
+      };
+      const HANDWAVY_ORDER: TriageHandwavyCategory[] = [
+        "absence",
+        "hedging",
+        "buzzword",
+      ];
+      if (categorized.length > 0) {
+        const groups = new Map<TriageHandwavyCategory, typeof categorized>();
+        for (const a of categorized) {
+          const key = a.flatHandwavyCategory as TriageHandwavyCategory;
+          const arr = groups.get(key) ?? [];
+          arr.push(a);
+          groups.set(key, arr);
+        }
+        for (const key of HANDWAVY_ORDER) {
+          const items = groups.get(key);
+          if (!items || items.length === 0) continue;
+          const subtotal = items.reduce((s, a) => s + a.points, 0);
+          lines.push(
+            `  - ${HANDWAVY_LABELS[key]} (${items.length} phrase${items.length === 1 ? "" : "s"}, −${subtotal} raw):`,
+          );
+          for (const a of items) {
+            lines.push(`    - −${a.points} ${a.description} (${a.id})`);
+          }
+        }
+      }
+      for (const a of uncategorized) {
+        lines.push(`  - −${a.points} ${a.description} (${a.id})`);
+      }
+    }
+    if (e2Avri?.contradictions && e2Avri.contradictions.length > 0) {
+      lines.push(
+        `- **Contradiction phrases**: ${e2Avri.contradictions.map((c) => `"${c}"`).join(", ")}`,
+      );
+    }
+    if (e2Avri?.crashTrace?.isStripped) {
+      const ct = e2Avri.crashTrace;
+      const traceKindLabel =
+        familyId === "RACE_CONCURRENCY"
+          ? "race trace"
+          : familyId === "MEMORY_CORRUPTION"
+            ? "crash trace"
+            : "tool trace";
+      lines.push(
+        `- **Stripped ${traceKindLabel}** (penalty ${ct.penalty}): ${ct.reason ?? "stripped trace"} — frames ${ct.framesAnalyzed}, good ${ct.goodFrames}, placeholder ${ct.placeholderFrames}`,
+      );
+      if (ct.revokedGoldHits.length > 0) {
+        lines.push(
+          `  - Trace gold signals revoked: ${ct.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
+        );
+      }
+    }
+    if (e2Avri?.rawHttp?.isFake) {
+      const rh = e2Avri.rawHttp;
+      const goodHeaders = Math.max(0, rh.totalHeaders - rh.placeholderHeaders);
+      lines.push(
+        `- **Fake raw HTTP request** (penalty ${rh.penalty}): ${rh.reason ?? "fabricated raw HTTP request"} — requests ${rh.requestsAnalyzed}, headers ${goodHeaders}/${rh.totalHeaders} good, placeholder ${rh.placeholderHeaders}, CRLF ${rh.crlfPresent ? "yes" : "no"}, TE/CL conflicts ${rh.teClConflicts} (broken ${rh.teClBroken})`,
+      );
+      if (rh.revokedGoldHits.length > 0) {
+        lines.push(
+          `  - Smuggling gold signals revoked: ${rh.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
+        );
+      }
+    }
+
+    // Composite overrides: surface the AVRI-related entries from
+    // vulnrapOverridesApplied (no-gold-signals, family-contradiction,
+    // velocity, template) so reviewers can see *why* the composite
+    // moved on top of the rubric breakdown. Mirrors the on-screen
+    // "AVRI Composite Overrides" subsection in the diagnostics panel.
+    const allOverrides = (report.vulnrapOverridesApplied ?? []) as string[];
+    const AVRI_OVERRIDE_LABELS: Array<{ token: string; label: string }> = [
+      { token: "AVRI_NO_GOLD_SIGNALS", label: "No gold signals for family" },
+      { token: "AVRI_FAMILY_CONTRADICTION", label: "Report contradicts claimed family" },
+      { token: "AVRI_VELOCITY", label: "Submission-velocity penalty" },
+      { token: "AVRI_TEMPLATE_CAMPAIGN", label: "Template fingerprint reused" },
+    ];
+    const matchingOverrides = allOverrides
+      .map((rule) => {
+        const meta = AVRI_OVERRIDE_LABELS.find((m) => rule.startsWith(m.token));
+        return meta ? { rule, label: meta.label, token: meta.token } : null;
+      })
+      .filter((x): x is { rule: string; label: string; token: string } => x !== null);
+    const velocityPenalty = avriComposite?.velocityPenalty ?? 0;
+    const templatePenalty = avriComposite?.templatePenalty ?? 0;
+    const hasBehavioural =
+      (velocityPenalty < 0 &&
+        !matchingOverrides.some((o) => o.token === "AVRI_VELOCITY")) ||
+      (templatePenalty < 0 &&
+        !matchingOverrides.some((o) => o.token === "AVRI_TEMPLATE_CAMPAIGN"));
+    if (matchingOverrides.length > 0 || hasBehavioural) {
+      lines.push("- **Composite overrides**:");
+      for (const o of matchingOverrides) {
+        lines.push(`  - ${o.label} — \`${o.rule}\``);
+      }
+      if (
+        velocityPenalty < 0 &&
+        !matchingOverrides.some((o) => o.token === "AVRI_VELOCITY")
+      ) {
+        lines.push(`  - Submission-velocity penalty applied: ${velocityPenalty}`);
+      }
+      if (
+        templatePenalty < 0 &&
+        !matchingOverrides.some((o) => o.token === "AVRI_TEMPLATE_CAMPAIGN")
+      ) {
+        lines.push(`  - Template-fingerprint penalty applied: ${templatePenalty}`);
+      }
+    }
+    if (
+      avriComposite &&
+      typeof avriComposite.rawCompositeBeforeBehavioralPenalties === "number"
+    ) {
+      lines.push(
+        `- Composite before behavioural penalties: ${avriComposite.rawCompositeBeforeBehavioralPenalties}`,
+      );
+    }
+    lines.push("");
   }
 
   lines.push("---");
