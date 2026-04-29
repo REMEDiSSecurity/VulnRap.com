@@ -1651,27 +1651,34 @@ function HandwavyPhrasesAdmin() {
     }
   };
 
-  // Task #130 — mirror of #121's reinstate. After adding a phrase by mistake
-  // a reviewer can press Undo within UNDO_WINDOW_MS to remove it; the
-  // resulting history row is tagged `undone: true` so the audit trail reads
-  // "added then undone" rather than producing an unrelated manual-removal
-  // entry. The Undo button only appears on the SINGLE most-recently-added
-  // marker (and only while still inside the window) — older entries fall
-  // back to the regular Trash flow.
+  // Task #130 + Task #141 — mirror of #121's reinstate. After adding a phrase
+  // by mistake a reviewer can press Undo within UNDO_WINDOW_MS to remove it;
+  // the resulting history row is tagged `undone: true` so the audit trail
+  // reads "added then undone" rather than producing an unrelated
+  // manual-removal entry. Task #141 broadened this from "only the single most
+  // recent add" to "every FLAT add still inside the window" so a reviewer
+  // who fires two phrases back-to-back and realises both were mistakes can
+  // undo each of them through this flow rather than dropping the older one
+  // into the regular Trash (which would record a manual-removal entry
+  // instead). The Trash button is still rendered as a fallback for entries
+  // that have aged out of the window or were never reviewer-added (curated
+  // defaults).
   const UNDO_WINDOW_MS = 5 * 60 * 1000;
-  // Re-render every ~15s while a fresh add exists so the Undo button
-  // visibly disappears once its window elapses (rather than waiting for
-  // the next click somewhere on the panel).
+  // Re-render every ~15s while at least one fresh add exists so each row's
+  // Undo button visibly disappears as its individual window elapses
+  // (rather than waiting for the next click somewhere on the panel).
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = window.setInterval(() => setTick((n) => n + 1), 15_000);
     return () => window.clearInterval(id);
   }, []);
-  // Find the most recently-added marker that's still inside the undo
-  // window. Curated defaults (no `addedAt`) are skipped — they were never
-  // "added" by a reviewer in the first place, so there's nothing to undo.
-  const undoCandidate = useMemo(() => {
-    let best: { phrase: string; addedAtIso: string; addedAtMs: number } | null = null;
+  // Map of phrase -> { addedAtIso } for every marker still inside its
+  // individual undo window. Curated defaults (no `addedAt`) are skipped —
+  // they were never "added" by a reviewer in the first place, so there's
+  // nothing to undo. Keyed by phrase because each row's lookup is by phrase
+  // and `phrases` already deduplicates active markers by phrase.
+  const undoCandidates = useMemo(() => {
+    const map = new Map<string, { addedAtIso: string; addedAtMs: number }>();
     const now = Date.now();
     for (const m of phrases) {
       if (!m.addedAt) continue;
@@ -1679,11 +1686,9 @@ function HandwavyPhrasesAdmin() {
       const ms = Date.parse(iso);
       if (!Number.isFinite(ms)) continue;
       if (now - ms > UNDO_WINDOW_MS) continue;
-      if (!best || ms > best.addedAtMs) {
-        best = { phrase: m.phrase, addedAtIso: iso, addedAtMs: ms };
-      }
+      map.set(m.phrase, { addedAtIso: iso, addedAtMs: ms });
     }
-    return best;
+    return map;
     // The tick state forces this to re-evaluate periodically so the window
     // expires visually; phrases.length covers add/remove/refresh changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2571,10 +2576,15 @@ function HandwavyPhrasesAdmin() {
               // disable rules below keep both flows visible side-by-side
               // without letting them step on each other.
               const bulkBusy = busy === "bulk-remove" || bulkPreview !== null;
-              const isUndoTarget =
-                undoCandidate !== null && undoCandidate.phrase === m.phrase;
-              const undoBusyKey = isUndoTarget && undoCandidate
-                ? `undo:${undoCandidate.phrase}:${undoCandidate.addedAtIso}`
+              // Task #141 — every active marker that's still inside its own
+              // undo window gets its own Undo button (not just the single
+              // most-recent one), so a reviewer who fired two adds back-to-
+              // back can roll back either of them through the audit-friendly
+              // undo path. Look the row up by phrase in `undoCandidates`.
+              const undoEntry = undoCandidates.get(m.phrase) ?? null;
+              const isUndoTarget = undoEntry !== null;
+              const undoBusyKey = undoEntry
+                ? `undo:${m.phrase}:${undoEntry.addedAtIso}`
                 : null;
               // Task #131 — count of completed remove+reinstate cycles for
               // this phrase, derived from the existing history log. Surfaced
@@ -2697,13 +2707,13 @@ function HandwavyPhrasesAdmin() {
                       </>
                     ) : (
                       <>
-                        {isUndoTarget && undoCandidate && (
+                        {isUndoTarget && undoEntry && (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-7 px-2 text-[10px] text-amber-300 hover:text-amber-200"
                             disabled={editing !== null || busy === undoBusyKey}
-                            onClick={() => handleUndo(undoCandidate.phrase, undoCandidate.addedAtIso)}
+                            onClick={() => handleUndo(m.phrase, undoEntry.addedAtIso)}
                             data-testid="handwavy-undo"
                             aria-label={`Undo adding phrase ${m.phrase}`}
                             title="Undo this brand-new add (within 5 minutes)"
