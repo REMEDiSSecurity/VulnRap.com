@@ -192,7 +192,7 @@ export default function Stats() {
   const { data: pageViews, isLoading: pvLoading } = useGetVisitorStats({
     query: {
       queryKey: getGetVisitorStatsQueryKey(),
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: import.meta.env.DEV ? false : REFETCH_INTERVAL,
     },
   });
 

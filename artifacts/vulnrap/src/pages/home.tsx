@@ -1840,17 +1840,23 @@ export default function Home() {
 }
 
 function VisitorCounter() {
+  const isDev = import.meta.env.DEV;
   const { data: visitors } = useGetVisitorStats({
-    query: { queryKey: getGetVisitorStatsQueryKey(), refetchInterval: 120_000 },
+    query: {
+      queryKey: getGetVisitorStatsQueryKey(),
+      refetchInterval: 120_000,
+      enabled: !isDev,
+    },
   });
 
   useEffect(() => {
+    if (isDev) return;
     const key = "vulnrap_visit_recorded";
     const today = new Date().toISOString().slice(0, 10);
     if (sessionStorage.getItem(key) !== today) {
       recordVisit().then(() => sessionStorage.setItem(key, today)).catch(() => {});
     }
-  }, []);
+  }, [isDev]);
 
   if (!visitors || visitors.totalUniqueVisitors === 0) return null;
 
