@@ -683,6 +683,44 @@ const SLOP_CMDI_PROSE_PLACEHOLDER_FIXTURE = [
   "fleet — please prioritize.",
 ].join("\n");
 
+// SQLi slop fixture using the no-colon dodge: prose says "the payload
+// `<sql payload here>` was tried" — same gesture as "Payload: `<...>`",
+// but the colon-form regex would miss it. The injection family's
+// `concrete_payload` gold signal would happily fire on the incidental
+// "UNION SELECT" token in the CWE description, so the inline-form
+// prose-placeholder check must revoke it.
+const SLOP_SQLI_PROSE_PLACEHOLDER_NOCOLON_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query.",
+  "This is the canonical UNION SELECT class of attacks (CWE-89).",
+  "Severity: Critical. Affects all customers in production.",
+  "",
+  "We confirmed the issue end-to-end: the payload `<sql payload here>`",
+  "was tried against /search and returned the full user table.",
+  "",
+  "Replay against any modern database backend; the response will",
+  "include sensitive rows.",
+].join("\n");
+
+// Command-injection slop fixture using the no-colon dodge: "send
+// `<inject>` to /api/exec" — slop author leans on the inline-code span
+// to make the slot look like a literal payload while skipping the
+// "Run:" / "Payload:" label.
+const SLOP_CMDI_PROSE_PLACEHOLDER_NOCOLON_FIXTURE = [
+  "# Critical command injection on POST /api/exec",
+  "",
+  "The cmd field is passed straight to a shell, allowing arbitrary",
+  "command execution. Per CWE-78, exploitation typically uses",
+  "separators like ; cat /etc/passwd to chain commands.",
+  "Severity: Critical.",
+  "",
+  "To reproduce, send `<inject>` to the cmd field on /api/exec.",
+  "",
+  "Any modern shell will exhibit this. Severe risk to the production",
+  "fleet — please prioritize.",
+].join("\n");
+
 describe("findProsePlaceholderPayloadRanges", () => {
   it("flags Payload:/Inject:/Exec:/Run: <slot> in prose", () => {
     expect(
@@ -717,6 +755,70 @@ describe("findProsePlaceholderPayloadRanges", () => {
     expect(
       findProsePlaceholderPayloadRanges("Host: <target> in a request").length,
     ).toBe(0);
+  });
+
+  it("flags inline-code <slot> after a payload-context word with no colon/equals", () => {
+    // Slop dodge: drop the "Payload:" / "Run:" label and just lean on the
+    // inline-code span to make the slot look like a literal payload.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload `<inject>` was sent to /search",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "send `<sql payload here>` against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload `<sql payload here>` was tried successfully",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we run `<command here>` to confirm the issue",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag inline-code <slot> without a payload-context word", () => {
+    // The inline-code form requires a payload-context word before the
+    // backtick, otherwise prose like "the value `<unknown>` failed" or
+    // "the field `<x>` was empty" would be punished.
+    expect(
+      findProsePlaceholderPayloadRanges("the value `<unknown>` was rejected")
+        .length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("the field `<x>` was empty").length,
+    ).toBe(0);
+  });
+
+  it("does not flag inline-code with a real payload after a payload-context word", () => {
+    // No `<...>` slot means no placeholder — the inline-code span carries
+    // a real exploit string.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "send `' UNION SELECT password FROM users--` to /search",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload `; cat /etc/passwd` was tried",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("does not double-count when both regexes could match the same slot", () => {
+    // The colon-form regex would match "Payload: `<inject>`"; the inline
+    // form needs `\s+` between the word and the backtick. They are
+    // disjoint by design, but the function still dedupes overlapping
+    // ranges so a future relax of either pattern stays idempotent.
+    const ranges = findProsePlaceholderPayloadRanges(
+      "Payload: `<inject>` and Run: `<command here>`.",
+    );
+    expect(ranges.length).toBe(2);
   });
 });
 
@@ -755,6 +857,36 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
   it("revokes concrete_payload when prose only gestures at a command-injection payload", () => {
     const sig = extractSignals(SLOP_CMDI_PROSE_PLACEHOLDER_FIXTURE);
     const result = runEngine2Avri(sig, SLOP_CMDI_PROSE_PLACEHOLDER_FIXTURE, INJ);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+  });
+
+  it("revokes concrete_payload when prose dodges the colon with 'the payload `<...>` was tried'", () => {
+    const sig = extractSignals(SLOP_SQLI_PROSE_PLACEHOLDER_NOCOLON_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_SQLI_PROSE_PLACEHOLDER_NOCOLON_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+  });
+
+  it("revokes concrete_payload when prose dodges the colon with 'send `<inject>` to'", () => {
+    const sig = extractSignals(SLOP_CMDI_PROSE_PLACEHOLDER_NOCOLON_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_CMDI_PROSE_PLACEHOLDER_NOCOLON_FIXTURE,
+      INJ,
+    );
     const survivingIds = result.detail.goldHits.map((g) => g.id);
     expect(survivingIds).not.toContain("concrete_payload");
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);

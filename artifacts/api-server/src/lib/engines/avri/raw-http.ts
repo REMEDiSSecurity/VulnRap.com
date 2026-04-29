@@ -340,27 +340,59 @@ export function isPlaceholderBody(body: string): boolean {
 const PROSE_PAYLOAD_PLACEHOLDER_RE =
   /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template)\s*[:=]\s*[`'"]?(<[^>\n]{1,80}>)[`'"]?/gi;
 
-/** Find prose snippets shaped like "Payload: `<sql payload here>`" whose
- * `<...>` slot is itself a placeholder (slop vocabulary or bare short
- * identifier — same shapes as `isPlaceholderBody`). Returns the byte ranges
- * of the full match so the caller can strip them before re-testing
- * payload-class gold signals. */
+// Same gesture, no colon/equals: a payload-context word followed by
+// whitespace and an inline-code `<...>` slot. Slop authors dodge the
+// colon-form check above by writing prose like "the payload `<inject>`
+// was sent" or "send `<sql payload here>` against the endpoint" — the
+// inline-code span makes the slot still look like a literal payload
+// even though there's no "Payload:" label. The verb list extends the
+// noun vocabulary with the most common "deliver-the-payload" verbs
+// (send/sent/sending/sends) so slop can't hide behind `send <inject>`.
+//
+// The opening backtick is required (without it the pattern would be too
+// aggressive — phrases like "the payload <unknown> was rejected" should
+// not be flagged). The closing backtick is also required so we don't
+// match unterminated code spans that bleed into surrounding prose.
+const PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE =
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)\s+`(<[^>\n`]{1,80}>)`/gi;
+
+/** Find prose snippets shaped like "Payload: `<sql payload here>`" or
+ * "the payload `<inject>` was sent" whose `<...>` slot is itself a
+ * placeholder (slop vocabulary or bare short identifier — same shapes as
+ * `isPlaceholderBody`). Returns the byte ranges of the full match so the
+ * caller can strip them before re-testing payload-class gold signals. */
 export function findProsePlaceholderPayloadRanges(
   text: string,
 ): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
-  PROSE_PAYLOAD_PLACEHOLDER_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = PROSE_PAYLOAD_PLACEHOLDER_RE.exec(text)) !== null) {
-    const slot = m[1];
-    const inner = slot.slice(1, -1).trim();
-    if (inner.length === 0) continue;
-    const looksPlaceholder =
-      BODY_PLACEHOLDER_KEYWORDS.test(inner) ||
-      /^[a-z][a-z0-9_\-\s]{0,30}$/i.test(inner);
-    if (!looksPlaceholder) continue;
-    ranges.push({ start: m.index, end: m.index + m[0].length });
+  for (const re of [
+    PROSE_PAYLOAD_PLACEHOLDER_RE,
+    PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE,
+  ]) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const slot = m[1];
+      const inner = slot.slice(1, -1).trim();
+      if (inner.length === 0) continue;
+      const looksPlaceholder =
+        BODY_PLACEHOLDER_KEYWORDS.test(inner) ||
+        /^[a-z][a-z0-9_\-\s]{0,30}$/i.test(inner);
+      if (!looksPlaceholder) continue;
+      const start = m.index;
+      const end = m.index + m[0].length;
+      // Dedupe against any range already added (the two regexes are
+      // disjoint by design — one requires `[:=]`, the other requires
+      // direct whitespace + backtick — but a future edit could broaden
+      // either pattern, so we still skip exact-overlap or contained
+      // ranges to keep the byte-strip pass idempotent).
+      const overlaps = ranges.some(
+        (r) => start < r.end && end > r.start,
+      );
+      if (!overlaps) ranges.push({ start, end });
+    }
   }
+  ranges.sort((a, b) => a.start - b.start);
   return ranges;
 }
 
