@@ -15,6 +15,10 @@ import {
   readArchetypeHistory,
 } from "../lib/archetype-history";
 import {
+  appendDatasetCohortSnapshots,
+  readDatasetHistory,
+} from "../lib/dataset-history";
+import {
   CompactWindowValidationError,
   getCompactAfterDaysSetting,
   setPersistedCompactAfterDays,
@@ -2642,6 +2646,26 @@ router.get("/test/run", async (_req, res) => {
         gapMeetsTarget: dsGap != null && dsGap >= DATASET_GAP_TARGET,
         samples: sampleRows,
       };
+      // Task #187 — persist one row per cohort with the run's gap so the
+      // calibration dashboard can chart week-over-week drift on the curated
+      // dataset cohorts. Only appended when the dataset is mounted (matches
+      // the "no rows when dataset isn't mounted" behavior the endpoint
+      // promises). Wrapped so a write failure can't break the smoke
+      // endpoint, mirroring the archetype-history persistence above.
+      try {
+        await appendDatasetCohortSnapshots(
+          cohorts.map(c => ({
+            tier: c.tier,
+            label: c.label,
+            count: c.count,
+            compositeMean: c.compositeMean,
+            gap: dsGap,
+          })),
+          snapshotTimestamp,
+        );
+      } catch {
+        // Persistence failures are non-fatal for the dev smoke endpoint.
+      }
     }
   } catch {
     // Dataset read/parse failures must not break the smoke endpoint.
@@ -2690,6 +2714,35 @@ router.get("/test/archetype-history", async (_req, res) => {
   res.json({
     totalSnapshots: file.snapshots.length,
     archetypes,
+  });
+});
+
+// Task #187 — persisted curated-dataset cohort means time series. The
+// calibration dashboard reads this to render a sparkline of each cohort's
+// composite mean (and the T1−T3 gap) over time so reviewers can see how
+// the 25-per-label real-report cohort drifts week-over-week. Snapshots
+// are only appended when the dataset is mounted, so on a runner without
+// the curated corpus this endpoint legitimately returns an empty list.
+router.get("/test/dataset-history", async (_req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not available in production." });
+    return;
+  }
+  const file = await readDatasetHistory();
+  // Group by tier so the dashboard can render one trend per cohort
+  // without re-walking the flat list. Snapshots are emitted in
+  // chronological order so the consumer can read .at(-1) for "current".
+  const byTier = new Map<string, typeof file.snapshots>();
+  for (const snap of file.snapshots) {
+    if (!byTier.has(snap.tier)) byTier.set(snap.tier, []);
+    byTier.get(snap.tier)!.push(snap);
+  }
+  const cohorts = Array.from(byTier.entries())
+    .map(([tier, snapshots]) => ({ tier, snapshots }))
+    .sort((a, b) => a.tier.localeCompare(b.tier));
+  res.json({
+    totalSnapshots: file.snapshots.length,
+    cohorts,
   });
 });
 

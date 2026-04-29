@@ -44,6 +44,8 @@ let tmpDir: string;
 const previousNodeEnv = process.env.NODE_ENV;
 const previousHistoryPath = process.env.ARCHETYPE_HISTORY_PATH;
 const previousHistoryConfigPath = process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
+const previousDatasetHistoryPath = process.env.DATASET_HISTORY_PATH;
+const previousDatasetsDir = process.env.VULNRAP_DATASETS_DIR;
 const previousCalibrationToken = process.env.CALIBRATION_TOKEN;
 
 beforeAll(async () => {
@@ -52,6 +54,16 @@ beforeAll(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "archetype-history-"));
   process.env.ARCHETYPE_HISTORY_PATH = path.join(tmpDir, "archetype-history.json");
   process.env.ARCHETYPE_HISTORY_CONFIG_PATH = path.join(tmpDir, "archetype-history-config.json");
+  process.env.DATASET_HISTORY_PATH = path.join(tmpDir, "dataset-history.json");
+  // Task #187 — point the dataset-loader at a tmpdir that we'll *only*
+  // populate inside the positive Task #187 test. The dataset-loader
+  // captures DATA_ROOTS at import time, so the env var must be set
+  // before the router (and its transitive dataset-loader import) loads.
+  // For the rest of the suite the directory is empty, which makes
+  // discover() return null exactly as in CI/dev.
+  const datasetDir = path.join(tmpDir, "datasets");
+  await fs.mkdir(datasetDir, { recursive: true });
+  process.env.VULNRAP_DATASETS_DIR = datasetDir;
   const { default: testFixturesRouter } = await import("./test-fixtures");
   const app = express();
   // express.json() is needed for PUT /test/archetype-history/config; the
@@ -72,6 +84,10 @@ afterAll(async () => {
   else process.env.ARCHETYPE_HISTORY_PATH = previousHistoryPath;
   if (previousHistoryConfigPath === undefined) delete process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
   else process.env.ARCHETYPE_HISTORY_CONFIG_PATH = previousHistoryConfigPath;
+  if (previousDatasetHistoryPath === undefined) delete process.env.DATASET_HISTORY_PATH;
+  else process.env.DATASET_HISTORY_PATH = previousDatasetHistoryPath;
+  if (previousDatasetsDir === undefined) delete process.env.VULNRAP_DATASETS_DIR;
+  else process.env.VULNRAP_DATASETS_DIR = previousDatasetsDir;
   if (previousCalibrationToken === undefined) delete process.env.CALIBRATION_TOKEN;
   else process.env.CALIBRATION_TOKEN = previousCalibrationToken;
   await new Promise<void>(resolve => server.close(() => resolve()));
@@ -420,4 +436,100 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     );
     expect(notNumber.status).toBe(400);
   });
+});
+
+// Task #187 — persisted curated-dataset cohort means time series.
+describe("GET /api/test/dataset-history — Task #187 cohort drift persistence", () => {
+  interface DatasetHistoryRow {
+    timestamp: string;
+    tier: string;
+    label: string;
+    count: number;
+    compositeMean: number | null;
+    gap: number | null;
+  }
+  interface DatasetHistoryResponse {
+    totalSnapshots: number;
+    cohorts: Array<{ tier: string; snapshots: DatasetHistoryRow[] }>;
+  }
+
+  it("exposes a stable empty shape when the dataset isn't mounted", async () => {
+    // /api/test/run has already been called by earlier specs in this file.
+    // Without the curated dataset mounted, no cohort rows should have been
+    // persisted — the endpoint must still return a well-formed response.
+    const body = await fetchJson<DatasetHistoryResponse>("/api/test/dataset-history");
+    expect(body.totalSnapshots).toBe(0);
+    expect(body.cohorts).toEqual([]);
+  });
+
+  it("appends one row per cohort on /api/test/run when the dataset IS mounted", async () => {
+    // beforeAll already pointed VULNRAP_DATASETS_DIR at an empty tmpdir
+    // so the dataset-loader picked it up at import time. Drop a synthetic
+    // curated v2 file in there so discover() now finds a path and the
+    // route walks the dataset persistence path.
+    const datasetDir = process.env.VULNRAP_DATASETS_DIR!;
+    const datasetFile = path.join(datasetDir, "vuln_reports_dataset_v2.json");
+    const buildReport = (id: string, label: string) => ({
+      id,
+      // The loader requires text length >= 50 chars to yield the row.
+      text: `Synthetic curated report ${id} for cohort drift persistence smoke test.`,
+      label,
+      cwes: [] as string[],
+    });
+    const reports = [
+      buildReport("syn-h-1", "human_authentic"),
+      buildReport("syn-h-2", "human_authentic"),
+      buildReport("syn-b-1", "borderline"),
+      buildReport("syn-b-2", "borderline"),
+      buildReport("syn-s-1", "ai_slop"),
+      buildReport("syn-s-2", "ai_slop"),
+    ];
+    await fs.writeFile(datasetFile, JSON.stringify(reports), "utf-8");
+
+    try {
+      const before = await fetchJson<DatasetHistoryResponse>("/api/test/dataset-history");
+      const baselineCount = before.totalSnapshots;
+
+      const runBody = await fetchJson<{
+        datasetSamples:
+          | { available: false }
+          | { available: true; cohorts: Array<{ tier: string }> };
+      }>("/api/test/run");
+      // Sanity check: with the synthetic dataset wired up the run must
+      // observe it as mounted, otherwise the persistence path is skipped.
+      expect(runBody.datasetSamples.available).toBe(true);
+
+      const after = await fetchJson<DatasetHistoryResponse>("/api/test/dataset-history");
+      // Three cohorts (T1/T2/T3) → three rows appended on this single run.
+      expect(after.totalSnapshots).toBe(baselineCount + 3);
+      const tiers = after.cohorts.map(c => c.tier).sort();
+      expect(tiers).toEqual(["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"]);
+      for (const c of after.cohorts) {
+        expect(c.snapshots.length).toBeGreaterThanOrEqual(1);
+        const last = c.snapshots[c.snapshots.length - 1]!;
+        expect(last.tier).toBe(c.tier);
+        expect(typeof last.count).toBe("number");
+        expect(typeof last.timestamp).toBe("string");
+        // compositeMean and gap may be null if a cohort came back empty,
+        // but for our seeded dataset every cohort has 2 samples so they're
+        // numeric.
+        expect(typeof last.compositeMean).toBe("number");
+      }
+      // The gap must match across cohort rows of the same run, since it's
+      // a per-run statistic repeated on every cohort row.
+      const lastTimestamps = after.cohorts.map(
+        c => c.snapshots[c.snapshots.length - 1]!.timestamp,
+      );
+      expect(new Set(lastTimestamps).size).toBe(1);
+      const gaps = after.cohorts.map(
+        c => c.snapshots[c.snapshots.length - 1]!.gap,
+      );
+      expect(new Set(gaps).size).toBe(1);
+    } finally {
+      // Remove the file so any later /api/test/run calls in this process
+      // see an empty dataset dir again. A leftover file would let the
+      // dataset-loader cache poison sibling specs.
+      await fs.rm(datasetFile, { force: true });
+    }
+  }, 60_000);
 });
