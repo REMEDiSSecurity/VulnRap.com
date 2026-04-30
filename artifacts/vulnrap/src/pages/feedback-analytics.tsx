@@ -1499,104 +1499,179 @@ export function PreviewOverlapsBlock({
       </div>
       <div className="space-y-1.5">
         {buckets.map((bucket) => (
-          <div
+          <PreviewOverlapBucketBlock
             key={bucket.relation}
-            data-testid="handwavy-preview-overlap-bucket"
-            data-relation={bucket.relation}
-          >
-            <div
-              className="text-[10px] font-semibold text-red-200/90 uppercase tracking-wide"
-              data-testid="handwavy-preview-overlap-bucket-header"
-            >
-              {bucket.matches.length}{" "}
-              {describeOverlapBucketNoun(bucket.relation, bucket.matches.length)}
-            </div>
-            <ul className="ml-1 space-y-1.5 mt-0.5">
-              {bucket.matches.map((o: HandwavyPhraseDryRunOverlapsMatchesItem) => {
-                // Task #226 — only the relations where the existing entry is
-                // narrower-or-equal to the candidate get the "Remove existing"
-                // action. For `existing-contains-candidate` the existing phrase is
-                // BROADER than the candidate (the candidate is already covered),
-                // so removing it would also drop coverage of unrelated reports —
-                // not the typical "supersede / dedupe" intent the action is for.
-                const canRemoveExisting =
-                  o.relation === "equal" ||
-                  o.relation === "candidate-contains-existing";
-                const removeInFlight = removeBusyPhrase === o.phrase;
-                return (
-                  <li
-                    key={`${o.relation}::${o.phrase}`}
-                    className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2"
-                    data-testid="handwavy-preview-overlap-row"
-                    data-handwavy-overlap-phrase={o.phrase}
-                    data-handwavy-overlap-relation={o.relation}
-                  >
-                    <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                      <span className="text-red-300/80 select-none">•</span>
-                      <span className="flex-1 min-w-0">
-                        <span className="text-red-200 font-medium">
-                          {describeOverlapRelation(o.relation)}
-                        </span>{" "}
-                        <span className="text-foreground/90 break-all">&ldquo;{o.phrase}&rdquo;</span>{" "}
-                        <span className="text-[10px] text-red-200/70 uppercase tracking-wide">
-                          [{o.category}]
-                        </span>
-                      </span>
-                    </div>
-                    {/* Task #226 — inline quick-actions per overlap row. The
-                        buttons don't auto-commit anything: "Jump" only scrolls +
-                        pulses the row in the active list, and "Remove existing"
-                        routes through the same single-phrase removal-impact
-                        preview the trash button uses, which still requires an
-                        explicit confirmation when valid detections would be lost.
-                        The handler props are optional (Task #228 unit tests render
-                        the component without wiring up the host page), so each
-                        button only shows when its handler is provided. */}
-                    {(onJumpToActivePhrase || (canRemoveExisting && onRequestRemoveExisting)) && (
-                      <div className="flex items-center gap-1 shrink-0 sm:pt-0.5">
-                        {onJumpToActivePhrase && (
-                          <button
-                            type="button"
-                            onClick={() => onJumpToActivePhrase(o.phrase)}
-                            className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium text-red-100 hover:bg-red-500/20 hover:text-red-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70"
-                            data-testid="handwavy-preview-overlap-jump"
-                            aria-label={`Jump to "${o.phrase}" in the active phrase list`}
-                            title={`Scroll the active list to "${o.phrase}" and highlight it`}
-                          >
-                            <ArrowRight className="w-3 h-3" />
-                            Jump
-                          </button>
-                        )}
-                        {canRemoveExisting && onRequestRemoveExisting && (
-                          <button
-                            type="button"
-                            onClick={() => onRequestRemoveExisting(o.phrase)}
-                            disabled={mutationsAllowed === false || removeInFlight}
-                            className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium text-red-200 hover:bg-red-500/20 hover:text-red-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-red-200"
-                            data-testid="handwavy-preview-overlap-remove"
-                            data-mutations-blocked={mutationsAllowed === false ? "true" : "false"}
-                            aria-label={`Open removal-impact preview for existing phrase "${o.phrase}"`}
-                            title={
-                              mutationsAllowed === false
-                                ? MUTATIONS_BLOCKED_TITLE
-                                : removeInFlight
-                                  ? "Removal preview already in flight"
-                                  : `Open the removal-impact preview for "${o.phrase}" — nothing is removed until you confirm`
-                            }
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            {removeInFlight ? "Loading…" : "Remove existing"}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+            bucket={bucket}
+            onJumpToActivePhrase={onJumpToActivePhrase}
+            onRequestRemoveExisting={onRequestRemoveExisting}
+            mutationsAllowed={mutationsAllowed}
+            removeBusyPhrase={removeBusyPhrase}
+          />
         ))}
       </div>
+    </div>
+  );
+}
+
+// Task #308 — buckets above this many rows start collapsed by default so a
+// generic candidate (e.g. "the system") that overlaps 20+ already-covered
+// phrases doesn't blow up the preview panel. Reviewers can still expand to
+// read every row, and the bucket-header count stays visible while collapsed
+// so the at-a-glance summary is preserved. Kept small (and not configurable)
+// because the panel is meant to be a quick callout, not a browseable list —
+// the active phrase list itself is the right place to scroll through dozens
+// of entries.
+export const PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD = 5;
+
+// Task #308 — one bucket inside `PreviewOverlapsBlock`. Extracted so each
+// bucket gets its own `useState` for collapsed/expanded; the parent map can't
+// hold per-bucket state without a child component. Default collapsed state is
+// derived from the bucket's row count so opening the preview already shows a
+// compact panel when a bucket is large; reviewers can flip individual buckets
+// independently after that.
+function PreviewOverlapBucketBlock({
+  bucket,
+  onJumpToActivePhrase,
+  onRequestRemoveExisting,
+  mutationsAllowed,
+  removeBusyPhrase,
+}: {
+  bucket: {
+    relation: HandwavyPhraseDryRunOverlapsMatchesItemRelation;
+    matches: HandwavyPhraseDryRunOverlapsMatchesItem[];
+  };
+  onJumpToActivePhrase?: (phrase: string) => void;
+  onRequestRemoveExisting?: (phrase: string) => void;
+  mutationsAllowed?: boolean;
+  removeBusyPhrase?: string | null;
+}) {
+  const startsCollapsed =
+    bucket.matches.length > PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD;
+  const [collapsed, setCollapsed] = useState(startsCollapsed);
+  const bucketNoun = describeOverlapBucketNoun(
+    bucket.relation,
+    bucket.matches.length,
+  );
+  const headerLabel = `${bucket.matches.length} ${bucketNoun}`;
+  const toggleAriaLabel = collapsed
+    ? `Show all ${bucket.matches.length} ${bucketNoun}`
+    : `Hide ${bucket.matches.length} ${bucketNoun}`;
+  return (
+    <div
+      data-testid="handwavy-preview-overlap-bucket"
+      data-relation={bucket.relation}
+      data-handwavy-overlap-bucket-collapsed={collapsed ? "true" : "false"}
+    >
+      <button
+        type="button"
+        onClick={() => setCollapsed((prev) => !prev)}
+        aria-expanded={!collapsed}
+        aria-label={toggleAriaLabel}
+        className="flex items-center gap-1 rounded-sm text-[10px] font-semibold text-red-200/90 uppercase tracking-wide hover:text-red-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70"
+        data-testid="handwavy-preview-overlap-bucket-toggle"
+      >
+        {collapsed ? (
+          <ChevronRight className="w-3 h-3" />
+        ) : (
+          <ChevronDown className="w-3 h-3" />
+        )}
+        <span data-testid="handwavy-preview-overlap-bucket-header">
+          {headerLabel}
+        </span>
+        {collapsed && (
+          <span
+            className="ml-1 normal-case tracking-normal text-red-200/80"
+            data-testid="handwavy-preview-overlap-bucket-show-all"
+          >
+            — Show all {bucket.matches.length}
+          </span>
+        )}
+      </button>
+      {!collapsed && (
+        <ul className="ml-1 space-y-1.5 mt-0.5">
+          {bucket.matches.map((o: HandwavyPhraseDryRunOverlapsMatchesItem) => {
+            // Task #226 — only the relations where the existing entry is
+            // narrower-or-equal to the candidate get the "Remove existing"
+            // action. For `existing-contains-candidate` the existing phrase is
+            // BROADER than the candidate (the candidate is already covered),
+            // so removing it would also drop coverage of unrelated reports —
+            // not the typical "supersede / dedupe" intent the action is for.
+            const canRemoveExisting =
+              o.relation === "equal" ||
+              o.relation === "candidate-contains-existing";
+            const removeInFlight = removeBusyPhrase === o.phrase;
+            return (
+              <li
+                key={`${o.relation}::${o.phrase}`}
+                className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2"
+                data-testid="handwavy-preview-overlap-row"
+                data-handwavy-overlap-phrase={o.phrase}
+                data-handwavy-overlap-relation={o.relation}
+              >
+                <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                  <span className="text-red-300/80 select-none">•</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="text-red-200 font-medium">
+                      {describeOverlapRelation(o.relation)}
+                    </span>{" "}
+                    <span className="text-foreground/90 break-all">&ldquo;{o.phrase}&rdquo;</span>{" "}
+                    <span className="text-[10px] text-red-200/70 uppercase tracking-wide">
+                      [{o.category}]
+                    </span>
+                  </span>
+                </div>
+                {/* Task #226 — inline quick-actions per overlap row. The
+                    buttons don't auto-commit anything: "Jump" only scrolls +
+                    pulses the row in the active list, and "Remove existing"
+                    routes through the same single-phrase removal-impact
+                    preview the trash button uses, which still requires an
+                    explicit confirmation when valid detections would be lost.
+                    The handler props are optional (Task #228 unit tests render
+                    the component without wiring up the host page), so each
+                    button only shows when its handler is provided. */}
+                {(onJumpToActivePhrase || (canRemoveExisting && onRequestRemoveExisting)) && (
+                  <div className="flex items-center gap-1 shrink-0 sm:pt-0.5">
+                    {onJumpToActivePhrase && (
+                      <button
+                        type="button"
+                        onClick={() => onJumpToActivePhrase(o.phrase)}
+                        className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium text-red-100 hover:bg-red-500/20 hover:text-red-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70"
+                        data-testid="handwavy-preview-overlap-jump"
+                        aria-label={`Jump to "${o.phrase}" in the active phrase list`}
+                        title={`Scroll the active list to "${o.phrase}" and highlight it`}
+                      >
+                        <ArrowRight className="w-3 h-3" />
+                        Jump
+                      </button>
+                    )}
+                    {canRemoveExisting && onRequestRemoveExisting && (
+                      <button
+                        type="button"
+                        onClick={() => onRequestRemoveExisting(o.phrase)}
+                        disabled={mutationsAllowed === false || removeInFlight}
+                        className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium text-red-200 hover:bg-red-500/20 hover:text-red-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-red-200"
+                        data-testid="handwavy-preview-overlap-remove"
+                        data-mutations-blocked={mutationsAllowed === false ? "true" : "false"}
+                        aria-label={`Open removal-impact preview for existing phrase "${o.phrase}"`}
+                        title={
+                          mutationsAllowed === false
+                            ? MUTATIONS_BLOCKED_TITLE
+                            : removeInFlight
+                              ? "Removal preview already in flight"
+                              : `Open the removal-impact preview for "${o.phrase}" — nothing is removed until you confirm`
+                        }
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        {removeInFlight ? "Loading…" : "Remove existing"}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
