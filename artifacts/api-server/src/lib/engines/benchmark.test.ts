@@ -244,7 +244,10 @@ Impact: This vulnerability may allow an attacker to execute arbitrary code, pote
 Steps To Reproduce: Clone the curl repository: git clone https://github.com/curl/curl.git. Run a secret scanning tool (e.g., gitleaks detect --source=.) to identify hard-coded secrets. Alternatively, search for likely private key and credential strings with: grep -r '-----BEGIN' ./tests/ and grep -r 'password' ./docs/examples/. Review identified files to confirm the presence of full private keys or functional credential examples, such as tests/data/testprivkey.pem or docs/examples/http-auth-example.txt. See .gitleaks/report.json for a consolidated findings report.
 
 Impact Summary: The security impact of this vulnerability is severe and multi-faceted: Impersonation and Privilege Escalation, Data Decryption, Credential Stuffing and Service Hijack, Supply Chain Attacks, Regulatory and Compliance Risks.`,
-    expectMaxScore: 35,
+    // Task #300: AI self-disclosure detector ("prepared using an AI security
+    // assistant") now applies a bounded -15 out-of-cap penalty in Engine 2,
+    // dragging the composite from 33 down into the ≤25 task target band.
+    expectMaxScore: 25,
   },
   {
     // HackerOne #3116935 — DES in NTLM flagged as broken crypto without
@@ -324,11 +327,15 @@ Verified POC Code creates a local buffer of 8192 bytes, fills it without null te
 // on as the corresponding Sprint 13B detector work lands and become real
 // regression assertions. Each entry references the fixture by name so the
 // fixture body and these expectations stay in sync.
-const CURL_SLOP_TIGHTENING_TARGETS: Array<{ name: string; expectMaxScore: number; reason: string }> = [
+const CURL_SLOP_TIGHTENING_TARGETS: Array<{ name: string; expectMaxScore: number; reason: string; enabled?: boolean }> = [
   {
+    // Task #300 — enabled (no longer `it.skip`) now that the AI self-
+    // disclosure detector lands the bounded penalty that drags this
+    // fixture from 33 into the ≤25 band.
     name: "curl-slop-h1-3295650-gitleaks-test-certs",
     expectMaxScore: 25,
     reason: "Sprint 13B handwavy-phrase + AI-self-disclosure tightening",
+    enabled: true,
   },
   {
     name: "curl-slop-h1-3116935-des-ntlm-broken-crypto",
@@ -498,12 +505,14 @@ describe("VulnRap engines benchmark", () => {
     });
   }
 
-  // Tightening targets from Task #204 that v3.8.0 does not yet meet. Each one
-  // is gated as `it.skip` until the corresponding Sprint 13B detector tightening
-  // lands; flipping `.skip` off is then a single-line change that turns the
-  // aspirational target into a real regression assertion.
+  // Tightening targets from Task #204 that v3.8.0 does not yet meet. Each
+  // entry stays gated as `it.skip` until the corresponding Sprint 13B
+  // detector tightening lands; flipping `enabled: true` on is then a one-
+  // line change that turns the aspirational target into a real regression
+  // assertion. Task #300 enabled the first (3295650) target.
   for (const t of CURL_SLOP_TIGHTENING_TARGETS) {
-    it.skip(`tightening target (${t.reason}): ${t.name} should score <= ${t.expectMaxScore}`, () => {
+    const runner = t.enabled ? it : it.skip;
+    runner(`tightening target (${t.reason}): ${t.name} should score <= ${t.expectMaxScore}`, () => {
       const f = CURL_SLOP_FIXTURES.find(x => x.name === t.name);
       expect(f, `tightening target references unknown fixture ${t.name}`).toBeTruthy();
       const r = analyzeWithEngines(f!.text, { claimedCwes: f!.claimedCwes });

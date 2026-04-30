@@ -23,6 +23,11 @@ import {
   type RawHttpResponseEvaluation,
 } from "./raw-http";
 import { getHandwavyPhrases } from "./handwavy-phrases";
+import {
+  detectAiSelfDisclosure,
+  AI_SELF_DISCLOSURE_PENALTY,
+  type AiSelfDisclosureResult,
+} from "./ai-self-disclosure";
 import type { AvriEngine2Block } from "@workspace/avri-rubric";
 
 const ABSENCE_PENALTY_CAP = 12;
@@ -43,6 +48,45 @@ const FAKE_RAW_HTTP_PENALTY = 18;
 
 function clamp(n: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, n));
+}
+
+/**
+ * Task #300 — render the AI self-disclosure detector output into the
+ * persisted AVRI Engine 2 block shape. Returns null when the detector
+ * didn't fire so the field stays absent from the JSON for clean
+ * round-trips on reports without an AI self-disclosure.
+ */
+function aiSelfDisclosureBlock(
+  result: AiSelfDisclosureResult,
+  appliedPenalty: number,
+): AvriEngine2Block["aiSelfDisclosure"] {
+  if (!result.detected) return null;
+  return {
+    detected: true,
+    matches: result.matches.map((m) => ({ id: m.id, excerpt: m.excerpt })),
+    penalty: -appliedPenalty,
+  };
+}
+
+/**
+ * Task #300 — build the diagnostics-panel indicator describing which AI
+ * self-disclosure phrase(s) fired. Folded into the engine's
+ * `triggeredIndicators` so reviewers see the exact wording that triggered
+ * the penalty alongside the other AVRI signals.
+ */
+function buildAiSelfDisclosureIndicator(
+  result: AiSelfDisclosureResult,
+  appliedPenalty: number,
+): TriggeredIndicator {
+  const idsAndExcerpts = result.matches
+    .map((m) => `"${m.excerpt}" (${m.id})`)
+    .join("; ");
+  return {
+    signal: "AI_SELF_DISCLOSURE",
+    value: result.matches.map((m) => m.id).join(","),
+    strength: "HIGH",
+    explanation: `Report body openly admits AI authorship — ${result.matches.length} phrase${result.matches.length === 1 ? "" : "s"}: ${idsAndExcerpts} (-${appliedPenalty})`,
+  };
 }
 
 /** Strip fenced code blocks and unified-diff hunks before applying contradiction
@@ -95,6 +139,16 @@ export function runEngine2Avri(
   family: FamilyRubric,
 ): AvriEngine2Result {
   const legacy = runEngine2Legacy(signals, fullText);
+
+  // Task #300 — AI self-disclosure detector. Fires for any family (a slop
+  // submission that admits to being AI-generated is slop regardless of
+  // which family the rubric routes it to). The penalty is bounded — same
+  // fixed amount whether one or six phrases match — so a legit, well
+  // -evidenced report that mentions AI drafting help gets docked exactly
+  // once and not enough to crater it.
+  const aiSelfDisclosure = detectAiSelfDisclosure(fullText);
+  const aiSelfDisclosurePenalty = aiSelfDisclosure.detected ? AI_SELF_DISCLOSURE_PENALTY : 0;
+
   // FLAT family: legacy passes through, but apply a hand-wavy haircut when
   // the report explicitly admits to having no reproducer / private PoC /
   // structural-only evidence. These markers are diagnostic of slop reports
@@ -134,7 +188,11 @@ export function runEngine2Avri(
     // keys off `totalAbsencePenalty`, so cap the applied total here while
     // leaving every matched-phrase entry visible in `absencePenaltiesApplied`.
     const haircut = Math.min(HANDWAVY_HAIRCUT_CAP, haircutRaw);
-    const adjusted = clamp(legacy.score - haircut);
+    // Task #300 — AI self-disclosure penalty is out-of-cap (separate from
+    // the curated hand-wavy haircut budget) so a slop FLAT report whose
+    // body openly admits AI authorship gets pulled below the YELLOW band
+    // even when the curated phrase list happens not to fire.
+    const adjusted = clamp(legacy.score - haircut - aiSelfDisclosurePenalty);
     // Task 273: type via the shared @workspace/avri-rubric `AvriEngine2Block`
     // shape so the engine, the diagnostics-panel reader, and the printable
     // triage report all agree on the persisted JSON contract. `satisfies`
@@ -160,20 +218,33 @@ export function runEngine2Avri(
       contradictionPenalty: 0,
       crashTrace: null,
       rawHttp: null,
+      aiSelfDisclosure: aiSelfDisclosureBlock(aiSelfDisclosure, aiSelfDisclosurePenalty),
       rawAvriScore: adjusted,
       legacyScore: legacy.score,
       blendedScore: adjusted,
     } satisfies AvriEngine2Block;
+    const flatNoteParts: string[] = [];
+    if (absencePenaltiesApplied.length > 0) {
+      flatNoteParts.push(`${absencePenaltiesApplied.length} hand-wavy phrase(s), -${haircut} haircut`);
+    }
+    if (aiSelfDisclosurePenalty > 0) {
+      flatNoteParts.push(`-${aiSelfDisclosurePenalty} AI self-disclosure (${aiSelfDisclosure.matches.length} phrase${aiSelfDisclosure.matches.length === 1 ? "" : "s"})`);
+    }
+    const flatIndicators: TriggeredIndicator[] = [];
+    if (aiSelfDisclosure.detected) {
+      flatIndicators.push(buildAiSelfDisclosureIndicator(aiSelfDisclosure, aiSelfDisclosurePenalty));
+    }
     return {
       engine: {
         ...legacy,
         score: adjusted,
+        triggeredIndicators: [...legacy.triggeredIndicators, ...flatIndicators],
         signalBreakdown: {
           ...legacy.signalBreakdown,
           avri: flatAvriBreakdown,
         },
-        note: absencePenaltiesApplied.length
-          ? `AVRI ${family.displayName}: ${absencePenaltiesApplied.length} hand-wavy phrase(s), -${haircut} haircut applied to legacy substance ${legacy.score} → ${adjusted}.`
+        note: flatNoteParts.length > 0
+          ? `AVRI ${family.displayName}: ${flatNoteParts.join(", ")} applied to legacy substance ${legacy.score} → ${adjusted}.`
           : legacy.note,
       },
       goldHitCount: 0,
@@ -422,7 +493,9 @@ export function runEngine2Avri(
       contradictionPenalty -
       strippedTracePenalty -
       structuralFabPenalty -
-      fakeRawHttpPenalty,
+      fakeRawHttpPenalty -
+      // Task #300 — bounded out-of-cap penalty for AI self-disclosure.
+      aiSelfDisclosurePenalty,
   );
 
   // 4. Blend with legacy substance. Default 50/50, but when the AVRI rubric
@@ -532,6 +605,11 @@ export function runEngine2Avri(
       explanation: `[${sides.join("+")}] ${reasonParts.join("; ") || "Fabricated raw HTTP bytes"} (-${FAKE_RAW_HTTP_PENALTY}; revoked ${revokedRawHttpHits.length} ${family.id} gold signal(s))`,
     });
   }
+  if (aiSelfDisclosure.detected) {
+    // Task #300 — surface every matched phrase so reviewers see the exact
+    // wording that earned the AI self-disclosure penalty.
+    indicators.push(buildAiSelfDisclosureIndicator(aiSelfDisclosure, aiSelfDisclosurePenalty));
+  }
   // Keep a couple of legacy indicators for continuity.
   for (const li of legacy.triggeredIndicators) {
     if (li.signal === "POC_MISMATCH" || li.signal === "PLACEHOLDER_URLS" || li.signal === "CLAIM_EVIDENCE_EXTREME") {
@@ -632,6 +710,7 @@ export function runEngine2Avri(
               : null,
           }
         : null,
+    aiSelfDisclosure: aiSelfDisclosureBlock(aiSelfDisclosure, aiSelfDisclosurePenalty),
     rawAvriScore: Math.round(rawAvriScore),
     legacyScore: legacy.score,
     blendedScore,
@@ -650,7 +729,7 @@ export function runEngine2Avri(
       ...legacy.signalBreakdown,
       avri: avriBlock,
     },
-    note: `AVRI ${family.displayName}: ${goldHits.length} gold signal(s) (+${goldTotal}), -${totalAbsencePenalty} absence, -${contradictionPenalty} contradiction${strippedTracePenalty ? `, -${strippedTracePenalty} stripped-trace` : ""}${structuralFabPenalty ? `, -${structuralFabPenalty} structural-fabrication` : ""}${fakeRawHttpPenalty ? `, -${fakeRawHttpPenalty} fake-raw-http` : ""}. Blended with legacy substance: ${blendedScore}.`,
+    note: `AVRI ${family.displayName}: ${goldHits.length} gold signal(s) (+${goldTotal}), -${totalAbsencePenalty} absence, -${contradictionPenalty} contradiction${strippedTracePenalty ? `, -${strippedTracePenalty} stripped-trace` : ""}${structuralFabPenalty ? `, -${structuralFabPenalty} structural-fabrication` : ""}${fakeRawHttpPenalty ? `, -${fakeRawHttpPenalty} fake-raw-http` : ""}${aiSelfDisclosurePenalty ? `, -${aiSelfDisclosurePenalty} ai-self-disclosure` : ""}. Blended with legacy substance: ${blendedScore}.`,
   };
 
   return {

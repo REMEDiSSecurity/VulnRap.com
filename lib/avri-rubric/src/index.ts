@@ -99,6 +99,23 @@ export interface AvriEngine2RawHttp {
   response?: AvriEngine2RawHttpResponse | null;
 }
 
+// Task #300 — AI self-disclosure detector. Surfaced on the AVRI Engine 2
+// block so the diagnostics panel and triage export can show reviewers
+// exactly which self-disclosure phrase(s) fired and how much was deducted.
+// Optional because reports analyzed before the detector shipped won't
+// carry it; consumers that don't render it can simply ignore the field.
+export interface AvriEngine2AiSelfDisclosureMatch {
+  id: string;
+  excerpt: string;
+}
+
+export interface AvriEngine2AiSelfDisclosure {
+  detected: boolean;
+  matches: AvriEngine2AiSelfDisclosureMatch[];
+  /** Negative number when applied; 0 when no phrase matched. */
+  penalty: number;
+}
+
 export interface AvriEngine2Block {
   family?: string | null;
   familyName?: string | null;
@@ -116,6 +133,9 @@ export interface AvriEngine2Block {
   contradictionPenalty?: number;
   crashTrace?: AvriEngine2CrashTrace | null;
   rawHttp?: AvriEngine2RawHttp | null;
+  // Task #300 — AI self-disclosure detector output. Optional so older
+  // persisted reports without the field continue to render normally.
+  aiSelfDisclosure?: AvriEngine2AiSelfDisclosure | null;
   // Final score components: AVRI raw (after penalties), legacy substance
   // score, and the blended Engine 2 score that lands on `engine.score`.
   rawAvriScore?: number;
@@ -283,6 +303,18 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
       lines.push(
         `  - Trace gold signals revoked: ${ct.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
       );
+    }
+  }
+  // Task #300 — AI self-disclosure (e.g. "prepared using an AI security
+  // assistant"). Surfaced ahead of raw-HTTP so it lives next to the other
+  // out-of-cap penalty rows in the rubric block.
+  if (engine2?.aiSelfDisclosure?.detected) {
+    const ai = engine2.aiSelfDisclosure;
+    lines.push(
+      `- **AI self-disclosure** (penalty ${ai.penalty}): ${ai.matches.length} phrase${ai.matches.length === 1 ? "" : "s"} matched`,
+    );
+    for (const m of ai.matches) {
+      lines.push(`  - "${m.excerpt}" (${m.id})`);
     }
   }
   if (engine2?.rawHttp?.isFake) {

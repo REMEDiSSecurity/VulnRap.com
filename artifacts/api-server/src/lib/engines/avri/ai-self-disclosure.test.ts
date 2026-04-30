@@ -1,0 +1,133 @@
+import { describe, expect, it } from "vitest";
+import {
+  AI_SELF_DISCLOSURE_PENALTY,
+  detectAiSelfDisclosure,
+} from "./ai-self-disclosure";
+
+describe("detectAiSelfDisclosure", () => {
+  it("returns no match for empty / nullish input", () => {
+    expect(detectAiSelfDisclosure("")).toEqual({ detected: false, matches: [], penalty: 0 });
+    expect(detectAiSelfDisclosure(null)).toEqual({ detected: false, matches: [], penalty: 0 });
+    expect(detectAiSelfDisclosure(undefined)).toEqual({ detected: false, matches: [], penalty: 0 });
+  });
+
+  it("returns no match for ordinary security prose with no AI mention", () => {
+    const text = `# Heap buffer overflow in libfoo
+The function bar() reads past the end of the heap buffer when len > 4096.
+ASan: heap-buffer-overflow READ size 8.`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(false);
+    expect(r.matches).toHaveLength(0);
+    expect(r.penalty).toBe(0);
+  });
+
+  // Task #300: cover ≥3 distinct phrasings, including the canonical
+  // HackerOne #3295650 wording, the most common alternate form, an
+  // adjective form, and a named-LLM-by-itself form. Each fires its own
+  // detector id so reviewers can tell them apart in the diagnostics
+  // panel.
+  it("matches the canonical 'prepared using an AI security assistant' wording (HackerOne #3295650)", () => {
+    const text = `... This report, including the verification steps and analysis, was prepared using an AI security assistant to ensure comprehensive and reproducible results.`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(true);
+    expect(r.matches.map((m) => m.id)).toContain("prepared_using_ai");
+    expect(r.penalty).toBe(AI_SELF_DISCLOSURE_PENALTY);
+  });
+
+  it("matches 'generated with the help of an AI assistant' phrasing", () => {
+    const text = `Summary: This writeup was generated with the help of an AI assistant to ensure clarity.`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(true);
+    expect(r.matches.map((m) => m.id)).toContain("with_ai_help");
+    expect(r.penalty).toBe(AI_SELF_DISCLOSURE_PENALTY);
+  });
+
+  it("matches the 'AI-generated' / 'AI-assisted' adjective form", () => {
+    const text = `This is an AI-generated security advisory based on prior CVE patterns.`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(true);
+    expect(r.matches.map((m) => m.id)).toContain("ai_generated_adjective");
+    expect(r.penalty).toBe(AI_SELF_DISCLOSURE_PENALTY);
+  });
+
+  it("matches a named-LLM-assisted phrasing (ChatGPT-assisted)", () => {
+    const text = `Note: ChatGPT-assisted analysis. Patch verified by hand.`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(true);
+    expect(r.matches.map((m) => m.id)).toContain("named_llm_assisted");
+    expect(r.penalty).toBe(AI_SELF_DISCLOSURE_PENALTY);
+  });
+
+  it("matches across line breaks (whitespace is collapsed before pattern matching)", () => {
+    const text = `This report
+was   prepared\tusing
+an AI security assistant.`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(true);
+    expect(r.matches.map((m) => m.id)).toContain("prepared_using_ai");
+  });
+
+  it("is bounded: a legit report mentioning Claude drafting help gets docked exactly the fixed penalty (not multiplied)", () => {
+    // Realistic scenario: a competent reporter who used Claude to draft
+    // their summary but provides a full PoC, ASan trace, and patch. The
+    // detector should fire once at the bounded penalty so it doesn't
+    // crater an otherwise well-evidenced report.
+    const text = `# Use-after-free in libfoo cookie parser
+Note: I used Claude to draft this summary; full PoC and patch below.
+
+## Reproducer
+\`\`\`
+printf 'GET / HTTP/1.1\\r\\nCookie: x=\\r\\n\\r\\n' | nc -l 8080 &
+./foo http://127.0.0.1:8080/
+\`\`\`
+
+ASan trace:
+==4711==ERROR: AddressSanitizer: heap-use-after-free READ of size 4
+    #0 cookie_get cookie.c:712`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(true);
+    // Bounded: exactly the fixed penalty, never compounded.
+    expect(r.penalty).toBe(AI_SELF_DISCLOSURE_PENALTY);
+    // The "I used Claude to draft" wording fires the generated_with_ai
+    // detector. Whatever subset of detectors trips, the penalty is the
+    // same fixed amount — that's the boundedness guarantee.
+    expect(r.matches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("is bounded across multiple matches: 6 phrasings still yield the same penalty as 1", () => {
+    // Hammer the detector with text that fires every pattern at once.
+    // The penalty must remain exactly AI_SELF_DISCLOSURE_PENALTY — the
+    // detector is explicitly NOT additive across phrases so a slop
+    // author can't be punished disproportionately for boilerplate.
+    const text = `This report was prepared using an AI security assistant.
+The findings were generated by ChatGPT and reviewed with the help of an LLM.
+The whole writeup is AI-generated. ChatGPT-assisted summary follows.
+This analysis was prepared by an AI tool.`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(true);
+    expect(r.matches.length).toBeGreaterThanOrEqual(3);
+    expect(r.penalty).toBe(AI_SELF_DISCLOSURE_PENALTY);
+  });
+
+  it("deduplicates matches by detector id (one entry per pattern even if it appears multiple times)", () => {
+    const text = `This is AI-generated.
+Another AI-written paragraph here.
+Also AI-assisted overall.`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(true);
+    const ids = r.matches.map((m) => m.id);
+    const uniqueIds = new Set(ids);
+    expect(ids.length).toBe(uniqueIds.size);
+    expect(uniqueIds.has("ai_generated_adjective")).toBe(true);
+  });
+
+  it("captures an excerpt of the matched phrase for the diagnostics panel", () => {
+    const text = `Note: this report was prepared using an AI security assistant to ensure comprehensive coverage.`;
+    const r = detectAiSelfDisclosure(text);
+    expect(r.detected).toBe(true);
+    const m = r.matches.find((x) => x.id === "prepared_using_ai");
+    expect(m).toBeDefined();
+    expect(m!.excerpt).toContain("prepared using an ai");
+    expect(m!.excerpt.length).toBeLessThanOrEqual(160);
+  });
+});
