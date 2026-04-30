@@ -11187,6 +11187,11 @@ function formatRelativeUntil(iso: string, now: number = Date.now()): string | nu
 // the UI flags a wedge even before the watchdog dispatches the webhook
 // (e.g. AVRI_DRIFT_WEBHOOK_URL unset). Reuses the same React Query key
 // as SchedulerStatusPanel so both share a single 30s poll.
+//
+// Task #397 — The status endpoint now returns one entry per replica.
+// The banner fires when ANY replica is stalled (not just whichever
+// one handled the request) and reports the worst-case overdue figure
+// across replicas so reviewers see the most urgent number.
 function SchedulerStalledBanner() {
   const queryKey = getGetAvriDriftSchedulerStatusQueryKey();
   const { data } = useGetAvriDriftSchedulerStatus({
@@ -11200,24 +11205,52 @@ function SchedulerStalledBanner() {
     return () => window.clearInterval(id);
   }, []);
 
-  if (!data) return null;
-  if (!data.schedulerStarted) return null;
-  if (!data.nextTickAt) return null;
-  const intervalMs = typeof data.intervalMs === "number" ? data.intervalMs : 0;
-  if (intervalMs <= 0) return null;
-  const expected = Date.parse(data.nextTickAt);
-  if (!Number.isFinite(expected)) return null;
-  // Match the server-side `isSchedulerStalled` predicate: only flag a
-  // stall once the wall clock has moved past `nextTickAt + 2 *
-  // intervalMs`. The displayed "overdue by" reports total time past
-  // `nextTickAt` (matches the watchdog webhook payload's
-  // `overdueByMs`) rather than time past the grace window, so the
-  // banner and the page sent to reviewers always agree.
-  const totalOverdueMs = now - expected;
-  if (totalOverdueMs <= 2 * intervalMs) return null;
+  // Defensive: tolerate a non-array (older deploy / mocked) response
+  // by treating it as no-data rather than crashing the banner.
+  const replicas = Array.isArray(data) ? data : [];
+  if (replicas.length === 0) return null;
 
-  const overdueMin = Math.max(1, Math.round(totalOverdueMs / 60_000));
-  const intervalMin = Math.max(1, Math.round(intervalMs / 60_000));
+  // Find the worst (most overdue) stalled replica. A replica is
+  // stalled iff the same predicate the server-side watchdog uses:
+  //   schedulerStarted && nextTickAt != null && intervalMs > 0
+  //   && now > nextTickAt + 2 * intervalMs
+  let worst: {
+    overdueMs: number;
+    intervalMs: number;
+    replicaId: string;
+  } | null = null;
+  for (const r of replicas) {
+    if (!r.schedulerStarted) continue;
+    if (!r.nextTickAt) continue;
+    const intervalMs = typeof r.intervalMs === "number" ? r.intervalMs : 0;
+    if (intervalMs <= 0) continue;
+    const expected = Date.parse(r.nextTickAt);
+    if (!Number.isFinite(expected)) continue;
+    const totalOverdueMs = now - expected;
+    if (totalOverdueMs <= 2 * intervalMs) continue;
+    if (!worst || totalOverdueMs > worst.overdueMs) {
+      worst = {
+        overdueMs: totalOverdueMs,
+        intervalMs,
+        replicaId: r.replicaId,
+      };
+    }
+  }
+  if (!worst) return null;
+
+  const overdueMin = Math.max(1, Math.round(worst.overdueMs / 60_000));
+  const intervalMin = Math.max(1, Math.round(worst.intervalMs / 60_000));
+  // Count of stalled replicas helps reviewers tell "one wedged
+  // replica" from "the whole fleet is wedged" at a glance.
+  const stalledCount = replicas.filter((r) => {
+    if (!r.schedulerStarted || !r.nextTickAt) return false;
+    const im = typeof r.intervalMs === "number" ? r.intervalMs : 0;
+    if (im <= 0) return false;
+    const exp = Date.parse(r.nextTickAt);
+    if (!Number.isFinite(exp)) return false;
+    return now - exp > 2 * im;
+  }).length;
+
   return (
     <div
       role="alert"
@@ -11226,11 +11259,15 @@ function SchedulerStalledBanner() {
     >
       <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
       <div className="space-y-1 text-sm">
-        <p className="font-semibold">Scheduler appears stalled</p>
+        <p className="font-semibold">
+          Scheduler appears stalled
+          {stalledCount > 1 ? ` on ${stalledCount} replicas` : ""}
+        </p>
         <p className="text-xs text-red-200/80">
           The AVRI drift scheduler should have fired ~{intervalMin} min ago, but
-          its next tick is overdue by ~{overdueMin} min. New drift flags will
-          not page reviewers until it resumes. See{" "}
+          its next tick is overdue by ~{overdueMin} min
+          {stalledCount === 1 ? ` on replica ${worst.replicaId}` : ""}. New
+          drift flags will not page reviewers until it resumes. See{" "}
           <code className="font-mono text-[11px]">docs/avri-drift-runbook.md</code>{" "}
           (&ldquo;Notifications&rdquo;) for recovery steps.
         </p>
@@ -11404,25 +11441,44 @@ function CalibrationAuthBruteForceAlertsContent({
   );
 }
 
-// Operator-visible heartbeat for the in-process AVRI drift scheduler.
-// Reads the unauthenticated status endpoint and renders last-tick /
-// next-tick / cadence so reviewers can confirm the timer is firing
-// without scraping logs. Per-process — in a multi-replica deploy the
-// panel reflects whichever replica handled the request.
+// Operator-visible heartbeat for the AVRI drift scheduler. Reads the
+// unauthenticated status endpoint and renders one row per server
+// replica so reviewers can confirm every replica's timer is firing —
+// and spot a wedged replica hiding behind a healthy one — without
+// scraping logs. (Task #397)
 function SchedulerStatusPanel() {
   const queryKey = getGetAvriDriftSchedulerStatusQueryKey();
-  // Refetch every 30s — the endpoint just reads an in-memory struct.
+  // Refetch every 30s — the endpoint just reads an in-memory struct
+  // overlaid on the persisted heartbeat file.
   const { data, isLoading, isError } = useGetAvriDriftSchedulerStatus({
     query: { queryKey, refetchInterval: 30_000 },
   });
 
   // Tick `now` between server fetches so the relative-time labels
-  // ("in 4m" / "5m ago") stay roughly fresh without re-querying.
+  // ("in 4m" / "5m ago") and the per-row overdue badges stay roughly
+  // fresh without re-querying.
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 15_000);
     return () => window.clearInterval(id);
   }, []);
+
+  // Overdue threshold: a replica is flagged when its scheduled
+  // nextTickAt has been more than this many ms in the past, beyond
+  // the configured retry interval. The grace covers fake-timer drift
+  // and clock skew between the server and the user's browser; the
+  // SLA is "overdue if the next tick is more than one full retry
+  // window past due".
+  const OVERDUE_GRACE_MS = 60_000;
+
+  // Defensive: the endpoint contract is `AvriDriftSchedulerStatus[]`,
+  // but if a test mock or older deployment surfaces an object we'd
+  // rather render the empty state than crash the entire calibration
+  // page on `.filter` / `.map`.
+  const replicas = Array.isArray(data) ? data : [];
+  const overdueCount = replicas.filter((r) =>
+    isReplicaOverdue(r, now, OVERDUE_GRACE_MS),
+  ).length;
 
   return (
     <div>
@@ -11430,7 +11486,9 @@ function SchedulerStatusPanel() {
         <Clock className="w-3 h-3" />
         <span>Scheduler heartbeat</span>
         <span className="text-muted-foreground/40 normal-case font-normal italic">
-          background drift check (per process)
+          background drift check · {replicas.length} replica
+          {replicas.length === 1 ? "" : "s"}
+          {overdueCount > 0 ? ` · ${overdueCount} overdue` : ""}
         </span>
       </div>
       {isLoading ? (
@@ -11440,22 +11498,62 @@ function SchedulerStatusPanel() {
           <XCircle className="w-3.5 h-3.5 text-red-400" />
           Could not load scheduler status.
         </p>
+      ) : replicas.length === 0 ? (
+        <p className="text-xs text-muted-foreground/70 py-2 flex items-center gap-2">
+          <Info className="w-3.5 h-3.5" />
+          No replicas have published a heartbeat yet.
+        </p>
       ) : (
-        <SchedulerStatusContent status={data} now={now} />
+        <div className="space-y-2">
+          {replicas.map((replica) => (
+            <SchedulerStatusContent
+              key={replica.replicaId}
+              status={replica}
+              now={now}
+              overdueGraceMs={OVERDUE_GRACE_MS}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
+// Overdue when the scheduler is armed AND its scheduled next tick has
+// elapsed by more than (retryIntervalMs ?? 0) + grace. We add the
+// retry window so a replica that's currently retrying after a
+// transient failure isn't flagged on every refresh — only persistent
+// stalls trigger the badge.
+function isReplicaOverdue(
+  status: AvriDriftSchedulerStatus,
+  now: number,
+  graceMs: number,
+): boolean {
+  if (!status.schedulerStarted || status.nextTickAt == null) return false;
+  const nextMs = new Date(status.nextTickAt).getTime();
+  if (!Number.isFinite(nextMs)) return false;
+  const cushion = (status.retryIntervalMs ?? 0) + graceMs;
+  return nextMs + cushion < now;
+}
+
 function SchedulerStatusContent({
   status,
   now,
+  overdueGraceMs,
 }: {
   status: AvriDriftSchedulerStatus;
   now: number;
+  overdueGraceMs: number;
 }) {
+  const overdue = isReplicaOverdue(status, now, overdueGraceMs);
   let headline: { label: string; color: string; icon: ReactNode };
-  if (!status.schedulerStarted) {
+  if (overdue) {
+    headline = {
+      label: "Overdue · scheduler may be wedged",
+      color: "text-red-400 bg-red-400/10 border-red-400/30",
+      icon: <AlertTriangle className="w-3 h-3" />,
+    };
+  } else if (!status.schedulerStarted) {
     headline = {
       label: "Not started in this process",
       color: "text-muted-foreground bg-muted/30 border-border/40",
@@ -11490,6 +11588,9 @@ function SchedulerStatusContent({
   const lastAgo = status.lastTickAt ? formatRelativeAgo(status.lastTickAt, now) : null;
   const nextIn = status.nextTickAt ? formatRelativeUntil(status.nextTickAt, now) : null;
   const startedAgo = status.startedAt ? formatRelativeAgo(status.startedAt, now) : null;
+  const heartbeatAgo = status.heartbeatAt
+    ? formatRelativeAgo(status.heartbeatAt, now)
+    : null;
 
   let lastDetail: string;
   if (status.lastTickAt == null) {
@@ -11512,6 +11613,30 @@ function SchedulerStatusContent({
 
   return (
     <div className="rounded-md border border-border/40 bg-muted/[0.03] p-3 space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-baseline gap-2 min-w-0">
+          <span
+            className="text-[11px] font-mono text-foreground/80 truncate"
+            title={status.replicaId}
+          >
+            {status.replicaId}
+          </span>
+          <span
+            className="text-[10px] text-muted-foreground/60 truncate"
+            title={`hostname: ${status.hostname}`}
+          >
+            {status.hostname}
+          </span>
+          {heartbeatAgo && (
+            <span
+              className="text-[10px] text-muted-foreground/50 tabular-nums"
+              title={status.heartbeatAt ?? undefined}
+            >
+              · heartbeat {heartbeatAgo}
+            </span>
+          )}
+        </div>
+      </div>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <Badge variant="outline" className={cn("text-[10px] gap-1", headline.color)}>
           {headline.icon}

@@ -417,12 +417,39 @@ describe("runDriftNotificationCheck", () => {
 // ---------------------------------------------------------------------------
 
 describe("startDriftNotificationScheduler", () => {
+  // Task #397 — isolate the shared heartbeat state file in a tmpdir
+  // so the scheduler's per-tick `persistLocalHeartbeat` doesn't
+  // clobber the shipped JSON. AVRI_REPLICA_ID is pinned for the same
+  // reason: deterministic replica identity per test case so the
+  // persisted entries don't bleed between cases.
+  let tmpDir: string;
+  let originalStatePath: string | undefined;
+  let originalReplicaId: string | undefined;
+
   beforeEach(() => {
     vi.useFakeTimers();
+    tmpDir = mkdtempSync(path.join(tmpdir(), "avri-drift-sched-"));
+    originalStatePath = process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = path.join(
+      tmpDir,
+      "notifications.json",
+    );
+    originalReplicaId = process.env.AVRI_REPLICA_ID;
+    process.env.AVRI_REPLICA_ID = "test-scheduler";
+    __testing.resetResolvedPath();
+    __testing.resetReplicaIdentity();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    if (originalStatePath === undefined)
+      delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    else process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = originalStatePath;
+    if (originalReplicaId === undefined) delete process.env.AVRI_REPLICA_ID;
+    else process.env.AVRI_REPLICA_ID = originalReplicaId;
+    __testing.resetResolvedPath();
+    __testing.resetReplicaIdentity();
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 
   async function flushTick(): Promise<void> {
@@ -749,15 +776,40 @@ describe("listNotifiedFlags / removeNotifiedFlags", () => {
 // ---------------------------------------------------------------------------
 
 describe("getDriftSchedulerStatus", () => {
+  // Task #397 — isolate per-replica heartbeat persistence in a tmpdir
+  // and pin AVRI_REPLICA_ID so the multi-replica entries each test
+  // exercises are deterministic and don't bleed between cases.
+  let tmpDir: string;
+  let originalStatePath: string | undefined;
+  let originalReplicaId: string | undefined;
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-29T00:00:00.000Z"));
+    tmpDir = mkdtempSync(path.join(tmpdir(), "avri-drift-status-"));
+    originalStatePath = process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = path.join(
+      tmpDir,
+      "notifications.json",
+    );
+    originalReplicaId = process.env.AVRI_REPLICA_ID;
+    process.env.AVRI_REPLICA_ID = "replica-A";
+    __testing.resetResolvedPath();
+    __testing.resetReplicaIdentity();
     __testing.resetSchedulerStatus();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    if (originalStatePath === undefined)
+      delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    else process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = originalStatePath;
+    if (originalReplicaId === undefined) delete process.env.AVRI_REPLICA_ID;
+    else process.env.AVRI_REPLICA_ID = originalReplicaId;
+    __testing.resetResolvedPath();
+    __testing.resetReplicaIdentity();
     __testing.resetSchedulerStatus();
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 
   async function flushTick(): Promise<void> {
@@ -765,8 +817,13 @@ describe("getDriftSchedulerStatus", () => {
     await Promise.resolve();
   }
 
-  it("returns the 'never started' baseline before the scheduler runs", () => {
-    const status = getDriftSchedulerStatus();
+  it("returns a single 'never started' placeholder for this replica before the scheduler runs", () => {
+    const statuses = getDriftSchedulerStatus();
+    expect(statuses).toHaveLength(1);
+    const status = statuses[0]!;
+    expect(status.replicaId).toBe("replica-A");
+    expect(typeof status.hostname).toBe("string");
+    expect(status.heartbeatAt).toBeNull();
     expect(status.schedulerStarted).toBe(false);
     expect(status.startedAt).toBeNull();
     expect(status.lastTickAt).toBeNull();
@@ -775,7 +832,7 @@ describe("getDriftSchedulerStatus", () => {
     expect(status.ticksCompleted).toBe(0);
   });
 
-  it("seeds startedAt + nextTickAt when the scheduler starts", () => {
+  it("seeds startedAt + nextTickAt and persists the heartbeat when the scheduler starts", () => {
     const sched = startDriftNotificationScheduler({
       intervalMs: 60_000,
       retryIntervalMs: 5_000,
@@ -783,7 +840,10 @@ describe("getDriftSchedulerStatus", () => {
       run: async () => ({ ok: true }),
     });
     try {
-      const status = getDriftSchedulerStatus();
+      const statuses = getDriftSchedulerStatus();
+      expect(statuses).toHaveLength(1);
+      const status = statuses[0]!;
+      expect(status.replicaId).toBe("replica-A");
       expect(status.schedulerStarted).toBe(true);
       expect(status.startedAt).toBe("2026-04-29T00:00:00.000Z");
       expect(status.intervalMs).toBe(60_000);
@@ -793,6 +853,11 @@ describe("getDriftSchedulerStatus", () => {
       expect(status.nextTickAt).toBe("2026-04-29T00:00:01.000Z");
       expect(status.lastTickAt).toBeNull();
       expect(status.ticksCompleted).toBe(0);
+      // Task #397: the start-time heartbeat is persisted immediately
+      // so peer replicas see this replica before its first tick.
+      expect(status.heartbeatAt).toBe("2026-04-29T00:00:00.000Z");
+      const persisted = __testing.readState().schedulerHeartbeats ?? {};
+      expect(Object.keys(persisted)).toEqual(["replica-A"]);
     } finally {
       sched.stop();
     }
@@ -827,7 +892,7 @@ describe("getDriftSchedulerStatus", () => {
       await vi.advanceTimersByTimeAsync(1_000);
       await flushTick();
 
-      const status = getDriftSchedulerStatus();
+      const status = getDriftSchedulerStatus()[0]!;
       expect(status.lastTickAt).toBe("2026-04-29T00:00:01.000Z");
       expect(status.lastTickOk).toBe(true);
       expect(status.lastTickRanCheck).toBe(true);
@@ -837,6 +902,10 @@ describe("getDriftSchedulerStatus", () => {
       // away, not retryIntervalMs.
       expect(status.nextTickAt).toBe("2026-04-29T00:01:01.000Z");
       expect(status.ticksCompleted).toBe(1);
+      // The completed-tick heartbeat is flushed to the shared store
+      // so a peer replica reading the file sees this replica's
+      // advance even when its own GET is the next request to land.
+      expect(status.heartbeatAt).toBe("2026-04-29T00:00:01.000Z");
     } finally {
       sched.stop();
     }
@@ -856,7 +925,7 @@ describe("getDriftSchedulerStatus", () => {
       await vi.advanceTimersByTimeAsync(0);
       await flushTick();
 
-      const status = getDriftSchedulerStatus();
+      const status = getDriftSchedulerStatus()[0]!;
       expect(status.lastTickOk).toBe(false);
       // Failed tick reschedules at retryIntervalMs (5s), not the
       // success intervalMs (60s).
@@ -874,15 +943,131 @@ describe("getDriftSchedulerStatus", () => {
       initialDelayMs: 1_000,
       run: async () => ({ ok: true }),
     });
-    expect(getDriftSchedulerStatus().nextTickAt).not.toBeNull();
+    expect(getDriftSchedulerStatus()[0]!.nextTickAt).not.toBeNull();
     sched.stop();
-    const status = getDriftSchedulerStatus();
+    const status = getDriftSchedulerStatus()[0]!;
     expect(status.nextTickAt).toBeNull();
     // schedulerStarted stays true so the UI can still show the
     // "scheduler ran but is stopped" state. startedAt is preserved
     // for the same reason.
     expect(status.schedulerStarted).toBe(true);
     expect(status.startedAt).toBe("2026-04-29T00:00:00.000Z");
+  });
+
+  // ---- Task #397 multi-replica behaviour ----
+
+  it("merges this replica's live snapshot with peer heartbeats persisted by other replicas", () => {
+    // Seed the shared state file with a heartbeat as if a different
+    // replica wrote to it, then start the local scheduler and assert
+    // that getDriftSchedulerStatus returns BOTH entries.
+    __testing.writeState({
+      notified: [],
+      rearmHistory: [],
+      schedulerHeartbeats: {
+        "replica-B": {
+          replicaId: "replica-B",
+          hostname: "pod-b",
+          heartbeatAt: "2026-04-28T23:00:00.000Z",
+          schedulerStarted: true,
+          startedAt: "2026-04-28T20:00:00.000Z",
+          intervalMs: 60_000,
+          retryIntervalMs: 5_000,
+          webhookConfigured: true,
+          lastTickAt: "2026-04-28T23:00:00.000Z",
+          lastTickOk: true,
+          lastTickRanCheck: true,
+          lastTickDispatched: false,
+          lastTickNewFlagCount: 0,
+          nextTickAt: "2026-04-29T00:00:00.000Z",
+          ticksCompleted: 7,
+        },
+      },
+    });
+
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 60_000,
+      retryIntervalMs: 5_000,
+      initialDelayMs: 1_000,
+      run: async () => ({ ok: true }),
+    });
+    try {
+      const statuses = getDriftSchedulerStatus();
+      expect(statuses.map((s) => s.replicaId).sort()).toEqual([
+        "replica-A",
+        "replica-B",
+      ]);
+      const a = statuses.find((s) => s.replicaId === "replica-A")!;
+      const b = statuses.find((s) => s.replicaId === "replica-B")!;
+      expect(a.schedulerStarted).toBe(true);
+      expect(a.startedAt).toBe("2026-04-29T00:00:00.000Z");
+      expect(b.schedulerStarted).toBe(true);
+      expect(b.hostname).toBe("pod-b");
+      expect(b.ticksCompleted).toBe(7);
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("the live in-memory snapshot wins over the persisted entry for the same replicaId", async () => {
+    // Pre-seed an OLD heartbeat for THIS replica id, then run a tick
+    // and confirm the response reflects the freshly-completed tick
+    // (live in-memory state) rather than the stale on-disk row.
+    __testing.writeState({
+      notified: [],
+      rearmHistory: [],
+      schedulerHeartbeats: {
+        "replica-A": {
+          replicaId: "replica-A",
+          hostname: "old",
+          heartbeatAt: "2026-04-28T00:00:00.000Z",
+          schedulerStarted: true,
+          startedAt: "2026-04-27T00:00:00.000Z",
+          intervalMs: 60_000,
+          retryIntervalMs: 5_000,
+          webhookConfigured: false,
+          lastTickAt: "2026-04-28T00:00:00.000Z",
+          lastTickOk: false,
+          lastTickRanCheck: true,
+          lastTickDispatched: false,
+          lastTickNewFlagCount: 0,
+          nextTickAt: "2026-04-28T00:05:00.000Z",
+          ticksCompleted: 999,
+        },
+      },
+    });
+
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 60_000,
+      retryIntervalMs: 5_000,
+      initialDelayMs: 0,
+      run: async () => ({ ok: true, ranCheck: true }),
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const statuses = getDriftSchedulerStatus();
+      const a = statuses.find((s) => s.replicaId === "replica-A")!;
+      // Live in-memory state — fresh tick, not the stale 999 from disk.
+      expect(a.ticksCompleted).toBe(1);
+      expect(a.lastTickOk).toBe(true);
+      expect(a.startedAt).toBe("2026-04-29T00:00:00.000Z");
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("uses os.hostname() when AVRI_REPLICA_ID is not set", () => {
+    delete process.env.AVRI_REPLICA_ID;
+    __testing.resetReplicaIdentity();
+    const id = __testing.currentReplicaId();
+    // The default identity must include the OS hostname plus a stable
+    // boot suffix, so two pods with the same hostname don't collide.
+    expect(id.startsWith(__testing.currentHostname() + "-")).toBe(true);
+    expect(id.length).toBeGreaterThan(__testing.currentHostname().length + 1);
+    // Repeated calls return the cached id (stable per process).
+    expect(__testing.currentReplicaId()).toBe(id);
   });
 });
 
@@ -1173,6 +1358,12 @@ function makeStatus(
   overrides: Partial<DriftSchedulerStatus> = {},
 ): DriftSchedulerStatus {
   return {
+    // Task #397 — DriftSchedulerStatus now requires per-replica
+    // identity. The watchdog tests don't care about the specific id
+    // (they pass `opts.status` directly), so we use a fixed test value.
+    replicaId: "test-replica-watchdog",
+    hostname: "test-host",
+    heartbeatAt: "2026-04-29T00:00:01.000Z",
     schedulerStarted: true,
     startedAt: "2026-04-29T00:00:00.000Z",
     intervalMs: 60_000,

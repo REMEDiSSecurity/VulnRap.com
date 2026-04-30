@@ -93,20 +93,25 @@ function makeDriftReport(weeksRequested: number) {
 
 const AVRI_DRIFT_NOTIFICATIONS = { notified: [], total: 0 };
 const AVRI_DRIFT_REARM_HISTORY = { entries: [], total: 0 };
-const AVRI_DRIFT_SCHEDULER_STATUS = {
-  schedulerStarted: false,
-  webhookConfigured: false,
-  ticksCompleted: 0,
-  startedAt: null,
-  lastTickAt: null,
-  nextTickAt: null,
-  lastTickOk: null,
-  lastTickRanCheck: false,
-  lastTickDispatched: false,
-  lastTickNewFlagCount: 0,
-  intervalMs: null,
-  retryIntervalMs: null,
-};
+const AVRI_DRIFT_SCHEDULER_STATUS = [
+  {
+    replicaId: "test-replica-A",
+    hostname: "test-host",
+    heartbeatAt: null,
+    schedulerStarted: false,
+    webhookConfigured: false,
+    ticksCompleted: 0,
+    startedAt: null,
+    lastTickAt: null,
+    nextTickAt: null,
+    lastTickOk: null,
+    lastTickRanCheck: false,
+    lastTickDispatched: false,
+    lastTickNewFlagCount: 0,
+    intervalMs: null,
+    retryIntervalMs: null,
+  },
+];
 const HANDWAVY_PHRASES = { phrases: [], total: 0 };
 const REMOVAL_BATCHES = { batches: [], total: 0, hasMore: false };
 

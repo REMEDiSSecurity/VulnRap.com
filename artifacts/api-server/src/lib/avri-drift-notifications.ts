@@ -23,6 +23,8 @@
 // (Slack incoming webhook, Discord, PagerDuty Events v2, etc.).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { hostname as osHostname } from "os";
+import { randomBytes } from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "./logger";
@@ -107,6 +109,15 @@ interface NotificationsFile {
    * `readState` normalizes it to an array.
    */
   schedulerStalls?: SchedulerStallRecord[];
+  /**
+   * Task #397 — per-replica scheduler heartbeats so the calibration
+   * UI can render one row per server replica and detect a wedged
+   * replica that's hiding behind a healthy one. Keyed by `replicaId`
+   * so concurrent writes from different replicas naturally upsert.
+   * Optional on disk; pre-#397 state files load with no heartbeats
+   * and the surface degrades to "this replica only".
+   */
+  schedulerHeartbeats?: Record<string, PersistedSchedulerHeartbeat>;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -134,6 +145,12 @@ const REARM_HISTORY_LIMIT = 200;
 // 100 entries covers years of normal operation while staying tiny on
 // disk. Trimmed oldest-first.
 const STALL_HISTORY_LIMIT = 100;
+// Task #397 — Cap the per-replica heartbeat map. 50 covers very large
+// horizontal scale-outs and rolling-deploy churn (every redeploy
+// generates a fresh boot id), and is small enough to keep the JSON
+// file diffable. Oldest by `heartbeatAt` is trimmed first so the most
+// recently-active replicas always win.
+const SCHEDULER_HEARTBEAT_LIMIT = 50;
 
 let RESOLVED_PATH: string | null = null;
 
@@ -222,7 +239,12 @@ export function selectNewFlags(
 function readState(): NotificationsFile {
   const filePath = resolvePath();
   if (!existsSync(filePath)) {
-    return { notified: [], rearmHistory: [], schedulerStalls: [] };
+    return {
+      notified: [],
+      rearmHistory: [],
+      schedulerStalls: [],
+      schedulerHeartbeats: {},
+    };
   }
   try {
     const raw = readFileSync(filePath, "utf8");
@@ -305,18 +327,81 @@ function readState(): NotificationsFile {
         });
       }
     }
+    // Task #397 — load any persisted per-replica heartbeats. Pre-#397
+    // state files won't have a `schedulerHeartbeats` block; treat it as
+    // empty so the read keeps working without forcing a one-shot
+    // migration.
+    const rawHeartbeats =
+      parsed.schedulerHeartbeats && typeof parsed.schedulerHeartbeats === "object"
+        ? (parsed.schedulerHeartbeats as Record<string, unknown>)
+        : {};
+    const cleanedHeartbeats: Record<string, PersistedSchedulerHeartbeat> = {};
+    for (const [replicaId, value] of Object.entries(rawHeartbeats)) {
+      const candidate = value as Partial<PersistedSchedulerHeartbeat> | null;
+      if (
+        candidate &&
+        typeof candidate === "object" &&
+        typeof candidate.replicaId === "string" &&
+        typeof candidate.hostname === "string" &&
+        typeof candidate.heartbeatAt === "string" &&
+        typeof candidate.schedulerStarted === "boolean" &&
+        typeof candidate.webhookConfigured === "boolean" &&
+        typeof candidate.ticksCompleted === "number"
+      ) {
+        cleanedHeartbeats[replicaId] = {
+          replicaId: candidate.replicaId,
+          hostname: candidate.hostname,
+          heartbeatAt: candidate.heartbeatAt,
+          schedulerStarted: candidate.schedulerStarted,
+          startedAt:
+            typeof candidate.startedAt === "string" ? candidate.startedAt : null,
+          intervalMs:
+            typeof candidate.intervalMs === "number" ? candidate.intervalMs : null,
+          retryIntervalMs:
+            typeof candidate.retryIntervalMs === "number"
+              ? candidate.retryIntervalMs
+              : null,
+          webhookConfigured: candidate.webhookConfigured,
+          lastTickAt:
+            typeof candidate.lastTickAt === "string" ? candidate.lastTickAt : null,
+          lastTickOk:
+            typeof candidate.lastTickOk === "boolean" ? candidate.lastTickOk : null,
+          lastTickRanCheck:
+            typeof candidate.lastTickRanCheck === "boolean"
+              ? candidate.lastTickRanCheck
+              : null,
+          lastTickDispatched:
+            typeof candidate.lastTickDispatched === "boolean"
+              ? candidate.lastTickDispatched
+              : null,
+          lastTickNewFlagCount:
+            typeof candidate.lastTickNewFlagCount === "number"
+              ? candidate.lastTickNewFlagCount
+              : null,
+          nextTickAt:
+            typeof candidate.nextTickAt === "string" ? candidate.nextTickAt : null,
+          ticksCompleted: candidate.ticksCompleted,
+        };
+      }
+    }
     return {
       _meta: parsed._meta,
       notified: cleaned,
       rearmHistory: cleanedHistory,
       schedulerStalls: cleanedStalls,
+      schedulerHeartbeats: cleanedHeartbeats,
     };
   } catch (err) {
     logger.warn(
       { err, path: filePath },
       "[avri-drift-notifications] Failed to read state file; starting from empty.",
     );
-    return { notified: [], rearmHistory: [], schedulerStalls: [] };
+    return {
+      notified: [],
+      rearmHistory: [],
+      schedulerStalls: [],
+      schedulerHeartbeats: {},
+    };
   }
 }
 
@@ -330,13 +415,31 @@ function writeState(file: NotificationsFile): void {
   const trimmed = file.notified.slice(-HISTORY_LIMIT);
   const trimmedHistory = (file.rearmHistory ?? []).slice(-REARM_HISTORY_LIMIT);
   const trimmedStalls = (file.schedulerStalls ?? []).slice(-STALL_HISTORY_LIMIT);
+  // Task #397 — cap heartbeat map at SCHEDULER_HEARTBEAT_LIMIT, evicting
+  // by oldest `heartbeatAt` so the most recently active replicas always
+  // win. Rolling deploys churn replica IDs (each boot generates a fresh
+  // suffix) so without a cap the file would grow per-deploy forever.
+  const heartbeatsIn = file.schedulerHeartbeats ?? {};
+  const heartbeatEntries = Object.entries(heartbeatsIn);
+  let trimmedHeartbeats: Record<string, PersistedSchedulerHeartbeat>;
+  if (heartbeatEntries.length <= SCHEDULER_HEARTBEAT_LIMIT) {
+    trimmedHeartbeats = heartbeatsIn;
+  } else {
+    heartbeatEntries.sort(
+      (a, b) => a[1].heartbeatAt.localeCompare(b[1].heartbeatAt),
+    );
+    trimmedHeartbeats = Object.fromEntries(
+      heartbeatEntries.slice(-SCHEDULER_HEARTBEAT_LIMIT),
+    );
+  }
   const payload: NotificationsFile = {
     _meta:
       file._meta ??
-      "Persisted dedup state for AVRI drift notifications. `notified` records flags already dispatched to AVRI_DRIFT_WEBHOOK_URL (capped at 500). `rearmHistory` is a bounded audit log of reviewer-driven re-arm events (capped at 200). `schedulerStalls` is a bounded audit log of stalled-scheduler alerts dispatched by the watchdog (capped at 100).",
+      "Persisted dedup state for AVRI drift notifications. `notified` records flags already dispatched to AVRI_DRIFT_WEBHOOK_URL (capped at 500). `rearmHistory` is a bounded audit log of reviewer-driven re-arm events (capped at 200). `schedulerStalls` is a bounded audit log of stalled-scheduler alerts dispatched by the watchdog (capped at 100). `schedulerHeartbeats` is a per-replica scheduler health snapshot keyed by replica id (capped at 50).",
     notified: trimmed,
     rearmHistory: trimmedHistory,
     schedulerStalls: trimmedStalls,
+    schedulerHeartbeats: trimmedHeartbeats,
   };
   writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
 }
@@ -568,6 +671,9 @@ export async function notifyDriftFlagsIfNew(
     notified: mergedNotified,
     rearmHistory: fresh.rearmHistory ?? [],
     schedulerStalls: fresh.schedulerStalls ?? [],
+    // Preserve persisted per-replica heartbeats — this writer only
+    // touches the dedup state, not heartbeats.
+    schedulerHeartbeats: fresh.schedulerHeartbeats ?? {},
   });
 
   return {
@@ -699,17 +805,32 @@ export interface DriftScheduler {
 }
 
 /**
- * Read-only snapshot of the in-process drift-notification scheduler.
- * Backs the calibration page's heartbeat panel so reviewers can confirm
- * the timer is firing without scraping logs. The shape is intentionally
- * boolean/timestamp-only — it never carries error text or webhook URLs
- * because the backing endpoint is unauthenticated.
+ * Read-only snapshot of the drift-notification scheduler for a single
+ * replica. Backs the calibration page's heartbeat panel so reviewers
+ * can confirm the timer is firing without scraping logs. The shape is
+ * intentionally boolean/timestamp-only — it never carries error text
+ * or webhook URLs because the backing endpoint is unauthenticated.
  *
- * Per-process by design: the dedup state file is the cross-replica
- * guard against duplicate dispatch; this struct is just the heartbeat
- * for the replica that served the request.
+ * Task #397: every entry is keyed by `replicaId` (a stable
+ * per-process identity — see `currentReplicaId()`) so a multi-replica
+ * deploy returns one row per server, and a wedged replica can't hide
+ * behind a healthy one. `heartbeatAt` is the wall-clock at which this
+ * snapshot was last written to the shared state file (null for the
+ * live in-memory snapshot of the responding replica before its first
+ * persisted heartbeat).
  */
 export interface DriftSchedulerStatus {
+  /** Stable per-process identity for this replica (e.g. "pod-7-a1b2c3d4"). */
+  replicaId: string;
+  /** Hostname (`os.hostname()`) of the replica, surfaced for the UI table. */
+  hostname: string;
+  /**
+   * ISO timestamp at which the snapshot was last persisted to the
+   * shared state file. Null for the live in-memory snapshot when
+   * nothing has been persisted yet (e.g. scheduler never started in
+   * this process and there is no on-disk row).
+   */
+  heartbeatAt: string | null;
   schedulerStarted: boolean;
   startedAt: string | null;
   intervalMs: number | null;
@@ -724,25 +845,185 @@ export interface DriftSchedulerStatus {
   ticksCompleted: number;
 }
 
-const INITIAL_SCHEDULER_STATUS: DriftSchedulerStatus = {
+/**
+ * Persisted shape of a replica heartbeat in the shared state file.
+ * Identical to {@link DriftSchedulerStatus} but with `heartbeatAt`
+ * non-nullable (we only persist after stamping a timestamp).
+ */
+export interface PersistedSchedulerHeartbeat
+  extends Omit<DriftSchedulerStatus, "heartbeatAt"> {
+  heartbeatAt: string;
+}
+
+const INITIAL_SCHEDULER_LOCAL_STATE = {
   schedulerStarted: false,
-  startedAt: null,
-  intervalMs: null,
-  retryIntervalMs: null,
+  startedAt: null as string | null,
+  intervalMs: null as number | null,
+  retryIntervalMs: null as number | null,
   webhookConfigured: false,
-  lastTickAt: null,
-  lastTickOk: null,
-  lastTickRanCheck: null,
-  lastTickDispatched: null,
-  lastTickNewFlagCount: null,
-  nextTickAt: null,
+  lastTickAt: null as string | null,
+  lastTickOk: null as boolean | null,
+  lastTickRanCheck: null as boolean | null,
+  lastTickDispatched: null as boolean | null,
+  lastTickNewFlagCount: null as number | null,
+  nextTickAt: null as string | null,
   ticksCompleted: 0,
 };
 
-let schedulerStatus: DriftSchedulerStatus = { ...INITIAL_SCHEDULER_STATUS };
+type SchedulerLocalState = typeof INITIAL_SCHEDULER_LOCAL_STATE;
 
-export function getDriftSchedulerStatus(): DriftSchedulerStatus {
-  return { ...schedulerStatus, webhookConfigured: isWebhookConfigured() };
+let schedulerLocal: SchedulerLocalState = { ...INITIAL_SCHEDULER_LOCAL_STATE };
+
+// Stable per-process replica identity. Computed lazily so tests can
+// override AVRI_REPLICA_ID in beforeEach without colliding with a
+// frozen module-level value. The hex suffix protects against two pods
+// that happen to share `os.hostname()` (e.g. a misconfigured
+// dev/staging pair).
+let CACHED_REPLICA_ID: string | null = null;
+let CACHED_HOSTNAME: string | null = null;
+
+function currentHostname(): string {
+  if (CACHED_HOSTNAME) return CACHED_HOSTNAME;
+  try {
+    CACHED_HOSTNAME = osHostname() || "unknown-host";
+  } catch {
+    CACHED_HOSTNAME = "unknown-host";
+  }
+  return CACHED_HOSTNAME;
+}
+
+function currentReplicaId(): string {
+  if (CACHED_REPLICA_ID) return CACHED_REPLICA_ID;
+  const override = (process.env.AVRI_REPLICA_ID ?? "").trim();
+  if (override.length > 0) {
+    CACHED_REPLICA_ID = override;
+    return CACHED_REPLICA_ID;
+  }
+  const suffix = randomBytes(4).toString("hex");
+  CACHED_REPLICA_ID = `${currentHostname()}-${suffix}`;
+  return CACHED_REPLICA_ID;
+}
+
+/**
+ * Build the live `DriftSchedulerStatus` for the current replica from
+ * the in-memory bookkeeping struct. `heartbeatAt` is set by the caller
+ * when persisting; the live read returns null until the persisted row
+ * is loaded back.
+ */
+function buildLocalStatus(heartbeatAt: string | null): DriftSchedulerStatus {
+  return {
+    replicaId: currentReplicaId(),
+    hostname: currentHostname(),
+    heartbeatAt,
+    schedulerStarted: schedulerLocal.schedulerStarted,
+    startedAt: schedulerLocal.startedAt,
+    intervalMs: schedulerLocal.intervalMs,
+    retryIntervalMs: schedulerLocal.retryIntervalMs,
+    webhookConfigured: isWebhookConfigured(),
+    lastTickAt: schedulerLocal.lastTickAt,
+    lastTickOk: schedulerLocal.lastTickOk,
+    lastTickRanCheck: schedulerLocal.lastTickRanCheck,
+    lastTickDispatched: schedulerLocal.lastTickDispatched,
+    lastTickNewFlagCount: schedulerLocal.lastTickNewFlagCount,
+    nextTickAt: schedulerLocal.nextTickAt,
+    ticksCompleted: schedulerLocal.ticksCompleted,
+  };
+}
+
+/**
+ * Persist the current replica's heartbeat to the shared state file so
+ * peer replicas reading the file see this replica's last tick. Best-
+ * effort: a write failure is logged but doesn't block the scheduler
+ * (the status surface degrades to in-memory-only for this replica).
+ */
+function persistLocalHeartbeat(now: Date): void {
+  try {
+    const state = readState();
+    const heartbeats = { ...(state.schedulerHeartbeats ?? {}) };
+    const replicaId = currentReplicaId();
+    const live = buildLocalStatus(now.toISOString());
+    heartbeats[replicaId] = {
+      replicaId: live.replicaId,
+      hostname: live.hostname,
+      heartbeatAt: now.toISOString(),
+      schedulerStarted: live.schedulerStarted,
+      startedAt: live.startedAt,
+      intervalMs: live.intervalMs,
+      retryIntervalMs: live.retryIntervalMs,
+      webhookConfigured: live.webhookConfigured,
+      lastTickAt: live.lastTickAt,
+      lastTickOk: live.lastTickOk,
+      lastTickRanCheck: live.lastTickRanCheck,
+      lastTickDispatched: live.lastTickDispatched,
+      lastTickNewFlagCount: live.lastTickNewFlagCount,
+      nextTickAt: live.nextTickAt,
+      ticksCompleted: live.ticksCompleted,
+    };
+    writeState({
+      _meta: state._meta,
+      notified: state.notified,
+      rearmHistory: state.rearmHistory ?? [],
+      schedulerHeartbeats: heartbeats,
+    });
+  } catch (err) {
+    logger.warn(
+      { err },
+      "[avri-drift-notifications] Failed to persist scheduler heartbeat (non-fatal).",
+    );
+  }
+}
+
+/**
+ * Return one snapshot per replica that has ever published a
+ * heartbeat to the shared state file, plus the live in-memory
+ * snapshot of the responding replica. The live entry takes precedence
+ * over any persisted row for the same `replicaId` (the in-memory
+ * struct is by definition fresher than what we last wrote).
+ *
+ * Sorted by `replicaId` so the calibration UI renders a stable order
+ * across refreshes.
+ */
+export function getDriftSchedulerStatus(): DriftSchedulerStatus[] {
+  let persisted: Record<string, PersistedSchedulerHeartbeat> = {};
+  try {
+    persisted = readState().schedulerHeartbeats ?? {};
+  } catch (err) {
+    // Read failures already log inside `readState`; degrade to
+    // live-only so the UI keeps working.
+    logger.warn(
+      { err },
+      "[avri-drift-notifications] Failed to read persisted heartbeats; returning live-only status.",
+    );
+    persisted = {};
+  }
+  const replicaId = currentReplicaId();
+  const livePersisted = persisted[replicaId];
+  const live = buildLocalStatus(
+    livePersisted ? livePersisted.heartbeatAt : null,
+  );
+  const out: DriftSchedulerStatus[] = [live];
+  for (const [id, snap] of Object.entries(persisted)) {
+    if (id === replicaId) continue;
+    out.push({
+      replicaId: snap.replicaId,
+      hostname: snap.hostname,
+      heartbeatAt: snap.heartbeatAt,
+      schedulerStarted: snap.schedulerStarted,
+      startedAt: snap.startedAt,
+      intervalMs: snap.intervalMs,
+      retryIntervalMs: snap.retryIntervalMs,
+      webhookConfigured: snap.webhookConfigured,
+      lastTickAt: snap.lastTickAt,
+      lastTickOk: snap.lastTickOk,
+      lastTickRanCheck: snap.lastTickRanCheck,
+      lastTickDispatched: snap.lastTickDispatched,
+      lastTickNewFlagCount: snap.lastTickNewFlagCount,
+      nextTickAt: snap.nextTickAt,
+      ticksCompleted: snap.ticksCompleted,
+    });
+  }
+  out.sort((a, b) => a.replicaId.localeCompare(b.replicaId));
+  return out;
 }
 
 /**
@@ -766,8 +1047,8 @@ export function startDriftNotificationScheduler(
   // "scheduler started, first tick scheduled at <initialDelay>" even
   // before the first tick fires.
   const startedAtMs = Date.now();
-  schedulerStatus = {
-    ...INITIAL_SCHEDULER_STATUS,
+  schedulerLocal = {
+    ...INITIAL_SCHEDULER_LOCAL_STATE,
     schedulerStarted: true,
     startedAt: new Date(startedAtMs).toISOString(),
     intervalMs,
@@ -775,6 +1056,11 @@ export function startDriftNotificationScheduler(
     webhookConfigured: isWebhookConfigured(),
     nextTickAt: new Date(startedAtMs + initialDelayMs).toISOString(),
   };
+  // Task #397 — publish the "armed, awaiting first tick" snapshot to
+  // the shared store immediately so peer replicas see this replica
+  // came up before its first tick fires (otherwise a slow first tick
+  // would make the replica look like it never started).
+  persistLocalHeartbeat(new Date(startedAtMs));
 
   function schedule(delayMs: number): void {
     if (stopped) return;
@@ -813,8 +1099,8 @@ export function startDriftNotificationScheduler(
       completed += 1;
       const completedAtMs = Date.now();
       const nextDelayMs = ok ? intervalMs : retryIntervalMs;
-      schedulerStatus = {
-        ...schedulerStatus,
+      schedulerLocal = {
+        ...schedulerLocal,
         webhookConfigured: isWebhookConfigured(),
         lastTickAt: new Date(completedAtMs).toISOString(),
         lastTickOk: ok,
@@ -826,6 +1112,11 @@ export function startDriftNotificationScheduler(
           : new Date(completedAtMs + nextDelayMs).toISOString(),
         ticksCompleted: completed,
       };
+      // Task #397 — flush the freshly-completed tick to the shared
+      // state file so peer replicas see this replica's heartbeat
+      // advance even when their own GET /scheduler-status is the next
+      // request that lands.
+      persistLocalHeartbeat(new Date(completedAtMs));
     }
     schedule(ok ? intervalMs : retryIntervalMs);
   }
@@ -847,7 +1138,11 @@ export function startDriftNotificationScheduler(
       // Reflect the stop in the status surface so the heartbeat panel
       // doesn't keep showing a "next tick at <past time>" after a
       // SIGTERM during deploy.
-      schedulerStatus = { ...schedulerStatus, nextTickAt: null };
+      schedulerLocal = { ...schedulerLocal, nextTickAt: null };
+      // Task #397 — flush the "stopped" snapshot so peer replicas
+      // observe this replica going down gracefully instead of seeing
+      // the last tick's `nextTickAt` linger and look overdue.
+      persistLocalHeartbeat(new Date());
     },
     ticksCompleted: () => completed,
   };
@@ -1005,7 +1300,17 @@ export interface DetectStalledSchedulerResult {
 export async function detectAndNotifyStalledScheduler(
   opts: DetectStalledSchedulerOptions = {},
 ): Promise<DetectStalledSchedulerResult> {
-  const status = opts.status ?? getDriftSchedulerStatus();
+  // Task #397 — `getDriftSchedulerStatus()` now returns a per-replica
+  // array. The watchdog runs in-process so we only ever care about
+  // *this* replica's scheduler health: a peer replica's stall is
+  // detected by its own watchdog. Pick this replica's entry; tests
+  // can still override via `opts.status` to drive specific scenarios.
+  const replicaId = currentReplicaId();
+  const statuses = opts.status
+    ? [opts.status]
+    : getDriftSchedulerStatus();
+  const status =
+    statuses.find((s) => s.replicaId === replicaId) ?? statuses[0]!;
   const links = buildLinks(opts.publicUrl, opts.runbookUrl);
   const baseResult: DetectStalledSchedulerResult = {
     stalled: false,
@@ -1361,6 +1666,9 @@ export function removeNotifiedFlags(
       notified: kept,
       rearmHistory: nextHistory,
       schedulerStalls: state.schedulerStalls ?? [],
+      // Preserve persisted per-replica heartbeats — re-arming dedup
+      // state must not clobber scheduler heartbeats from other replicas.
+      schedulerHeartbeats: state.schedulerHeartbeats ?? {},
     });
   }
   // Echo back the newest-trimmed snapshot so callers see the same view
@@ -1394,14 +1702,24 @@ export const __testing = {
   // test's "scheduler started" record doesn't leak into a test that
   // exercises the "never started" code path.
   resetSchedulerStatus: () => {
-    schedulerStatus = { ...INITIAL_SCHEDULER_STATUS };
+    schedulerLocal = { ...INITIAL_SCHEDULER_LOCAL_STATE };
   },
+  // Task #397 — clear the cached per-process replica id + hostname
+  // so tests can pin AVRI_REPLICA_ID per case without leaking the
+  // first-run cached value into subsequent tests.
+  resetReplicaIdentity: () => {
+    CACHED_REPLICA_ID = null;
+    CACHED_HOSTNAME = null;
+  },
+  currentReplicaId,
+  currentHostname,
   buildLinks,
   readState,
   writeState,
   HISTORY_LIMIT,
   REARM_HISTORY_LIMIT,
   STALL_HISTORY_LIMIT,
+  SCHEDULER_HEARTBEAT_LIMIT,
   DEFAULT_WATCHDOG_INTERVAL_MS,
   DEFAULT_INTERVAL_MS,
   DEFAULT_RETRY_INTERVAL_MS,

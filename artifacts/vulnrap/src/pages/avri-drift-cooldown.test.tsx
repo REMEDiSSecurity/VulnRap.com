@@ -146,20 +146,25 @@ function installFetchMock(): ReturnType<typeof vi.spyOn> {
       return jsonResponse(AVRI_DRIFT_NOTIFICATIONS);
     }
     if (url.includes("/api/feedback/calibration/avri-drift/scheduler-status")) {
-      return jsonResponse({
-        schedulerStarted: false,
-        webhookConfigured: false,
-        ticksCompleted: 0,
-        startedAt: null,
-        lastTickAt: null,
-        nextTickAt: null,
-        lastTickOk: null,
-        lastTickRanCheck: false,
-        lastTickDispatched: false,
-        lastTickNewFlagCount: 0,
-        intervalMs: null,
-        retryIntervalMs: null,
-      });
+      return jsonResponse([
+        {
+          replicaId: "test-replica-A",
+          hostname: "test-host",
+          heartbeatAt: null,
+          schedulerStarted: false,
+          webhookConfigured: false,
+          ticksCompleted: 0,
+          startedAt: null,
+          lastTickAt: null,
+          nextTickAt: null,
+          lastTickOk: null,
+          lastTickRanCheck: false,
+          lastTickDispatched: false,
+          lastTickNewFlagCount: 0,
+          intervalMs: null,
+          retryIntervalMs: null,
+        },
+      ]);
     }
     if (url.includes("/api/feedback/calibration/avri-drift")) {
       return jsonResponse(AVRI_DRIFT_REPORT);

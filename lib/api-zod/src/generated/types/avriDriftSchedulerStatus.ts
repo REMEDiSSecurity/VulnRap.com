@@ -7,13 +7,33 @@
  */
 
 /**
- * In-process status of the AVRI drift-notification scheduler.
+ * Per-replica status of the AVRI drift-notification scheduler.
 Timestamps are ISO 8601; `null` is used wherever the field is
 not yet meaningful (e.g. `lastTickAt` before the first tick,
 `nextTickAt` while the scheduler is stopped).
 
+`replicaId` + `hostname` identify the server replica that owns
+this snapshot so a multi-replica deploy can render one row per
+replica. `heartbeatAt` is the wall-clock at which the snapshot
+was last persisted to the shared state file (null only for the
+live in-memory snapshot of the responding replica before its
+first persisted heartbeat).
+
  */
 export interface AvriDriftSchedulerStatus {
+  /** Stable per-process identity for the replica that owns this
+snapshot (e.g. `${hostname}-${bootHex}`, overridable via
+the `AVRI_REPLICA_ID` environment variable).
+ */
+  replicaId: string;
+  /** Hostname of the replica that owns this snapshot. */
+  hostname: string;
+  /** ISO timestamp at which this snapshot was last persisted to
+the shared state file. Null only for the live in-memory
+snapshot of the responding replica before its first
+persisted heartbeat.
+ */
+  heartbeatAt: Date | null;
   /** True once the scheduler has been armed in this process. */
   schedulerStarted: boolean;
   /** ISO timestamp when the scheduler was started, or null when never started in this process. */

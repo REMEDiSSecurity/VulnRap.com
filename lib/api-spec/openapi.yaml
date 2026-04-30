@@ -577,24 +577,34 @@ paths:
     get:
       operationId: getAvriDriftSchedulerStatus
       tags: [feedback]
-      summary: Get the in-process AVRI drift scheduler status
+      summary: Get per-replica AVRI drift scheduler status
       description: |
-        Operator-visible status of the in-process AVRI drift-notification
-        scheduler started at server boot. Backs the calibration page's
-        heartbeat panel so reviewers can confirm the timer is firing
-        without scraping logs.
+        Operator-visible status of the AVRI drift-notification scheduler
+        across every replica that has registered a heartbeat. Backs the
+        calibration page's per-replica heartbeat table so reviewers can
+        confirm every replica's timer is firing — and spot a wedged
+        replica hiding behind a healthy one — without scraping logs.
 
         Unauthenticated, matching `/feedback/calibration/auth-status`:
-        the response is timestamps + booleans only (no error text,
-        webhook URL, or token). Per-process — in a multi-replica deploy
-        the response reflects whichever replica handled the request.
+        the response is timestamps + booleans + replica identity only
+        (no error text, webhook URL, or token).
+
+        The response is an array because the API server runs in a
+        multi-replica deploy. Each entry is keyed by `replicaId` (a
+        stable per-process identity, e.g. `${hostname}-${bootHex}`) so
+        the calibration UI can render one row per replica. The replica
+        that handled the request returns a live in-memory snapshot;
+        peer replicas return their last-persisted heartbeat from the
+        shared `data/avri-drift-notifications.json` state file.
       responses:
         "200":
-          description: Scheduler status snapshot
+          description: Per-replica scheduler status snapshots
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AvriDriftSchedulerStatus"
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvriDriftSchedulerStatus"
 
   /feedback/calibration/avri-drift/notifications/rearm-history:
     get:
@@ -3721,11 +3731,36 @@ components:
     AvriDriftSchedulerStatus:
       type: object
       description: |
-        In-process status of the AVRI drift-notification scheduler.
+        Per-replica status of the AVRI drift-notification scheduler.
         Timestamps are ISO 8601; `null` is used wherever the field is
         not yet meaningful (e.g. `lastTickAt` before the first tick,
         `nextTickAt` while the scheduler is stopped).
+
+        `replicaId` + `hostname` identify the server replica that owns
+        this snapshot so a multi-replica deploy can render one row per
+        replica. `heartbeatAt` is the wall-clock at which the snapshot
+        was last persisted to the shared state file (null only for the
+        live in-memory snapshot of the responding replica before its
+        first persisted heartbeat).
       properties:
+        replicaId:
+          type: string
+          description: |
+            Stable per-process identity for the replica that owns this
+            snapshot (e.g. `${hostname}-${bootHex}`, overridable via
+            the `AVRI_REPLICA_ID` environment variable).
+        hostname:
+          type: string
+          description: Hostname of the replica that owns this snapshot.
+        heartbeatAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            ISO timestamp at which this snapshot was last persisted to
+            the shared state file. Null only for the live in-memory
+            snapshot of the responding replica before its first
+            persisted heartbeat.
         schedulerStarted:
           type: boolean
           description: True once the scheduler has been armed in this process.
@@ -3775,6 +3810,9 @@ components:
           type: integer
           description: Number of ticks that have completed since the scheduler started.
       required:
+        - replicaId
+        - hostname
+        - heartbeatAt
         - schedulerStarted
         - startedAt
         - intervalMs

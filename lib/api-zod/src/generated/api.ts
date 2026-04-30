@@ -2662,20 +2662,42 @@ export const RearmAvriDriftNotificationsResponse = zod.object({
 });
 
 /**
- * Operator-visible status of the in-process AVRI drift-notification
-scheduler started at server boot. Backs the calibration page's
-heartbeat panel so reviewers can confirm the timer is firing
-without scraping logs.
+ * Operator-visible status of the AVRI drift-notification scheduler
+across every replica that has registered a heartbeat. Backs the
+calibration page's per-replica heartbeat table so reviewers can
+confirm every replica's timer is firing — and spot a wedged
+replica hiding behind a healthy one — without scraping logs.
 
 Unauthenticated, matching `/feedback/calibration/auth-status`:
-the response is timestamps + booleans only (no error text,
-webhook URL, or token). Per-process — in a multi-replica deploy
-the response reflects whichever replica handled the request.
+the response is timestamps + booleans + replica identity only
+(no error text, webhook URL, or token).
 
- * @summary Get the in-process AVRI drift scheduler status
+The response is an array because the API server runs in a
+multi-replica deploy. Each entry is keyed by `replicaId` (a
+stable per-process identity, e.g. `${hostname}-${bootHex}`) so
+the calibration UI can render one row per replica. The replica
+that handled the request returns a live in-memory snapshot;
+peer replicas return their last-persisted heartbeat from the
+shared `data/avri-drift-notifications.json` state file.
+
+ * @summary Get per-replica AVRI drift scheduler status
  */
-export const GetAvriDriftSchedulerStatusResponse = zod
+export const GetAvriDriftSchedulerStatusResponseItem = zod
   .object({
+    replicaId: zod
+      .string()
+      .describe(
+        "Stable per-process identity for the replica that owns this\nsnapshot (e.g. `${hostname}-${bootHex}`, overridable via\nthe `AVRI_REPLICA_ID` environment variable).\n",
+      ),
+    hostname: zod
+      .string()
+      .describe("Hostname of the replica that owns this snapshot."),
+    heartbeatAt: zod.coerce
+      .date()
+      .nullable()
+      .describe(
+        "ISO timestamp at which this snapshot was last persisted to\nthe shared state file. Null only for the live in-memory\nsnapshot of the responding replica before its first\npersisted heartbeat.\n",
+      ),
     schedulerStarted: zod
       .boolean()
       .describe("True once the scheduler has been armed in this process."),
@@ -2745,8 +2767,11 @@ export const GetAvriDriftSchedulerStatusResponse = zod
       ),
   })
   .describe(
-    "In-process status of the AVRI drift-notification scheduler.\nTimestamps are ISO 8601; `null` is used wherever the field is\nnot yet meaningful (e.g. `lastTickAt` before the first tick,\n`nextTickAt` while the scheduler is stopped).\n",
+    "Per-replica status of the AVRI drift-notification scheduler.\nTimestamps are ISO 8601; `null` is used wherever the field is\nnot yet meaningful (e.g. `lastTickAt` before the first tick,\n`nextTickAt` while the scheduler is stopped).\n\n`replicaId` + `hostname` identify the server replica that owns\nthis snapshot so a multi-replica deploy can render one row per\nreplica. `heartbeatAt` is the wall-clock at which the snapshot\nwas last persisted to the shared state file (null only for the\nlive in-memory snapshot of the responding replica before its\nfirst persisted heartbeat).\n",
   );
+export const GetAvriDriftSchedulerStatusResponse = zod.array(
+  GetAvriDriftSchedulerStatusResponseItem,
+);
 
 /**
  * Returns the bounded audit log of every reviewer-driven re-arm

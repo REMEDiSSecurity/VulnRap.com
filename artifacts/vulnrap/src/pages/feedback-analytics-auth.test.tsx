@@ -181,6 +181,30 @@ function installFetchMock(opts: {
     // Match the most-specific calibration sub-routes BEFORE the general
     // /api/feedback/calibration so the report endpoint doesn't swallow
     // them.
+    if (url.includes("/api/feedback/calibration/avri-drift/scheduler-status")) {
+      // Per Task #397 the scheduler-status response is an array of
+      // per-replica snapshots. The auth test only renders the chrome,
+      // so a single empty placeholder replica is enough.
+      return jsonResponse([
+        {
+          replicaId: "test-replica-A",
+          hostname: "test-host",
+          heartbeatAt: null,
+          schedulerStarted: false,
+          webhookConfigured: false,
+          ticksCompleted: 0,
+          startedAt: null,
+          lastTickAt: null,
+          nextTickAt: null,
+          lastTickOk: null,
+          lastTickRanCheck: false,
+          lastTickDispatched: false,
+          lastTickNewFlagCount: 0,
+          intervalMs: null,
+          retryIntervalMs: null,
+        },
+      ]);
+    }
     if (url.includes("/api/feedback/calibration/avri-drift")) {
       return jsonResponse(AVRI_DRIFT_REPORT);
     }

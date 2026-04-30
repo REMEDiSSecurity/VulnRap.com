@@ -379,7 +379,10 @@ describe("POST /feedback/calibration/avri-drift/notifications/rearm", () => {
 // CALIBRATION_TOKEN, JSON shape matches the OpenAPI contract, and the
 // body never carries the webhook URL or token. Task #277 unit-tested
 // the in-memory struct directly; this block exercises the real route.
-interface SchedulerStatusBody {
+interface SchedulerStatusEntry {
+  replicaId: string;
+  hostname: string;
+  heartbeatAt: string | null;
   schedulerStarted: boolean;
   startedAt: string | null;
   intervalMs: number | null;
@@ -394,9 +397,17 @@ interface SchedulerStatusBody {
   ticksCompleted: number;
 }
 
+// Task #397 — endpoint now returns an array of per-replica entries
+// instead of a single object. Tests pick the live in-memory entry
+// (this replica) for the assertions that used to address `r.body`.
+type SchedulerStatusBody = SchedulerStatusEntry[];
+
 describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
   const SCHEDULER_PATH = "/feedback/calibration/avri-drift/scheduler-status";
-  const REQUIRED_KEYS: ReadonlyArray<keyof SchedulerStatusBody> = [
+  const REQUIRED_KEYS: ReadonlyArray<keyof SchedulerStatusEntry> = [
+    "replicaId",
+    "hostname",
+    "heartbeatAt",
     "schedulerStarted",
     "startedAt",
     "intervalMs",
@@ -410,6 +421,18 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
     "nextTickAt",
     "ticksCompleted",
   ];
+
+  // Helper: pick this replica's entry. Tests start with state seeded
+  // by `beforeEach` (no persisted heartbeats), so the array contains
+  // exactly one entry — the live in-memory record for this replica.
+  // We pick by `schedulerStarted: true` when a scheduler is running,
+  // else the sole entry, so the same helper works for both the
+  // "never started" and "running" code paths.
+  const pickLive = (body: SchedulerStatusBody): SchedulerStatusEntry => {
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.length).toBeGreaterThan(0);
+    return body.find((e) => e.schedulerStarted) ?? body[0]!;
+  };
 
   let scheduler: { stop(): void } | null = null;
 
@@ -437,14 +460,14 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
     expect(process.env.CALIBRATION_TOKEN).toBe(TOKEN);
     const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
     expect(r.status).toBe(200);
-    expect(r.body.schedulerStarted).toBe(false);
+    expect(pickLive(r.body).schedulerStarted).toBe(false);
   });
 
   it("returns 200 unauthenticated when CALIBRATION_TOKEN is not set", async () => {
     delete process.env.CALIBRATION_TOKEN;
     const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
     expect(r.status).toBe(200);
-    expect(r.body.schedulerStarted).toBe(false);
+    expect(pickLive(r.body).schedulerStarted).toBe(false);
   });
 
   it("ignores a stray x-calibration-token header (route is un-gated, not opportunistically auth'd)", async () => {
@@ -460,7 +483,8 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
   it("returns the 'never started' baseline before the scheduler runs", async () => {
     const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({
+    const live = pickLive(r.body);
+    expect(live).toMatchObject({
       schedulerStarted: false,
       startedAt: null,
       intervalMs: null,
@@ -475,7 +499,7 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
     });
     // webhookConfigured is derived from env at read-time, so just
     // assert the type — the env-set case is covered separately below.
-    expect(typeof r.body.webhookConfigured).toBe("boolean");
+    expect(typeof live.webhookConfigured).toBe("boolean");
   });
 
   it("reflects a running scheduler with schedulerStarted + nextTickAt populated", async () => {
@@ -492,27 +516,29 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
     });
     const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
     expect(r.status).toBe(200);
-    expect(r.body.schedulerStarted).toBe(true);
-    expect(r.body.startedAt).not.toBeNull();
-    expect(r.body.intervalMs).toBe(60_000);
-    expect(r.body.retryIntervalMs).toBe(5_000);
-    expect(r.body.nextTickAt).not.toBeNull();
-    expect(r.body.ticksCompleted).toBe(0);
+    const live = pickLive(r.body);
+    expect(live.schedulerStarted).toBe(true);
+    expect(live.startedAt).not.toBeNull();
+    expect(live.intervalMs).toBe(60_000);
+    expect(live.retryIntervalMs).toBe(5_000);
+    expect(live.nextTickAt).not.toBeNull();
+    expect(live.ticksCompleted).toBe(0);
     // No tick has fired yet, so the per-tick fields stay null.
-    expect(r.body.lastTickAt).toBeNull();
-    expect(r.body.lastTickOk).toBeNull();
+    expect(live.lastTickAt).toBeNull();
+    expect(live.lastTickOk).toBeNull();
   });
 
   it("matches the OpenAPI shape exactly — no missing keys, no surprise keys", async () => {
     const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
     expect(r.status).toBe(200);
+    const live = pickLive(r.body);
     for (const key of REQUIRED_KEYS) {
-      expect(r.body).toHaveProperty(key);
+      expect(live).toHaveProperty(key);
     }
     // Lock the key set so a future patch that drops the webhook URL,
     // an error message, or a bearer token into the status struct fails
     // here instead of silently leaking on a public endpoint.
-    expect(Object.keys(r.body).sort()).toEqual([...REQUIRED_KEYS].sort());
+    expect(Object.keys(live).sort()).toEqual([...REQUIRED_KEYS].sort());
   });
 
   it("does not leak AVRI_DRIFT_WEBHOOK_URL even when the env is set and the scheduler is running", async () => {
@@ -537,7 +563,7 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
     // The boolean projection is fine to expose — the UI uses it to warn
     // when the webhook is missing — but the URL itself must never
     // appear anywhere in the body.
-    expect(r.body.webhookConfigured).toBe(true);
+    expect(pickLive(r.body).webhookConfigured).toBe(true);
 
     const raw = JSON.stringify(r.body);
     expect(raw).not.toContain(sentinelUrl);

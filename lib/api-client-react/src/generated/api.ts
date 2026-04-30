@@ -1613,17 +1613,25 @@ export const useRearmAvriDriftNotifications = <
 };
 
 /**
- * Operator-visible status of the in-process AVRI drift-notification
-scheduler started at server boot. Backs the calibration page's
-heartbeat panel so reviewers can confirm the timer is firing
-without scraping logs.
+ * Operator-visible status of the AVRI drift-notification scheduler
+across every replica that has registered a heartbeat. Backs the
+calibration page's per-replica heartbeat table so reviewers can
+confirm every replica's timer is firing — and spot a wedged
+replica hiding behind a healthy one — without scraping logs.
 
 Unauthenticated, matching `/feedback/calibration/auth-status`:
-the response is timestamps + booleans only (no error text,
-webhook URL, or token). Per-process — in a multi-replica deploy
-the response reflects whichever replica handled the request.
+the response is timestamps + booleans + replica identity only
+(no error text, webhook URL, or token).
 
- * @summary Get the in-process AVRI drift scheduler status
+The response is an array because the API server runs in a
+multi-replica deploy. Each entry is keyed by `replicaId` (a
+stable per-process identity, e.g. `${hostname}-${bootHex}`) so
+the calibration UI can render one row per replica. The replica
+that handled the request returns a live in-memory snapshot;
+peer replicas return their last-persisted heartbeat from the
+shared `data/avri-drift-notifications.json` state file.
+
+ * @summary Get per-replica AVRI drift scheduler status
  */
 export const getGetAvriDriftSchedulerStatusUrl = () => {
   return `/api/feedback/calibration/avri-drift/scheduler-status`;
@@ -1631,8 +1639,8 @@ export const getGetAvriDriftSchedulerStatusUrl = () => {
 
 export const getAvriDriftSchedulerStatus = async (
   options?: RequestInit,
-): Promise<AvriDriftSchedulerStatus> => {
-  return customFetch<AvriDriftSchedulerStatus>(
+): Promise<AvriDriftSchedulerStatus[]> => {
+  return customFetch<AvriDriftSchedulerStatus[]>(
     getGetAvriDriftSchedulerStatusUrl(),
     {
       ...options,
@@ -1679,7 +1687,7 @@ export type GetAvriDriftSchedulerStatusQueryResult = NonNullable<
 export type GetAvriDriftSchedulerStatusQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get the in-process AVRI drift scheduler status
+ * @summary Get per-replica AVRI drift scheduler status
  */
 
 export function useGetAvriDriftSchedulerStatus<

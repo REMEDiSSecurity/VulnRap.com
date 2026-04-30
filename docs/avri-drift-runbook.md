@@ -172,32 +172,47 @@ notified, so transient webhook outages auto-recover on the next run.
   `AVRI_DRIFT_WEBHOOK_URL` is unset, so unconfigured environments
   pay zero cost per tick. The drift dashboard endpoint still works
   exactly as before.
-- The scheduler is per-process: in a multi-instance deploy each
-  replica ticks independently. The dedup state file
+- The scheduler runs in every replica: in a multi-instance deploy
+  each replica ticks independently. The dedup state file
   (`avri-drift-notifications.json`) is the cross-tick guard against
   duplicate webhook fan-out, so the same flag is dispatched at most
   once per replica's view of the state file. If you run multiple
   replicas with separate state files you will see at most one extra
   dispatch per flag per replica — point all replicas at the same
   state path (or at the same external state store) if that matters.
+- **Per-replica heartbeats (Task #397).** Each replica writes its
+  own scheduler heartbeat back to the shared
+  `avri-drift-notifications.json` under `schedulerHeartbeats`,
+  keyed by a stable `replicaId` (`${hostname}-${bootHex}`,
+  overridable with the `AVRI_REPLICA_ID` env var). The
+  scheduler-status endpoint merges this replica's live in-memory
+  snapshot with the persisted heartbeats from peers, so the
+  calibration UI surfaces every replica — not just whichever one
+  happened to handle the request. The heartbeat map is capped at
+  50 entries (oldest by `heartbeatAt` evicted) so transient
+  replicas can't grow it unboundedly. Persistence is best-effort:
+  failures are logged but never block a tick.
 - The manual `POST .../notify` endpoint always runs the check (it's
   not gated by the scheduler interval) so reviewers can press a
   "Re-check now" button between scheduled runs.
-- **Scheduler heartbeat panel.** The calibration page
-  renders a "Scheduler heartbeat" panel below the notified-flags
-  table. It displays the in-process scheduler's last tick + last
-  outcome, the next scheduled tick, the configured cadence, and a
-  health badge ("Healthy" / "Last tick failed" / "Armed · webhook
-  not configured" / "Not started in this process"). Use it as the
-  first stop when the question is "is the scheduler still alive?" —
-  no need to scrape stdout for the
+- **Scheduler heartbeat panel.** The calibration page renders a
+  "Scheduler heartbeat" panel below the notified-flags table with
+  one row per replica that has published a heartbeat. Each row
+  shows the replica's id + hostname, last tick + outcome, next
+  scheduled tick, configured cadence, and a health badge ("Healthy"
+  / "Last tick failed" / "Armed · webhook not configured" / "Not
+  started in this process" / "Overdue · scheduler may be wedged").
+  A row is flagged Overdue when its scheduled `nextTickAt` has been
+  past due by more than `retryIntervalMs + 60s` — that grace window
+  covers a single in-flight retry so transient failures don't trip
+  the alarm, only persistent stalls. Use the panel as the first stop
+  when the question is "are all replica schedulers still alive?" —
+  no need to scrape stdout for per-replica
   `[avri-drift-notifications] Drift notification scheduler started.`
-  boot line. Backed by
+  boot lines. Backed by
   `GET /api/feedback/calibration/avri-drift/scheduler-status`, which
-  is un-gated (status only, no webhook URL or token leakage). Like
-  every other piece of scheduler state it is per-process, so in a
-  multi-replica deploy the panel reflects whichever replica handled
-  the request.
+  is un-gated (status + replica identity only, no webhook URL or
+  token leakage) and returns an array — one entry per known replica.
 - When the webhook is unset but flags exist, the notifier still
   records them as notified locally so wiring up a webhook later
   does not produce a retroactive flood. Truncate the state file if
