@@ -1429,13 +1429,26 @@ function describeOverlapBucketNoun(
 // Task #226 — each row also gets inline quick-action buttons (Jump,
 // Remove existing) so reviewers can route into the existing flows
 // without dismissing the preview.
+//
+// Task #315 — when the candidate broadens (or exactly duplicates) MULTIPLE
+// existing curated phrases at once, the header gets a "Remove all
+// overlapping" affordance that batches the eligible phrases through the
+// shared bulk-remove dry-run flow (`POST handwavyPhrases/batchRemoveDryRun`)
+// so the reviewer sees one combined corpus + production impact preview and
+// confirms once. Eligible relations are the same ones the per-row "Remove
+// existing" button is offered for (`equal` and `candidate-contains-existing`):
+// `existing-contains-candidate` rows are excluded because those existing
+// phrases are BROADER than the candidate — removing them would also drop
+// coverage of unrelated reports, which is rarely the supersede intent.
 export function PreviewOverlapsBlock({
   overlaps,
   candidate,
   onJumpToActivePhrase,
   onRequestRemoveExisting,
+  onRequestRemoveAllOverlapping,
   mutationsAllowed,
   removeBusyPhrase,
+  bulkOverlappingBusy,
 }: {
   overlaps: HandwavyPhraseDryRunOverlaps | null;
   candidate: string;
@@ -1455,6 +1468,17 @@ export function PreviewOverlapsBlock({
   // what the reviewer wants — that case omits the button. Optional for the
   // same unit-test reason as `onJumpToActivePhrase`.
   onRequestRemoveExisting?: (phrase: string) => void;
+  // Task #315 — quick-action: open the existing batch-removal dry-run
+  // panel pre-filled with every overlap row whose `relation` is `equal`
+  // or `candidate-contains-existing` (deduplicated). The handler is
+  // invoked with that filtered phrase list; the page wires it to the same
+  // dry-run endpoint and `BulkRemovalImpactBlock` renderer the regular
+  // bulk-remove flow uses, so the reviewer sees one combined preview and
+  // confirms once instead of firing N single-phrase dialogs in sequence.
+  // Only rendered when the eligible set has 2+ entries — the per-row
+  // "Remove existing" button is fine for a single overlap. Optional so
+  // unit tests can render the component without wiring it up.
+  onRequestRemoveAllOverlapping?: (phrases: string[]) => void;
   // Forwarded from the parent so we can disable the destructive action when
   // mutations are blocked (no calibration token, server probe failed, etc.).
   // Defaults to `true` when omitted, since the only consumer that has a
@@ -1464,6 +1488,11 @@ export function PreviewOverlapsBlock({
   // the dry-run preview or the live DELETE). Used to disable just that row's
   // remove button so a double-click can't fire two preview requests.
   removeBusyPhrase?: string | null;
+  // Task #315 — true while a bulk-overlapping dry-run is in flight or the
+  // bulk-remove preview panel is already open. Disables the header
+  // "Remove all overlapping" button so a second click can't stack a
+  // duplicate dry-run on top of an in-flight or open panel.
+  bulkOverlappingBusy?: boolean;
 }) {
   if (!overlaps || overlaps.matches.length === 0) return null;
   const noun = overlaps.total === 1 ? "entry" : "entries";
@@ -1480,6 +1509,31 @@ export function PreviewOverlapsBlock({
       ),
     }))
     .filter((bucket) => bucket.matches.length > 0);
+  // Task #315 — collect the phrases eligible for the header bulk action.
+  // Mirrors the per-row gating: only `equal` and
+  // `candidate-contains-existing` rows are included (broader-existing
+  // phrases would drop unrelated coverage). De-dupe by phrase so an
+  // overlap snapshot that happens to list the same string under two
+  // relations (the server normally won't, but the type allows it) doesn't
+  // ask the dry-run endpoint to retire the same phrase twice.
+  const overlappingForBulk = (() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const m of overlaps.matches) {
+      if (
+        m.relation !== "equal" &&
+        m.relation !== "candidate-contains-existing"
+      ) {
+        continue;
+      }
+      if (seen.has(m.phrase)) continue;
+      seen.add(m.phrase);
+      out.push(m.phrase);
+    }
+    return out;
+  })();
+  const showRemoveAllOverlapping =
+    !!onRequestRemoveAllOverlapping && overlappingForBulk.length >= 2;
   return (
     <div
       className="rounded-md border border-red-500/40 bg-red-500/10 p-2.5 space-y-1.5 text-xs text-red-100"
@@ -1496,6 +1550,32 @@ export function PreviewOverlapsBlock({
             or editing the existing entry is usually preferable to a near-duplicate add.
           </div>
         </div>
+        {showRemoveAllOverlapping && (
+          <button
+            type="button"
+            onClick={() =>
+              onRequestRemoveAllOverlapping?.(overlappingForBulk)
+            }
+            disabled={mutationsAllowed === false || bulkOverlappingBusy === true}
+            className="shrink-0 inline-flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] font-semibold text-red-100 bg-red-500/20 hover:bg-red-500/30 hover:text-red-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-500/20 disabled:hover:text-red-100"
+            data-testid="handwavy-preview-overlap-remove-all"
+            data-handwavy-overlap-remove-all-count={overlappingForBulk.length}
+            data-mutations-blocked={mutationsAllowed === false ? "true" : "false"}
+            aria-label={`Open the bulk removal preview for ${overlappingForBulk.length} overlapping curated phrases`}
+            title={
+              mutationsAllowed === false
+                ? MUTATIONS_BLOCKED_TITLE
+                : bulkOverlappingBusy === true
+                  ? "Bulk removal preview already open or in flight"
+                  : `Open one combined removal preview for the ${overlappingForBulk.length} overlapping curated phrases this candidate would supersede — nothing is removed until you confirm.`
+            }
+          >
+            <Trash2 className="w-3 h-3" />
+            {bulkOverlappingBusy === true
+              ? "Loading…"
+              : `Remove all overlapping (${overlappingForBulk.length})`}
+          </button>
+        )}
       </div>
       <div className="space-y-1.5">
         {buckets.map((bucket) => (
@@ -3805,6 +3885,69 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     }
   };
 
+  // Task #315 — open the bulk-remove dry-run panel pre-filled with the set
+  // of overlap phrases the candidate would supersede (or exactly duplicate)
+  // straight from the in-preview overlap callout. Mirrors
+  // `handlePreviewBulkRemove` but takes the explicit phrase list from the
+  // overlap snapshot instead of `selectedInList`, and replaces the
+  // active-list selection with that same list so the bulk preview's
+  // "selection has changed since this preview was generated" stale guard
+  // doesn't fire spuriously when the reviewer never ticked checkboxes in
+  // the active list themselves. Cancel-out from the bulk preview leaves
+  // the synced selection in place — that's the same end state as if the
+  // reviewer had hand-ticked those rows and then backed out, and the
+  // active-list checkboxes already reflect what the panel was scored
+  // against, so re-firing through the regular `Remove selected` button
+  // will produce the same dry-run.
+  const previewBulkRemoveOverlapping = async (
+    overlappingPhrases: string[],
+  ) => {
+    if (overlappingPhrases.length === 0) return;
+    if (bailOnCooldown("Preview bulk removal")) return;
+    if (!mutationsAllowed) return;
+    // De-dupe defensively — `PreviewOverlapsBlock` already filters dupes,
+    // but the public handler shouldn't trust its caller.
+    const phrasesToPreview = Array.from(new Set(overlappingPhrases));
+    setSelected(new Set(phrasesToPreview));
+    setBulkResults(null);
+    setBusy("bulk-preview");
+    try {
+      const resp = await removeHandwavyPhrase({
+        phrases: phrasesToPreview,
+        dryRun: true,
+        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+          ? { productionScanLimit: effectiveProductionScanLimit }
+          : {}),
+      });
+      if (
+        !("dryRun" in resp) ||
+        resp.dryRun !== true ||
+        !("dryRunImpact" in resp)
+      ) {
+        toast({
+          title: "Preview unavailable",
+          description:
+            "The server did not return a removal preview. No phrases were removed — please retry.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setBulkPreview({
+        requestedPhrases: phrasesToPreview,
+        data: resp,
+        acknowledged: false,
+      });
+    } catch (err) {
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg =
+          err instanceof Error ? err.message : "Failed to preview removal.";
+        toast({ title: "Preview failed", description: msg, variant: "destructive" });
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Task #258 — track the in-flight debounced re-fetch for the bulk-remove
   // preview so a per-phrase drop (see `dropPhraseFromBulkPreview` below)
   // can issue a fresh dry-run against the SURVIVING `requestedPhrases`
@@ -5357,6 +5500,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               onRequestRemoveExisting={(phrase) =>
                 requestRemove(phrase, thrashByPhrase.get(phrase) ?? [])
               }
+              // Task #315 — route the header "Remove all overlapping" action
+              // through a dedicated handler that pre-fills the existing
+              // bulk-remove dry-run panel with the eligible overlap phrases.
+              // The reviewer then sees the same combined corpus + production
+              // impact summary the regular bulk-remove flow uses and confirms
+              // once instead of firing one single-phrase dialog per overlap.
+              onRequestRemoveAllOverlapping={(phrases) =>
+                void previewBulkRemoveOverlapping(phrases)
+              }
               mutationsAllowed={mutationsAllowed}
               removeBusyPhrase={
                 busy && busy.startsWith("rm-preview:")
@@ -5365,6 +5517,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     ? busy.slice("rm:".length)
                     : null
               }
+              // Disable the header bulk action while a bulk-remove dry-run
+              // is in flight or its preview panel is already open, so a
+              // second click can't stack a duplicate request on top of an
+              // existing one.
+              bulkOverlappingBusy={busy === "bulk-preview" || bulkPreview !== null}
             />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <PreviewMatchBlock

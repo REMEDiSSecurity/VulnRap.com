@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import type {
   HandwavyPhraseDryRunOverlaps,
@@ -321,6 +321,204 @@ describe("PreviewOverlapsBlock collapsible buckets (Task #308)", () => {
         "handwavy-preview-overlap-row",
       ),
     ).toHaveLength(0);
+  });
+});
+
+describe("PreviewOverlapsBlock — Remove all overlapping (Task #315)", () => {
+  it("renders the header bulk action when 2+ rows are eligible (equal + supersede)", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "exact one", relation: "equal" }),
+      makeMatch({
+        phrase: "narrower one",
+        relation: "candidate-contains-existing",
+      }),
+      makeMatch({
+        phrase: "broader one",
+        relation: "existing-contains-candidate",
+      }),
+    ]);
+    const onRequestRemoveAllOverlapping = vi.fn();
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={onRequestRemoveAllOverlapping}
+      />,
+    );
+
+    const button = screen.getByTestId("handwavy-preview-overlap-remove-all");
+    expect(button).toBeInTheDocument();
+    // The label and the data attribute both reflect the eligible count
+    // (2), NOT the total overlap count (3) — the broader-existing row is
+    // excluded for the same reason the per-row "Remove existing" action
+    // is hidden on it.
+    expect(button).toHaveTextContent("Remove all overlapping (2)");
+    expect(button.getAttribute("data-handwavy-overlap-remove-all-count")).toBe("2");
+
+    fireEvent.click(button);
+
+    expect(onRequestRemoveAllOverlapping).toHaveBeenCalledTimes(1);
+    expect(onRequestRemoveAllOverlapping).toHaveBeenCalledWith([
+      "exact one",
+      "narrower one",
+    ]);
+  });
+
+  it("hides the header bulk action when only one row is eligible (the per-row button is enough)", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "exact one", relation: "equal" }),
+      makeMatch({
+        phrase: "broader one",
+        relation: "existing-contains-candidate",
+      }),
+    ]);
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("handwavy-preview-overlap-remove-all"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the header bulk action when every overlap is broader-than-candidate", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({
+        phrase: "broader one",
+        relation: "existing-contains-candidate",
+      }),
+      makeMatch({
+        phrase: "broader two",
+        relation: "existing-contains-candidate",
+      }),
+      makeMatch({
+        phrase: "broader three",
+        relation: "existing-contains-candidate",
+      }),
+    ]);
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("handwavy-preview-overlap-remove-all"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the header bulk action when no handler is wired up (unit-test render)", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "exact one", relation: "equal" }),
+      makeMatch({
+        phrase: "narrower one",
+        relation: "candidate-contains-existing",
+      }),
+    ]);
+
+    render(<PreviewOverlapsBlock overlaps={overlaps} candidate="something" />);
+
+    expect(
+      screen.queryByTestId("handwavy-preview-overlap-remove-all"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("disables the header bulk action when mutations are blocked", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "exact one", relation: "equal" }),
+      makeMatch({
+        phrase: "narrower one",
+        relation: "candidate-contains-existing",
+      }),
+    ]);
+    const onRequestRemoveAllOverlapping = vi.fn();
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        mutationsAllowed={false}
+        onRequestRemoveAllOverlapping={onRequestRemoveAllOverlapping}
+      />,
+    );
+
+    const button = screen.getByTestId("handwavy-preview-overlap-remove-all");
+    expect(button).toBeDisabled();
+    expect(button.getAttribute("data-mutations-blocked")).toBe("true");
+
+    fireEvent.click(button);
+    expect(onRequestRemoveAllOverlapping).not.toHaveBeenCalled();
+  });
+
+  it("disables the header bulk action and shows the loading label while a bulk preview is in flight or open", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "exact one", relation: "equal" }),
+      makeMatch({
+        phrase: "narrower one",
+        relation: "candidate-contains-existing",
+      }),
+    ]);
+    const onRequestRemoveAllOverlapping = vi.fn();
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        bulkOverlappingBusy
+        onRequestRemoveAllOverlapping={onRequestRemoveAllOverlapping}
+      />,
+    );
+
+    const button = screen.getByTestId("handwavy-preview-overlap-remove-all");
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent(/Loading/);
+
+    fireEvent.click(button);
+    expect(onRequestRemoveAllOverlapping).not.toHaveBeenCalled();
+  });
+
+  it("de-duplicates the eligible phrase list passed to the handler", () => {
+    // Defensive: the server normally won't list the same phrase under two
+    // relations, but the type allows it and the handler shouldn't ask the
+    // dry-run endpoint to retire the same phrase twice.
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "duped one", relation: "equal" }),
+      makeMatch({
+        phrase: "duped one",
+        relation: "candidate-contains-existing",
+      }),
+      makeMatch({
+        phrase: "narrower two",
+        relation: "candidate-contains-existing",
+      }),
+    ]);
+    const onRequestRemoveAllOverlapping = vi.fn();
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={onRequestRemoveAllOverlapping}
+      />,
+    );
+
+    const button = screen.getByTestId("handwavy-preview-overlap-remove-all");
+    expect(button).toHaveTextContent("Remove all overlapping (2)");
+
+    fireEvent.click(button);
+    expect(onRequestRemoveAllOverlapping).toHaveBeenCalledWith([
+      "duped one",
+      "narrower two",
+    ]);
   });
 });
 
