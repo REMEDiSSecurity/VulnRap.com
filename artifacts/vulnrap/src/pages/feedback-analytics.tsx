@@ -2930,6 +2930,33 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   const [historyBatchRowsExplicit, setHistoryBatchRowsExplicit] = useState<
     Map<string, boolean>
   >(() => new Map());
+  // Task #365 — when the outcomes <details> auto-expands because the
+  // batch contains a high-thrash phrase, the first such row can still be
+  // scrolled below the fold inside the `max-h-48 overflow-y-auto` list
+  // container in 30+ phrase batches. We flip this flag to `true` at the
+  // auto-expand moment so a follow-up effect can scroll the first
+  // high-thrash row into view inside the container; the effect resets
+  // the flag so a subsequent manual collapse + manual re-expand doesn't
+  // re-trigger the scroll. Routine batches and manual expands never set
+  // this flag, so the reviewer's scroll position is left alone there.
+  const [bulkPreviewAutoScrollPending, setBulkPreviewAutoScrollPending] =
+    useState(false);
+  // Ref on the per-phrase outcomes <ul> so the auto-scroll effect can
+  // find the first high-thrash row inside this exact scroll container.
+  const bulkPreviewResultsRef = useRef<HTMLUListElement | null>(null);
+  useEffect(() => {
+    if (!bulkPreviewAutoScrollPending) return;
+    if (!bulkPreviewOutcomesOpen) return;
+    const container = bulkPreviewResultsRef.current;
+    if (!container) return;
+    const firstThrashRow = container.querySelector<HTMLElement>(
+      '[data-testid="handwavy-bulk-preview-result-row-thrash"]',
+    );
+    if (firstThrashRow) {
+      firstThrashRow.scrollIntoView({ block: "nearest" });
+    }
+    setBulkPreviewAutoScrollPending(false);
+  }, [bulkPreviewAutoScrollPending, bulkPreviewOutcomesOpen]);
   // Task #173 — single-phrase removal-impact preview state. The per-row
   // Trash button now first issues `DELETE {phrase, dryRun: true}` (Task
   // #155). When `validDetectionsLost === 0` we fire the live DELETE in
@@ -5654,6 +5681,14 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           (thrashByPhrase.get(p)?.length ?? 0) >= HIGH_THRASH_MIN_INIT,
       );
       setBulkPreviewOutcomesOpen(hasHighThrashInBatch);
+      // Task #365 — only schedule the auto-scroll when the panel is
+      // actually being auto-expanded due to a high-thrash phrase, so
+      // routine batches and manual expands don't yank the reviewer's
+      // scroll position around. The bulkPreviewResultsRef effect above
+      // consumes this flag once and resets it after the scroll lands.
+      if (hasHighThrashInBatch) {
+        setBulkPreviewAutoScrollPending(true);
+      }
     }
   }
 
@@ -6439,6 +6474,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 Per-phrase outcomes ({visibleResults.length})
               </summary>
               <ul
+                ref={bulkPreviewResultsRef}
                 className="mt-1 max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
                 data-testid="handwavy-bulk-preview-results"
               >

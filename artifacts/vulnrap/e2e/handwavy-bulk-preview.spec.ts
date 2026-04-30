@@ -24,6 +24,9 @@ const REVIEWER = "e2e-task154";
 // auto-expand specs so audit-log scans can tell them apart from the
 // original Task #154 preview specs above.
 const REVIEWER_TASK257 = "e2e-task257";
+// Task #365 — separate reviewer tag for the auto-scroll spec so audit-log
+// scans can tell its rows apart from the Task #257 auto-expand specs above.
+const REVIEWER_TASK365 = "e2e-task365";
 
 // UI-flow helper kept local: it threads checkbox-tick + "Remove selected"
 // click in the order this spec needs (the bulk-undo spec has its own
@@ -768,6 +771,102 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     } finally {
       await cleanup(apiCtx, [thrashy, fresh], {
         reviewer: `${REVIEWER_TASK257}-cleanup`,
+      });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #365 — when the outcomes <details> auto-expands because the
+  // batch contains a high-thrash phrase, the row itself can still be
+  // scrolled below the fold inside the `max-h-48 overflow-y-auto`
+  // container in 30+ phrase batches. Task #257's auto-expand alone
+  // wasn't enough — the per-row drop button would be in the DOM but
+  // outside the visible portion of the scroll container, so a reviewer
+  // who saw the high-thrash banner still had to manually scroll the
+  // inner list to act. The follow-up scrolls the first
+  // `handwavy-bulk-preview-result-row-thrash` row into view inside that
+  // container the first time the panel renders auto-expanded; this spec
+  // pins the row's bounding box landing inside the container's visible
+  // portion after the auto-expand.
+  test("Auto-expand scrolls the first high-thrash row into view inside the outcomes scroll container", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const id = randomUUID().replace(/-/g, "").slice(0, 12);
+    // 30 routine fillers added FIRST so they occupy the top of the
+    // displayed active list (curated insertion order). The high-thrash
+    // phrase is added LAST via seedCycles, putting its outcomes row at
+    // the bottom of the rendered list — well below the `max-h-48`
+    // container's ~192px visible portion. Zero-padded suffix avoids the
+    // `hasText` substring collision selectRowsAndOpenPreview would hit
+    // if we used `uniquePhrases` (where "… phrase 1" matches "… phrase
+    // 10" / "… phrase 11" / etc).
+    const fillers = Array.from(
+      { length: 30 },
+      (_, i) => `task365 filler ${id} idx${String(i + 1).padStart(3, "0")}`,
+    );
+    const thrashy = `task365 thrashy ${id}`;
+
+    try {
+      for (const p of fillers)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER_TASK365 });
+      await seedCycles(apiCtx, thrashy, 2, { reviewer: REVIEWER_TASK365 });
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, [...fillers, thrashy]);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Sanity: the auto-expand from Task #257 still fires.
+      const details = panel.getByTestId(
+        "handwavy-bulk-preview-results-details",
+      );
+      await expect(details).toHaveJSProperty("open", true);
+
+      const thrashyRow = panel
+        .locator(`[data-testid="handwavy-bulk-preview-result-row-thrash"]`)
+        .first();
+      await expect(thrashyRow).toHaveCount(1);
+
+      // The row's bounding box must sit within the scroll container's
+      // visible portion — proving the auto-scroll lands the row on
+      // screen and not just in the DOM below the overflow fold. The
+      // ±1px slack absorbs sub-pixel rounding in the layout engine.
+      // We walk up from the row itself to find the outcomes <ul>
+      // ancestor (rather than re-querying the document) so the
+      // assertion stays scoped to the same panel even if a second
+      // preview container is ever present in the DOM.
+      await expect
+        .poll(
+          async () =>
+            thrashyRow.evaluate((row) => {
+              const container = row.closest(
+                '[data-testid="handwavy-bulk-preview-results"]',
+              );
+              if (!container) return null;
+              const r = row.getBoundingClientRect();
+              const c = container.getBoundingClientRect();
+              return {
+                rowTop: r.top,
+                rowBottom: r.bottom,
+                containerTop: c.top,
+                containerBottom: c.bottom,
+                inView:
+                  r.top >= c.top - 1 && r.bottom <= c.bottom + 1,
+              };
+            }),
+          {
+            message:
+              "first high-thrash row should be in the visible portion of the outcomes scroll container after auto-expand",
+            timeout: 5_000,
+          },
+        )
+        .toMatchObject({ inView: true });
+    } finally {
+      await cleanup(apiCtx, [...fillers, thrashy], {
+        reviewer: `${REVIEWER_TASK365}-cleanup`,
       });
       await apiCtx.dispose();
     }
