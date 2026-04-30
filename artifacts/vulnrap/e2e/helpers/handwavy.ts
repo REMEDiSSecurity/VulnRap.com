@@ -52,6 +52,10 @@ import { randomUUID } from "node:crypto";
 //     (type → Preview impact → Confirm add) used by the undo specs.
 //   - removeSingle(api, phrase, opts?): DELETE one phrase, returns the
 //     historyEntry.removedAt timestamp for chaining into reinstate().
+//   - addAndUndo(api, phrase, opts?): POST add then immediately POST the
+//     per-marker undo, leaving one `undone: true` history row. Used by
+//     the history-overlap-hint spec to seed the rare "Previously
+//     undone" wording branch without coupling to the live UI countdown.
 //   - reinstate(api, phrase, removedAt, opts?): POST .../reinstate.
 //   - seedCycles(api, phrase, cycles, opts?): N complete remove+reinstate
 //     round-trips so a phrase ends up in the active list with N reinstated
@@ -243,6 +247,70 @@ export async function removeSingle(
   expect(
     typeof removedAt,
     "single removal should produce a history entry with a removedAt timestamp",
+  ).toBe("string");
+  return removedAt as string;
+}
+
+/**
+ * Add a phrase via POST and immediately undo it through the per-marker
+ * `/handwavy-phrases/undo` endpoint, leaving exactly one history row
+ * tagged `undone: true` (the Task #130 audit shape — "added then
+ * undone" rather than a manual-removal entry). Returns the
+ * `historyEntry.removedAt` timestamp captured by the undo so callers
+ * can chain it where a follow-up reinstate or assertion needs it.
+ *
+ * Used by the Task #413 history-overlap-hint spec to seed the rare
+ * "Previously undone" wording branch without driving the multi-step
+ * UI add + click-Undo flow (which would couple the seed to the
+ * 5-minute undo window's live countdown rendering — the spec only
+ * cares about the resulting history shape).
+ */
+export async function addAndUndo(
+  api: APIRequestContext,
+  phrase: string,
+  opts: AddPhraseOptions = {},
+): Promise<string> {
+  const reviewer = opts.reviewer ?? DEFAULT_REVIEWER;
+  const category = opts.category ?? "hedging";
+  const data: Record<string, unknown> = { phrase, category, reviewer };
+  if (opts.addedAt) data.addedAt = opts.addedAt;
+  if (opts.rationale !== undefined) data.rationale = opts.rationale;
+  const addRes = await api.post("/api/feedback/calibration/handwavy-phrases", {
+    data,
+  });
+  expect(
+    addRes.ok(),
+    `POST handwavy-phrases (add for undo) failed for "${phrase}": ${addRes.status()} ${await addRes.text()}`,
+  ).toBeTruthy();
+  const addBody = (await addRes.json()) as {
+    marker?: { addedAt?: string };
+  };
+  const addedAt = addBody.marker?.addedAt;
+  expect(
+    typeof addedAt,
+    "POST handwavy-phrases (add for undo) must echo the marker.addedAt timestamp so we can target the per-marker undo endpoint",
+  ).toBe("string");
+  const undoRes = await api.post(
+    "/api/feedback/calibration/handwavy-phrases/undo",
+    {
+      data: { phrase, addedAt, reviewer },
+    },
+  );
+  expect(
+    undoRes.ok(),
+    `POST handwavy-phrases/undo failed for "${phrase}" @ ${addedAt}: ${undoRes.status()} ${await undoRes.text()}`,
+  ).toBeTruthy();
+  const undoBody = (await undoRes.json()) as {
+    historyEntry?: { removedAt?: string; undone?: boolean };
+  };
+  expect(
+    undoBody.historyEntry?.undone,
+    "POST handwavy-phrases/undo must produce a history entry tagged undone:true",
+  ).toBe(true);
+  const removedAt = undoBody.historyEntry?.removedAt;
+  expect(
+    typeof removedAt,
+    "POST handwavy-phrases/undo must include historyEntry.removedAt",
   ).toBe("string");
   return removedAt as string;
 }

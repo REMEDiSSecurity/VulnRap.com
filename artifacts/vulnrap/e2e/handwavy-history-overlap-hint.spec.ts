@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import {
+  addAndUndo,
   addPhrase,
   cleanup,
   injectCalibrationTokenIntoPage,
@@ -126,6 +127,77 @@ test.describe("Pre-preview 'Previously removed' history-overlap hint (Task #221)
         page.getByTestId("handwavy-history-overlap-hint"),
         "Reinstated history entries must be skipped by the previously-removed hint",
       ).toHaveCount(0);
+    } finally {
+      await cleanup(api, phrase, { reviewer: `${REVIEWER}-cleanup` });
+      await api.dispose();
+    }
+  });
+
+  // Task #413 — covers the `verb = top.undone ? "undone" : "removed"`
+  // wording branch in feedback-analytics.tsx. The Task #295 spec above
+  // only exercises the "removed" branch (a deliberate per-row Trash
+  // removal), so a regression that swaps the verb (e.g. always renders
+  // "removed" or always renders "undone") would slip past CI even with
+  // both Task #295 tests green. Seeding via `addAndUndo` produces a
+  // history row tagged `undone: true` exactly the way the in-app
+  // per-row "Undo" button does, but without coupling this spec to the
+  // 5-minute window's live countdown rendering — the per-row Undo path
+  // is already covered by handwavy-undo.spec.ts.
+  test("renders 'Previously undone' wording (and 'undone by …' in the summary line) when the matching history entry was an undo of a brand-new add", async ({
+    page,
+  }) => {
+    const phrase = uniquePhrase("task413 undone");
+    // Keep the rationale free of the literal words "removed"/"undone"
+    // so the negative assertions below (which check the rendered hint
+    // text doesn't carry the OTHER verb) can't be defeated by the
+    // rationale leaking the wrong word into the same `top` block.
+    const rationale = `task413 reasoning ${phrase.split(" ").pop()}`;
+    const api = await newApiContext();
+
+    try {
+      await injectCalibrationTokenIntoPage(page);
+
+      await addAndUndo(api, phrase, {
+        reviewer: REVIEWER,
+        rationale,
+        category: "hedging",
+      });
+
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      // Same gating signal as the existing tests: the history-toggle only
+      // mounts after the removal-history payload has loaded — the same
+      // payload the in-page detection reads from. Detection runs against
+      // the fetched array regardless of collapse state.
+      await expect(page.getByTestId("handwavy-history-toggle")).toBeVisible({
+        timeout: 15_000,
+      });
+
+      await page.getByTestId("handwavy-input").fill(phrase);
+
+      const hint = page.getByTestId("handwavy-history-overlap-hint");
+      await expect(hint).toBeVisible({ timeout: 15_000 });
+
+      // The verb appears TWICE in the rendered hint:
+      //   1. The bold leader "Previously {verb} — overlaps with …"
+      //   2. The per-entry summary "{verb} by {reviewer} on {date}"
+      // Both must read "undone", and neither must read "removed", so a
+      // regression that flips only one occurrence (or pins the leader
+      // to "removed" while the summary still flips) is caught.
+      await expect(hint).toContainText("Previously undone");
+      await expect(
+        hint,
+        "Leader must read 'Previously undone' — never 'Previously removed' — for an undo-tagged history row",
+      ).not.toContainText("Previously removed");
+
+      const top = page.getByTestId("handwavy-history-overlap-hint-top");
+      await expect(top).toContainText(phrase);
+      await expect(top).toContainText(`undone by ${REVIEWER}`);
+      await expect(
+        top,
+        "Per-entry summary must read 'undone by …' — never 'removed by …' — for an undo-tagged history row",
+      ).not.toContainText("removed by");
+      await expect(top).toContainText(rationale);
     } finally {
       await cleanup(api, phrase, { reviewer: `${REVIEWER}-cleanup` });
       await api.dispose();
