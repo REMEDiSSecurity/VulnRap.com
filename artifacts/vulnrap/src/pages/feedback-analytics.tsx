@@ -8194,7 +8194,7 @@ function HeadroomSparkline({ snapshots, ceiling }: {
  * value means the latest snapshot has shrunk vs. the older comparison
  * window (worst-case, most regression-y direction).
  */
-function recentHeadroomDecline(snapshots: ArchetypeHistorySnapshot[]): number {
+export function recentHeadroomDecline(snapshots: ArchetypeHistorySnapshot[]): number {
   if (snapshots.length < 2) return 0;
   // Compare current minDistanceToCeiling to the max observed in the
   // earlier half of the window — picks up the worst regression rather
