@@ -368,8 +368,19 @@ const PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE =
 // in the slop-payload vocabulary (BODY_PLACEHOLDER_KEYWORDS) qualify.
 // A bare short identifier like `<unknown>` / `<x>` is NOT enough on
 // its own here, even though it is for the colon and inline-code forms.
+//
+// The separator class between the payload word and the slot accepts
+// whitespace, commas, parentheses, en-dashes (U+2013), and em-dashes
+// (U+2014) so the same dodge written as "the payload, <inject>, was
+// sent", "the payload (<inject>) was sent", or "the payload — <inject>
+// — was sent" is still caught. Letters, digits, backticks, and other
+// non-separator characters break the run, so incidental adjacency
+// like "payload-injected" or "payload `<x>`" stays safe (and the
+// inline-code form keeps its own match for the backticked shape).
+// The slop-vocab guard above is what keeps neutral prose like "the
+// payload, <unknown>, was rejected" off the list.
 const PROSE_PAYLOAD_PLACEHOLDER_BARE_RE =
-  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)\s+(<[^>\n`]{1,80}>)/gi;
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)[\s,(\u2013\u2014]+(<[^>\n`]{1,80}>)/gi;
 
 // Same gesture, but the slot is wrapped in bare double-quotes instead
 // of backticks: "the payload \"<inject>\" was sent" / "we exec

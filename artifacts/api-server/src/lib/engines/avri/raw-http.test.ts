@@ -1059,6 +1059,126 @@ describe("findProsePlaceholderPayloadRanges", () => {
     ).toBe(0);
   });
 
+  it("flags bare-angle <slot> when a comma separates the payload word from the slot", () => {
+    // Slop dodge: drop the backticks AND insert a comma between the
+    // payload-context word and the `<...>` slot. "the payload,
+    // <inject>, was sent" is the same gesture as "the payload <inject>
+    // was sent" — the comma separator must not let it slip past.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload, <inject>, was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send,<sql payload here>, to /search",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags bare-angle <slot> when the slot is wrapped in parentheses", () => {
+    // Slop dodge: parenthesize the slot. "the payload (<inject>) was
+    // sent" wraps the slot in `(...)` so there is no whitespace
+    // immediately before `<`, only an opening paren after a space.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload (<inject>) was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "exec (<command here>) to confirm RCE",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags bare-angle <slot> when an em-dash separates the payload word from the slot", () => {
+    // Slop dodge: em-dash (U+2014) between the payload word and the
+    // slot. "the payload — <inject> — was sent" is the same gesture
+    // dressed up with typographic dashes; the separator class must
+    // accept em-dashes so the dodge is caught.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload \u2014 <inject> \u2014 was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send \u2014 <sql payload here> \u2014 to /search",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags bare-angle <slot> when an en-dash separates the payload word from the slot", () => {
+    // Same as the em-dash form, but with en-dash (U+2013). Slop
+    // authors paste from sources that auto-convert hyphens to en-dashes
+    // too, so both shapes need to be caught.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload \u2013 <inject> \u2013 was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag punctuation-separated bare-angle prose with a neutral identifier", () => {
+    // The slop-vocab guard on the bare-angle form must still hold
+    // when separators other than whitespace are in play. "the payload,
+    // <unknown>, was rejected" and "the payload (<unknown>) was
+    // rejected" both legitimately call out a server-supplied identifier
+    // and must not be flagged just because we relaxed the separator
+    // class.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload, <unknown>, was rejected",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload (<unknown>) was rejected",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload \u2014 <unknown> \u2014 was rejected",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("does not flag punctuation-separated bare-angle prose without a payload-context word", () => {
+    // Without a payload-context word in front of the separator, the
+    // slot is ordinary prose markup and stays safe even when the
+    // separator is comma / paren / em-dash.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the value, <inject>, was rejected",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the field (<sql payload here>) failed validation",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the value \u2014 <inject> \u2014 was rejected",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("does not flag bare-angle prose where letters intervene between the payload word and the slot", () => {
+    // The relaxed separator class only contains whitespace and
+    // punctuation — letters and digits between the payload word and
+    // `<` still break the run. Compound words like "payload-injected"
+    // and parenthetical noun phrases like "payload (args) <inject>"
+    // must therefore not light up.
+    expect(
+      findProsePlaceholderPayloadRanges("payload-injected-into <foo>").length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("the payload (args) <inject>").length,
+    ).toBe(0);
+  });
+
   it("does not double-count the bare-angle form against the inline-code form", () => {
     // The bare-angle regex doesn't require backticks, but it does
     // require whitespace immediately before `<`, so the backticked
