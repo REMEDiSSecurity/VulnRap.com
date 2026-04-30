@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Task #182 — Run the full vulnrap Playwright e2e suite against the
+# Task #182 + Task #251 -- Run the vulnrap Playwright e2e suite against the
 # PRODUCTION builds of @workspace/vulnrap and @workspace/api-server.
 #
 # This wraps `pnpm --filter @workspace/vulnrap run test:e2e` so it can be
 # wired into a registered validation step (and any future CI workflow).
 # The Playwright config (artifacts/vulnrap/playwright.config.ts) handles
 # the webServer plumbing for both the bundled api-server (dist/index.mjs
-# via `start`) and the vite preview build, so this script's job is just
-# to (1) ensure a runnable Chromium binary is on disk and (2) provision
-# E2E_CALIBRATION_TOKEN for the strict-auth GET on
-# /feedback/calibration/handwavy-phrases (Task #163 + Task #152).
+# via `start`) and the vite preview build, so this script's job is to:
+#   (1) ensure a runnable Chromium binary is on disk
+#   (2) provision E2E_CALIBRATION_TOKEN for the strict-auth GET on
+#       /feedback/calibration/handwavy-phrases (Task #163 + Task #152)
+#   (3) ask scripts/vulnrap-e2e-select-specs.mjs which specs the current
+#       branch's changes can possibly affect, and pass that subset to
+#       Playwright -- saves wall-clock when the change is unrelated to
+#       the FLAT hand-wavy phrase panel or only touches one spec file.
 #
 # The hand-wavy specs themselves (handwavy-undo.spec.ts,
 # handwavy-reinstate-batch.spec.ts, handwavy-remove-confirm.spec.ts,
@@ -20,8 +24,18 @@ set -euo pipefail
 # same default explicitly here so a fail-loud override
 # (E2E_CALIBRATION_TOKEN=...) propagates to both the webServer env
 # block and the spec-side request contexts.
+#
+# Escape hatches:
+#   E2E_RUN_ALL_SPECS=1   force the full suite (skip the change-aware
+#                         filter). Use this for nightly runs or when
+#                         debugging the selector itself.
+#   E2E_DIFF_BASE=<ref>   override the git ref the selector compares
+#                         against (defaults to origin/main, then main).
 
-echo "[vulnrap-e2e-check] Running the full vulnrap Playwright e2e suite against the PRODUCTION builds of vulnrap and api-server..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SELECTOR="${SCRIPT_DIR}/vulnrap-e2e-select-specs.mjs"
+
+echo "[vulnrap-e2e-check] Running the vulnrap Playwright e2e suite against the PRODUCTION builds of vulnrap and api-server..."
 echo "[vulnrap-e2e-check] (vite preview + bundled dist/index.mjs, not the dev servers)"
 
 CHROMIUM_PATH="${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-${REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE:-}}"
@@ -40,6 +54,59 @@ export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="${CHROMIUM_PATH}"
 export E2E_CALIBRATION_TOKEN="${E2E_CALIBRATION_TOKEN:-e2e-calibration-token}"
 echo "[vulnrap-e2e-check] E2E_CALIBRATION_TOKEN is set (length=${#E2E_CALIBRATION_TOKEN})."
 
+# --- Change-aware spec selection (Task #251) ---
+# The selector prints either:
+#   ALL                 -> run every spec
+#   NONE                -> skip the suite entirely
+#   <spec>...           -> one spec basename per line, run only those
+# stderr from the selector is forwarded so the reasoning shows up in logs.
+echo "[vulnrap-e2e-check] Selecting specs based on the current branch's changed files..."
+SELECTOR_OUTPUT="$(node "${SELECTOR}")"
+SELECTED_SPECS=()
+RUN_MODE="all"
+while IFS= read -r line; do
+  [ -z "${line}" ] && continue
+  if [ "${line}" = "ALL" ]; then
+    RUN_MODE="all"
+    SELECTED_SPECS=()
+    break
+  elif [ "${line}" = "NONE" ]; then
+    RUN_MODE="none"
+    SELECTED_SPECS=()
+    break
+  else
+    RUN_MODE="subset"
+    SELECTED_SPECS+=("${line}")
+  fi
+done <<<"${SELECTOR_OUTPUT}"
+
+if [ "${RUN_MODE}" = "none" ]; then
+  echo "[vulnrap-e2e-check] No vulnrap e2e surface area was touched -- skipping suite."
+  echo "[vulnrap-e2e-check] (set E2E_RUN_ALL_SPECS=1 to force the full suite)"
+  exit 0
+fi
+
+if [ "${RUN_MODE}" = "subset" ]; then
+  echo "[vulnrap-e2e-check] Running ${#SELECTED_SPECS[@]} change-affected spec(s):"
+  for spec in "${SELECTED_SPECS[@]}"; do
+    echo "  - ${spec}"
+  done
+  if ! pnpm --filter @workspace/vulnrap exec playwright test \
+    --config playwright.config.ts \
+    "${SELECTED_SPECS[@]}"; then
+    echo "" >&2
+    echo "[vulnrap-e2e-check] ERROR: change-affected vulnrap Playwright specs failed against the production builds." >&2
+    echo "  Failing spec is one of: ${SELECTED_SPECS[*]}" >&2
+    echo "  Inspect the failing spec and the Playwright report under artifacts/vulnrap/playwright-report/." >&2
+    echo "  (set E2E_RUN_ALL_SPECS=1 to also run the unrelated specs and rule out a wider regression)" >&2
+    exit 1
+  fi
+  echo "[vulnrap-e2e-check] change-affected vulnrap Playwright specs passed (${#SELECTED_SPECS[@]} spec(s))."
+  exit 0
+fi
+
+# RUN_MODE == "all"
+echo "[vulnrap-e2e-check] Running the FULL vulnrap Playwright e2e suite (a shared file changed or no diff was available)."
 if ! pnpm --filter @workspace/vulnrap run test:e2e; then
   echo "" >&2
   echo "[vulnrap-e2e-check] ERROR: vulnrap Playwright e2e suite failed against the production builds." >&2
