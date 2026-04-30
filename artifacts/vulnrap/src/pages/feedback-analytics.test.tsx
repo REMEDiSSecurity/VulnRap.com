@@ -6,8 +6,13 @@ import {
   isProductionScanStale,
   PRODUCTION_SCAN_FRESHNESS_DAYS,
   renderHandwavyEditEntries,
+  computeHandwavyActiveListVersion,
+  createSingleRemoveDryRunPreviewCache,
 } from "./feedback-analytics";
-import type { HandwavyEditEntry } from "@workspace/api-client-react";
+import type {
+  HandwavyEditEntry,
+  HandwavyPhraseSingleRemoveDryRunResponse,
+} from "@workspace/api-client-react";
 
 describe("revertWouldBeNoop (Task #148 — disable Revert when it would be a no-op)", () => {
   it("treats an entry with no tracked field changes as a no-op", () => {
@@ -280,5 +285,121 @@ describe("renderHandwavyEditEntries — visible no-op hint (Task #241)", () => {
     const noopRow = buttons[1].closest("li");
     expect(noopRow, "disabled button must live in an <li> row").not.toBeNull();
     expect(within(noopRow!).getByTestId("handwavy-revert-noop-hint")).toBe(hints[0]);
+  });
+});
+
+describe("computeHandwavyActiveListVersion (Task #246 — invalidation key for the per-row dry-run preview cache)", () => {
+  it("returns a stable string for the empty list so callers don't have to special-case undefined", () => {
+    expect(computeHandwavyActiveListVersion([])).toBe("0:");
+  });
+
+  it("returns the same version when only the iteration order of the SAME phrase set changes", () => {
+    // The cache uses this string to decide whether a previously-fetched
+    // dry-run can be served. A reorder (e.g. the sort-by-thrash toggle)
+    // doesn't change what removing any given phrase would un-flag, so it
+    // MUST NOT bust the cache.
+    const a = computeHandwavyActiveListVersion([{ phrase: "alpha" }, { phrase: "bravo" }]);
+    const b = computeHandwavyActiveListVersion([{ phrase: "bravo" }, { phrase: "alpha" }]);
+    expect(a).toBe(b);
+  });
+
+  it("returns a different version when a phrase is added, removed, or replaced", () => {
+    const base = computeHandwavyActiveListVersion([{ phrase: "alpha" }, { phrase: "bravo" }]);
+    const added = computeHandwavyActiveListVersion([
+      { phrase: "alpha" },
+      { phrase: "bravo" },
+      { phrase: "charlie" },
+    ]);
+    const removed = computeHandwavyActiveListVersion([{ phrase: "alpha" }]);
+    const replaced = computeHandwavyActiveListVersion([{ phrase: "alpha" }, { phrase: "delta" }]);
+    expect(added).not.toBe(base);
+    expect(removed).not.toBe(base);
+    expect(replaced).not.toBe(base);
+    // And these three "changed" versions are all distinct from each other
+    // — defense against a length-only or first-element-only hash that
+    // would let an edit slip through unnoticed.
+    expect(new Set([base, added, removed, replaced]).size).toBe(4);
+  });
+
+  it("does not collide between a single phrase containing a digit prefix and a multi-element list with the same suffix", () => {
+    // The version string starts with a length prefix specifically so a
+    // phrase like "2:foo" can't accidentally match a 2-element list whose
+    // joined form happens to equal "foo".
+    const single = computeHandwavyActiveListVersion([{ phrase: "2:foo" }]);
+    const pair = computeHandwavyActiveListVersion([{ phrase: "" }, { phrase: "foo" }]);
+    expect(single).not.toBe(pair);
+  });
+});
+
+describe("createSingleRemoveDryRunPreviewCache (Task #246 — cache hit + invalidation)", () => {
+  // The cache is generic over the response type; using a minimal stand-in
+  // here keeps the test focused on the cache's hit/miss + invalidation
+  // contract without coupling it to the full DryRunResponse shape.
+  type StubResp = Pick<HandwavyPhraseSingleRemoveDryRunResponse, "phrase">;
+  const stubFor = (phrase: string): StubResp => ({ phrase });
+
+  const VERSION_A = "2:alpha\u0001bravo";
+  const VERSION_B = "3:alpha\u0001bravo\u0001charlie";
+
+  it("returns the stored response on a cache hit when phrase + scan-limit + version all match", () => {
+    const cache = createSingleRemoveDryRunPreviewCache<StubResp>();
+    const response = stubFor("alpha");
+    cache.set("alpha", 50, VERSION_A, response);
+    // Same key triple -> same reference back out (no clone, no fetch).
+    expect(cache.get("alpha", 50, VERSION_A)).toBe(response);
+    expect(cache.size()).toBe(1);
+  });
+
+  it("returns undefined when the active-list version has changed since the entry was stored", () => {
+    // This is the core invalidation contract: any add / remove /
+    // reinstate / edit bumps the version, and a cached preview from the
+    // OLD list MUST NOT be served against the NEW list.
+    const cache = createSingleRemoveDryRunPreviewCache<StubResp>();
+    cache.set("alpha", 50, VERSION_A, stubFor("alpha"));
+    expect(cache.get("alpha", 50, VERSION_B)).toBeUndefined();
+    // The stale entry is still occupying a slot — that's fine, a fresh
+    // `set` will overwrite it on the next miss-then-fetch round-trip.
+    expect(cache.size()).toBe(1);
+  });
+
+  it("treats a different production-scan limit as a different cache slot", () => {
+    // The dry-run response embeds production matches scored against up to
+    // N reports. A reviewer who tunes N gets a materially different
+    // response and must NOT be served the previous limit's cached result.
+    const cache = createSingleRemoveDryRunPreviewCache<StubResp>();
+    const at50 = stubFor("alpha");
+    cache.set("alpha", 50, VERSION_A, at50);
+    expect(cache.get("alpha", 100, VERSION_A)).toBeUndefined();
+    expect(cache.get("alpha", 50, VERSION_A)).toBe(at50);
+  });
+
+  it("treats a different phrase as a different cache slot (no cross-phrase pollution)", () => {
+    const cache = createSingleRemoveDryRunPreviewCache<StubResp>();
+    cache.set("alpha", 50, VERSION_A, stubFor("alpha"));
+    expect(cache.get("bravo", 50, VERSION_A)).toBeUndefined();
+  });
+
+  it("invalidate() drops every entry so a refresh() can defensively clear the cache before the new list lands", () => {
+    const cache = createSingleRemoveDryRunPreviewCache<StubResp>();
+    cache.set("alpha", 50, VERSION_A, stubFor("alpha"));
+    cache.set("bravo", 50, VERSION_A, stubFor("bravo"));
+    expect(cache.size()).toBe(2);
+    cache.invalidate();
+    expect(cache.size()).toBe(0);
+    expect(cache.get("alpha", 50, VERSION_A)).toBeUndefined();
+    expect(cache.get("bravo", 50, VERSION_A)).toBeUndefined();
+  });
+
+  it("a re-set after a version bump replaces the stale entry instead of stacking another slot", () => {
+    // Simulates: Trash phrase X (set v1) → reviewer adds a new phrase
+    // (version bumps to v2) → reviewer Trashes X again (miss, then fresh
+    // set against v2). The cache should end up with exactly one entry
+    // for X, tagged at v2.
+    const cache = createSingleRemoveDryRunPreviewCache<StubResp>();
+    cache.set("alpha", 50, VERSION_A, stubFor("alpha-v1"));
+    cache.set("alpha", 50, VERSION_B, stubFor("alpha-v2"));
+    expect(cache.size()).toBe(1);
+    expect(cache.get("alpha", 50, VERSION_A)).toBeUndefined();
+    expect(cache.get("alpha", 50, VERSION_B)?.phrase).toBe("alpha-v2");
   });
 });

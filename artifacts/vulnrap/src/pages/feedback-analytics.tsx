@@ -1085,6 +1085,93 @@ export function isProductionScanStale(
   return days !== null && days > thresholdDays;
 }
 
+// Task #246 — Compute a stable "active list version" string for the curated
+// hand-wavy phrase list. Used as the invalidation key for the per-row
+// removal-impact dry-run cache: any add / remove / reinstate / edit /
+// reorder of the active list changes this string, which evicts every cached
+// preview so the next Trash click re-scans the corpus against the new list.
+// We sort the phrase strings before joining so that a list-order change
+// alone (e.g. a sort-by-thrash toggle) doesn't pointlessly invalidate
+// every cached preview — only changes to the SET of active phrases matter
+// for the dry-run impact, since removing a different phrase wouldn't change
+// what THIS phrase's removal would un-flag.
+export function computeHandwavyActiveListVersion(
+  phrases: ReadonlyArray<{ phrase: string }>,
+): string {
+  if (phrases.length === 0) return "0:";
+  const sorted = phrases.map((p) => p.phrase).slice().sort();
+  // Length prefix + NUL-joined sorted phrases. The NUL separator (`\u0001`)
+  // can't appear in a normalized hand-wavy phrase, so two distinct lists
+  // can never accidentally collide on the same version string.
+  return `${sorted.length}:${sorted.join("\u0001")}`;
+}
+
+// Task #246 — Per-row removal-impact dry-run cache. Each per-row Trash click
+// fires a `DELETE {phrase, dryRun: true}` that scans both the curated
+// benchmark and (when configured) up to N production reports. With a large
+// production archive that scan can be visibly slow, so a Trash → Back-out
+// → Trash flow on the same phrase used to re-scan twice for no new
+// information. This cache short-circuits the second click to the previously
+// fetched response while the active phrase list is unchanged.
+//
+// Invalidation: cached entries are tagged with the active-list version
+// (see `computeHandwavyActiveListVersion`) at write time. A `get` only
+// returns the entry if the supplied version still matches — so any add /
+// remove / reinstate / edit eligibly bumps the version and the next Trash
+// click re-fetches against the new corpus. Callers can also invoke
+// `invalidate()` directly to drop every entry (used as defense-in-depth on
+// every `refresh()` call so the cache can't outlive the underlying data
+// even briefly while React Query refetches).
+//
+// The cache is intentionally local to the component instance (lives in a
+// `useRef`) and not persisted across reloads — a reloaded page has no idea
+// what corpus version the cached preview was scored against, so we'd
+// rather pay one fresh scan than ever surface a stale impact number.
+export type SingleRemoveDryRunPreviewCache<T> = {
+  get(
+    phrase: string,
+    productionScanLimit: number,
+    version: string,
+  ): T | undefined;
+  set(
+    phrase: string,
+    productionScanLimit: number,
+    version: string,
+    response: T,
+  ): void;
+  invalidate(): void;
+  size(): number;
+};
+
+export function createSingleRemoveDryRunPreviewCache<
+  T,
+>(): SingleRemoveDryRunPreviewCache<T> {
+  // The two cache-key components (productionScanLimit, phrase) are joined
+  // with a NUL byte so a phrase whose text happens to start with digits
+  // can't collide with a different phrase fetched at a different scan
+  // limit. The same NUL guard is used in `computeHandwavyActiveListVersion`.
+  const cacheKey = (phrase: string, productionScanLimit: number): string =>
+    `${productionScanLimit}\u0001${phrase}`;
+  const store = new Map<string, { version: string; response: T }>();
+  return {
+    get(phrase, productionScanLimit, version) {
+      const entry = store.get(cacheKey(phrase, productionScanLimit));
+      if (!entry) return undefined;
+      if (entry.version !== version) return undefined;
+      return entry.response;
+    },
+    set(phrase, productionScanLimit, version, response) {
+      store.set(cacheKey(phrase, productionScanLimit), { version, response });
+    },
+    invalidate() {
+      store.clear();
+    },
+    size() {
+      return store.size;
+    },
+  };
+}
+
 // Task #119 — Side-by-side render of one dry-run match block (curated vs.
 // production). Identical visual shape so reviewers can read both signals at
 // a glance; the `kind` prop only changes the leading icon and label noun.
@@ -2353,6 +2440,21 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
 
   const phrases = data?.phrases ?? [];
   const history = data?.history ?? [];
+  // Task #246 — per-row removal-impact dry-run cache. Lives in a ref so
+  // it's stable across renders without becoming a useState dependency that
+  // triggers re-renders when entries land. The active-list version
+  // computed below is what evicts stale entries: any change to the SET of
+  // active phrases bumps the version and the next Trash click re-fetches.
+  const removeDryRunCacheRef = useRef(
+    createSingleRemoveDryRunPreviewCache<HandwavyPhraseSingleRemoveDryRunResponse>(),
+  );
+  // Memoize the version off the (typically tiny) phrase set so the
+  // `requestRemoveWithImpactPreview` lookup doesn't recompute the join on
+  // every keystroke / unrelated re-render.
+  const handwavyActiveListVersion = useMemo(
+    () => computeHandwavyActiveListVersion(phrases),
+    [phrases],
+  );
   // Task #242 — per-batch conflict count for the "Recent batch removals"
   // picker. Reinstating a batch (handleReinstateBatch) silently merges the
   // batch's historical phrase set onto the current active list. If a phrase
@@ -2559,6 +2661,14 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     queryClient.invalidateQueries({
       queryKey: getListHandwavyPhraseRemovalBatchesQueryKey(),
     });
+    // Task #246 — drop every cached single-phrase dry-run preview eagerly.
+    // The version-keyed `get()` already evicts stale entries once the
+    // refetched phrase list arrives, but invalidating here closes the
+    // brief window between firing the React Query refetch and the new
+    // data landing — during which the active-list version still matches
+    // the old corpus and a re-Trash on the same phrase would otherwise
+    // serve a now-stale preview.
+    removeDryRunCacheRef.current.invalidate();
   };
 
   // Task #212 — single-line cooldown bail used by every mutation handler in
@@ -3007,6 +3117,33 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   // valid hand-wavy detections would be un-flagged.
   const requestRemoveWithImpactPreview = async (phrase: string) => {
     if (bailOnCooldown("Removal preview")) return;
+    // Task #246 — short-circuit a re-Trash on the same phrase to the most
+    // recent dry-run response while the active phrase list is unchanged
+    // (cache key includes the phrase + the production-scan limit, and
+    // each entry is tagged with the active-list version at write time so
+    // any add / remove / reinstate / edit evicts it). This avoids a full
+    // corpus + production-archive re-scan for the very common Trash →
+    // Back-out → Trash flow.
+    const cached = removeDryRunCacheRef.current.get(
+      phrase,
+      effectiveProductionScanLimit,
+      handwavyActiveListVersion,
+    );
+    if (cached) {
+      const cachedCorpusLost = cached.dryRunImpact.corpus.validDetectionsLost;
+      const cachedProductionLost =
+        cached.dryRunImpact.production?.validDetectionsLost ?? 0;
+      const cachedTotalValidLost = cachedCorpusLost + cachedProductionLost;
+      // Mirror the post-fetch branch below: zero-impact removals keep the
+      // one-click affordance even when served from cache; non-zero-impact
+      // re-opens the same impact preview the reviewer just backed out of.
+      if (cachedTotalValidLost === 0) {
+        await handleRemove(phrase);
+        return;
+      }
+      setRemovePreview({ phrase, data: cached, acknowledged: false });
+      return;
+    }
     setBusy(`rm-preview:${phrase}`);
     try {
       // Task #230 — honor the reviewer-chosen production-scan window
@@ -3043,6 +3180,19 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         return;
       }
       const single = resp as HandwavyPhraseSingleRemoveDryRunResponse;
+      // Task #246 — stash the validated dry-run response so a Back-out →
+      // Trash on the same phrase reuses it while the active list is
+      // unchanged. We cache regardless of impact: the version-keyed
+      // eviction keeps zero-impact entries from outliving the live
+      // DELETE that's about to fire (which calls refresh() and bumps
+      // the version anyway), and caching unconditionally keeps the
+      // hit-rate logic simple.
+      removeDryRunCacheRef.current.set(
+        phrase,
+        effectiveProductionScanLimit,
+        handwavyActiveListVersion,
+        single,
+      );
       const corpusLost = single.dryRunImpact.corpus.validDetectionsLost;
       const productionLost = single.dryRunImpact.production?.validDetectionsLost ?? 0;
       const totalValidLost = corpusLost + productionLost;
