@@ -70,11 +70,15 @@ import {
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
   Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
-  KeyRound, ArrowLeftRight, Calendar, ChevronDown, ChevronRight,
+  KeyRound, Calendar, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCalibrationCooldown } from "@/lib/calibration-cooldown";
 import { CalibrationCooldownBanner } from "@/components/calibration-cooldown-banner";
+import {
+  HandwavyCategoryFlipBadge,
+  getCategoryFlips,
+} from "@/components/handwavy-category-flip-badge";
 import {
   useCalibrationTokenRejection,
   type CalibrationTokenRejectionState,
@@ -6964,14 +6968,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               // Task #149 — count category transitions from the in-row edit
               // history so reviewers can spot phrases that have bounced
               // between absence/hedging/buzzword multiple times without
-              // expanding the full history panel. We only count edits that
-              // actually changed the category (the audit log omits the
-              // `category` field when only the rationale changed) and only
-              // surface the badge once there are >= 2 distinct transitions
-              // to keep noise off rows that just had a one-off correction.
-              const categoryFlips = editsList.filter(
-                (e) => e.category && e.category.from !== e.category.to,
-              );
+              // expanding the full history panel. The filter + render lives
+              // in `HandwavyCategoryFlipBadge` (Task #338) so this list and
+              // the removed-history list always agree on what counts as a
+              // "flip" and how the badge looks.
+              const categoryFlips = getCategoryFlips(editsList);
               // Task #220 — when a reviewer clicks an entry name in the
               // pre-preview overlap hint we set `highlightedPhrase` to that
               // phrase for ~2.5s so the matching row pulses amber. The
@@ -7080,69 +7081,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     {/* Task #149 — category-flip badge sits next to the
                        thrash badge so the two "this phrase is unstable"
                        signals (remove+reinstate cycles vs. category
-                       reassignments) live side by side. Only renders when
-                       reviewers have moved the phrase between categories
-                       at least twice, otherwise the row stays clean. */}
-                    {categoryFlips.length >= 2 && (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger
-                            type="button"
-                            className="cursor-help inline-flex"
-                            data-testid="handwavy-category-flip-badge"
-                            aria-label={`Category changed ${categoryFlips.length} times across edit history`}
-                          >
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] border-sky-500/40 text-sky-300"
-                            >
-                              <ArrowLeftRight className="w-3 h-3 mr-1" />
-                              {categoryFlips.length} category flips
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            align="end"
-                            collisionPadding={12}
-                            className="max-w-xs glass-card glow-border text-popover-foreground text-left font-normal normal-case px-3 py-2 whitespace-normal"
-                            data-testid="handwavy-category-flip-tooltip"
-                          >
-                            <div className="text-[11px] font-semibold mb-1">
-                              Category changed {categoryFlips.length} times
-                            </div>
-                            <ol className="space-y-1 text-[10px] leading-snug">
-                              {categoryFlips.map((e, i) => {
-                                const at = formatAuditTimestamp(e.editedAt);
-                                return (
-                                  <li
-                                    key={`${e.editedAt}-${i}`}
-                                    className="space-y-0.5"
-                                  >
-                                    <div>
-                                      <span className="text-muted-foreground">#{i + 1}:</span>{" "}
-                                      <span className="text-foreground/90 capitalize">
-                                        {e.category!.from}
-                                      </span>
-                                      {" → "}
-                                      <span className="text-foreground/90 capitalize">
-                                        {e.category!.to}
-                                      </span>
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                      by{" "}
-                                      <span className="text-foreground/80">
-                                        {e.editedBy || "anonymous"}
-                                      </span>
-                                      {at && <> • {at}</>}
-                                    </div>
-                                  </li>
-                                );
-                              })}
-                            </ol>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
+                       reassignments) live side by side. Render lives in the
+                       shared `HandwavyCategoryFlipBadge` (Task #338) which
+                       also enforces the >= HANDWAVY_CATEGORY_FLIP_MIN
+                       threshold so a one-off correction stays clean. */}
+                    <HandwavyCategoryFlipBadge
+                      flips={categoryFlips}
+                      testIdPrefix="handwavy"
+                      formatTimestamp={formatAuditTimestamp}
+                    />
                     {isEditing ? (
                       <select
                         value={editing!.category}
@@ -7719,21 +7666,14 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     // rows, so a reviewer about to click Reinstate sees that
                     // the phrase has bounced between categories. We pull
                     // straight off the row's preserved `edits` array (which
-                    // mirrors the active-list source) and only count edits
-                    // that actually changed the category — rationale-only
-                    // edits are intentionally ignored. Threshold matches the
-                    // active list (>= 2 distinct transitions) so a one-off
-                    // re-categorization doesn't produce noise. For batch
-                    // entries this is per-inner-phrase, not aggregated, so a
-                    // partial reinstate still sees per-phrase churn.
-                    const HANDWAVY_HIGH_FLIP_MIN = 2;
-                    const historyEditsList: HandwavyEditEntry[] =
-                      h.edits ?? [];
-                    const historyCategoryFlips = historyEditsList.filter(
-                      (e) => e.category && e.category.from !== e.category.to,
-                    );
-                    const showHistoryCategoryFlipBadge =
-                      historyCategoryFlips.length >= HANDWAVY_HIGH_FLIP_MIN;
+                    // mirrors the active-list source); the filter, threshold
+                    // and rendering live in the shared
+                    // `HandwavyCategoryFlipBadge` (Task #338) so this row and
+                    // the active-list row never disagree on what counts as a
+                    // flip. For batch entries this is per-inner-phrase, not
+                    // aggregated, so a partial reinstate still sees
+                    // per-phrase churn.
+                    const historyCategoryFlips = getCategoryFlips(h.edits);
                     return (
                       <div
                         key={`${h.phrase}-${removedAtKey}-${rowIdx}`}
@@ -7761,69 +7701,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           {/* Task #234 — category-flip badge mirrors the
                               active-row badge from Task #149 so a reviewer
                               about to Reinstate sees the same churn signal.
-                              Tooltip lists each transition with reviewer +
-                              timestamp. For batch rows this is per-inner-
-                              phrase (not aggregated). */}
-                          {showHistoryCategoryFlipBadge && (
-                            <TooltipProvider delayDuration={150}>
-                              <Tooltip>
-                                <TooltipTrigger
-                                  type="button"
-                                  className="cursor-help inline-flex"
-                                  data-testid="handwavy-history-category-flip-badge"
-                                  aria-label={`Category changed ${historyCategoryFlips.length} times across edit history`}
-                                >
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] border-sky-500/40 text-sky-300"
-                                  >
-                                    <ArrowLeftRight className="w-3 h-3 mr-1" />
-                                    {historyCategoryFlips.length} category flips
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  align="end"
-                                  collisionPadding={12}
-                                  className="max-w-xs glass-card glow-border text-popover-foreground text-left font-normal normal-case px-3 py-2 whitespace-normal"
-                                  data-testid="handwavy-history-category-flip-tooltip"
-                                >
-                                  <div className="text-[11px] font-semibold mb-1">
-                                    Category changed {historyCategoryFlips.length} times
-                                  </div>
-                                  <ol className="space-y-1 text-[10px] leading-snug">
-                                    {historyCategoryFlips.map((e, i) => {
-                                      const at = formatAuditTimestamp(e.editedAt);
-                                      return (
-                                        <li
-                                          key={`${e.editedAt}-${i}`}
-                                          className="space-y-0.5"
-                                        >
-                                          <div>
-                                            <span className="text-muted-foreground">#{i + 1}:</span>{" "}
-                                            <span className="text-foreground/90 capitalize">
-                                              {e.category!.from}
-                                            </span>
-                                            {" → "}
-                                            <span className="text-foreground/90 capitalize">
-                                              {e.category!.to}
-                                            </span>
-                                          </div>
-                                          <div className="text-muted-foreground">
-                                            by{" "}
-                                            <span className="text-foreground/80">
-                                              {e.editedBy || "anonymous"}
-                                            </span>
-                                            {at && <> • {at}</>}
-                                          </div>
-                                        </li>
-                                      );
-                                    })}
-                                  </ol>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
+                              Render lives in the shared
+                              `HandwavyCategoryFlipBadge` (Task #338); the
+                              component handles the threshold guard and
+                              tooltip. For batch rows this is per-inner-phrase
+                              (not aggregated). */}
+                          <HandwavyCategoryFlipBadge
+                            flips={historyCategoryFlips}
+                            testIdPrefix="handwavy-history"
+                            formatTimestamp={formatAuditTimestamp}
+                          />
                           <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
                           {isUndone && (
                             <Badge
