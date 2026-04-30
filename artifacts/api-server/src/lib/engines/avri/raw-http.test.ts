@@ -1697,6 +1697,10 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
       (i) => i.signal === "FAKE_RAW_HTTP",
     );
     expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+    // Explanation names the actual dodge family that fired (slot, with a
+    // `<...>` snippet) instead of a fixed "Payload: <…>" example string.
+    expect(fakeInd?.explanation).toContain("slot dodge");
+    expect(fakeInd?.explanation).toContain("Payload: `<sql payload here>`");
   });
 
   it("keeps concrete_payload when a real payload sits in an inline code span alongside the prose placeholder", () => {
@@ -1909,6 +1913,13 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
       (i) => i.signal === "FAKE_RAW_HTTP",
     );
     expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+    // Task #391 — the explanation must describe the actual no-slot dodge
+    // (label + a snippet of the matched text "Payload: TBD") rather than
+    // a fixed "Payload: <…>" example. The fixture's prose carries no
+    // angle brackets, so the explanation must not invent any either.
+    expect(fakeInd?.explanation).toContain("label dodge");
+    expect(fakeInd?.explanation).toContain("Payload: TBD");
+    expect(fakeInd?.explanation).not.toContain("<…>");
   });
 
   it("revokes concrete_payload when prose drops the slot entirely: 'Payload: [insert here]'", () => {
@@ -1944,6 +1955,14 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
     expect(survivingIds).not.toContain("concrete_payload");
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
     expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    // Task #391 — the explanation must name the parenthetical dodge
+    // and carry the matched prose snippet, not a `<…>` example.
+    expect(fakeInd?.explanation).toContain("parenthetical dodge");
+    expect(fakeInd?.explanation).toContain("payload (to be added)");
+    expect(fakeInd?.explanation).not.toContain("<…>");
   });
 
   it("revokes concrete_payload when prose defers the payload: 'the payload will be added later'", () => {
@@ -1961,6 +1980,12 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
     expect(survivingIds).not.toContain("concrete_payload");
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
     expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    // Task #391 — the explanation must name the deferred dodge.
+    expect(fakeInd?.explanation).toContain("deferred dodge");
+    expect(fakeInd?.explanation).toContain("payload will be added");
   });
 
   it("revokes concrete_payload when the reporter promises to add the payload: 'I'll add the actual payload later'", () => {
@@ -1978,6 +2003,13 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
     expect(survivingIds).not.toContain("concrete_payload");
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
     expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    // Task #391 — the explanation must name the promise dodge and
+    // quote the matched prose so reviewers can locate it in the report.
+    expect(fakeInd?.explanation).toContain("promise dodge");
+    expect(fakeInd?.explanation).toContain("add the actual");
   });
 });
 

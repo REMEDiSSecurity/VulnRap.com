@@ -373,11 +373,23 @@ export function runEngine2Avri(
         if (rawHttp.placeholderBodies > 0 && rawHttp.requestsAnalyzed > 0) {
           fallbackReason = `Raw HTTP request body is a placeholder (${rawHttp.placeholderBodies}/${rawHttp.requestsAnalyzed} request block(s))`;
         } else if (rawHttp.prosePlaceholderPayloads > 0) {
-          // Prose-only path: no fake bytes, just "Payload: `<inject>`"-shape
-          // mentions in the prose that gesture at a payload without naming
-          // one. The payload-class gold signal only matched incidental
-          // tokens elsewhere, so revoke and flag the report.
-          fallbackReason = `Prose payload reference is a placeholder (${rawHttp.prosePlaceholderPayloads} mention(s) like "Payload: <…>" with no concrete payload)`;
+          // Prose-only path: no fake bytes, just placeholder gestures in
+          // the prose that point at a payload without naming one. The
+          // payload-class gold signal only matched incidental tokens
+          // elsewhere, so revoke and flag the report. Surface the
+          // representative dodge category (slot / label / parenthetical /
+          // deferred / promise / bracket) and a short snippet of the
+          // matched text so reviewers see the language the report
+          // actually used instead of a fixed `"Payload: <…>"` example.
+          const detail = rawHttp.prosePlaceholderDetails[0];
+          const count = rawHttp.prosePlaceholderPayloads;
+          if (detail) {
+            const more =
+              count > 1 ? ` (+${count - 1} more)` : "";
+            fallbackReason = `Prose payload reference is a placeholder (${detail.category} dodge: "${detail.snippet}"${more})`;
+          } else {
+            fallbackReason = `Prose payload reference is a placeholder (${count} mention(s) with no concrete payload)`;
+          }
         } else {
           fallbackReason = "Raw HTTP request body is a placeholder";
         }

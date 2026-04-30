@@ -31,6 +31,30 @@
 // proxy log — has real header values, an integer Content-Length, an
 // actual "chunked" Transfer-Encoding, and (usually) CRLFs preserved.
 
+/** Shape of prose placeholder dodge that fired. Tracks the six families of
+ * "gesture at a payload without naming one" patterns the prose-placeholder
+ * check covers, so the FAKE_RAW_HTTP explanation can describe what the
+ * report actually said:
+ *   - "slot": angle-bracket `<...>` slot in any of its fence variants
+ *     (colon, inline-code, bare, double-quote, square-bracket, post-slot).
+ *   - "label": "Payload: TBD" / "Payload: TODO" / "payload = N/A" /
+ *     "Payload: [insert here]".
+ *   - "parenthetical": "the payload (to be added)" / "the command
+ *     (placeholder)".
+ *   - "deferred": passive-future deferral, "the payload will be added
+ *     later" / "the actual command will be provided".
+ *   - "promise": active-promise deferral, "I'll add the actual payload
+ *     later" / "we'll provide the exact command shortly".
+ *   - "bracket": bare bracketed placeholder used as the payload itself,
+ *     "[insert payload here]" / "[your sql payload]". */
+export type ProsePlaceholderCategory =
+  | "slot"
+  | "label"
+  | "parenthetical"
+  | "deferred"
+  | "promise"
+  | "bracket";
+
 export interface RawHttpEvaluation {
   /** Number of `METHOD /path HTTP/1.x` request-lines detected. */
   requestsAnalyzed: number;
@@ -63,6 +87,15 @@ export interface RawHttpEvaluation {
    * the engine re-tests the signal pattern against text with these prose
    * ranges stripped and revokes the point if no real match remains. */
   prosePlaceholderPayloads: number;
+  /** Per-mention category + matched snippet for the prose-level placeholder
+   * payload references counted in `prosePlaceholderPayloads`. Used by the
+   * AVRI engine to surface a representative explanation that matches the
+   * actual language in the report (slot vs label vs parenthetical vs
+   * deferred vs promise vs bracket dodge), rather than a fixed example. */
+  prosePlaceholderDetails: ReadonlyArray<{
+    category: ProsePlaceholderCategory;
+    snippet: string;
+  }>;
   /** Byte ranges (start, end half-open) of bodies and prose snippets that
    * look like placeholders. Used by the AVRI engine to revoke payload-class
    * gold signals whose only match was inside one of these ranges. */
@@ -543,48 +576,78 @@ const PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_BRACKET_RE =
  *
  * Returns the byte ranges of the full match so the caller can strip
  * them before re-testing payload-class gold signals. */
+export interface ProsePlaceholderMatch {
+  start: number;
+  end: number;
+  /** Which family of dodge this match belongs to. Used by the engine's
+   * FAKE_RAW_HTTP explanation so reviewers see "label" / "parenthetical"
+   * / "deferred" / "promise" / "bracket" / "slot" instead of a fixed
+   * `<…>` example that may not appear anywhere in the actual report. */
+  category: ProsePlaceholderCategory;
+  /** The raw matched text (capped at ~80 chars). Surfaced verbatim in
+   * the FAKE_RAW_HTTP explanation so reviewers can confirm the dodge
+   * by searching the report for the same snippet. */
+  snippet: string;
+}
+
+// Truncate a matched string to a reasonable length for surfacing in a
+// human-readable explanation. Collapses internal whitespace runs and
+// trims leading/trailing whitespace before capping.
+const SNIPPET_MAX_LEN = 80;
+function buildSnippet(match: string): string {
+  const collapsed = match.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= SNIPPET_MAX_LEN) return collapsed;
+  return collapsed.slice(0, SNIPPET_MAX_LEN - 1).trimEnd() + "…";
+}
+
 export function findProsePlaceholderPayloadRanges(
   text: string,
-): Array<{ start: number; end: number }> {
-  const ranges: Array<{ start: number; end: number }> = [];
+): ProsePlaceholderMatch[] {
+  const ranges: ProsePlaceholderMatch[] = [];
   const cases: Array<{
     re: RegExp;
     requireSlopVocab: boolean;
     noSlot?: boolean;
+    category: ProsePlaceholderCategory;
   }> = [
-    { re: PROSE_PAYLOAD_PLACEHOLDER_RE, requireSlopVocab: false },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE, requireSlopVocab: false },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_BARE_RE, requireSlopVocab: true },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_DQUOTE_RE, requireSlopVocab: true },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE, requireSlopVocab: true },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE, requireSlopVocab: false },
+    { re: PROSE_PAYLOAD_PLACEHOLDER_RE, requireSlopVocab: false, category: "slot" },
+    { re: PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE, requireSlopVocab: false, category: "slot" },
+    { re: PROSE_PAYLOAD_PLACEHOLDER_BARE_RE, requireSlopVocab: true, category: "slot" },
+    { re: PROSE_PAYLOAD_PLACEHOLDER_DQUOTE_RE, requireSlopVocab: true, category: "slot" },
+    { re: PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE, requireSlopVocab: true, category: "slot" },
+    { re: PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE, requireSlopVocab: false, category: "slot" },
     {
       re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_LABEL_RE,
       requireSlopVocab: false,
       noSlot: true,
+      category: "label",
     },
     {
       re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_PARENS_RE,
       requireSlopVocab: false,
       noSlot: true,
+      category: "parenthetical",
     },
     {
       re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_DEFERRED_RE,
       requireSlopVocab: false,
       noSlot: true,
+      category: "deferred",
     },
     {
       re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_PROMISE_RE,
       requireSlopVocab: false,
       noSlot: true,
+      category: "promise",
     },
     {
       re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_BRACKET_RE,
       requireSlopVocab: false,
       noSlot: true,
+      category: "bracket",
     },
   ];
-  for (const { re, requireSlopVocab, noSlot } of cases) {
+  for (const { re, requireSlopVocab, noSlot, category } of cases) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
@@ -610,7 +673,14 @@ export function findProsePlaceholderPayloadRanges(
       const overlaps = ranges.some(
         (r) => start < r.end && end > r.start,
       );
-      if (!overlaps) ranges.push({ start, end });
+      if (!overlaps) {
+        ranges.push({
+          start,
+          end,
+          category,
+          snippet: buildSnippet(m[0]),
+        });
+      }
     }
   }
   ranges.sort((a, b) => a.start - b.start);
@@ -656,6 +726,10 @@ export function evaluateRawHttpRequest(
   // is to drop "Payload: `<inject>`" in plain prose with no fake bytes
   // alongside it.
   const proseRanges = findProsePlaceholderPayloadRanges(text);
+  const proseDetails = proseRanges.map((r) => ({
+    category: r.category,
+    snippet: r.snippet,
+  }));
   if (blocks.length === 0) {
     return {
       requestsAnalyzed: 0,
@@ -668,7 +742,11 @@ export function evaluateRawHttpRequest(
       fakeCredentialHeaders: 0,
       placeholderBodies: 0,
       prosePlaceholderPayloads: proseRanges.length,
-      placeholderBodyRanges: proseRanges,
+      prosePlaceholderDetails: proseDetails,
+      placeholderBodyRanges: proseRanges.map((r) => ({
+        start: r.start,
+        end: r.end,
+      })),
       isFake: false,
       reason: null,
     };
@@ -829,7 +907,7 @@ export function evaluateRawHttpRequest(
     const overlaps = placeholderBodyRanges.some(
       (existing) => r.start < existing.end && r.end > existing.start,
     );
-    if (!overlaps) placeholderBodyRanges.push(r);
+    if (!overlaps) placeholderBodyRanges.push({ start: r.start, end: r.end });
   }
 
   return {
@@ -843,6 +921,7 @@ export function evaluateRawHttpRequest(
     fakeCredentialHeaders,
     placeholderBodies,
     prosePlaceholderPayloads: proseRanges.length,
+    prosePlaceholderDetails: proseDetails,
     placeholderBodyRanges,
     isFake,
     reason,
