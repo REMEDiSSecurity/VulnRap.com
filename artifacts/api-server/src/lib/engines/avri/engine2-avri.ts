@@ -474,13 +474,16 @@ export function runEngine2Avri(
   // cap budget. Only fires when the validator detected a placeholder trace.
   const strippedTracePenalty = crashTrace?.isStripped ? STRIPPED_TRACE_PENALTY : 0;
 
-  // 3b'. Sprint 13B-2 / Task #303 — structural-fabrication penalty (out-of
-  // -cap). Fires when ≥2 of the seven structural detectors match: the four
-  // shape detectors (round function offsets, frame-number gaps, thread-id
-  // inconsistency, round heap region size) and the three Task #303 bounds
-  // detectors (function offsets in the prologue or > 1 MiB, thread/PID
-  // identifiers outside realistic Linux/sanitizer ranges, region size
-  // incompatible with the access-size header). Mutually exclusive with
+  // 3b'. Sprint 13B-2 / Task #303 / Task #316 — structural-fabrication
+  // penalty (out-of-cap). Fires when ≥2 of the nine structural detectors
+  // match: the four shape detectors (round function offsets, frame-number
+  // gaps, thread-id inconsistency, round heap region size), the three
+  // Task #303 bounds detectors (function offsets in the prologue or > 1 MiB,
+  // thread/PID identifiers outside realistic Linux/sanitizer ranges, region
+  // size incompatible with the access-size header), and the two Task #316
+  // shape detectors (textbook-round / repeated register dumps and
+  // /proc/self/maps listings with overlapping, zero-size, impossibly-low,
+  // or non-page-aligned ranges). Mutually exclusive with
   // `strippedTracePenalty` (we never charge twice for the same unreliable
   // trace) — when both conditions hold we keep the stripped-trace charge
   // and surface STRUCTURAL_FABRICATION as a separate diagnostic only.

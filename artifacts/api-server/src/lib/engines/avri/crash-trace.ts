@@ -38,8 +38,10 @@ export interface CrashTraceEvaluation {
 }
 
 /** A single structural-fabrication tell detected against a crash trace.
- * Sprint 13B-2 ships four shape detectors (the first four IDs below) and
- * Sprint 13B-2 / Task #303 adds three bounds detectors (the last three) so
+ * Sprint 13B-2 ships four shape detectors (the first four IDs below),
+ * Sprint 13B-2 / Task #303 adds three bounds detectors (the next three),
+ * and Task #316 adds two more shape detectors aimed at the report sections
+ * that LLMs most often pad — register dumps and memory-map listings — so
  * the diagnostics panel can render exactly which markers fired without
  * re-running the regexes. */
 export interface StructuralMarker {
@@ -54,7 +56,14 @@ export interface StructuralMarker {
     // structural envelope a real sanitizer respects.
     | "implausible_function_offset"
     | "implausible_thread_id"
-    | "region_size_vs_access_size";
+    | "region_size_vs_access_size"
+    // Task #316: shape checks against two report sections LLMs commonly
+    // fabricate alongside the stack — x86/x64 register dumps with values
+    // that are textbook-round or repeated across registers, and
+    // /proc/self/maps listings whose ranges overlap, are zero-size, sit
+    // below the Linux mmap_min_addr, or are not 4 KiB page-aligned.
+    | "fabricated_register_state"
+    | "fabricated_memory_map";
   description: string;
 }
 
@@ -368,6 +377,172 @@ function detectRegionSizeVsAccessSize(text: string): StructuralMarker | null {
   return null;
 }
 
+// Task #316 register-dump and memory-map detectors -----------------------
+//
+// LLMs that pad a fabricated crash report with "supporting evidence" almost
+// always reach for two more sections beyond the stack frames: a register
+// dump (RAX/RBX/...) and a /proc/self/maps memory listing. Real values for
+// both look pseudo-random — actual ASLR addresses, mixed page offsets,
+// non-overlapping ascending mappings — but a fabrication tends to land on
+// textbook-round register values and zero/overlapping/impossibly-low map
+// ranges. These two detectors catch those patterns.
+
+// x86 / x86-64 general-purpose register names. Matches `RAX: 0x...`,
+// `rax = 0x...`, `RAX 0x...`, `EIP=0x...` and the lowercase variants. The
+// optional `:`/`=`/whitespace separator covers the most common dump shapes
+// (gdb `info registers`, sigaction handler `ucontext_t` print, ASan abort
+// banner). RFLAGS / EFLAGS are included so a fab dump that pads them too
+// counts toward the entry total.
+const REGISTER_DUMP_RE =
+  /\b(R[ABCD]X|R[SD]I|R[BS]P|R(?:8|9|1[0-5])|RIP|RFLAGS|E[ABCD]X|E[SD]I|E[BS]P|EIP|EFLAGS)\b\s*[:=]?\s*0x([0-9a-fA-F]+)\b/gi;
+
+/** A register value is "suspiciously round" when it sits on a 16-bit
+ * (≥3 trailing hex zeros) page boundary AND is short enough that it cannot
+ * be a realistic ASLR pointer (≤6 hex digits — i.e. < 0x1_000000 = 16 MiB).
+ * Real register dumps include some page-aligned 12-digit pointers (mmap'd
+ * regions, code segments, stack pointers); those are NOT short and so do
+ * not trip this predicate. Single small constants (0, 0xff, errno-sized
+ * values) are also excluded so a `RAX: 0x0` after a syscall is fine. */
+function isSuspiciousRegisterValue(hex: string): boolean {
+  const stripped = hex.toLowerCase().replace(/^0+/, "") || "0";
+  if (stripped === "0") return false;
+  if (stripped.length <= 2) return false;
+  if (stripped.length <= 6 && /^[1-9a-f][0-9a-f]*0{3,}$/i.test(stripped)) return true;
+  return false;
+}
+
+function detectFabricatedRegisterState(text: string): StructuralMarker | null {
+  REGISTER_DUMP_RE.lastIndex = 0;
+  const entries: { name: string; value: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = REGISTER_DUMP_RE.exec(text)) !== null) {
+    entries.push({ name: m[1].toUpperCase(), value: m[2].toLowerCase() });
+  }
+  // Need at least four register lines before judging — fewer than that is
+  // a one-off mention of a pointer value, not a dump.
+  if (entries.length < 4) return null;
+
+  // Identical-value tell: fab dumps frequently repeat the same value across
+  // several registers (e.g. `RAX = RBX = RCX = 0x4141414141414141`). Build
+  // the set of values that appear in ≥3 register entries; trivial values
+  // (single-hex-digit constants like `0x0` / `0xa`) are excluded so a real
+  // dump where R8..R15 are all zero after a fresh frame setup doesn't trip
+  // the rule.
+  const valueCounts = new Map<string, number>();
+  for (const e of entries) {
+    const v = e.value.replace(/^0+/, "") || "0";
+    if (v.length <= 1) continue;
+    valueCounts.set(v, (valueCounts.get(v) ?? 0) + 1);
+  }
+  const repeatedValues = new Set<string>();
+  for (const [v, count] of valueCounts) {
+    if (count >= 3) repeatedValues.add(v);
+  }
+  // An entry is suspicious if either tell fires; every entry is counted at
+  // most once even when both checks would catch it.
+  let suspicious = 0;
+  for (const e of entries) {
+    const stripped = e.value.replace(/^0+/, "") || "0";
+    if (isSuspiciousRegisterValue(e.value) || repeatedValues.has(stripped)) {
+      suspicious++;
+    }
+  }
+
+  if (suspicious >= 4 && suspicious / entries.length >= 0.5) {
+    return {
+      id: "fabricated_register_state",
+      description: `${suspicious}/${entries.length} register values are textbook-round (≤6 hex digits with ≥3 trailing zeros) or repeated across registers; real register dumps are pseudo-random pointers/constants`,
+    };
+  }
+  return null;
+}
+
+// `/proc/self/maps` line shape:
+//   55f4a1c89000-55f4a1c8a000 r-xp 00000000 fd:00 12345 /usr/bin/bash
+// We anchor at line start (multiline flag) and require the 4-char perms
+// field as the disambiguator — that combination very rarely occurs outside
+// a real or fabricated maps listing, so false positives on stack-frame
+// hex pairs are not a concern. Allow an optional `0x` prefix because some
+// LLM dumps add it even though real /proc/self/maps never does.
+const MAPS_LINE_RE =
+  /^[ \t]*(?:0x)?([0-9a-fA-F]{4,16})-(?:0x)?([0-9a-fA-F]{4,16})[ \t]+([-rwxsp]{4})(?=[ \t]|$)/gm;
+// Linux's default `vm.mmap_min_addr` is 65536 (0x10000). Userspace mappings
+// below that address are rejected by the kernel, so any fabricated maps
+// line claiming a range starting at e.g. `00001000-00002000` is structurally
+// impossible regardless of process or kernel version.
+const MMAP_MIN_ADDR = BigInt("0x10000");
+// Linux memory mappings are always page-aligned. The smallest page size
+// supported by mainstream architectures (x86-64, ARM64 4K mode, RISC-V
+// Sv39/Sv48) is 4 KiB = 0x1000, so both `start` and `end` of every real
+// /proc/self/maps row are multiples of 0x1000. A fabricated row that picks
+// arbitrary hex digits (e.g. `55f4a1c89123-55f4a1c8a456`) violates this.
+const PAGE_SIZE = BigInt("0x1000");
+
+function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
+  MAPS_LINE_RE.lastIndex = 0;
+  const ranges: { start: bigint; end: bigint }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = MAPS_LINE_RE.exec(text)) !== null) {
+    // The regex restricts both groups to [0-9a-fA-F]+, so the BigInt
+    // parses are infallible.
+    ranges.push({
+      start: BigInt("0x" + m[1]),
+      end: BigInt("0x" + m[2]),
+    });
+  }
+  // Need ≥2 lines before judging — a stray hex-hex pair on its own line
+  // followed by a perms-shaped token is highly unlikely but we don't want
+  // to fire on a single accidental match.
+  if (ranges.length < 2) return null;
+
+  // 1. Inverted / zero-size range — physically impossible.
+  for (const r of ranges) {
+    if (r.end <= r.start) {
+      return {
+        id: "fabricated_memory_map",
+        description: `Memory-map range 0x${r.start.toString(16)}-0x${r.end.toString(16)} has end ≤ start; real /proc/self/maps entries are non-empty (end strictly greater than start)`,
+      };
+    }
+  }
+
+  // 2. Range below mmap_min_addr — userspace can't map there.
+  for (const r of ranges) {
+    if (r.start < MMAP_MIN_ADDR) {
+      return {
+        id: "fabricated_memory_map",
+        description: `Memory-map range starts at 0x${r.start.toString(16)} which is below Linux mmap_min_addr (0x10000); real userspace mappings never sit in the low 64 KiB`,
+      };
+    }
+  }
+
+  // 3. Non-page-aligned start or end — every kernel rounds VMAs to the page
+  // boundary (≥4 KiB on every supported arch), so an arbitrary low-nibble
+  // value is a tell that the LLM made the address up.
+  for (const r of ranges) {
+    if (r.start % PAGE_SIZE !== BigInt(0) || r.end % PAGE_SIZE !== BigInt(0)) {
+      return {
+        id: "fabricated_memory_map",
+        description: `Memory-map range 0x${r.start.toString(16)}-0x${r.end.toString(16)} is not 4 KiB page-aligned; real /proc/self/maps entries always start and end on page boundaries`,
+      };
+    }
+  }
+
+  // 4. Overlapping ranges — kernel coalesces or splits, never overlaps.
+  const sorted = [...ranges].sort((a, b) =>
+    a.start < b.start ? -1 : a.start > b.start ? 1 : 0,
+  );
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].start < sorted[i - 1].end) {
+      return {
+        id: "fabricated_memory_map",
+        description: `Memory-map range 0x${sorted[i].start.toString(16)}-0x${sorted[i].end.toString(16)} overlaps the previous range ending at 0x${sorted[i - 1].end.toString(16)}; real /proc/self/maps entries never overlap`,
+      };
+    }
+  }
+
+  return null;
+}
+
 /** Run all structural-fabrication detectors and return the markers that
  * fired. Exported so the hallucination detector can hook the same predicates
  * without re-tokenising the trace. */
@@ -389,6 +564,11 @@ export function detectStructuralFabrication(text: string): StructuralMarker[] {
   if (f) markers.push(f);
   const g = detectRegionSizeVsAccessSize(text);
   if (g) markers.push(g);
+  // Task #316 register-dump and memory-map detectors.
+  const h = detectFabricatedRegisterState(text);
+  if (h) markers.push(h);
+  const i = detectFabricatedMemoryMap(text);
+  if (i) markers.push(i);
   return markers;
 }
 

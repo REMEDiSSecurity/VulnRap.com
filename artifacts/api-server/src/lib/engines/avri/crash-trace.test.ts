@@ -369,6 +369,120 @@ READ of size 8 at 0x602000000010 thread T0
   });
 });
 
+// --- Task #316: register-dump and memory-map detectors ---------------------
+
+describe("detectStructuralFabrication — Task #316 register/map detectors", () => {
+  it("flags textbook-round register dump (fabricated_register_state)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0x6020abcd thread T0
+    #0 0x4001000 in foo src/foo.c:1
+General Purpose Registers:
+RAX: 0x0000000000001000
+RBX: 0x0000000000002000
+RCX: 0x0000000000003000
+RDX: 0x0000000000004000
+RSI: 0x0000000000005000`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_register_state");
+  });
+
+  it("flags repeated identical values across registers (fabricated_register_state)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+    #0 0x4001000 in foo src/foo.c:1
+RAX = 0x4141414141414141
+RBX = 0x4141414141414141
+RCX = 0x4141414141414141
+RDX = 0x4141414141414141`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_register_state");
+  });
+
+  it("does NOT flag a realistic gdb register dump", () => {
+    // Mix of small constants, page-aligned 12-digit ASLR pointers, and
+    // unaligned function/stack pointers — the shape a real `info registers`
+    // produces. None of these should be classified as suspicious.
+    const trace = `(gdb) info registers
+RAX: 0x0000000000000000
+RBX: 0x00007ffff7faf210
+RCX: 0x00007ffff7e8b1d4
+RDX: 0x0000000000000010
+RSI: 0x00007fffffffd380
+RDI: 0x00007ffff7c1c000
+RBP: 0x00007fffffffd420
+RSP: 0x00007fffffffd380
+RIP: 0x0000000000401234`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_register_state");
+  });
+
+  it("does NOT flag fewer than 4 register lines (insufficient sample)", () => {
+    const trace = `Crashed with RAX: 0x0000000000001000 at the bad instruction.
+RBX: 0x0000000000002000 was the destination operand.`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_register_state");
+  });
+
+  it("flags overlapping memory-map ranges (fabricated_memory_map)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+    #0 0x4001000 in foo src/foo.c:1
+/proc/self/maps excerpt:
+55f4a1c89000-55f4a1c8a000 r-xp 00000000 fd:00 12345 /usr/bin/server
+55f4a1c89800-55f4a1c8b000 rw-p 00001000 fd:00 12345 /usr/bin/server`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_memory_map");
+  });
+
+  it("flags inverted / zero-size memory-map ranges", () => {
+    const trace = `==12345==ERROR: AddressSanitizer
+    #0 0x4001000 in foo src/foo.c:1
+55f4a1c89000-55f4a1c89000 r-xp 00000000 fd:00 12345 /usr/bin/server
+7f3c4a8d3000-7f3c4a8d4000 r--p 00000000 fd:00 67890 /lib/libc.so.6`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_memory_map");
+  });
+
+  it("flags non-page-aligned memory-map ranges", () => {
+    // Two non-overlapping, non-low ranges where start/end include arbitrary
+    // low-nibble bits — kernel-issued mappings always sit on 4 KiB page
+    // boundaries, so a fabricated row that picks arbitrary hex digits
+    // breaks the alignment invariant.
+    const trace = `==12345==ERROR: AddressSanitizer
+    #0 0x4001000 in foo src/foo.c:1
+55f4a1c89123-55f4a1c8a456 r-xp 00000000 fd:00 12345 /usr/bin/server
+7f3c4a8d3000-7f3c4a8d4000 r--p 00000000 fd:00 67890 /lib/libc.so.6`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_memory_map");
+  });
+
+  it("flags ranges below mmap_min_addr (impossibly low userspace)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer
+    #0 0x4001000 in foo src/foo.c:1
+00001000-00002000 r-xp 00000000 fd:00 12345 /usr/bin/server
+00002000-00003000 rw-p 00001000 fd:00 12345 /usr/bin/server`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_memory_map");
+  });
+
+  it("does NOT flag a realistic /proc/self/maps excerpt", () => {
+    const trace = `==12345==ERROR: AddressSanitizer
+    #0 0x4001000 in foo src/foo.c:1
+55f4a1c89000-55f4a1c8a000 r-xp 00000000 fd:00 12345 /usr/bin/server
+55f4a1c8a000-55f4a1c8b000 rw-p 00001000 fd:00 12345 /usr/bin/server
+7f3c4a8d3000-7f3c4a8d4000 r--p 00000000 fd:00 67890 /lib/libc.so.6
+7f3c4a8d4000-7f3c4a8d5000 r-xp 00001000 fd:00 67890 /lib/libc.so.6
+7ffff7ffd000-7ffff7ffe000 rw-p 00000000 00:00 0   [stack]`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_memory_map");
+  });
+
+  it("does NOT flag a single map line (insufficient sample)", () => {
+    const trace = `Mapping of interest:
+00000000-00010000 r-xp 00000000 fd:00 0 /something/odd`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_memory_map");
+  });
+});
+
 describe("evaluateCrashTrace — structural fabrication aggregation", () => {
   it("hasStructuralFabrication is true only when ≥2 markers fire", () => {
     // Only round_function_offsets should fire here.

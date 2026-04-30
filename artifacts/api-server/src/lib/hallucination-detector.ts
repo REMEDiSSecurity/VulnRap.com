@@ -16,7 +16,7 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   const signals: HallucinationSignal[] = [];
 
   // Sprint 13B-2: structural-fabrication tells against ASan/TSan-style traces.
-  // The shared `detectStructuralFabrication` validator runs seven predicates:
+  // The shared `detectStructuralFabrication` validator runs nine predicates:
   //   • shape (Sprint 13B-2): round function offsets, frame-numbering gaps,
   //     thread-id inconsistency (no `==PID==` anchor), round/hex heap region
   //     size.
@@ -24,6 +24,9 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   //     prologue or implying a 1 MiB+ function), thread/PID identifiers
   //     outside realistic Linux/sanitizer ranges, heap region sizes
   //     incompatible with the access-size header.
+  //   • register/map (Task #316): register dumps with textbook-round or
+  //     repeated values, /proc/self/maps listings whose ranges overlap, are
+  //     zero-size, sit below mmap_min_addr, or are not 4 KiB page-aligned.
   // When ≥2 fire the trace is internally inconsistent in ways a real
   // sanitizer never produces — strong fabrication evidence even when the
   // prose claims well-resolved frames.

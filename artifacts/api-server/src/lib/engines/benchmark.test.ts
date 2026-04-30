@@ -90,6 +90,50 @@ exercise. CVSS 9.8.`,
     expectMaxScore: 35,
     claimedCwes: ["CWE-416"],
   },
+  {
+    // Task #316. The narrative looks crash-y on first read — ASan ERROR
+    // header, READ-of-size frame, plausible function offsets — but pads
+    // the report with two report sections LLMs commonly fabricate beyond
+    // the stack: a register dump whose values all sit on textbook
+    // 0x1000/0x2000/... page boundaries (every register suspicious), and
+    // a /proc/self/maps excerpt whose two ranges overlap (one map's end
+    // > the next map's start). Each new Task #316 detector fires once,
+    // clearing the ≥2-marker structural-fabrication threshold and
+    // revoking the AVRI crash-trace gold signal so the composite stays
+    // in slop range. The frame offsets and PID anchor are deliberately
+    // realistic so the existing seven detectors stay quiet — the new
+    // pair is what catches this trace.
+    name: "slop-13-fabricated-register-dump-and-memory-map",
+    text: `Heap-use-after-free crash in libserver. We attached gdb to the
+crashing worker, captured the AddressSanitizer dump, and pulled
+the register state and process memory map at the moment of the
+crash. The full evidence is reproduced below.
+
+==31415==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a1c0
+READ of size 8 at 0x60200000a1c0 thread T0
+    #0 0x55e9b8c2f3d1 in handle_request+0x4abf1a src/server.c:412
+    #1 0x55e9b8c2e210 in worker_loop+0x1c4d3 src/worker.c:88
+    #2 0x55e9b8c2d100 in dispatch+0x2af80 src/dispatch.c:42
+
+General Purpose Registers (captured at SIGSEGV):
+RAX: 0x0000000000001000
+RBX: 0x0000000000002000
+RCX: 0x0000000000003000
+RDX: 0x0000000000004000
+RSI: 0x0000000000005000
+RDI: 0x0000000000006000
+
+/proc/self/maps excerpt (overlapping mappings observed at fault time):
+55f4a1c89000-55f4a1c8a000 r-xp 00000000 fd:00 12345 /usr/bin/server
+55f4a1c89800-55f4a1c8b000 rw-p 00001000 fd:00 12345 /usr/bin/server
+
+Severity: Critical. Use-after-free, sanitizer crash, segmentation
+fault. The crash is reproducible against the shipped binary which
+is the realistic attack surface; rebuilding with debug symbols is
+left as an exercise. CVSS 9.8.`,
+    expectMaxScore: 35,
+    claimedCwes: ["CWE-416"],
+  },
   // Sprint 13B-3 calibration fixture: slop report whose primary
   // "evidence" is a fabricated server response. The narrative names a
   // class of issue and shows a side-by-side baseline / vulnerable
