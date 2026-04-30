@@ -12497,6 +12497,8 @@ function NotifiedFlagsPanel({
 // re-arm audit log so reviewers can see who re-armed which dedup
 // entry and why. Strict-auth gated; when the reviewer doesn't have
 // a valid token we surface a static explainer instead of a load error.
+// When `weekFilter` is set, narrows the list to audit entries with a
+// matching `weekStart` and shows a chip with a clear-filter button.
 function escapeCsvField(value: string | undefined): string {
   if (value == null) return "";
   if (/[",\r\n]/.test(value)) {
@@ -12536,9 +12538,13 @@ export function buildRearmHistoryCsv(entries: AvriDriftRearmAuditEntry[]): strin
 function RearmHistoryPanel({
   authState,
   rearmHistoryQueryKey,
+  weekFilter,
+  onClearWeekFilter,
 }: {
   authState: CalibrationAuthState;
   rearmHistoryQueryKey: ReturnType<typeof getGetAvriDriftRearmHistoryQueryKey>;
+  weekFilter?: string | null;
+  onClearWeekFilter?: () => void;
 }) {
   const enabled = authState.kind === "valid";
   const { data, isLoading, isError } = useGetAvriDriftRearmHistory({
@@ -12582,7 +12588,16 @@ function RearmHistoryPanel({
     return 0;
   });
 
+  // Filter on the audit entry's own `weekStart` (not the dedup state)
+  // so entries whose `notified` record was already trimmed still appear
+  // under the matching week badge.
+  const visible = weekFilter
+    ? sorted.filter((entry) => entry.weekStart === weekFilter)
+    : sorted;
+
   const downloadCsv = () => {
+    // CSV always exports the full unfiltered audit log so reviewers
+    // get a complete monthly export regardless of the active filter.
     const csv = buildRearmHistoryCsv(sorted);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -12596,8 +12611,7 @@ function RearmHistoryPanel({
     URL.revokeObjectURL(url);
   };
 
-  return (
-    <div className="space-y-2">
+  const csvButton = (
     <div className="flex justify-end">
       <Button
         type="button"
@@ -12606,14 +12620,68 @@ function RearmHistoryPanel({
         onClick={downloadCsv}
         className="h-7 px-2 text-[11px] gap-1.5 font-normal"
         data-testid="avri-drift-rearm-history-csv"
-        title="Download the currently-loaded re-arm audit log as CSV (rearmedAt, rearmedBy, rationale, key, weekStart, kind, originalNotifiedAt, originalDetail)."
+        title="Download the full re-arm audit log as CSV (rearmedAt, rearmedBy, rationale, key, weekStart, kind, originalNotifiedAt, originalDetail)."
       >
         <Download className="w-3 h-3" />
         Download CSV
       </Button>
     </div>
-    <ul className="space-y-1.5">
-      {sorted.map((entry, idx) => {
+  );
+
+  const filterChip = weekFilter ? (
+    <div
+      className="flex items-center gap-2 text-[10px] mb-2 flex-wrap"
+      data-testid="avri-drift-rearm-history-filter-chip"
+      data-week-filter={weekFilter}
+    >
+      <Badge
+        variant="outline"
+        className="text-[10px] gap-1 border-primary/40 text-primary bg-primary/5"
+      >
+        Filtered to week <span className="font-mono">{weekFilter}</span>
+        <span className="text-muted-foreground/70">
+          · {visible.length} of {sorted.length}
+        </span>
+      </Badge>
+      {onClearWeekFilter && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+          onClick={onClearWeekFilter}
+          data-testid="avri-drift-rearm-history-filter-clear"
+          aria-label={`Clear week filter (${weekFilter})`}
+        >
+          <XIcon className="w-3 h-3 mr-1" />
+          Clear filter
+        </Button>
+      )}
+    </div>
+  ) : null;
+
+  if (visible.length === 0) {
+    return (
+      <div className="space-y-2">
+        {csvButton}
+        {filterChip}
+        <p
+          className="text-[11px] text-muted-foreground/60 italic"
+          data-testid="avri-drift-rearm-history-filter-empty"
+        >
+          No re-arm entries recorded for week {weekFilter} — the audit log
+          may have already trimmed them.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {csvButton}
+      {filterChip}
+      <ul className="space-y-1.5">
+      {visible.map((entry, idx) => {
         const rearmedAt = new Date(entry.rearmedAt);
         const rearmedAtLabel = Number.isFinite(rearmedAt.getTime())
           ? rearmedAt.toISOString().replace("T", " ").slice(0, 16) + "Z"
@@ -12665,7 +12733,7 @@ function RearmHistoryPanel({
           </li>
         );
       })}
-    </ul>
+      </ul>
     </div>
   );
 }
@@ -15062,12 +15130,50 @@ function AvriDriftSection() {
     }
   };
   const [rearmRationale, setRearmRationale] = useState<string>("");
+  // `null` = show the full unfiltered audit log; otherwise narrow the
+  // sibling RearmHistoryPanel to a single weekStart.
+  const [rearmHistoryWeekFilter, setRearmHistoryWeekFilter] = useState<
+    string | null
+  >(null);
+  const rearmHistoryPanelRef = useRef<HTMLDivElement | null>(null);
   const { data, isLoading, isFetching, error } = useGetAvriDriftReport(params, {
     query: {
       queryKey: driftReportQueryKey,
       refetchInterval: 300_000,
     },
   });
+
+  // Re-uses the same React Query cache key as the RearmHistoryPanel, so
+  // this does not add a second network request.
+  const rearmHistoryQuery = useGetAvriDriftRearmHistory({
+    query: {
+      queryKey: rearmHistoryQueryKey,
+      refetchInterval: 300_000,
+      enabled: authState.kind === "valid",
+      retry: 1,
+    },
+  });
+  const rearmCountByWeek = useMemo(() => {
+    const map = new Map<string, number>();
+    const history = rearmHistoryQuery.data?.history ?? [];
+    for (const entry of history) {
+      if (!entry.weekStart) continue;
+      map.set(entry.weekStart, (map.get(entry.weekStart) ?? 0) + 1);
+    }
+    return map;
+  }, [rearmHistoryQuery.data]);
+
+  const focusRearmHistoryForWeek = useCallback((weekStart: string) => {
+    setRearmHistoryWeekFilter(weekStart);
+    // Defer the scroll until after the filter chip mounts so the
+    // panel's new content height is already in the layout.
+    requestAnimationFrame(() => {
+      rearmHistoryPanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, []);
 
   if (isLoading) return <Skeleton className="h-64 rounded-xl" />;
   if (error || !data) {
@@ -15225,7 +15331,7 @@ function AvriDriftSection() {
                     )}
                   >
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-xs text-foreground">{week.weekStart}</span>
                         <span className="text-[10px] text-muted-foreground">
                           {week.reportCount} report{week.reportCount === 1 ? "" : "s"}
@@ -15238,6 +15344,30 @@ function AvriDriftSection() {
                             familyShiftWarn={report.thresholds.familyShiftWarn}
                           />
                         ))}
+                        {(() => {
+                          const count = rearmCountByWeek.get(week.weekStart) ?? 0;
+                          if (count === 0) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => focusRearmHistoryForWeek(week.weekStart)}
+                              className={cn(
+                                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium",
+                                "border-primary/30 bg-primary/5 text-primary/90",
+                                "hover:bg-primary/10 hover:border-primary/50 hover:text-primary",
+                                "focus:outline-none focus:ring-1 focus:ring-primary/40 transition-colors",
+                              )}
+                              data-testid="avri-drift-week-rearm-badge"
+                              data-week-start={week.weekStart}
+                              data-rearm-count={count}
+                              title={`${count} re-arm event${count === 1 ? "" : "s"} recorded for week ${week.weekStart} — click to filter the audit log to this week`}
+                              aria-label={`Show ${count} re-arm event${count === 1 ? "" : "s"} for week ${week.weekStart} in the audit log`}
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              re-armed {count} time{count === 1 ? "" : "s"}
+                            </button>
+                          );
+                        })()}
                       </div>
                       <div className="flex items-center gap-3 text-[11px]">
                         <span className="tabular-nums">
@@ -15339,7 +15469,7 @@ function AvriDriftSection() {
 
         {/* Audit trail of who re-armed which dedup entry and when —
             a sibling read-only log alongside the notified-flags panel. */}
-        <div>
+        <div ref={rearmHistoryPanelRef} data-testid="avri-drift-rearm-history-panel">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
             <span>Recently re-armed</span>
             <span className="text-muted-foreground/40 normal-case font-normal italic">
@@ -15349,6 +15479,8 @@ function AvriDriftSection() {
           <RearmHistoryPanel
             authState={authState}
             rearmHistoryQueryKey={rearmHistoryQueryKey}
+            weekFilter={rearmHistoryWeekFilter}
+            onClearWeekFilter={() => setRearmHistoryWeekFilter(null)}
           />
         </div>
 
