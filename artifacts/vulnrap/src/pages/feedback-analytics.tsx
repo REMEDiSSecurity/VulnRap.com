@@ -2429,6 +2429,19 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     // before clicking "Add" the same way the CLI does.
     overlaps: HandwavyPhraseDryRunOverlaps | null;
   } | null>(null);
+  // Task #314 — mirror the latest `preview` value into a ref so the
+  // post-remove refresh helper (`refreshOpenPreviewAfterRemoval`) can
+  // read it without becoming a dependency on every async path that
+  // calls it. The helper runs from `handleRemove` /
+  // `confirmBulkRemove`, both of which are called via stale closures
+  // captured by event handlers; reading off the ref guarantees we
+  // always see the panel's current state (e.g. the reviewer dismissing
+  // the panel between the live DELETE returning 200 and our
+  // refresh-dry-run landing).
+  const previewRef = useRef(preview);
+  useEffect(() => {
+    previewRef.current = preview;
+  }, [preview]);
   const [showHistory, setShowHistory] = useState(false);
   // Task #133 — track which phrase rows have their full edit history
   // expanded. Multiple rows can be open at once so reviewers can compare
@@ -3117,6 +3130,63 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     }
   };
 
+  // Task #314 — re-issue the open dry-run preview's `addHandwavyPhrase`
+  // dryRun call so its `overlaps` (and corpus / production scan blocks)
+  // reflect the curated list AFTER a successful removal. The original
+  // preview's `overlaps` field is captured at preview-open time and never
+  // refetches on its own, so without this hook a reviewer who removed a
+  // duplicate via the in-panel "Remove existing" quick-action — or via any
+  // other path while the panel happens to be open (per-row trash, batch
+  // confirm) — would keep seeing the just-removed phrase listed as an
+  // overlap until they dismissed and re-ran the preview. We intentionally
+  // refresh ALL of the preview's dry-run-derived fields, not just
+  // `overlaps`, so the panel can never end up with mixed-version state
+  // (e.g. an overlap snapshot from after the remove paired with a corpus
+  // sample from before it). Best-effort: a failed refetch swallows the
+  // error rather than surfacing a separate "Preview refresh failed" toast
+  // on top of the success toast the live DELETE just produced.
+  const refreshOpenPreviewAfterRemoval = async (): Promise<void> => {
+    const current = previewRef.current;
+    if (!current) return;
+    const candidate = current.phrase;
+    const category = current.category;
+    try {
+      const dry = await addHandwavyPhrase({
+        phrase: candidate,
+        category,
+        dryRun: true,
+        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+          ? { productionScanLimit: effectiveProductionScanLimit }
+          : {}),
+      });
+      if (!dry.dryRunMatches) return;
+      const refreshedMatches = dry.dryRunMatches;
+      setPreview((prev) => {
+        // Bail if the panel was dismissed, the reviewer started a fresh
+        // preview for a different candidate, or the candidate's category
+        // changed while the refetch was in flight — in any of those cases
+        // the snapshot we just fetched is no longer the right one to land.
+        if (!prev) return prev;
+        if (prev.phrase !== candidate || prev.category !== category) return prev;
+        return {
+          ...prev,
+          matches: refreshedMatches,
+          productionMatches: dry.dryRunMatchesProduction ?? null,
+          productionError: dry.dryRunMatchesProductionError ?? null,
+          productionLimit: dry.dryRunMatchesProductionLimit ?? null,
+          overlaps: dry.dryRunOverlaps ?? null,
+        };
+      });
+    } catch {
+      // Best-effort refresh — the live DELETE already succeeded and the
+      // reviewer saw a confirmation toast. A second toast here would be
+      // confusing (the actual mutation worked); the worst case without it
+      // is the same stale-overlap problem the panel had before this task,
+      // which the reviewer can clear by dismissing and re-running the
+      // preview manually.
+    }
+  };
+
   const handleRemove = async (phrase: string) => {
     if (bailOnCooldown("Remove phrase")) return;
     setBusy(`rm:${phrase}`);
@@ -3151,6 +3221,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         setSingleUndo(null);
       }
       refresh();
+      // Task #314 — re-issue the open dry-run preview's add-phrase
+      // dryRun so its `overlaps` callout drops the just-removed phrase
+      // instead of leaving a stale duplicate warning visible. Covers the
+      // per-row Trash, the high-thrash gate's eventual remove, and the
+      // overlap-row "Remove existing" quick-action — all of which land
+      // here. Fired without `await` so the live-DELETE success path
+      // returns immediately; the helper itself bails when no preview is
+      // open and reconciles candidate identity inside `setPreview`.
+      void refreshOpenPreviewAfterRemoval();
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
@@ -3846,6 +3925,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     // Refresh ONCE after the whole batch — the active list and history view
     // both update from a single refetch instead of one per DELETE.
     refresh();
+    // Task #314 — also refresh the open dry-run add-preview if any phrase
+    // was actually removed. Mirrors the per-row `handleRemove` hook so a
+    // bulk-remove that retired one of the previewed candidate's overlap
+    // entries can't leave that entry visible in the panel's `overlaps`
+    // callout. Skipped when nothing was removed (server rejected every
+    // phrase / sticky auth failure) since the curated list is unchanged.
+    if (results.some((r) => r.status === "removed")) {
+      void refreshOpenPreviewAfterRemoval();
+    }
     // Drop successfully-removed phrases from the selection so the next batch
     // doesn't try to act on them again.
     setSelected((prev) => {
