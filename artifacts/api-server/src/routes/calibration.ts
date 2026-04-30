@@ -35,6 +35,10 @@ import {
   getCalibrationAuthStatus,
 } from "../middlewares/require-calibration-auth";
 import {
+  getRecentCalibrationAuthBruteForceAlerts,
+  __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS,
+} from "../middlewares/calibration-auth-brute-force-alert";
+import {
   handwavyRemovalImpactCache,
   computeHandwavyActiveListVersion,
   type CachedRemovalImpactResponse,
@@ -959,6 +963,52 @@ router.get(
       res
         .status(500)
         .json({ error: "Failed to read AVRI drift re-arm audit log." });
+    }
+  },
+);
+
+// Task #399 — Surface the in-process ring buffer of recent calibration
+// auth brute-force alerts so reviewers can confirm at a glance whether
+// the latest alert was them fat-fingering a token or a real probe,
+// without round-tripping through pino logs. Same field set as the
+// dispatched webhook payload (sans the constant `event` discriminator
+// and the static `recommendedActions` runbook copy).
+//
+// Strict-auth because the entries include client IP plus per-route
+// metadata (lastRoute, lastMethod, rejectionsByGate) that mirrors the
+// dedup-state read endpoint's privacy model.
+const RECENT_BRUTE_FORCE_ALERTS_DEFAULT_LIMIT =
+  __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit;
+const RECENT_BRUTE_FORCE_ALERTS_MAX_LIMIT =
+  __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsBufferSize;
+
+router.get(
+  "/feedback/calibration/auth-brute-force-alerts",
+  requireCalibrationAuthStrict,
+  (req, res) => {
+    try {
+      const rawLimit = req.query.limit;
+      let limit = RECENT_BRUTE_FORCE_ALERTS_DEFAULT_LIMIT;
+      if (typeof rawLimit === "string" && rawLimit.length > 0) {
+        const parsed = Number.parseInt(rawLimit, 10);
+        if (!Number.isFinite(parsed) || parsed < 1) {
+          res.status(400).json({ error: "limit must be a positive integer." });
+          return;
+        }
+        limit = Math.min(parsed, RECENT_BRUTE_FORCE_ALERTS_MAX_LIMIT);
+      }
+      const alerts = getRecentCalibrationAuthBruteForceAlerts(limit);
+      res.json({
+        alerts,
+        total: alerts.length,
+        limit,
+        bufferSize: RECENT_BRUTE_FORCE_ALERTS_MAX_LIMIT,
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to read recent calibration auth brute-force alerts");
+      res
+        .status(500)
+        .json({ error: "Failed to read recent calibration auth brute-force alerts." });
     }
   },
 );

@@ -810,3 +810,185 @@ describe("per-IP cooldown is persisted across process restarts (Task #400)", () 
   });
 });
 
+// Task #399 — the alerter exposes an in-memory ring buffer of
+// dispatched alerts so the calibration UI can show "what just
+// tripped" without scraping pino logs.
+describe("recentAlerts() ring buffer", () => {
+  it("returns an empty list before any threshold has been crossed", async () => {
+    const { createBruteForceAlerter } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+    const alerter = createBruteForceAlerter({
+      threshold: 3,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+
+    expect(alerter.recentAlerts()).toEqual([]);
+
+    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "192.0.2.10" });
+    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "192.0.2.10" });
+    await alerter.flushPending();
+    // Two events with threshold=3 should still be empty.
+    expect(alerter.recentAlerts()).toEqual([]);
+  });
+
+  it("records each dispatched alert with the same fields the webhook payload carries", async () => {
+    const { createBruteForceAlerter } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+    let mockNow = 5_000_000;
+    const alerter = createBruteForceAlerter({
+      threshold: 2,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+
+    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/feedback/calibration/handwavy-phrases", method: "POST", ip: "203.0.113.42" });
+    mockNow += 100;
+    alerter.recordWrongTokenEvent({ status: 429, gate: "strict-read", route: "/feedback/calibration/handwavy-phrases", method: "GET", ip: "203.0.113.42" });
+    await alerter.flushPending();
+
+    const alerts = alerter.recentAlerts();
+    expect(alerts.length).toBe(1);
+    const [entry] = alerts;
+    expect(entry.ip).toBe("203.0.113.42");
+    expect(entry.threshold).toBe(2);
+    expect(entry.windowMs).toBe(60_000);
+    expect(entry.wrongTokenCount).toBe(2);
+    expect(entry.rejectionsByStatus).toEqual({ "401": 1, "429": 1 });
+    expect(entry.rejectionsByGate).toEqual({ mutation: 1, "strict-read": 1 });
+    expect(entry.lastRoute).toBe("/feedback/calibration/handwavy-phrases");
+    expect(entry.lastMethod).toBe("GET");
+    expect(entry.runbookUrl).toBe("https://example.test/runbook");
+    expect(entry.detectedAt).toBe(new Date(5_000_100).toISOString());
+    expect(entry.firstSeenAt).toBe(new Date(5_000_000).toISOString());
+    expect(entry.lastSeenAt).toBe(new Date(5_000_100).toISOString());
+  });
+
+  it("records the alert even when no webhook is configured (so the UI panel still shows it)", async () => {
+    const { createBruteForceAlerter } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+    const alerter = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "",
+      runbookUrl: "https://example.test/runbook",
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+
+    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "203.0.113.50" });
+    await alerter.flushPending();
+
+    const alerts = alerter.recentAlerts();
+    expect(alerts.length).toBe(1);
+    expect(alerts[0].ip).toBe("203.0.113.50");
+  });
+
+  it("returns alerts newest-first regardless of the order they fired", async () => {
+    const { createBruteForceAlerter } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+    let mockNow = 1_000_000;
+    const alerter = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+
+    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "203.0.113.1" });
+    mockNow += 1_000;
+    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "203.0.113.2" });
+    mockNow += 1_000;
+    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "203.0.113.3" });
+    await alerter.flushPending();
+
+    const alerts = alerter.recentAlerts();
+    expect(alerts.map((a) => a.ip)).toEqual(["203.0.113.3", "203.0.113.2", "203.0.113.1"]);
+  });
+
+  it("honors the limit argument and clamps it to the buffer size", async () => {
+    const { createBruteForceAlerter, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+    let mockNow = 1_000_000;
+    const alerter = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+
+    for (let i = 0; i < 5; i++) {
+      alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: `203.0.113.${i + 1}` });
+      mockNow += 1_000;
+    }
+    await alerter.flushPending();
+
+    expect(alerter.recentAlerts(3).length).toBe(3);
+    // Default limit (no arg) returns the configured default cap.
+    expect(alerter.recentAlerts().length).toBe(
+      Math.min(5, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit),
+    );
+    // Asking for more than what's in the buffer returns whatever is available
+    // (capped by the configured buffer size).
+    const huge = alerter.recentAlerts(1_000_000);
+    expect(huge.length).toBeLessThanOrEqual(
+      __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsBufferSize,
+    );
+    expect(huge.length).toBe(5);
+    // Bad limits (zero/negative/NaN) fall back to the default.
+    expect(alerter.recentAlerts(0).length).toBe(
+      Math.min(5, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit),
+    );
+    expect(alerter.recentAlerts(-3).length).toBe(
+      Math.min(5, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit),
+    );
+  });
+
+  it("evicts the oldest entry once the buffer fills up (FIFO)", async () => {
+    const { createBruteForceAlerter, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+    let mockNow = 1_000_000;
+    const alerter = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+    const cap = __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsBufferSize;
+    // Fire one more alert than the buffer can hold.
+    for (let i = 0; i < cap + 1; i++) {
+      alerter.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/x",
+        method: "POST",
+        ip: `198.51.100.${(i % 250) + 1}`,
+      });
+      mockNow += 1_000;
+    }
+    await alerter.flushPending();
+
+    const all = alerter.recentAlerts(cap + 10);
+    expect(all.length).toBe(cap);
+    // Newest IP should be at the head; the very first IP should have
+    // been evicted by the cap+1th push.
+    expect(all[0].ip).toBe(`198.51.100.${(cap % 250) + 1}`);
+    expect(all.find((a) => a.ip === "198.51.100.1")).toBeUndefined();
+  });
+});

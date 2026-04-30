@@ -25,6 +25,7 @@ import type {
   AvriDriftRearmResponse,
   AvriDriftReport,
   AvriDriftSchedulerStatus,
+  CalibrationAuthBruteForceAlertsList,
   CalibrationAuthStatus,
   CalibrationReport,
   CheckReportBody,
@@ -36,6 +37,7 @@ import type {
   FeedbackChallenge,
   FeedbackResponse,
   GetAvriDriftReportParams,
+  GetCalibrationAuthBruteForceAlertsParams,
   GetReportFeedParams,
   GetTrendsParams,
   HandwavyPhraseBatchRemoveBody,
@@ -1780,6 +1782,130 @@ export function useGetAvriDriftRearmHistory<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAvriDriftRearmHistoryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #399 — Bounded snapshot of the in-process ring buffer of
+dispatched calibration-auth brute-force alerts so reviewers can
+confirm at a glance whether the latest alert was them
+fat-fingering a token or a real probe, without round-tripping
+through pino logs.
+
+The entries mirror the webhook payload (sans the constant
+`event` discriminator and the static `recommendedActions`
+runbook copy). The buffer is in-memory only — restarts clear it
+and a multi-replica deploy reflects whichever replica handled
+the request. Strict-auth because the entries include client IP
+plus per-route metadata.
+
+ * @summary List recent calibration auth brute-force alert decisions
+ */
+export const getGetCalibrationAuthBruteForceAlertsUrl = (
+  params?: GetCalibrationAuthBruteForceAlertsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/feedback/calibration/auth-brute-force-alerts?${stringifiedParams}`
+    : `/api/feedback/calibration/auth-brute-force-alerts`;
+};
+
+export const getCalibrationAuthBruteForceAlerts = async (
+  params?: GetCalibrationAuthBruteForceAlertsParams,
+  options?: RequestInit,
+): Promise<CalibrationAuthBruteForceAlertsList> => {
+  return customFetch<CalibrationAuthBruteForceAlertsList>(
+    getGetCalibrationAuthBruteForceAlertsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetCalibrationAuthBruteForceAlertsQueryKey = (
+  params?: GetCalibrationAuthBruteForceAlertsParams,
+) => {
+  return [
+    `/api/feedback/calibration/auth-brute-force-alerts`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetCalibrationAuthBruteForceAlertsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCalibrationAuthBruteForceAlerts>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetCalibrationAuthBruteForceAlertsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCalibrationAuthBruteForceAlerts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetCalibrationAuthBruteForceAlertsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCalibrationAuthBruteForceAlerts>>
+  > = ({ signal }) =>
+    getCalibrationAuthBruteForceAlerts(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCalibrationAuthBruteForceAlerts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCalibrationAuthBruteForceAlertsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCalibrationAuthBruteForceAlerts>>
+>;
+export type GetCalibrationAuthBruteForceAlertsQueryError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary List recent calibration auth brute-force alert decisions
+ */
+
+export function useGetCalibrationAuthBruteForceAlerts<
+  TData = Awaited<ReturnType<typeof getCalibrationAuthBruteForceAlerts>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetCalibrationAuthBruteForceAlertsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCalibrationAuthBruteForceAlerts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCalibrationAuthBruteForceAlertsQueryOptions(
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

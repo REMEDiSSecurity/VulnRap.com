@@ -85,7 +85,10 @@ function request<T>(
         method,
         hostname: url.hostname,
         port: url.port,
-        path: url.pathname,
+        // Task #399 — preserve the query string so endpoints that
+        // parse req.query (e.g. ?limit=) see the values the test sent
+        // instead of an empty object.
+        path: url.pathname + url.search,
         headers: { ...baseHeaders, ...headers },
       },
       (res) => {
@@ -369,6 +372,86 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
     // The response body is JSON-stringified before the assertion so we catch
     // any field at any nesting level that might have leaked the secret.
     expect(JSON.stringify(r.body)).not.toContain(TOKEN);
+  });
+});
+
+// Task #399 — strict-auth gate + response shape for the recent-alerts
+// endpoint that powers the "Recent calibration auth alerts" panel on
+// the /feedback-analytics dashboard. The handler doesn't go anywhere
+// near the brute-force ring buffer's contents (those live in the
+// alerter's own unit tests); these cases just pin the route's auth
+// gate and the JSON envelope.
+describe("GET /feedback/calibration/auth-brute-force-alerts (Task #399)", () => {
+  it("rejects an unauthenticated request with 401", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/auth-brute-force-alerts",
+    );
+    expect(r.status).toBe(401);
+    expect(r.body.error).toMatch(/token/i);
+  });
+
+  it("rejects a request with the wrong token with 401", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/auth-brute-force-alerts",
+      undefined,
+      { "X-Calibration-Token": "wrong-token" },
+    );
+    expect(r.status).toBe(401);
+  });
+
+  it("returns the recent-alerts envelope with the correct shape when authenticated", async () => {
+    const r = await request<{
+      alerts: unknown[];
+      total: number;
+      limit: number;
+      bufferSize: number;
+    }>(
+      "GET",
+      "/feedback/calibration/auth-brute-force-alerts",
+      undefined,
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(200);
+    expect(Array.isArray(r.body.alerts)).toBe(true);
+    expect(typeof r.body.total).toBe("number");
+    expect(typeof r.body.limit).toBe("number");
+    expect(typeof r.body.bufferSize).toBe("number");
+    expect(r.body.bufferSize).toBeGreaterThanOrEqual(r.body.limit);
+    expect(r.body.total).toBe(r.body.alerts.length);
+  });
+
+  it("rejects a non-numeric ?limit= with 400", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/auth-brute-force-alerts?limit=abc",
+      undefined,
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/limit/i);
+  });
+
+  it("rejects a non-positive ?limit= with 400", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/auth-brute-force-alerts?limit=0",
+      undefined,
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("clamps an oversized ?limit= to the configured buffer size rather than 400-ing", async () => {
+    const r = await request<{ limit: number; bufferSize: number }>(
+      "GET",
+      "/feedback/calibration/auth-brute-force-alerts?limit=999999",
+      undefined,
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.limit).toBe(r.body.bufferSize);
   });
 });
 

@@ -622,6 +622,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /feedback/calibration/auth-brute-force-alerts:
+    get:
+      operationId: getCalibrationAuthBruteForceAlerts
+      tags: [feedback]
+      summary: List recent calibration auth brute-force alert decisions
+      description: |
+        Task #399 — Bounded snapshot of the in-process ring buffer of
+        dispatched calibration-auth brute-force alerts so reviewers can
+        confirm at a glance whether the latest alert was them
+        fat-fingering a token or a real probe, without round-tripping
+        through pino logs.
+
+        The entries mirror the webhook payload (sans the constant
+        `event` discriminator and the static `recommendedActions`
+        runbook copy). The buffer is in-memory only — restarts clear it
+        and a multi-replica deploy reflects whichever replica handled
+        the request. Strict-auth because the entries include client IP
+        plus per-route metadata.
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: |
+            Maximum number of recent alerts to return (newest first).
+            Defaults to 10 and is clamped server-side to the buffer
+            size (50). Values that fail to parse as a positive integer
+            return 400.
+      responses:
+        "200":
+          description: Recent alert snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalibrationAuthBruteForceAlertsList"
+        "400":
+          description: Invalid limit query parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /feedback/calibration/config:
     get:
       operationId: getScoringConfig
@@ -3571,6 +3621,102 @@ components:
             render the "Recently re-armed" panel without an extra
             GET. Capped at 200 entries.
       required: [rearmed, notFound, remaining, removed, notified, auditEntries, rearmHistory]
+
+    CalibrationAuthBruteForceAlertEntry:
+      type: object
+      description: |
+        Single entry in the in-process ring buffer of dispatched
+        calibration-auth brute-force alerts. Mirrors the webhook
+        payload (sans the constant `event` discriminator and the
+        static `recommendedActions` runbook copy).
+      properties:
+        detectedAt:
+          type: string
+          format: date-time
+          description: ISO timestamp when the alert tripped (i.e. the threshold-crossing wrong-token event).
+        ip:
+          type: string
+          description: Source IP that crossed the per-IP wrong-token threshold.
+        windowMs:
+          type: integer
+          description: Sliding window (ms) used to count wrong-token events.
+        threshold:
+          type: integer
+          description: Number of wrong-token events within `windowMs` that triggered the alert.
+        wrongTokenCount:
+          type: integer
+          description: Total wrong-token events from the IP within the window at the moment the alert fired.
+        rejectionsByStatus:
+          type: object
+          properties:
+            "401":
+              type: integer
+            "429":
+              type: integer
+          required: ["401", "429"]
+          description: Tally of in-window rejections split by HTTP status code.
+        rejectionsByGate:
+          type: object
+          properties:
+            mutation:
+              type: integer
+            "strict-read":
+              type: integer
+          required: [mutation, "strict-read"]
+          description: Tally of in-window rejections split by which calibration gate fired.
+        firstSeenAt:
+          type: string
+          format: date-time
+          description: ISO timestamp of the oldest in-window wrong-token event from this IP.
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: ISO timestamp of the newest in-window wrong-token event from this IP (the one that crossed the threshold).
+        lastRoute:
+          type: string
+          description: Route that the threshold-crossing request hit.
+        lastMethod:
+          type: string
+          description: HTTP method of the threshold-crossing request.
+        runbookUrl:
+          type: string
+          description: Operator runbook URL surfaced in the alert payload.
+      required:
+        - detectedAt
+        - ip
+        - windowMs
+        - threshold
+        - wrongTokenCount
+        - rejectionsByStatus
+        - rejectionsByGate
+        - firstSeenAt
+        - lastSeenAt
+        - lastRoute
+        - lastMethod
+        - runbookUrl
+
+    CalibrationAuthBruteForceAlertsList:
+      type: object
+      description: |
+        Newest-first snapshot of the in-process recent-alerts ring
+        buffer. `bufferSize` is the absolute cap on retained entries
+        (older alerts are evicted FIFO); `limit` is the per-request
+        cap actually applied.
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalibrationAuthBruteForceAlertEntry"
+        total:
+          type: integer
+          description: Number of alerts returned (`<= limit`).
+        limit:
+          type: integer
+          description: Effective per-request cap that was applied.
+        bufferSize:
+          type: integer
+          description: Maximum number of entries the in-process buffer retains.
+      required: [alerts, total, limit, bufferSize]
 
     AvriDriftSchedulerStatus:
       type: object

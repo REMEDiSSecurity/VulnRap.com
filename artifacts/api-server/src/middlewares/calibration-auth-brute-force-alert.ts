@@ -96,8 +96,38 @@ export interface BruteForceAlerterOptions {
   persistHistoryLimit?: number;
 }
 
+/**
+ * Single entry in the in-process ring buffer of dispatched alerts.
+ * Mirrors the webhook payload (minus the constant `event` discriminator
+ * and the static `recommendedActions` runbook copy) so the calibration
+ * UI can render the same IP / count / window / runbook context that
+ * goes into the webhook without round-tripping through pino logs.
+ */
+export interface RecentBruteForceAlert {
+  detectedAt: string;
+  ip: string;
+  windowMs: number;
+  threshold: number;
+  wrongTokenCount: number;
+  rejectionsByStatus: { "401": number; "429": number };
+  rejectionsByGate: { mutation: number; "strict-read": number };
+  firstSeenAt: string;
+  lastSeenAt: string;
+  lastRoute: string;
+  lastMethod: string;
+  runbookUrl: string;
+}
+
 export interface BruteForceAlerter {
   recordWrongTokenEvent(ev: WrongTokenEventInput): void;
+  /**
+   * Bounded snapshot of the most recent alerts dispatched by this
+   * process, newest-first. The buffer is in-memory only — restarts
+   * clear it and a multi-replica deploy reflects whichever replica
+   * handled the request. Pass `limit` to cap the response; values
+   * <= 0 fall back to the default.
+   */
+  recentAlerts(limit?: number): RecentBruteForceAlert[];
   /** Test-only: resolves once any in-flight dispatch promise has settled. */
   flushPending(): Promise<void>;
 }
@@ -106,6 +136,12 @@ const DEFAULT_MAX_TRACKED_IPS = 1024;
 // Cap the persisted cooldown table so the file stays small and
 // trivially diffable. Oldest (by lastAlertedAt) drops first.
 const DEFAULT_PERSIST_HISTORY_LIMIT = 256;
+// Cap the in-process ring buffer well above the panel's render limit so
+// reviewers can scroll back through recent flaps without the buffer
+// filling up after a noisy hour. Each entry is ~300 bytes serialized,
+// so 50 entries fits comfortably under 20 KB.
+const RECENT_ALERTS_BUFFER_SIZE = 50;
+const RECENT_ALERTS_DEFAULT_LIMIT = 10;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -352,6 +388,32 @@ export function createBruteForceAlerter(
 
   const perIp = new Map<string, PerIpState>();
   const inFlight = new Set<Promise<unknown>>();
+  // Ring buffer of dispatched alerts. Newer entries get pushed to the
+  // tail; once the buffer hits RECENT_ALERTS_BUFFER_SIZE the oldest
+  // entry at the head is dropped on the next push. The accessor flips
+  // the order so callers see newest-first without re-sorting.
+  const recentAlertsBuffer: RecentBruteForceAlert[] = [];
+
+  function pushRecentAlert(payload: BruteForceAlertPayload): void {
+    const entry: RecentBruteForceAlert = {
+      detectedAt: payload.detectedAt,
+      ip: payload.ip,
+      windowMs: payload.windowMs,
+      threshold: payload.threshold,
+      wrongTokenCount: payload.wrongTokenCount,
+      rejectionsByStatus: { ...payload.rejectionsByStatus },
+      rejectionsByGate: { ...payload.rejectionsByGate },
+      firstSeenAt: payload.firstSeenAt,
+      lastSeenAt: payload.lastSeenAt,
+      lastRoute: payload.lastRoute,
+      lastMethod: payload.lastMethod,
+      runbookUrl: payload.runbookUrl,
+    };
+    recentAlertsBuffer.push(entry);
+    if (recentAlertsBuffer.length > RECENT_ALERTS_BUFFER_SIZE) {
+      recentAlertsBuffer.splice(0, recentAlertsBuffer.length - RECENT_ALERTS_BUFFER_SIZE);
+    }
+  }
 
   // Seed the in-memory cooldown table from the persisted state file so
   // an attack that crossed the threshold before a deploy doesn't re-fire
@@ -430,6 +492,12 @@ export function createBruteForceAlerter(
     // dispatch so a crash mid-dispatch still leaves the cooldown intact
     // and a fast restart doesn't immediately re-page the on-call.
     persistCooldownState();
+    // Always retain the alert in the in-process ring buffer, regardless
+    // of whether a webhook is configured or whether dispatch later
+    // succeeds. The point of the buffer is to give reviewers a "what
+    // just tripped?" view from the calibration UI even on installs that
+    // never set CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL.
+    pushRecentAlert(payload);
 
     const webhookUrl = webhookOverridden ? pinnedWebhook : readWebhookUrlEnv();
 
@@ -522,6 +590,16 @@ export function createBruteForceAlerter(
 
   return {
     recordWrongTokenEvent,
+    recentAlerts(limit?: number): RecentBruteForceAlert[] {
+      const requested =
+        typeof limit === "number" && Number.isFinite(limit) && limit > 0
+          ? Math.min(Math.floor(limit), RECENT_ALERTS_BUFFER_SIZE)
+          : RECENT_ALERTS_DEFAULT_LIMIT;
+      // Buffer is oldest-first; flip to newest-first so the dashboard
+      // can render the most recent alert at the top of the list.
+      const newestFirst = [...recentAlertsBuffer].reverse();
+      return newestFirst.slice(0, requested);
+    },
     async flushPending(): Promise<void> {
       while (inFlight.size > 0) {
         await Promise.allSettled(Array.from(inFlight));
@@ -552,6 +630,18 @@ export function reportCalibrationAuthRejection(
   getAlerter().recordWrongTokenEvent(ev);
 }
 
+/**
+ * Top-level accessor for the in-process ring buffer of dispatched
+ * alerts. Backs `GET /feedback/calibration/auth-brute-force-alerts`
+ * so the calibration dashboard can render a "recent calibration auth
+ * alerts" panel without scraping pino logs.
+ */
+export function getRecentCalibrationAuthBruteForceAlerts(
+  limit?: number,
+): RecentBruteForceAlert[] {
+  return getAlerter().recentAlerts(limit);
+}
+
 /** Test seam — replace the lazy alerter (or null to reset). */
 export function __setBruteForceAlerterForTests(
   alerter: BruteForceAlerter | null,
@@ -565,4 +655,6 @@ export const __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS = {
   recommendedActions: RECOMMENDED_ACTIONS,
   persistHistoryLimit: DEFAULT_PERSIST_HISTORY_LIMIT,
   stateFileName: STATE_FILE_NAME,
+  recentAlertsBufferSize: RECENT_ALERTS_BUFFER_SIZE,
+  recentAlertsDefaultLimit: RECENT_ALERTS_DEFAULT_LIMIT,
 };

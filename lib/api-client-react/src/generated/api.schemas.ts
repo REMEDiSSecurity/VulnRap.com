@@ -1754,6 +1754,73 @@ GET. Capped at 200 entries.
 }
 
 /**
+ * Tally of in-window rejections split by HTTP status code.
+ */
+export type CalibrationAuthBruteForceAlertEntryRejectionsByStatus = {
+  "401": number;
+  "429": number;
+};
+
+/**
+ * Tally of in-window rejections split by which calibration gate fired.
+ */
+export type CalibrationAuthBruteForceAlertEntryRejectionsByGate = {
+  mutation: number;
+  "strict-read": number;
+};
+
+/**
+ * Single entry in the in-process ring buffer of dispatched
+calibration-auth brute-force alerts. Mirrors the webhook
+payload (sans the constant `event` discriminator and the
+static `recommendedActions` runbook copy).
+
+ */
+export interface CalibrationAuthBruteForceAlertEntry {
+  /** ISO timestamp when the alert tripped (i.e. the threshold-crossing wrong-token event). */
+  detectedAt: string;
+  /** Source IP that crossed the per-IP wrong-token threshold. */
+  ip: string;
+  /** Sliding window (ms) used to count wrong-token events. */
+  windowMs: number;
+  /** Number of wrong-token events within `windowMs` that triggered the alert. */
+  threshold: number;
+  /** Total wrong-token events from the IP within the window at the moment the alert fired. */
+  wrongTokenCount: number;
+  /** Tally of in-window rejections split by HTTP status code. */
+  rejectionsByStatus: CalibrationAuthBruteForceAlertEntryRejectionsByStatus;
+  /** Tally of in-window rejections split by which calibration gate fired. */
+  rejectionsByGate: CalibrationAuthBruteForceAlertEntryRejectionsByGate;
+  /** ISO timestamp of the oldest in-window wrong-token event from this IP. */
+  firstSeenAt: string;
+  /** ISO timestamp of the newest in-window wrong-token event from this IP (the one that crossed the threshold). */
+  lastSeenAt: string;
+  /** Route that the threshold-crossing request hit. */
+  lastRoute: string;
+  /** HTTP method of the threshold-crossing request. */
+  lastMethod: string;
+  /** Operator runbook URL surfaced in the alert payload. */
+  runbookUrl: string;
+}
+
+/**
+ * Newest-first snapshot of the in-process recent-alerts ring
+buffer. `bufferSize` is the absolute cap on retained entries
+(older alerts are evicted FIFO); `limit` is the per-request
+cap actually applied.
+
+ */
+export interface CalibrationAuthBruteForceAlertsList {
+  alerts: CalibrationAuthBruteForceAlertEntry[];
+  /** Number of alerts returned (`<= limit`). */
+  total: number;
+  /** Effective per-request cap that was applied. */
+  limit: number;
+  /** Maximum number of entries the in-process buffer retains. */
+  bufferSize: number;
+}
+
+/**
  * In-process status of the AVRI drift-notification scheduler.
 Timestamps are ISO 8601; `null` is used wherever the field is
 not yet meaningful (e.g. `lastTickAt` before the first tick,
@@ -3043,6 +3110,18 @@ export type GetAvriDriftReportParams = {
    * @maximum 26
    */
   weeks?: number;
+};
+
+export type GetCalibrationAuthBruteForceAlertsParams = {
+  /**
+ * Maximum number of recent alerts to return (newest first).
+Defaults to 10 and is clamped server-side to the buffer
+size (50). Values that fail to parse as a positive integer
+return 400.
+
+ * @minimum 1
+ */
+  limit?: number;
 };
 
 export type ListHandwavyPhraseRemovalBatchesParams = {

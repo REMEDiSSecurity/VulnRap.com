@@ -7,11 +7,14 @@ import {
   useGetAvriDriftNotifications, getGetAvriDriftNotificationsQueryKey,
   useGetAvriDriftSchedulerStatus, getGetAvriDriftSchedulerStatusQueryKey,
   useGetAvriDriftRearmHistory, getGetAvriDriftRearmHistoryQueryKey,
+  useGetCalibrationAuthBruteForceAlerts,
+  getGetCalibrationAuthBruteForceAlertsQueryKey,
   rearmAvriDriftNotifications,
   ApiError,
   type AvriDriftNotificationRecord,
   type AvriDriftSchedulerStatus,
   type AvriDriftRearmAuditEntry,
+  type CalibrationAuthBruteForceAlertEntry,
   useGetCalibrationAuthStatus, getGetCalibrationAuthStatusQueryKey,
   useGetReportFeed, getGetReportFeedQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
@@ -11175,6 +11178,171 @@ function SchedulerStalledBanner() {
   );
 }
 
+// Task #399 — Recent calibration auth brute-force alert decisions.
+// Reads the in-process ring buffer maintained by the alerter so a
+// reviewer can confirm at a glance whether the latest alert was them
+// fat-fingering a token or a real probe, without round-tripping
+// through pino logs. Strict-auth gated (matches the dedup-state /
+// re-arm-history panels) — when the reviewer doesn't have a valid
+// token we surface a static explainer instead of a load error.
+function CalibrationAuthBruteForceAlertsPanel({
+  authState,
+}: {
+  authState: CalibrationAuthState;
+}) {
+  const enabled = authState.kind === "valid";
+  const queryKey = getGetCalibrationAuthBruteForceAlertsQueryKey();
+  const { data, isLoading, isError } = useGetCalibrationAuthBruteForceAlerts(
+    undefined,
+    {
+      query: {
+        queryKey,
+        // Refetch every 60s — the buffer is in-memory and cheap to
+        // read, but the panel only really matters when something
+        // tripped recently, so a slow poll is plenty.
+        refetchInterval: 60_000,
+        enabled,
+        retry: 1,
+      },
+    },
+  );
+
+  // Tick `now` between server fetches so the relative-time labels
+  // ("5m ago") stay roughly fresh without re-querying.
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+        <Shield className="w-3 h-3" />
+        <span>Recent calibration auth alerts</span>
+        <span className="text-muted-foreground/40 normal-case font-normal italic">
+          in-memory ring buffer (per process)
+        </span>
+      </div>
+      {!enabled ? (
+        <p className="text-[11px] text-muted-foreground/60 italic leading-relaxed">
+          A valid reviewer token is required to view recent calibration auth
+          brute-force alerts.
+        </p>
+      ) : isLoading ? (
+        <Skeleton className="h-12 rounded-md" />
+      ) : isError || !data ? (
+        <p className="text-[11px] text-red-400/80 italic leading-relaxed">
+          Could not load recent calibration auth alerts.
+        </p>
+      ) : (
+        <CalibrationAuthBruteForceAlertsContent
+          alerts={data.alerts ?? []}
+          bufferSize={data.bufferSize}
+          now={now}
+        />
+      )}
+    </div>
+  );
+}
+
+function CalibrationAuthBruteForceAlertsContent({
+  alerts,
+  bufferSize,
+  now,
+}: {
+  alerts: CalibrationAuthBruteForceAlertEntry[];
+  bufferSize: number;
+  now: number;
+}) {
+  if (alerts.length === 0) {
+    return (
+      <p className="text-[11px] text-muted-foreground/60 italic">
+        No calibration auth brute-force alerts have fired in this process — the
+        ring buffer is empty.
+      </p>
+    );
+  }
+  return (
+    <ul className="space-y-1.5" data-testid="calibration-auth-brute-force-alerts">
+      {alerts.map((alert, idx) => {
+        const detectedAgo = formatRelativeAgo(alert.detectedAt, now);
+        const detectedLabel = detectedAgo ?? alert.detectedAt;
+        const windowLabel = formatMsInterval(alert.windowMs);
+        const status401 = alert.rejectionsByStatus["401"] ?? 0;
+        const status429 = alert.rejectionsByStatus["429"] ?? 0;
+        const gateMutation = alert.rejectionsByGate.mutation ?? 0;
+        const gateStrictRead = alert.rejectionsByGate["strict-read"] ?? 0;
+        return (
+          <li
+            // Two alerts can share the same (ip, detectedAt) only if the
+            // alerter's clock didn't advance between dispatches, so
+            // include the index for a defensive React key.
+            key={`${alert.ip}|${alert.detectedAt}|${idx}`}
+            className="flex items-start gap-2 text-xs p-2 rounded-md border border-orange-400/20 bg-orange-400/[0.03]"
+          >
+            <Badge
+              variant="outline"
+              className="text-[10px] gap-1 font-mono shrink-0 text-orange-400/90 bg-orange-400/10 border-orange-400/30"
+            >
+              <AlertTriangle className="w-3 h-3" />
+              {alert.wrongTokenCount}/{alert.threshold}
+            </Badge>
+            <div className="flex-1 min-w-0 space-y-0.5">
+              <div className="flex items-center gap-2 text-[11px] flex-wrap">
+                <span className="font-mono text-foreground/90 break-all">
+                  {alert.ip}
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span
+                  className="text-muted-foreground/80 tabular-nums"
+                  title={alert.detectedAt}
+                >
+                  {detectedLabel}
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="text-muted-foreground/70">
+                  {alert.wrongTokenCount} wrong-token{" "}
+                  {alert.wrongTokenCount === 1 ? "event" : "events"} in{" "}
+                  {windowLabel}
+                </span>
+              </div>
+              <div className="text-[10px] text-muted-foreground/70 font-mono flex items-center gap-2 flex-wrap">
+                <span>
+                  401×{status401} · 429×{status429}
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span>
+                  mutation×{gateMutation} · strict-read×{gateStrictRead}
+                </span>
+              </div>
+              <div className="text-[10px] text-muted-foreground/60 font-mono break-all">
+                last: {alert.lastMethod} {alert.lastRoute}
+              </div>
+              <div className="text-[10px]">
+                <a
+                  href={alert.runbookUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary/80 hover:underline"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  Runbook
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          </li>
+        );
+      })}
+      <li className="text-[10px] text-muted-foreground/40 italic pt-1">
+        Showing the most recent {alerts.length} of up to {bufferSize} retained
+        alerts. Restarting the API server clears the buffer.
+      </li>
+    </ul>
+  );
+}
+
 // Operator-visible heartbeat for the in-process AVRI drift scheduler.
 // Reads the unauthenticated status endpoint and renders last-tick /
 // next-tick / cadence so reviewers can confirm the timer is firing
@@ -14595,6 +14763,13 @@ function AvriDriftSection() {
         </div>
 
         <SchedulerStatusPanel />
+
+        {/* Task #399 — Recent calibration auth brute-force alerts.
+            Same auth-gating model as the dedup-state and re-arm-history
+            panels above, so reviewers can confirm at a glance whether
+            the latest alert was them fat-fingering a token or a real
+            probe without scraping pino logs. */}
+        <CalibrationAuthBruteForceAlertsPanel authState={authState} />
 
         <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed border-t border-border/30 pt-3">
           {report.bucketingNote}

@@ -2807,6 +2807,111 @@ export const GetAvriDriftRearmHistoryResponse = zod
   );
 
 /**
+ * Task #399 — Bounded snapshot of the in-process ring buffer of
+dispatched calibration-auth brute-force alerts so reviewers can
+confirm at a glance whether the latest alert was them
+fat-fingering a token or a real probe, without round-tripping
+through pino logs.
+
+The entries mirror the webhook payload (sans the constant
+`event` discriminator and the static `recommendedActions`
+runbook copy). The buffer is in-memory only — restarts clear it
+and a multi-replica deploy reflects whichever replica handled
+the request. Strict-auth because the entries include client IP
+plus per-route metadata.
+
+ * @summary List recent calibration auth brute-force alert decisions
+ */
+
+export const GetCalibrationAuthBruteForceAlertsQueryParams = zod.object({
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .optional()
+    .describe(
+      "Maximum number of recent alerts to return (newest first).\nDefaults to 10 and is clamped server-side to the buffer\nsize (50). Values that fail to parse as a positive integer\nreturn 400.\n",
+    ),
+});
+
+export const GetCalibrationAuthBruteForceAlertsResponse = zod
+  .object({
+    alerts: zod.array(
+      zod
+        .object({
+          detectedAt: zod.coerce
+            .date()
+            .describe(
+              "ISO timestamp when the alert tripped (i.e. the threshold-crossing wrong-token event).",
+            ),
+          ip: zod
+            .string()
+            .describe(
+              "Source IP that crossed the per-IP wrong-token threshold.",
+            ),
+          windowMs: zod
+            .number()
+            .describe("Sliding window (ms) used to count wrong-token events."),
+          threshold: zod
+            .number()
+            .describe(
+              "Number of wrong-token events within `windowMs` that triggered the alert.",
+            ),
+          wrongTokenCount: zod
+            .number()
+            .describe(
+              "Total wrong-token events from the IP within the window at the moment the alert fired.",
+            ),
+          rejectionsByStatus: zod
+            .object({
+              "401": zod.number(),
+              "429": zod.number(),
+            })
+            .describe(
+              "Tally of in-window rejections split by HTTP status code.",
+            ),
+          rejectionsByGate: zod
+            .object({
+              mutation: zod.number(),
+              "strict-read": zod.number(),
+            })
+            .describe(
+              "Tally of in-window rejections split by which calibration gate fired.",
+            ),
+          firstSeenAt: zod.coerce
+            .date()
+            .describe(
+              "ISO timestamp of the oldest in-window wrong-token event from this IP.",
+            ),
+          lastSeenAt: zod.coerce
+            .date()
+            .describe(
+              "ISO timestamp of the newest in-window wrong-token event from this IP (the one that crossed the threshold).",
+            ),
+          lastRoute: zod
+            .string()
+            .describe("Route that the threshold-crossing request hit."),
+          lastMethod: zod
+            .string()
+            .describe("HTTP method of the threshold-crossing request."),
+          runbookUrl: zod
+            .string()
+            .describe("Operator runbook URL surfaced in the alert payload."),
+        })
+        .describe(
+          "Single entry in the in-process ring buffer of dispatched\ncalibration-auth brute-force alerts. Mirrors the webhook\npayload (sans the constant `event` discriminator and the\nstatic `recommendedActions` runbook copy).\n",
+        ),
+    ),
+    total: zod.number().describe("Number of alerts returned (`<= limit`)."),
+    limit: zod.number().describe("Effective per-request cap that was applied."),
+    bufferSize: zod
+      .number()
+      .describe("Maximum number of entries the in-process buffer retains."),
+  })
+  .describe(
+    "Newest-first snapshot of the in-process recent-alerts ring\nbuffer. `bufferSize` is the absolute cap on retained entries\n(older alerts are evicted FIFO); `limit` is the per-request\ncap actually applied.\n",
+  );
+
+/**
  * Returns the active scoring config version and full version history.
  * @summary Get current and historical scoring configurations
  */
