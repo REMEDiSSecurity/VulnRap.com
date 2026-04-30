@@ -715,6 +715,7 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
     count: number;
     compositeMean: number | null;
     gap: number | null;
+    sampleDateKey?: string;
   }
   interface DatasetHistoryResponse {
     totalSnapshots: number;
@@ -791,6 +792,12 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
       expect(after.totalSnapshots).toBe(baselineCount + 3);
       const tiers = after.cohorts.map(c => c.tier).sort();
       expect(tiers).toEqual(["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"]);
+      // Task #358 — every persisted cohort row must carry the same
+      // slice key the live block returned, so the dashboard's trend can
+      // distinguish daily-slice rotations from real cohort drift.
+      const liveSampleDateKey = runBody.datasetSamples.available
+        ? runBody.datasetSamples.sampleDateKey
+        : null;
       for (const c of after.cohorts) {
         expect(c.snapshots.length).toBeGreaterThanOrEqual(1);
         const last = c.snapshots[c.snapshots.length - 1]!;
@@ -801,6 +808,7 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
         // but for our seeded dataset every cohort has 2 samples so they're
         // numeric.
         expect(typeof last.compositeMean).toBe("number");
+        expect(last.sampleDateKey).toBe(liveSampleDateKey);
       }
       // The gap must match across cohort rows of the same run, since it's
       // a per-run statistic repeated on every cohort row.

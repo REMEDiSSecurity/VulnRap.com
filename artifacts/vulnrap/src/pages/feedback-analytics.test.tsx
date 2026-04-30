@@ -656,6 +656,89 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
     expect(summary.gapPoints.map(p => p.value)).toEqual([10, 11]);
     expect(summary.latestGap).toBe(11);
   });
+
+  // Task #358 — `sampleDateKey` annotations on the trend so reviewers can
+  // tell daily-slice rotations apart from real cohort drift.
+  it("threads sampleDateKey onto plottable points and counts adjacent rotations per tier", () => {
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 4,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-04-22" },
+            // Same slice → no rotation between #1 and #2.
+            { timestamp: "2026-04-22T12:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18, sampleDateKey: "2026-04-22" },
+            // Slice flipped → rotation between #2 and #3.
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 19, sampleDateKey: "2026-04-23" },
+            // Slice flipped again → rotation between #3 and #4.
+            { timestamp: "2026-04-24T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 73, gap: 20, sampleDateKey: "2026-04-24" },
+          ],
+        },
+      ],
+    });
+    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    expect(t1.points.map(p => p.sampleDateKey)).toEqual([
+      "2026-04-22",
+      "2026-04-22",
+      "2026-04-23",
+      "2026-04-24",
+    ]);
+    expect(t1.rotationCount).toBe(2);
+    expect(t1.latestSampleDateKey).toBe("2026-04-24");
+    expect(summary.latestSampleDateKey).toBe("2026-04-24");
+    // Threaded onto the gap series too, so the gap sparkline can mark rotations.
+    expect(summary.gapPoints.map(p => p.sampleDateKey)).toEqual([
+      "2026-04-22",
+      "2026-04-22",
+      "2026-04-23",
+      "2026-04-24",
+    ]);
+  });
+
+  it("does not count a rotation across a gap where one side lacks a slice key (legacy rows)", () => {
+    // Pre-Task-#358 history won't have the field — we mustn't ghost-mark
+    // a rotation purely because the data showed up partway through the
+    // trend. Rotation detection only fires when both sides actually
+    // disagree on a real key.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 3,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18, sampleDateKey: "2026-04-23" },
+            { timestamp: "2026-04-23T12:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 18, sampleDateKey: "2026-04-23" },
+          ],
+        },
+      ],
+    });
+    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    expect(t1.rotationCount).toBe(0);
+    expect(t1.latestSampleDateKey).toBe("2026-04-23");
+    expect(summary.latestSampleDateKey).toBe("2026-04-23");
+  });
+
+  it("falls back to a null latest slice key when no snapshot carried one", () => {
+    // Pure-legacy history: the summary reports no slice annotations so
+    // the dashboard's "latest slice" badge stays hidden.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 1,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+          ],
+        },
+      ],
+    });
+    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    expect(t1.latestSampleDateKey).toBeNull();
+    expect(t1.rotationCount).toBe(0);
+    expect(summary.latestSampleDateKey).toBeNull();
+  });
 });
 
 describe("computeCohortFixtureDelta (Task #256 — surface synthetic-vs-dataset cohort drift)", () => {

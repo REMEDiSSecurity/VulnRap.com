@@ -53,6 +53,21 @@ export interface DatasetCohortSnapshot {
    * tooltip explaining "rolled up from N runs that day").
    */
   aggregated?: boolean;
+  /**
+   * Task #358 — UTC slice key (YYYY-MM-DD) of the curated cohort that
+   * contributed to this snapshot. Mirrors the `sampleDateKey` returned
+   * on the live `datasetSamples` block in /api/test/run so reviewers
+   * looking at the persisted trend can tell which day's slice the
+   * cohort means came from. The slice rotates daily, so two adjacent
+   * snapshots whose mean jumps but whose `sampleDateKey` differs
+   * indicate a slice rotation rather than real model drift.
+   *
+   * Optional because (a) the field was added after Task #187's initial
+   * shape so older on-disk rows won't have it, and (b) the persistence
+   * call is wrapped in try/catch so we'd rather record a snapshot
+   * without the key than fail the smoke endpoint.
+   */
+  sampleDateKey?: string;
 }
 
 export interface DatasetHistoryFile {
@@ -184,6 +199,23 @@ export function compactSnapshots(
   const aggregated: DatasetCohortSnapshot[] = [];
   for (const [day, perTier] of byDay) {
     for (const [tier, bucket] of perTier) {
+      // Task #358 — propagate the slice key onto the rolled-up row so
+      // the dashboard can still annotate the day-bucket on the trend.
+      // Pick the latest run's key in the bucket (which corresponds to
+      // the most recent observation for that UTC day); rows without a
+      // key are skipped so a single run with the field set still wins
+      // over older history that pre-dates the field.
+      const sortedByTime = bucket
+        .slice()
+        .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+      let sampleDateKey: string | undefined;
+      for (let i = sortedByTime.length - 1; i >= 0; i--) {
+        const k = sortedByTime[i]!.sampleDateKey;
+        if (typeof k === "string" && k.length > 0) {
+          sampleDateKey = k;
+          break;
+        }
+      }
       aggregated.push({
         timestamp: `${day}T00:00:00.000Z`,
         tier,
@@ -199,6 +231,7 @@ export function compactSnapshots(
         // run-day value while still folding multi-run days correctly.
         gap: weightedMean(bucket, b => b.gap),
         aggregated: true,
+        ...(sampleDateKey !== undefined ? { sampleDateKey } : {}),
       });
     }
   }

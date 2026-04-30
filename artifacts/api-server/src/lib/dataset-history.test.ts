@@ -49,9 +49,9 @@ describe("appendDatasetCohortSnapshots", () => {
     const ts1 = "2026-04-22T12:00:00.000Z";
     await appendDatasetCohortSnapshots(
       [
-        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72.4, gap: 18.2 },
-        { tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 58.1, gap: 18.2 },
-        { tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 54.2, gap: 18.2 },
+        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72.4, gap: 18.2, sampleDateKey: "2026-04-22" },
+        { tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 58.1, gap: 18.2, sampleDateKey: "2026-04-22" },
+        { tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 54.2, gap: 18.2, sampleDateKey: "2026-04-22" },
       ],
       ts1,
     );
@@ -59,9 +59,9 @@ describe("appendDatasetCohortSnapshots", () => {
     const ts2 = "2026-04-29T12:00:00.000Z";
     await appendDatasetCohortSnapshots(
       [
-        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70.0, gap: 14.5 },
-        { tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 56.0, gap: 14.5 },
-        { tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 55.5, gap: 14.5 },
+        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70.0, gap: 14.5, sampleDateKey: "2026-04-29" },
+        { tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 56.0, gap: 14.5, sampleDateKey: "2026-04-29" },
+        { tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 55.5, gap: 14.5, sampleDateKey: "2026-04-29" },
       ],
       ts2,
     );
@@ -73,15 +73,48 @@ describe("appendDatasetCohortSnapshots", () => {
     const t1 = file.snapshots.filter(s => s.tier === "T1_LEGIT");
     expect(t1.map(s => s.timestamp)).toEqual([ts1, ts2]);
     expect(t1.map(s => s.compositeMean)).toEqual([72.4, 70.0]);
+    // Task #358 — every persisted row carries the run's slice key so
+    // the dashboard can mark daily-slice rotations on the trend.
+    expect(t1.map(s => s.sampleDateKey)).toEqual(["2026-04-22", "2026-04-29"]);
     // The gap is repeated across cohort rows of the same run so the
     // dashboard never has to join rows to render it.
     for (const s of file.snapshots.filter(s => s.timestamp === ts2)) {
       expect(s.gap).toBe(14.5);
+      expect(s.sampleDateKey).toBe("2026-04-29");
     }
     // Recent rows are not flagged as aggregated.
     for (const s of file.snapshots) {
       expect(s.aggregated).toBeUndefined();
     }
+  });
+
+  it("preserves rows that pre-date the sampleDateKey field by leaving the field undefined", async () => {
+    // Older on-disk rows from before Task #358 won't have a
+    // `sampleDateKey`. Appending a fresh row mustn't synthesise one for
+    // them retroactively — the field must stay undefined so the
+    // dashboard doesn't surface a fabricated slice annotation on a
+    // historical point.
+    const tsOld = "2026-04-15T12:00:00.000Z";
+    await appendDatasetCohortSnapshots(
+      [
+        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+      ],
+      tsOld,
+    );
+    const tsNew = "2026-04-22T12:00:00.000Z";
+    await appendDatasetCohortSnapshots(
+      [
+        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 19, sampleDateKey: "2026-04-22" },
+      ],
+      tsNew,
+    );
+
+    const file = await readDatasetHistory();
+    expect(file.snapshots.length).toBe(2);
+    const oldRow = file.snapshots.find(s => s.timestamp === tsOld)!;
+    const newRow = file.snapshots.find(s => s.timestamp === tsNew)!;
+    expect(oldRow.sampleDateKey).toBeUndefined();
+    expect(newRow.sampleDateKey).toBe("2026-04-22");
   });
 
   it("caps the persisted history at MAX_SNAPSHOTS rows", async () => {
@@ -225,6 +258,55 @@ describe("compactSnapshots", () => {
     ];
     const out = compactSnapshots(snaps, now, 30);
     expect(out).toEqual(snaps);
+  });
+
+  it("propagates the latest run's sampleDateKey onto rolled-up daily rows", () => {
+    // Task #358 — when several runs in one UTC day get folded into a
+    // single aggregated row, the slice key from the most recent run in
+    // that bucket is what survives. That keeps the dashboard's
+    // "rotation marker" honest: a daily aggregate represents the slice
+    // that was active by end-of-day.
+    const now = new Date("2026-04-22T12:00:00.000Z");
+    const oldDay = new Date(now.getTime() - 60 * DAY_MS);
+    const oldIso = (h: number) =>
+      new Date(Date.UTC(
+        oldDay.getUTCFullYear(), oldDay.getUTCMonth(), oldDay.getUTCDate(), h,
+      )).toISOString();
+    const oldDayKey = oldDay.toISOString().slice(0, 10);
+
+    const snaps: DatasetCohortSnapshot[] = [
+      // First run that day landed before the slice rotated to the same UTC day.
+      { timestamp: oldIso(1), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-02-20" },
+      // Later runs that day saw the rotated slice.
+      { timestamp: oldIso(10), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 18, sampleDateKey: oldDayKey },
+      { timestamp: oldIso(20), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 74, gap: 18, sampleDateKey: oldDayKey },
+    ];
+    const out = compactSnapshots(snaps, now, 30);
+    expect(out.length).toBe(1);
+    expect(out[0]!.aggregated).toBe(true);
+    expect(out[0]!.sampleDateKey).toBe(oldDayKey);
+  });
+
+  it("omits sampleDateKey from rolled-up rows when none of the contributing snapshots carried one", () => {
+    // Pre-Task-#358 rows on disk won't have a slice key, so a bucket
+    // made entirely of those legacy rows must produce an aggregate
+    // without the field — synthesising a value would mislead the
+    // dashboard into drawing a phantom rotation marker.
+    const now = new Date("2026-04-22T12:00:00.000Z");
+    const oldDay = new Date(now.getTime() - 60 * DAY_MS);
+    const oldIso = (h: number) =>
+      new Date(Date.UTC(
+        oldDay.getUTCFullYear(), oldDay.getUTCMonth(), oldDay.getUTCDate(), h,
+      )).toISOString();
+
+    const snaps: DatasetCohortSnapshot[] = [
+      { timestamp: oldIso(1), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+      { timestamp: oldIso(5), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 18 },
+    ];
+    const out = compactSnapshots(snaps, now, 30);
+    expect(out.length).toBe(1);
+    expect(out[0]!.aggregated).toBe(true);
+    expect(out[0]!.sampleDateKey).toBeUndefined();
   });
 
   it("is idempotent — re-running compaction on already-aggregated rows preserves their numbers", () => {

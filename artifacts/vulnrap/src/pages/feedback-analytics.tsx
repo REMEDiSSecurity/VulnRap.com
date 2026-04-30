@@ -12218,6 +12218,13 @@ export interface DatasetHistorySnapshot {
   count: number;
   compositeMean: number | null;
   gap: number | null;
+  /**
+   * Task #358 — UTC slice key (YYYY-MM-DD) of the curated cohort that
+   * contributed to this snapshot, mirrored from the live `datasetSamples`
+   * block on /api/test/run. Optional because rows persisted before the
+   * field was added won't carry it.
+   */
+  sampleDateKey?: string;
 }
 
 interface DatasetHistoryCohort {
@@ -12233,6 +12240,13 @@ interface DatasetHistoryResponse {
 export interface DatasetHistorySeriesPoint {
   timestamp: string;
   value: number;
+  /**
+   * Task #358 — UTC slice key the snapshot came from (when the
+   * persisted row carried one). Used to render rotation markers on
+   * the per-tier sparklines so reviewers can tell daily-slice flips
+   * apart from genuine cohort drift.
+   */
+  sampleDateKey?: string;
 }
 
 export interface DatasetHistorySeries {
@@ -12243,6 +12257,20 @@ export interface DatasetHistorySeries {
   points: DatasetHistorySeriesPoint[];
   /** Latest non-null mean if any (the rightmost point). */
   latest: number | null;
+  /**
+   * Task #358 — most recent slice key seen on a plottable point in this
+   * series (or null when no snapshot carried one). Surfaced as a small
+   * caption next to the latest mean so reviewers can read the active
+   * slice at a glance.
+   */
+  latestSampleDateKey: string | null;
+  /**
+   * Task #358 — count of slice rotations observed across this series.
+   * One rotation == an adjacent pair of plottable points whose
+   * sampleDateKey differs (and both are non-null). Used to chip the
+   * sparkline header with "N rotations" when present.
+   */
+  rotationCount: number;
 }
 
 export interface DatasetHistorySummary {
@@ -12253,6 +12281,8 @@ export interface DatasetHistorySummary {
   /** Gap (T1−T3) series, plottable points only. */
   gapPoints: DatasetHistorySeriesPoint[];
   latestGap: number | null;
+  /** Task #358 — latest slice key observed across any cohort, or null. */
+  latestSampleDateKey: string | null;
 }
 
 /**
@@ -12278,7 +12308,26 @@ export function summarizeDatasetHistory(
     const points: DatasetHistorySeriesPoint[] = [];
     for (const s of snaps) {
       if (s.compositeMean != null && Number.isFinite(s.compositeMean)) {
-        points.push({ timestamp: s.timestamp, value: s.compositeMean });
+        const point: DatasetHistorySeriesPoint = { timestamp: s.timestamp, value: s.compositeMean };
+        if (typeof s.sampleDateKey === "string" && s.sampleDateKey.length > 0) {
+          point.sampleDateKey = s.sampleDateKey;
+        }
+        points.push(point);
+      }
+    }
+    // Task #358 — count adjacent pairs of plottable points whose slice
+    // key differs (both must be non-null). A run of pre-Task-#358 rows
+    // followed by post-Task-#358 rows is intentionally NOT counted as a
+    // rotation, since the legacy rows simply lack the data.
+    let rotationCount = 0;
+    let latestSampleDateKey: string | null = null;
+    for (let i = 0; i < points.length; i++) {
+      const cur = points[i]!;
+      if (cur.sampleDateKey) latestSampleDateKey = cur.sampleDateKey;
+      if (i === 0) continue;
+      const prev = points[i - 1]!;
+      if (prev.sampleDateKey && cur.sampleDateKey && prev.sampleDateKey !== cur.sampleDateKey) {
+        rotationCount += 1;
       }
     }
     return {
@@ -12286,6 +12335,8 @@ export function summarizeDatasetHistory(
       snapshotCount: snaps.length,
       points,
       latest: points.length > 0 ? points[points.length - 1]!.value : null,
+      latestSampleDateKey,
+      rotationCount,
     };
   });
 
@@ -12299,16 +12350,41 @@ export function summarizeDatasetHistory(
       if (s.gap == null || !Number.isFinite(s.gap)) continue;
       if (seenTimestamps.has(s.timestamp)) continue;
       seenTimestamps.add(s.timestamp);
-      gapEntries.push({ timestamp: s.timestamp, value: s.gap });
+      const entry: DatasetHistorySeriesPoint = { timestamp: s.timestamp, value: s.gap };
+      if (typeof s.sampleDateKey === "string" && s.sampleDateKey.length > 0) {
+        entry.sampleDateKey = s.sampleDateKey;
+      }
+      gapEntries.push(entry);
     }
   }
   gapEntries.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  // Task #358 — pick the most recent slice key observed across the
+  // entire history (any tier or the gap series). The persisted rows of
+  // a single run all share the same key, so this is unambiguous.
+  let latestSampleDateKey: string | null = null;
+  let latestSampleDateTimestamp = "";
+  for (const series of tiers) {
+    for (const p of series.points) {
+      if (p.sampleDateKey && p.timestamp >= latestSampleDateTimestamp) {
+        latestSampleDateTimestamp = p.timestamp;
+        latestSampleDateKey = p.sampleDateKey;
+      }
+    }
+  }
+  for (const p of gapEntries) {
+    if (p.sampleDateKey && p.timestamp >= latestSampleDateTimestamp) {
+      latestSampleDateTimestamp = p.timestamp;
+      latestSampleDateKey = p.sampleDateKey;
+    }
+  }
 
   return {
     isEmpty: total === 0 || cohorts.every(c => c.snapshots.length === 0),
     tiers,
     gapPoints: gapEntries,
     latestGap: gapEntries.length > 0 ? gapEntries[gapEntries.length - 1]!.value : null,
+    latestSampleDateKey,
   };
 }
 
@@ -12343,21 +12419,53 @@ function DatasetHistoryMeanSparkline({ points }: { points: DatasetHistorySeriesP
   const yMin = minY - span * 0.1;
   const yMax = maxY + span * 0.1;
   const yRange = yMax - yMin;
+  const xAt = (i: number) => PAD + (i / (points.length - 1)) * (W - 2 * PAD);
   const coords = points.map((p, i) => {
-    const x = PAD + (i / (points.length - 1)) * (W - 2 * PAD);
+    const x = xAt(i);
     const py = PAD + (1 - (p.value - yMin) / yRange) * (H - 2 * PAD);
     return `${x.toFixed(1)},${py.toFixed(1)}`;
   });
   const lastPt = points[points.length - 1]!;
-  const lastX = PAD + (W - 2 * PAD);
+  const lastX = xAt(points.length - 1);
   const lastY = PAD + (1 - (lastPt.value - yMin) / yRange) * (H - 2 * PAD);
-  const tooltip =
+
+  // Task #358 — for every adjacent pair whose slice key flipped, draw a
+  // faint vertical tick midway between the two points so reviewers can
+  // see at a glance which jumps coincide with a daily-slice rotation
+  // (vs. real model drift). We skip pairs where either side lacks a
+  // key so legacy rows don't ghost-mark a transition.
+  const rotationXs: number[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1]!;
+    const cur = points[i]!;
+    if (prev.sampleDateKey && cur.sampleDateKey && prev.sampleDateKey !== cur.sampleDateKey) {
+      rotationXs.push((xAt(i - 1) + xAt(i)) / 2);
+    }
+  }
+
+  const tooltipBase =
     `${points.length} snapshots: ${ys[0]!.toFixed(1)} → ${lastPt.value.toFixed(1)}`
     + ` (range ${minY.toFixed(1)}–${maxY.toFixed(1)})`;
+  const tooltip = rotationXs.length > 0
+    ? `${tooltipBase} · ${rotationXs.length} slice rotation${rotationXs.length === 1 ? "" : "s"}`
+    : tooltipBase;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-8" role="img" aria-label={tooltip}>
       <title>{tooltip}</title>
       <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />
+      {rotationXs.map((x, i) => (
+        <line
+          key={`rot-${i}`}
+          x1={x}
+          y1={PAD}
+          x2={x}
+          y2={H - PAD}
+          stroke="rgba(217, 119, 6, 0.55)"
+          strokeWidth={0.75}
+          strokeDasharray="2 2"
+          data-testid="dataset-cohort-drift-rotation-marker"
+        />
+      ))}
       <polyline
         fill="none"
         stroke="#06b6d4"
@@ -12402,10 +12510,27 @@ function DatasetCohortDriftSection() {
               {data.totalSnapshots} snapshot{data.totalSnapshots === 1 ? "" : "s"}
             </Badge>
           )}
+          {/*
+            Task #358 — chip the latest UTC slice key so reviewers can
+            tell at a glance which day's cohort the trend's right edge
+            represents. Only rendered when a recent snapshot actually
+            carries the field (older history won't).
+          */}
+          {!summary.isEmpty && summary.latestSampleDateKey && (
+            <Badge
+              variant="outline"
+              className="text-[10px] tabular-nums font-mono"
+              data-testid="dataset-cohort-drift-latest-slice"
+              title={`Latest snapshot used the ${summary.latestSampleDateKey} UTC slice (rotates daily — vertical ticks on the trend mark a slice change rather than real drift).`}
+            >
+              slice {summary.latestSampleDateKey}
+            </Badge>
+          )}
         </CardTitle>
         <CardDescription>
           Per-tier composite mean and the T1−T3 gap over time, drawn from the persisted history of
-          /api/test/run on the curated 25-per-label real-report cohort.
+          /api/test/run on the curated 25-per-label real-report cohort. Vertical dashed ticks mark
+          UTC slice rotations so reviewers can distinguish daily-slice flips from real cohort drift.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -12429,8 +12554,21 @@ function DatasetCohortDriftSection() {
                   <span className="font-mono">
                     {DATASET_COHORT_TIER_LABELS[series.tier] ?? series.tier}
                   </span>
-                  <span className="tabular-nums text-muted-foreground/60">
+                  <span className="tabular-nums text-muted-foreground/60 flex items-center gap-1">
                     {series.snapshotCount} pt{series.snapshotCount === 1 ? "" : "s"}
+                    {/*
+                      Task #358 — note rotation count when present so a
+                      jittery sparkline isn't confused for model drift.
+                    */}
+                    {series.rotationCount > 0 && (
+                      <span
+                        className="text-amber-500/80 font-mono normal-case"
+                        title={`${series.rotationCount} UTC slice rotation${series.rotationCount === 1 ? "" : "s"} observed across the trend.`}
+                        data-testid={`dataset-cohort-drift-rotations-${series.tier}`}
+                      >
+                        · {series.rotationCount} rot
+                      </span>
+                    )}
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2">

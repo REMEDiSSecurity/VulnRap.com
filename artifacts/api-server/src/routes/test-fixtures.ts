@@ -2925,12 +2925,16 @@ router.get("/test/run", async (req, res) => {
       // endpoint, mirroring the archetype-history persistence above.
       try {
         await appendDatasetCohortSnapshots(
+          // Task #358 — also persist the live block's `sampleDateKey`
+          // alongside the timestamp so the dataset-history trend can
+          // distinguish daily-slice rotations from real cohort drift.
           cohorts.map(c => ({
             tier: c.tier,
             label: c.label,
             count: c.count,
             compositeMean: c.compositeMean,
             gap: dsGap,
+            sampleDateKey: dsDateKey,
           })),
           snapshotTimestamp,
         );
