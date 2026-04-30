@@ -6611,6 +6611,16 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                   "T3_SLOP",
                   "T4_HALLUCINATED",
                 ]),
+                snippet: zod
+                  .object({
+                    before: zod.string(),
+                    match: zod.string(),
+                    after: zod.string(),
+                  })
+                  .nullish()
+                  .describe(
+                    "Task #345 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\ncan judge the un-flag in place without opening \/verify\/:id.\nReturned as a structured `{ before, match, after }` triple so\nthe UI can render the matched phrase highlighted while the\nrest of the snippet stays plain text. All three fields are\nraw text — the client is responsible for escaping them when\nrendering (React's text-node rendering already does this).\nNull when the matched phrase could not be located in the\noriginal text (defensive fallback; should not happen for the\nflow that produced the match).\n",
+                  ),
               }),
             ),
             warning: zod.union([zod.string(), zod.null()]),
@@ -6659,6 +6669,16 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                       "T3_SLOP",
                       "T4_HALLUCINATED",
                     ]),
+                    snippet: zod
+                      .object({
+                        before: zod.string(),
+                        match: zod.string(),
+                        after: zod.string(),
+                      })
+                      .nullish()
+                      .describe(
+                        "Task #345 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\ncan judge the un-flag in place without opening \/verify\/:id.\nReturned as a structured `{ before, match, after }` triple so\nthe UI can render the matched phrase highlighted while the\nrest of the snippet stays plain text. All three fields are\nraw text — the client is responsible for escaping them when\nrendering (React's text-node rendering already does this).\nNull when the matched phrase could not be located in the\noriginal text (defensive fallback; should not happen for the\nflow that produced the match).\n",
+                      ),
                   }),
                 ),
                 warning: zod.union([zod.string(), zod.null()]),
@@ -6855,6 +6875,16 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                   "T3_SLOP",
                   "T4_HALLUCINATED",
                 ]),
+                snippet: zod
+                  .object({
+                    before: zod.string(),
+                    match: zod.string(),
+                    after: zod.string(),
+                  })
+                  .nullish()
+                  .describe(
+                    "Task #345 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\ncan judge the un-flag in place without opening \/verify\/:id.\nReturned as a structured `{ before, match, after }` triple so\nthe UI can render the matched phrase highlighted while the\nrest of the snippet stays plain text. All three fields are\nraw text — the client is responsible for escaping them when\nrendering (React's text-node rendering already does this).\nNull when the matched phrase could not be located in the\noriginal text (defensive fallback; should not happen for the\nflow that produced the match).\n",
+                  ),
               }),
             ),
             warning: zod.union([zod.string(), zod.null()]),
@@ -6903,6 +6933,16 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                       "T3_SLOP",
                       "T4_HALLUCINATED",
                     ]),
+                    snippet: zod
+                      .object({
+                        before: zod.string(),
+                        match: zod.string(),
+                        after: zod.string(),
+                      })
+                      .nullish()
+                      .describe(
+                        "Task #345 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\ncan judge the un-flag in place without opening \/verify\/:id.\nReturned as a structured `{ before, match, after }` triple so\nthe UI can render the matched phrase highlighted while the\nrest of the snippet stays plain text. All three fields are\nraw text — the client is responsible for escaping them when\nrendering (React's text-node rendering already does this).\nNull when the matched phrase could not be located in the\noriginal text (defensive fallback; should not happen for the\nflow that produced the match).\n",
+                      ),
                   }),
                 ),
                 warning: zod.union([zod.string(), zod.null()]),

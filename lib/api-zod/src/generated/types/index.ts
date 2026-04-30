@@ -88,6 +88,7 @@ export * from "./handwavyPhraseBatchRemoveBody";
 export * from "./handwavyPhraseBatchRemoveDryRunImpact";
 export * from "./handwavyPhraseBatchRemoveDryRunImpactByTier";
 export * from "./handwavyPhraseBatchRemoveDryRunImpactSampleMatchesItem";
+export * from "./handwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemSnippet";
 export * from "./handwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier";
 export * from "./handwavyPhraseBatchRemoveDryRunResponse";
 export * from "./handwavyPhraseBatchRemoveDryRunResponseDryRunImpact";

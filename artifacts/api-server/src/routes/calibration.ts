@@ -324,6 +324,19 @@ function detectCuratedOverlaps(
 // would silently drop. We split the tally by tier so reviewers can see the
 // trade-off: T3/T4 lost = real slop detection lost (worrying); T1/T2 lost =
 // false-positives that would also disappear (informational good news).
+// Task #345 — context snippet attached to each sample match so reviewers can
+// judge the un-flag in place without opening /verify/:id. Returned as a
+// structured `{ before, match, after }` triple so the UI can render the
+// matched phrase highlighted (e.g. wrapped in a `<mark>`) while the rest of
+// the snippet stays plain text. All three fields are raw text — React's
+// text-node rendering escapes them when the client interpolates them, so the
+// server does not pre-encode HTML entities.
+export interface SampleMatchSnippet {
+  before: string;
+  match: string;
+  after: string;
+}
+
 interface RemovalImpact {
   total: number;
   byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
@@ -332,7 +345,13 @@ interface RemovalImpact {
   /** T1 + T2 lost matches — false-positive flags that would also disappear. */
   falsePositivesDropped: number;
   corpusSize: number;
-  sampleMatches: Array<{ id: string; tier: CorpusTier }>;
+  // Task #345 — each sample match now also carries a short context snippet
+  // (when one can be located in the row's original text) so the per-row
+  // Trash preview can show reviewers what the report actually said next to
+  // each fixture/report ID. `snippet` is null only for the defensive
+  // fallback where the matched phrase can no longer be found in the
+  // original text (should not happen on the path that produced the match).
+  sampleMatches: Array<{ id: string; tier: CorpusTier; snippet: SampleMatchSnippet | null }>;
   warning: string | null;
   // Task #218 — for production scans, the createdAt range of the scanned
   // sample so reviewers using the bulk-retire flow have the same "is this
@@ -361,6 +380,85 @@ function fixtureMatchesAny(haystackNormalized: string, phrases: Iterable<string>
   return false;
 }
 
+// Task #345 — Of the supplied phrases, return the first one that occurs as a
+// substring of `haystackNormalized` (lowercase + collapsed whitespace), or
+// `null` when none of them match. Mirrors `fixtureMatchesAny` but surfaces
+// WHICH phrase matched so the caller can build a snippet around it.
+function findFirstMatchingPhrase(
+  haystackNormalized: string,
+  phrases: Iterable<string>,
+): string | null {
+  for (const p of phrases) {
+    if (!p) continue;
+    if (haystackNormalized.includes(p)) return p;
+  }
+  return null;
+}
+
+const SNIPPET_MAX_LEN = 80;
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Task #345 — Build a `~80 char` context snippet centered on the matched
+// phrase, cut from the row's ORIGINAL text (not the lowercased / whitespace-
+// collapsed haystack used for matching) so the reviewer reads the report's
+// actual wording. The matched phrase comes in already-normalized
+// (lowercase + collapsed whitespace) so we expand it back into a regex that
+// matches the original-cased, original-spaced run of characters and report
+// the surrounding context as a `{ before, match, after }` triple. The
+// boundaries are nudged to the nearest whitespace so we don't slice through
+// a word, and ellipses are added when the snippet doesn't reach the start
+// or end of the source text. Returns `null` when the phrase cannot be
+// located in the original text (defensive: the caller already knows the
+// normalized haystack matched, but we're conservative against pathological
+// inputs).
+export function buildSnippetForMatch(
+  text: string,
+  normalizedNeedle: string,
+  maxLen: number = SNIPPET_MAX_LEN,
+): SampleMatchSnippet | null {
+  if (!normalizedNeedle || !text) return null;
+  const tokens = normalizedNeedle.split(" ").filter((t) => t.length > 0);
+  if (tokens.length === 0) return null;
+  const pattern = tokens.map(escapeRegExp).join("\\s+");
+  const re = new RegExp(pattern, "i");
+  const m = re.exec(text);
+  if (!m) return null;
+  const start = m.index;
+  const end = start + m[0].length;
+  const matched = m[0].replace(/\s+/g, " ").trim();
+
+  const sideBudget = Math.max(0, maxLen - matched.length);
+  const beforeBudget = Math.floor(sideBudget / 2);
+  const afterBudget = sideBudget - beforeBudget;
+
+  let beforeStart = Math.max(0, start - beforeBudget);
+  let afterEnd = Math.min(text.length, end + afterBudget);
+
+  // Nudge boundaries to whitespace so we don't slice through a word.
+  if (beforeStart > 0) {
+    const slice = text.slice(beforeStart, start);
+    const firstWs = slice.search(/\s/);
+    if (firstWs >= 0 && firstWs < slice.length - 1) {
+      beforeStart = beforeStart + firstWs + 1;
+    }
+  }
+  if (afterEnd < text.length) {
+    const slice = text.slice(end, afterEnd);
+    const lastWs = slice.search(/\s\S*$/);
+    if (lastWs > 0) afterEnd = end + lastWs;
+  }
+
+  let before = text.slice(beforeStart, start).replace(/\s+/g, " ");
+  let after = text.slice(end, afterEnd).replace(/\s+/g, " ");
+  if (beforeStart > 0) before = "…" + before;
+  if (afterEnd < text.length) after = after + "…";
+
+  return { before, match: matched, after };
+}
+
 function computeRemovalImpactOnRows(
   removedPhrases: string[],
   remainingPhrases: string[],
@@ -384,7 +482,7 @@ function computeRemovalImpactOnRows(
   archiveTotal: number | null = null,
 ): RemovalImpact {
   const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
-  const sampleMatches: Array<{ id: string; tier: CorpusTier }> = [];
+  const sampleMatches: Array<{ id: string; tier: CorpusTier; snippet: SampleMatchSnippet | null }> = [];
   let total = 0;
   // Task #218 — track the createdAt window of the rows that actually made it
   // into the scanned sample (i.e. survived the label/content filter at the
@@ -405,9 +503,13 @@ function computeRemovalImpactOnRows(
     }
     if (removedSet.length === 0) continue;
     const haystack = r.text.toLowerCase().replace(/\s+/g, " ");
-    const wasFlagged = fixtureMatchesAny(haystack, removedSet) ||
-      fixtureMatchesAny(haystack, remainingPhrases);
-    if (!wasFlagged) continue;
+    // Task #345 — find WHICH removed phrase matched (not just whether one
+    // did) so we can build a snippet around it for the sample-match list.
+    // A row is unflagged-by-removal exactly when a removed phrase matches
+    // and no remaining phrase does, so we can short-circuit on the
+    // removedSet check first and skip the redundant `wasFlagged` probe.
+    const matchedRemoved = findFirstMatchingPhrase(haystack, removedSet);
+    if (!matchedRemoved) continue;
     const willBeFlagged = fixtureMatchesAny(haystack, remainingPhrases);
     if (willBeFlagged) continue;
     total += 1;
@@ -415,7 +517,10 @@ function computeRemovalImpactOnRows(
     else if (r.tier === "T2_BORDERLINE") byTier.t2Borderline += 1;
     else if (r.tier === "T3_SLOP") byTier.t3Slop += 1;
     else byTier.t4Hallucinated += 1;
-    if (sampleMatches.length < 12) sampleMatches.push({ id: r.id, tier: r.tier });
+    if (sampleMatches.length < 12) {
+      const snippet = buildSnippetForMatch(r.text, matchedRemoved);
+      sampleMatches.push({ id: r.id, tier: r.tier, snippet });
+    }
   }
   const validDetectionsLost = byTier.t3Slop + byTier.t4Hallucinated;
   const falsePositivesDropped = byTier.t1Legit + byTier.t2Borderline;
@@ -524,6 +629,7 @@ export const __testing = {
   detectCuratedOverlaps,
   computeRemovalImpactOnRows,
   previewRemovalAgainstCorpus,
+  buildSnippetForMatch,
   PRODUCTION_PREVIEW_LIMIT,
   PRODUCTION_PREVIEW_LIMIT_MIN,
   PRODUCTION_PREVIEW_LIMIT_MAX,

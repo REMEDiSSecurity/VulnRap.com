@@ -10,6 +10,7 @@ const {
   productionLabelToTier,
   PRODUCTION_PREVIEW_LIMIT,
   computeRemovalImpactOnRows,
+  buildSnippetForMatch,
 } = __testing;
 
 describe("productionLabelToTier", () => {
@@ -217,5 +218,122 @@ describe("computeRemovalImpactOnRows archiveTotal threading", () => {
     );
     expect(out.archiveTotal).toBe(100);
     expect(out.validDetectionsLost).toBe(0);
+  });
+});
+
+// Task #345 — context-snippet helper. Slices a ~80-char window centered on
+// the matched phrase out of the row's ORIGINAL text so reviewers can judge
+// the un-flag in place without opening /verify/:id.
+describe("buildSnippetForMatch", () => {
+  it("returns a {before, match, after} triple with the matched phrase preserving its original case", () => {
+    const out = buildSnippetForMatch(
+      "The reviewer noted that this is OBVIOUS slop and should be retired.",
+      "obvious slop",
+    );
+    expect(out).not.toBeNull();
+    expect(out!.match).toBe("OBVIOUS slop");
+    expect(`${out!.before}${out!.match}${out!.after}`).toContain("OBVIOUS slop");
+  });
+
+  it("highlights the match where it actually occurs (substring positioning, not the start of the row)", () => {
+    const out = buildSnippetForMatch(
+      "alpha beta gamma the magic phrase here ends epsilon zeta",
+      "magic phrase",
+    );
+    expect(out).not.toBeNull();
+    expect(out!.match).toBe("magic phrase");
+    // The phrase is mid-row, so context flanks it on both sides.
+    expect(out!.before.length).toBeGreaterThan(0);
+    expect(out!.after.length).toBeGreaterThan(0);
+  });
+
+  it("matches case-insensitively and treats collapsed whitespace in the needle as any-whitespace in the text", () => {
+    const out = buildSnippetForMatch(
+      "Lots of spaces and newlines\nbetween    UNSAFE\n\tFOO words here",
+      "unsafe foo",
+    );
+    expect(out).not.toBeNull();
+    // The original (multi-whitespace) match is collapsed to a single
+    // space when emitted so the highlighted token reads naturally.
+    expect(out!.match).toBe("UNSAFE FOO");
+  });
+
+  it("adds a leading ellipsis when the snippet does not reach the start of the source text", () => {
+    const long = "x ".repeat(100) + "fishy claim about CVE-1234";
+    const out = buildSnippetForMatch(long, "fishy claim");
+    expect(out).not.toBeNull();
+    expect(out!.before.startsWith("…")).toBe(true);
+  });
+
+  it("adds a trailing ellipsis when the snippet does not reach the end of the source text", () => {
+    const long = "fishy claim about CVE-1234 " + "y ".repeat(100);
+    const out = buildSnippetForMatch(long, "fishy claim");
+    expect(out).not.toBeNull();
+    expect(out!.after.endsWith("…")).toBe(true);
+  });
+
+  it("keeps the rendered snippet near the configured budget (matched phrase + side context)", () => {
+    const long = "x ".repeat(50) + "MARKER PHRASE HERE" + " y".repeat(50);
+    const out = buildSnippetForMatch(long, "marker phrase here", 80);
+    expect(out).not.toBeNull();
+    const rendered = `${out!.before}${out!.match}${out!.after}`;
+    // 80 char target + ellipses + a wee bit of slack for word-boundary nudging.
+    expect(rendered.length).toBeLessThanOrEqual(100);
+  });
+
+  it("returns null when the needle cannot be located in the original text (defensive fallback)", () => {
+    const out = buildSnippetForMatch("nothing to see here", "obvious slop");
+    expect(out).toBeNull();
+  });
+
+  it("returns null on empty input", () => {
+    expect(buildSnippetForMatch("", "phrase")).toBeNull();
+    expect(buildSnippetForMatch("text here", "")).toBeNull();
+  });
+
+  it("escapes regex-special characters inside the needle so they are matched literally", () => {
+    const out = buildSnippetForMatch(
+      "the reviewer noted (probably) hand-wavy claim here",
+      "(probably)",
+    );
+    expect(out).not.toBeNull();
+    expect(out!.match).toBe("(probably)");
+  });
+});
+
+// Task #345 — verify the snippet is threaded through to each pushed sample
+// match by the shared removal-impact computer, and that it carries the
+// original-cased, whitespace-collapsed matched phrase the row contained.
+describe("computeRemovalImpactOnRows snippet threading", () => {
+  it("attaches a snippet to every sample match identifying the removed phrase", () => {
+    const out = computeRemovalImpactOnRows(
+      ["obvious slop"],
+      [],
+      [
+        { id: "a", tier: "T3_SLOP" as const, text: "definitely an OBVIOUS slop claim, no proof" },
+        { id: "b", tier: "T4_HALLUCINATED" as const, text: "see also: obvious   slop here" },
+      ],
+      "the curated benchmark corpus",
+    );
+    expect(out.sampleMatches).toHaveLength(2);
+    const a = out.sampleMatches.find((s) => s.id === "a");
+    const b = out.sampleMatches.find((s) => s.id === "b");
+    expect(a?.snippet?.match).toBe("OBVIOUS slop");
+    expect(b?.snippet?.match).toBe("obvious slop");
+    // The before/after carry the surrounding text from the original row.
+    expect(`${a!.snippet!.before}${a!.snippet!.match}${a!.snippet!.after}`).toContain("no proof");
+  });
+
+  it("attributes the snippet to the SPECIFIC removed phrase that fired (not just any removed phrase)", () => {
+    const out = computeRemovalImpactOnRows(
+      ["alpha phrase", "beta phrase"],
+      [],
+      [
+        { id: "row-1", tier: "T3_SLOP" as const, text: "the BETA phrase is what flagged this row" },
+      ],
+      "the curated benchmark corpus",
+    );
+    expect(out.sampleMatches).toHaveLength(1);
+    expect(out.sampleMatches[0].snippet?.match).toBe("BETA phrase");
   });
 });

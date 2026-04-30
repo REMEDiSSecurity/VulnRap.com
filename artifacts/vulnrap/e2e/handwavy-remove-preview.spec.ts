@@ -347,10 +347,20 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
                       t4Hallucinated: 1,
                     },
                     sampleMatches: [
-                      { id: "fixture-T1-alpha", tier: "T1_LEGIT" },
-                      { id: "fixture-T2-beta", tier: "T2_BORDERLINE" },
-                      { id: "fixture-T3-gamma", tier: "T3_SLOP" },
-                      { id: "fixture-T4-delta", tier: "T4_HALLUCINATED" },
+                      {
+                        id: "fixture-T1-alpha",
+                        tier: "T1_LEGIT",
+                        // Task #345 — server-supplied context snippet so a
+                        // reviewer can judge the row in place.
+                        snippet: {
+                          before: "the report says ",
+                          match: "MAGIC PHRASE",
+                          after: " has fired here",
+                        },
+                      },
+                      { id: "fixture-T2-beta", tier: "T2_BORDERLINE", snippet: null },
+                      { id: "fixture-T3-gamma", tier: "T3_SLOP", snippet: null },
+                      { id: "fixture-T4-delta", tier: "T4_HALLUCINATED", snippet: null },
                     ],
                     warning:
                       "2 legitimate detections would be lost from the curated benchmark",
@@ -369,9 +379,20 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
                       t4Hallucinated: 1,
                     },
                     sampleMatches: [
-                      { id: "9001", tier: "T1_LEGIT" },
-                      { id: "9002", tier: "T3_SLOP" },
-                      { id: "9003", tier: "T4_HALLUCINATED" },
+                      {
+                        id: "9001",
+                        tier: "T1_LEGIT",
+                        // Task #345 — including a `<` character to verify the
+                        // client renders snippet text via React (which escapes
+                        // angle brackets) rather than as raw HTML.
+                        snippet: {
+                          before: "alert(<svg> ",
+                          match: "fishy claim",
+                          after: " about CVE-1234",
+                        },
+                      },
+                      { id: "9002", tier: "T3_SLOP", snippet: null },
+                      { id: "9003", tier: "T4_HALLUCINATED", snippet: null },
                     ],
                     warning:
                       "2 legitimate detections would be lost from the production archive",
@@ -470,6 +491,53 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
       await expect(t1Link).toHaveAttribute("href", /\/verify\/9001$/);
       await expect(t3Link).toHaveAttribute("href", /\/verify\/9002$/);
       await expect(t4Link).toHaveAttribute("href", /\/verify\/9003$/);
+
+      // Task #345 — snippets are rendered next to each ID that has one.
+      // The matched phrase is wrapped in a <mark> for highlighting; the
+      // surrounding text (`before`/`after`) is plain.
+      const curatedSnippet = curatedBlock.getByTestId(
+        "handwavy-remove-preview-matches-curated-snippet-fixture-T1-alpha",
+      );
+      await expect(curatedSnippet).toBeVisible();
+      await expect(curatedSnippet).toContainText("the report says");
+      await expect(curatedSnippet).toContainText("has fired here");
+      const curatedMark = curatedBlock.getByTestId(
+        "handwavy-remove-preview-matches-curated-snippet-mark-fixture-T1-alpha",
+      );
+      await expect(curatedMark).toBeVisible();
+      await expect(curatedMark).toHaveText("MAGIC PHRASE");
+      // The mark element is a <mark> tag (so screen readers and any
+      // user CSS targeting the highlight get the correct semantics).
+      await expect(curatedMark).toHaveJSProperty("tagName", "MARK");
+
+      const productionSnippet = productionBlock.getByTestId(
+        "handwavy-remove-preview-matches-production-snippet-9001",
+      );
+      await expect(productionSnippet).toBeVisible();
+      await expect(productionSnippet).toContainText("about CVE-1234");
+      const productionMark = productionBlock.getByTestId(
+        "handwavy-remove-preview-matches-production-snippet-mark-9001",
+      );
+      await expect(productionMark).toHaveText("fishy claim");
+      // HTML escaping check: the mocked snippet's `before` field contains a
+      // literal `<svg>` substring. A naive innerHTML render would inject an
+      // SVG element into the DOM; React's text rendering escapes it instead,
+      // so the literal text must appear in the rendered snippet.
+      await expect(productionSnippet).toContainText("<svg>");
+      await expect(productionSnippet.locator("svg")).toHaveCount(0);
+
+      // Sample matches without a snippet must NOT render an empty/dangling
+      // snippet element next to their ID.
+      await expect(
+        curatedBlock.getByTestId(
+          "handwavy-remove-preview-matches-curated-snippet-fixture-T2-beta",
+        ),
+      ).toHaveCount(0);
+      await expect(
+        productionBlock.getByTestId(
+          "handwavy-remove-preview-matches-production-snippet-9002",
+        ),
+      ).toHaveCount(0);
     } finally {
       await cleanup(apiCtx, [phrase]);
       await apiCtx.dispose();

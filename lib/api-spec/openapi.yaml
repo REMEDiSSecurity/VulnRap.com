@@ -4244,6 +4244,26 @@ components:
               tier:
                 type: string
                 enum: [T1_LEGIT, T2_BORDERLINE, T3_SLOP, T4_HALLUCINATED]
+              snippet:
+                nullable: true
+                description: |
+                  Task #345 — A short context snippet (~80 chars centered on the
+                  matched phrase) cut from the row's original text so a reviewer
+                  can judge the un-flag in place without opening /verify/:id.
+                  Returned as a structured `{ before, match, after }` triple so
+                  the UI can render the matched phrase highlighted while the
+                  rest of the snippet stays plain text. All three fields are
+                  raw text — the client is responsible for escaping them when
+                  rendering (React's text-node rendering already does this).
+                  Null when the matched phrase could not be located in the
+                  original text (defensive fallback; should not happen for the
+                  flow that produced the match).
+                type: object
+                properties:
+                  before: { type: string }
+                  match: { type: string }
+                  after: { type: string }
+                required: [before, match, after]
             required: [id, tier]
         warning:
           oneOf:

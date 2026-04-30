@@ -2267,9 +2267,42 @@ export const HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier = {
   T4_HALLUCINATED: "T4_HALLUCINATED",
 } as const;
 
+/**
+ * Task #345 — A short context snippet (~80 chars centered on the
+matched phrase) cut from the row's original text so a reviewer
+can judge the un-flag in place without opening /verify/:id.
+Returned as a structured `{ before, match, after }` triple so
+the UI can render the matched phrase highlighted while the
+rest of the snippet stays plain text. All three fields are
+raw text — the client is responsible for escaping them when
+rendering (React's text-node rendering already does this).
+Null when the matched phrase could not be located in the
+original text (defensive fallback; should not happen for the
+flow that produced the match).
+
+ */
+export type HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemSnippet = {
+  before: string;
+  match: string;
+  after: string;
+} | null;
+
 export type HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItem = {
   id: string;
   tier: HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier;
+  /** Task #345 — A short context snippet (~80 chars centered on the
+matched phrase) cut from the row's original text so a reviewer
+can judge the un-flag in place without opening /verify/:id.
+Returned as a structured `{ before, match, after }` triple so
+the UI can render the matched phrase highlighted while the
+rest of the snippet stays plain text. All three fields are
+raw text — the client is responsible for escaping them when
+rendering (React's text-node rendering already does this).
+Null when the matched phrase could not be located in the
+original text (defensive fallback; should not happen for the
+flow that produced the match).
+ */
+  snippet?: HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemSnippet;
 };
 
 /**

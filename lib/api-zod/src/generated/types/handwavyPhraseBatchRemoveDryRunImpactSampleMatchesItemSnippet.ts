@@ -5,13 +5,9 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemSnippet } from "./handwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemSnippet";
-import type { HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier } from "./handwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier";
 
-export type HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItem = {
-  id: string;
-  tier: HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier;
-  /** Task #345 — A short context snippet (~80 chars centered on the
+/**
+ * Task #345 — A short context snippet (~80 chars centered on the
 matched phrase) cut from the row's original text so a reviewer
 can judge the un-flag in place without opening /verify/:id.
 Returned as a structured `{ before, match, after }` triple so
@@ -22,6 +18,10 @@ rendering (React's text-node rendering already does this).
 Null when the matched phrase could not be located in the
 original text (defensive fallback; should not happen for the
 flow that produced the match).
+
  */
-  snippet?: HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemSnippet;
-};
+export type HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemSnippet = {
+  before: string;
+  match: string;
+  after: string;
+} | null;

@@ -2098,6 +2098,39 @@ function normalizeSampleMatchTier(t: string): string {
 // place" affordance for reviewers who need it.
 const HANDWAVY_REMOVE_PREVIEW_MATCHES_DEFAULT_VISIBLE = 5;
 
+// Task #345 — context snippet attached to each sample match by the server,
+// rendered next to its ID so reviewers can judge most rows in place. The
+// matched phrase is wrapped in a <mark> for highlighting; React's text-node
+// rendering escapes the surrounding text so HTML in the source report can't
+// leak into the DOM.
+type SampleMatchSnippet = { before: string; match: string; after: string };
+
+function HandwavyRemovePreviewMatchSnippet({
+  kind,
+  id,
+  snippet,
+}: {
+  kind: "curated" | "production";
+  id: string;
+  snippet: SampleMatchSnippet;
+}) {
+  return (
+    <span
+      className="ml-1 text-muted-foreground italic break-words"
+      data-testid={`handwavy-remove-preview-matches-${kind}-snippet-${id}`}
+    >
+      {snippet.before}
+      <mark
+        className="bg-amber-500/30 text-amber-100 not-italic font-semibold px-0.5 rounded-sm"
+        data-testid={`handwavy-remove-preview-matches-${kind}-snippet-mark-${id}`}
+      >
+        {snippet.match}
+      </mark>
+      {snippet.after}
+    </span>
+  );
+}
+
 function HandwavyRemovePreviewMatches({
   kind,
   title,
@@ -2105,7 +2138,7 @@ function HandwavyRemovePreviewMatches({
 }: {
   kind: "curated" | "production";
   title: string;
-  matches: Array<{ id: string; tier: string }>;
+  matches: Array<{ id: string; tier: string; snippet?: SampleMatchSnippet | null }>;
 }) {
   // The BrowserRouter is mounted with `basename={import.meta.env.BASE_URL}`
   // (see App.tsx), so production report links must be prefixed with the
@@ -2127,11 +2160,11 @@ function HandwavyRemovePreviewMatches({
   useEffect(() => {
     setExpandedTiers({});
   }, [matches]);
-  const grouped = new Map<string, Array<{ id: string }>>();
+  const grouped = new Map<string, Array<{ id: string; snippet: SampleMatchSnippet | null }>>();
   for (const m of matches) {
     const key = normalizeSampleMatchTier(m.tier);
     const bucket = grouped.get(key) ?? [];
-    bucket.push({ id: m.id });
+    bucket.push({ id: m.id, snippet: m.snippet ?? null });
     grouped.set(key, bucket);
   }
   const orderedKeys = [
@@ -2201,6 +2234,18 @@ function HandwavyRemovePreviewMatches({
                     >
                       {m.id}
                     </span>
+                  )}
+                  {/* Task #345 — inline context snippet so reviewers can
+                      judge the un-flag in place without opening
+                      /verify/:id. The matched phrase is highlighted with
+                      a <mark>; the surrounding text is auto-escaped by
+                      React. Hidden when the server didn't supply one. */}
+                  {m.snippet && (
+                    <HandwavyRemovePreviewMatchSnippet
+                      kind={kind}
+                      id={m.id}
+                      snippet={m.snippet}
+                    />
                   )}
                 </li>
               ))}
