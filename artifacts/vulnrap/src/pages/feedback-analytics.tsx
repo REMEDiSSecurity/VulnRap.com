@@ -71,10 +71,8 @@ import {
   KeyRound, ArrowLeftRight, Calendar, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  useCalibrationCooldown,
-  type CalibrationCooldownState,
-} from "@/lib/calibration-cooldown";
+import { useCalibrationCooldown } from "@/lib/calibration-cooldown";
+import { CalibrationCooldownBanner } from "@/components/calibration-cooldown-banner";
 import {
   formatHistoryRange,
   recentHeadroomDecline,
@@ -517,60 +515,10 @@ function CalibrationAuthBanner({ state }: { state: CalibrationAuthState }) {
   );
 }
 
-// Task #212 — friendly cooldown banner shown when the calibration UI hits the
-// per-IP wrong-token throttle (Task #116). The shared API client publishes
-// every 429 to `useCalibrationCooldown`, which derives the seconds-remaining
-// from the `RateLimit-Reset` response header and re-renders this component
-// once per second so the countdown ticks down in place. While `state.active`
-// is true, the calibration mutation buttons (handwavy add/remove/reinstate/
-// edit/revert/undo and the Apply suggestion button) render in their disabled
-// state via `useCalibrationCooldownDisabled` below, so a fat-fingered token
-// won't keep firing rejected requests at the limiter.
-function CalibrationCooldownBanner({
-  state,
-}: { state: CalibrationCooldownState }) {
-  if (!state.active) return null;
-  const seconds = Math.max(1, state.secondsRemaining);
-  const headline =
-    seconds === 1
-      ? "Too many failed attempts — try again in 1 second"
-      : `Too many failed attempts — try again in ${seconds} seconds`;
-  const detail =
-    state.serverMessage ??
-    "The reviewer-token throttle has temporarily blocked calibration mutations from this IP. Mutation buttons are disabled until the cooldown elapses.";
-  const limitDetail =
-    state.limit != null
-      ? ` The limit is ${state.limit} failed attempt${state.limit === 1 ? "" : "s"} per window.`
-      : "";
-  return (
-    <Card
-      className="glass-card rounded-xl border-amber-500/40 bg-amber-500/5"
-      role="alert"
-      data-testid="calibration-cooldown-banner"
-    >
-      <CardContent className="p-4 flex items-start gap-3">
-        <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <div
-            className="text-sm font-semibold text-amber-300"
-            data-testid="calibration-cooldown-headline"
-          >
-            {headline}
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            {detail}
-            {limitDetail}
-          </p>
-          <p className="text-xs text-muted-foreground/70 leading-relaxed">
-            Confirm the reviewer token (<code className="font-mono text-[11px]">VITE_CALIBRATION_TOKEN</code>)
-            matches the server's <code className="font-mono text-[11px]">CALIBRATION_TOKEN</code>{" "}
-            before retrying — every wrong-token attempt extends the bucket.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// Task #212 / #296 — the wrong-token cooldown banner now lives in
+// `@/components/calibration-cooldown-banner` so every calibration screen
+// (this dashboard, the handwavy admin, the AVRI drift admin, and any future
+// calibration surface) can mount it without re-implementing the markup.
 
 function CalibrationSection() {
   const { toast } = useToast();
@@ -8873,10 +8821,22 @@ function NotifiedFlagsPanel({
   authState,
   notificationsQueryKey,
   driftReportQueryKey,
+  // Task #296 — when the per-IP wrong-token throttle is tripped, the
+  // re-arm button on each row renders disabled with a "Cooldown — Ns"
+  // label so reviewers can't keep firing rejected requests at the
+  // limiter (which would just extend the bucket). Mirrors the gating
+  // SuggestionCard / handwavy-admin already do for their mutating
+  // controls. Passed in by AvriDriftSection so a single
+  // `useCalibrationCooldown` subscription drives both the banner above
+  // the card and these per-row buttons.
+  cooldownActive,
+  cooldownSecondsRemaining,
 }: {
   authState: CalibrationAuthState;
   notificationsQueryKey: ReturnType<typeof getGetAvriDriftNotificationsQueryKey>;
   driftReportQueryKey: ReturnType<typeof getGetAvriDriftReportQueryKey>;
+  cooldownActive: boolean;
+  cooldownSecondsRemaining: number;
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -8987,6 +8947,18 @@ function NotifiedFlagsPanel({
 
   const handleRearm = async (record: AvriDriftNotificationRecord) => {
     const key = record.key;
+    // Task #296 — defense in depth against a stale render that lets the
+    // click through after the cooldown landed: refuse to extend the
+    // wrong-token bucket while it's already active. The button is also
+    // disabled below; this only fires on a click/cooldown race.
+    if (cooldownActive) {
+      toast({
+        title: "Cooldown active",
+        description: `Re-arm disabled — wait ${Math.max(1, cooldownSecondsRemaining)}s for the wrong-token throttle to clear.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setBusyKey(key);
     try {
       const resp = await rearmAvriDriftNotifications({ keys: [key] });
@@ -9037,6 +9009,14 @@ function NotifiedFlagsPanel({
 
   const handleBulkRearm = async () => {
     if (liveSelectedKeys.length === 0 || bulkBusy || overCap) return;
+    if (cooldownActive) {
+      toast({
+        title: "Cooldown active",
+        description: `Bulk re-arm disabled — wait ${Math.max(1, cooldownSecondsRemaining)}s for the wrong-token throttle to clear.`,
+        variant: "destructive",
+      });
+      return;
+    }
     const keys = [...liveSelectedKeys];
     setBulkBusy(true);
     try {
@@ -9134,20 +9114,26 @@ function NotifiedFlagsPanel({
                 bulkBusy ||
                 busyKey !== null ||
                 overCap ||
-                !authState.mutationsAllowed
+                !authState.mutationsAllowed ||
+                cooldownActive
               }
               onClick={handleBulkRearm}
+              data-cooldown-active={cooldownActive ? "true" : "false"}
               title={
-                authState.mutationsAllowed
-                  ? "Re-arm every ticked entry in a single request."
-                  : "A valid reviewer token is required to re-arm flags."
+                cooldownActive
+                  ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
+                  : authState.mutationsAllowed
+                    ? "Re-arm every ticked entry in a single request."
+                    : "A valid reviewer token is required to re-arm flags."
               }
               data-testid="notified-flags-bulk-rearm"
             >
               <RotateCcw className="w-3 h-3" />
-              {bulkBusy
-                ? "Re-arming…"
-                : `Re-arm selected (${selectedCount})`}
+              {cooldownActive
+                ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
+                : bulkBusy
+                  ? "Re-arming…"
+                  : `Re-arm selected (${selectedCount})`}
             </Button>
           </div>
         </div>
@@ -9204,16 +9190,29 @@ function NotifiedFlagsPanel({
                 size="sm"
                 variant="outline"
                 className="h-7 px-2 text-[11px] gap-1 shrink-0"
-                disabled={isBusy || bulkBusy || !authState.mutationsAllowed}
+                disabled={
+                  isBusy ||
+                  bulkBusy ||
+                  !authState.mutationsAllowed ||
+                  cooldownActive
+                }
                 onClick={() => handleRearm(record)}
+                data-testid="avri-drift-rearm-button"
+                data-cooldown-active={cooldownActive ? "true" : "false"}
                 title={
-                  authState.mutationsAllowed
-                    ? "Remove this entry from the dedup state so the flag re-pages reviewers on the next dispatch run."
-                    : "A valid reviewer token is required to re-arm flags."
+                  cooldownActive
+                    ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
+                    : authState.mutationsAllowed
+                      ? "Remove this entry from the dedup state so the flag re-pages reviewers on the next dispatch run."
+                      : "A valid reviewer token is required to re-arm flags."
                 }
               >
                 <RotateCcw className="w-3 h-3" />
-                {isBusy ? "Re-arming…" : "Re-arm"}
+                {cooldownActive
+                  ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
+                  : isBusy
+                    ? "Re-arming…"
+                    : "Re-arm"}
               </Button>
             </li>
           );
@@ -10422,6 +10421,15 @@ function AvriDriftSection() {
   const driftReportQueryKey = getGetAvriDriftReportQueryKey(params);
   const notificationsQueryKey = getGetAvriDriftNotificationsQueryKey();
   const authState = useCalibrationAuthState();
+  // Task #296 — observe the per-IP wrong-token throttle so the AVRI drift
+  // admin (re-arm-notifications today, future drift-only tweaks tomorrow)
+  // shows the same friendly cooldown banner the calibration dashboard and
+  // handwavy admin already render, instead of falling through to the raw
+  // "HTTP 429" toast. The drift section can be rendered standalone (e.g.
+  // a future deep-link route, or a reviewer scrolling past the calibration
+  // card without lingering) so we mount the banner inside this section
+  // rather than relying on a parent to do it.
+  const cooldown = useCalibrationCooldown();
   const { data, isLoading, isFetching, error } = useGetAvriDriftReport(params, {
     query: {
       queryKey: driftReportQueryKey,
@@ -10453,6 +10461,13 @@ function AvriDriftSection() {
     : "text-orange-400 bg-orange-400/10";
 
   return (
+    <>
+    {/* Task #296 — wrong-token throttle countdown, repeated above the AVRI
+        drift card so reviewers using the re-arm panel see the same friendly
+        banner CalibrationSection / HandwavyPhrasesAdmin already render
+        rather than a raw "HTTP 429" toast. Hidden when the cooldown is
+        not active, so the panel layout is unchanged in the common case. */}
+    <CalibrationCooldownBanner state={cooldown} />
     <Card className="glass-card rounded-xl border-primary/10">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -10652,6 +10667,8 @@ function AvriDriftSection() {
             authState={authState}
             notificationsQueryKey={notificationsQueryKey}
             driftReportQueryKey={driftReportQueryKey}
+            cooldownActive={cooldown.active}
+            cooldownSecondsRemaining={cooldown.secondsRemaining}
           />
         </div>
 
@@ -10662,6 +10679,7 @@ function AvriDriftSection() {
         </p>
       </CardContent>
     </Card>
+    </>
   );
 }
 
