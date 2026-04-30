@@ -1189,6 +1189,255 @@ describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", ()
     expect(res.body).toContain("- Composite before behavioural penalties: 42");
   });
 
+  it("renders the STRIPPED_CRASH_TRACE block with reason, frame counts, and revoked trace gold signals", async () => {
+    // Mirrors the diagnostics-panel test fixture for the same branch
+    // (artifacts/vulnrap/src/components/diagnostics-panel.test.tsx
+    // "renders the STRIPPED_CRASH_TRACE block ..."), so the markdown
+    // export and the on-screen panel agree on the same crashTrace payload.
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "sample report body",
+      vulnrapEngineResults: {
+        avri: {
+          family: "MEMORY_CORRUPTION",
+          familyName: "Memory corruption / unsafe C",
+          classification: {
+            confidence: "HIGH",
+            reason: "matched member CWE-787",
+            evidence: ["CWE-787"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 22,
+            verdict: "RED",
+            confidence: "MEDIUM",
+            signalBreakdown: {
+              avri: {
+                family: "MEMORY_CORRUPTION",
+                familyName: "Memory corruption / unsafe C",
+                baseScore: 18,
+                goldHitCount: 0,
+                goldTotalCount: 8,
+                goldHits: [],
+                goldMisses: [],
+                absencePenalty: 0,
+                absencePenalties: [],
+                contradictions: [],
+                contradictionPenalty: 0,
+                crashTrace: {
+                  framesAnalyzed: 6,
+                  goodFrames: 1,
+                  placeholderFrames: 4,
+                  isStripped: true,
+                  reason:
+                    "Crash trace has 4/6 frames with placeholder symbols/offsets",
+                  revokedGoldHits: [
+                    { id: "asan_or_sanitizer", points: 22 },
+                    { id: "stack_trace_with_offset", points: 14 },
+                  ],
+                  penalty: -18,
+                },
+                rawAvriScore: 0,
+                legacyScore: 30,
+                blendedScore: 22,
+              },
+            },
+          },
+        ],
+      },
+      vulnrapOverridesApplied: [],
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("## AVRI Family Rubric");
+
+    // Title says "Stripped crash trace" for MEMORY_CORRUPTION (the helper
+    // picks the trace-kind label by family id).
+    expect(res.body).toContain(
+      "- **Stripped crash trace** (penalty -18): Crash trace has 4/6 frames with placeholder symbols/offsets — frames 6, good 1, placeholder 4",
+    );
+
+    // Revoked trace gold signals use the unicode minus (U+2212) the helper
+    // interpolates around the points value.
+    expect(res.body).toContain(
+      "  - Trace gold signals revoked: asan_or_sanitizer (\u221222), stack_trace_with_offset (\u221214)",
+    );
+  });
+
+  it("renders the STRIPPED_CRASH_TRACE block with race-trace wording for RACE_CONCURRENCY reports", async () => {
+    // Mirrors the diagnostics-panel race-trace fixture so the
+    // family-driven wording switch ("crash trace" → "race trace") is
+    // covered on the markdown side too.
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "race report body",
+      vulnrapEngineResults: {
+        avri: {
+          family: "RACE_CONCURRENCY",
+          familyName: "Concurrency / data race",
+          classification: {
+            confidence: "HIGH",
+            reason: "matched member CWE-362",
+            evidence: ["CWE-362"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 22,
+            verdict: "RED",
+            confidence: "MEDIUM",
+            signalBreakdown: {
+              avri: {
+                family: "RACE_CONCURRENCY",
+                familyName: "Concurrency / data race",
+                baseScore: 18,
+                goldHitCount: 0,
+                goldTotalCount: 6,
+                goldHits: [],
+                goldMisses: [],
+                absencePenalty: 0,
+                absencePenalties: [],
+                contradictions: [],
+                contradictionPenalty: 0,
+                crashTrace: {
+                  framesAnalyzed: 5,
+                  goodFrames: 1,
+                  placeholderFrames: 3,
+                  isStripped: true,
+                  reason:
+                    "TSan trace has 3/5 frames with placeholder symbols/offsets",
+                  revokedGoldHits: [
+                    { id: "tsan_or_helgrind_header", points: 22 },
+                  ],
+                  penalty: -18,
+                },
+                rawAvriScore: 0,
+                legacyScore: 30,
+                blendedScore: 22,
+              },
+            },
+          },
+        ],
+      },
+      vulnrapOverridesApplied: [],
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+
+    // Wording reads "race trace" (not "crash trace" / "tool trace") because
+    // the helper switches on familyId === "RACE_CONCURRENCY".
+    expect(res.body).toContain(
+      "- **Stripped race trace** (penalty -18): TSan trace has 3/5 frames with placeholder symbols/offsets — frames 5, good 1, placeholder 3",
+    );
+    expect(res.body).not.toContain("- **Stripped crash trace**");
+    expect(res.body).not.toContain("- **Stripped tool trace**");
+
+    expect(res.body).toContain(
+      "  - Trace gold signals revoked: tsan_or_helgrind_header (\u221222)",
+    );
+  });
+
+  it("renders the FAKE_RAW_HTTP block with reason, header/CRLF/TE-CL counters, and revoked smuggling gold signals", async () => {
+    // Mirrors the diagnostics-panel FAKE_RAW_HTTP request-side fixture
+    // (no nested rawHttp.response, so the title stays "Fake raw HTTP
+    // request" rather than the response/both variants).
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "smuggling report body",
+      vulnrapEngineResults: {
+        avri: {
+          family: "REQUEST_SMUGGLING",
+          familyName: "HTTP request smuggling / desync",
+          classification: {
+            confidence: "HIGH",
+            reason: "matched member CWE-444",
+            evidence: ["CWE-444"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 22,
+            verdict: "RED",
+            confidence: "MEDIUM",
+            signalBreakdown: {
+              avri: {
+                family: "REQUEST_SMUGGLING",
+                familyName: "HTTP request smuggling / desync",
+                baseScore: 18,
+                goldHitCount: 0,
+                goldTotalCount: 6,
+                goldHits: [],
+                goldMisses: [],
+                absencePenalty: 0,
+                absencePenalties: [],
+                contradictions: [],
+                contradictionPenalty: 0,
+                rawHttp: {
+                  requestsAnalyzed: 1,
+                  totalHeaders: 7,
+                  placeholderHeaders: 4,
+                  crlfPresent: false,
+                  teClConflicts: 1,
+                  teClBroken: 1,
+                  isFake: true,
+                  reason:
+                    "Fabricated raw HTTP request (no CRLFs, placeholder header values)",
+                  revokedGoldHits: [
+                    { id: "raw_http_te_cl_conflict", points: 22 },
+                    { id: "raw_http_request_with_headers", points: 14 },
+                  ],
+                  penalty: -18,
+                },
+                rawAvriScore: 0,
+                legacyScore: 30,
+                blendedScore: 22,
+              },
+            },
+          },
+        ],
+      },
+      vulnrapOverridesApplied: [],
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+
+    // Penalty bullet: title is the request-side variant, includes the
+    // reason string, the request count, headers good/total split (good =
+    // total − placeholder = 7 − 4 = 3), placeholder header count, CRLF
+    // yes/no, and the TE/CL conflict (with broken sub-count) numerals.
+    expect(res.body).toContain(
+      "- **Fake raw HTTP request** (penalty -18): Fabricated raw HTTP request (no CRLFs, placeholder header values) — requests 1, headers 3/7 good, placeholder 4, CRLF no, TE/CL conflicts 1 (broken 1)",
+    );
+
+    // Revoked smuggling gold signals: rendered as a sub-bullet,
+    // comma-joined, using the unicode minus the helper interpolates.
+    expect(res.body).toContain(
+      "  - Gold signals revoked: raw_http_te_cl_conflict (\u221222), raw_http_request_with_headers (\u221214)",
+    );
+  });
+
   it("omits the AVRI Family Rubric section entirely for legacy reports with no AVRI data", async () => {
     // Legacy report shape: no avri composite block, no Technical Substance
     // engine entry with a signalBreakdown.avri sub-block.
