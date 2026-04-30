@@ -11,6 +11,7 @@ import {
   getDriftSchedulerStatus,
   listRearmHistory,
 } from "../lib/avri-drift-notifications";
+import { getRescoreBackfillSchedulerStatus } from "../lib/rescore-backfill-scheduler";
 import {
   getHandwavyPhrases,
   getHandwavyPhraseHistory,
@@ -918,6 +919,29 @@ router.get("/feedback/calibration/avri-drift/scheduler-status", (_req, res) => {
       .json({ error: "Failed to read AVRI drift scheduler status." });
   }
 });
+
+// Task #388 — Operator-visible rescore-backfill scheduler heartbeat.
+// Mirrors the AVRI drift scheduler-status endpoint: response is
+// timestamps + booleans + small numeric counters only (no error text,
+// row text, or env values), so the endpoint stays safe to expose
+// unauthenticated alongside the drift heartbeat.
+router.get(
+  "/feedback/calibration/rescore-backfill/scheduler-status",
+  (_req, res) => {
+    try {
+      const status = getRescoreBackfillSchedulerStatus();
+      res.json(status);
+    } catch (err) {
+      _req.log?.error(
+        err,
+        "Failed to read rescore backfill scheduler status",
+      );
+      res
+        .status(500)
+        .json({ error: "Failed to read rescore backfill scheduler status." });
+    }
+  },
+);
 
 // Surface the persisted re-arm audit log so the calibration UI can
 // render a "Recently re-armed" subsection. Strict-auth because the

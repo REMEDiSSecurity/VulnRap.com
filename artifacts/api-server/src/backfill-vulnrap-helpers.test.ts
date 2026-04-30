@@ -180,6 +180,10 @@ describe("parseArgs (rescore flags)", () => {
     expect(opts.dryRun).toBe(false);
     expect(opts.limit).toBeNull();
     expect(opts.batchSize).toBe(50);
+    // Task #388 — wall-clock budget defaults to "no deadline" so
+    // operator-driven invocations behave exactly as before; the
+    // recurring scheduler is the only caller that opts in.
+    expect(opts.maxRuntimeMs).toBeNull();
   });
 
   it("--rescore and --only-with-cached-hallucination flip independently", () => {
@@ -201,7 +205,29 @@ describe("parseArgs (rescore flags)", () => {
       batchSize: 50,
       rescore: true,
       onlyWithCachedHallucination: true,
+      maxRuntimeMs: null,
     });
+  });
+
+  // Task #388 — wall-clock cap exposed to the recurring rescore
+  // scheduler so a runaway scan can't saturate the DB. Operator-driven
+  // invocations may also pair it with --limit.
+  it("--max-runtime-ms=N populates maxRuntimeMs", () => {
+    const opts = parseArgs(argv("--max-runtime-ms=600000"));
+    expect(opts.maxRuntimeMs).toBe(600000);
+  });
+
+  it("--max-runtime-ms rejects non-positive integers", () => {
+    expect(() => parseArgs(argv("--max-runtime-ms=0"))).toThrow(CliExit);
+    expect(() => parseArgs(argv("--max-runtime-ms=-5"))).toThrow(CliExit);
+    expect(() => parseArgs(argv("--max-runtime-ms=abc"))).toThrow(CliExit);
+    try {
+      parseArgs(argv("--max-runtime-ms=0"));
+    } catch (e) {
+      expect(e).toBeInstanceOf(CliExit);
+      expect((e as CliExit).code).toBe(2);
+      expect((e as CliExit).message).toContain("--max-runtime-ms");
+    }
   });
 
   it("--help throws CliExit(0) and unknown flags throw CliExit(2)", () => {
@@ -212,6 +238,7 @@ describe("parseArgs (rescore flags)", () => {
       expect((e as CliExit).code).toBe(0);
       expect((e as CliExit).message).toContain("--rescore");
       expect((e as CliExit).message).toContain("--only-with-cached-hallucination");
+      expect((e as CliExit).message).toContain("--max-runtime-ms");
     }
 
     try {

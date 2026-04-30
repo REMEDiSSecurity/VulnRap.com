@@ -59,8 +59,10 @@ import {
   appendRescoreHistory,
   CliExit,
   type CliOpts,
+  type BackfillStats,
   type ConcurrencyGuard,
 } from "./backfill-vulnrap-helpers";
+import { fileURLToPath } from "url";
 import type { SQL } from "drizzle-orm";
 
 // Evidence types that count as "strong" for the v3.6.0 triage matrix's
@@ -234,8 +236,16 @@ function guardToSql(guard: ConcurrencyGuard): SQL {
   }
 }
 
-async function backfill(opts: CliOpts): Promise<void> {
+export async function backfill(opts: CliOpts): Promise<BackfillStats> {
   const startedAt = Date.now();
+  // Wall-clock deadline (Task #388) — when set, the inner loop bails after
+  // the current row finishes so the recurring rescore scheduler can't
+  // saturate the DB if the candidate set ever blows up. `null` = no
+  // deadline, preserving the original "run to completion" semantics for
+  // operator-driven invocations.
+  const deadlineAt =
+    opts.maxRuntimeMs !== null ? startedAt + opts.maxRuntimeMs : null;
+  let deadlineReached = false;
 
   // EXISTS over the evidence jsonb array matches any element whose `type`
   // starts with `hallucination_` — exactly the rows the v3.6.0 fabricated-
@@ -278,6 +288,13 @@ async function backfill(opts: CliOpts): Promise<void> {
 
   while (true) {
     if (opts.limit !== null && processed >= opts.limit) break;
+    if (deadlineAt !== null && Date.now() >= deadlineAt) {
+      deadlineReached = true;
+      console.log(
+        `[backfill] max-runtime budget (${opts.maxRuntimeMs}ms) reached before next page; stopping`,
+      );
+      break;
+    }
 
     const remaining = opts.limit !== null ? opts.limit - processed : opts.batchSize;
     const pageSize = Math.min(opts.batchSize, remaining);
@@ -545,6 +562,13 @@ async function backfill(opts: CliOpts): Promise<void> {
       }
 
       if (opts.limit !== null && processed >= opts.limit) break;
+      if (deadlineAt !== null && Date.now() >= deadlineAt) {
+        deadlineReached = true;
+        console.log(
+          `[backfill] max-runtime budget (${opts.maxRuntimeMs}ms) reached mid-page; stopping after #${row.id}`,
+        );
+        break;
+      }
     }
   }
 
@@ -553,26 +577,63 @@ async function backfill(opts: CliOpts): Promise<void> {
     `[backfill] done: processed=${processed} updated=${updated} reconstructed=${reconstructed} ` +
       `rescored_updated=${rescoredUpdated} rescored_reconstructed=${rescoredReconstructed} ` +
       `skipped_no_signals=${skippedNoSignals} skipped_concurrent=${skippedConcurrent} ` +
-      `failed=${failed} elapsed=${elapsedMs}ms`,
+      `failed=${failed} deadline_reached=${deadlineReached} elapsed=${elapsedMs}ms`,
   );
+
+  return {
+    processed,
+    updated,
+    reconstructed,
+    rescoredUpdated,
+    rescoredReconstructed,
+    skippedNoSignals,
+    skippedConcurrent,
+    failed,
+    deadlineReached,
+    elapsedMs,
+  };
 }
 
-// parseArgs throws CliExit so it stays unit-testable; translate to a
-// real process.exit here at the script entry.
-let parsed: CliOpts;
-try {
-  parsed = parseArgs(process.argv);
-} catch (err) {
-  if (err instanceof CliExit) {
-    if (err.code === 0) console.log(err.message);
-    else console.error(err.message);
-    process.exit(err.code);
+// Auto-run guard (Task #388): the recurring rescore scheduler imports
+// `backfill` from this module, so the side-effecting CLI parse + DB
+// kickoff at the bottom must only fire when the file is invoked as the
+// process entry point (e.g. `node ./dist/backfill-vulnrap.mjs`). esbuild
+// emits the bundled file under dist/ with a `.mjs` extension, so we
+// match the resolved entry against `import.meta.url`.
+function isInvokedAsScript(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    const here = fileURLToPath(import.meta.url);
+    if (entry === here) return true;
+    // Tolerate the .mjs vs .ts difference between the bundled dist file
+    // and the source path so dev-time invocations through tsx still
+    // trigger the script entry.
+    const stripExt = (p: string) => p.replace(/\.(?:mjs|js|ts)$/, "");
+    return stripExt(entry) === stripExt(here);
+  } catch {
+    return false;
   }
-  throw err;
 }
-backfill(parsed)
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error("[backfill] fatal:", err);
-    process.exit(1);
-  });
+
+if (isInvokedAsScript()) {
+  // parseArgs throws CliExit so it stays unit-testable; translate to a
+  // real process.exit here at the script entry.
+  let parsed: CliOpts;
+  try {
+    parsed = parseArgs(process.argv);
+  } catch (err) {
+    if (err instanceof CliExit) {
+      if (err.code === 0) console.log(err.message);
+      else console.error(err.message);
+      process.exit(err.code);
+    }
+    throw err;
+  }
+  backfill(parsed)
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error("[backfill] fatal:", err);
+      process.exit(1);
+    });
+}

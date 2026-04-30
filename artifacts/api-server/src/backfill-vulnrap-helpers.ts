@@ -90,12 +90,37 @@ export function reconstructHallucinationTriggerText(
 // CLI options for backfill-vulnrap. Lives here (not in the script entry)
 // so unit tests can import parseArgs without tripping the script's
 // top-level db connection and backfill kickoff.
+//
+// `maxRuntimeMs` (Task #388) is a wall-clock budget the loop checks
+// after every row so a runaway scan can't saturate the DB when the
+// script is invoked from the recurring rescore scheduler. `null`
+// preserves the historical "run to completion" behavior for operator-
+// driven invocations that pair with `--limit` instead.
 export interface CliOpts {
   dryRun: boolean;
   limit: number | null;
   batchSize: number;
   rescore: boolean;
   onlyWithCachedHallucination: boolean;
+  maxRuntimeMs: number | null;
+}
+
+// Counters surfaced by `backfill()` so callers (the rescore scheduler)
+// can persist them into the heartbeat / status surface without having
+// to scrape stdout. Fields mirror the final summary line the script
+// has historically logged.
+export interface BackfillStats {
+  processed: number;
+  updated: number;
+  reconstructed: number;
+  rescoredUpdated: number;
+  rescoredReconstructed: number;
+  skippedNoSignals: number;
+  skippedConcurrent: number;
+  failed: number;
+  /** True iff the loop exited because `maxRuntimeMs` was reached. */
+  deadlineReached: boolean;
+  elapsedMs: number;
 }
 
 // Throwing instead of process.exit keeps parseArgs unit-testable; the
@@ -224,6 +249,7 @@ export function parseArgs(argv: string[]): CliOpts {
     batchSize: 50,
     rescore: false,
     onlyWithCachedHallucination: false,
+    maxRuntimeMs: null,
   };
   for (const arg of argv.slice(2)) {
     if (arg === "--" || arg === "") continue;
@@ -232,11 +258,16 @@ export function parseArgs(argv: string[]): CliOpts {
     else if (arg.startsWith("--batch-size=")) opts.batchSize = parsePositiveInt(arg.slice("--batch-size=".length), "--batch-size");
     else if (arg === "--rescore") opts.rescore = true;
     else if (arg === "--only-with-cached-hallucination") opts.onlyWithCachedHallucination = true;
-    else if (arg === "--help" || arg === "-h") {
+    else if (arg.startsWith("--max-runtime-ms=")) {
+      opts.maxRuntimeMs = parsePositiveInt(
+        arg.slice("--max-runtime-ms=".length),
+        "--max-runtime-ms",
+      );
+    } else if (arg === "--help" || arg === "-h") {
       throw new CliExit(
         0,
         "Usage: backfill-vulnrap [--dry-run] [--limit=N] [--batch-size=N]" +
-          " [--rescore] [--only-with-cached-hallucination]",
+          " [--rescore] [--only-with-cached-hallucination] [--max-runtime-ms=N]",
       );
     } else {
       throw new CliExit(2, `[backfill] unknown argument: ${arg}`);

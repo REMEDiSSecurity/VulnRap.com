@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupMigrations } from "./lib/startup-migrations";
 import { startDriftNotificationScheduler } from "./lib/avri-drift-notifications";
+import { startRescoreBackfillScheduler } from "./lib/rescore-backfill-scheduler";
 
 const rawPort = process.env["PORT"];
 
@@ -35,10 +36,23 @@ app.listen(port, (err) => {
   // POST /api/reports used to invoke. The handle is retained so signal
   // handlers can stop the timer cleanly during a graceful shutdown.
   const driftScheduler = startDriftNotificationScheduler();
+
+  // Task #388 — Kick off the recurring rescore backfill. The scheduler
+  // is opt-in via RESCORE_BACKFILL_SCHEDULER_ENABLED so dev / test
+  // environments don't accidentally rescore data; in production it
+  // runs weekly (default) with a per-tick row cap and wall-clock
+  // budget so a runaway scan can't saturate the DB. The handle is
+  // retained so signal handlers can stop the timer cleanly during a
+  // graceful shutdown.
+  const rescoreScheduler = startRescoreBackfillScheduler();
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.once(signal, () => {
-      logger.info({ signal }, "Shutting down: stopping drift scheduler.");
+      logger.info(
+        { signal },
+        "Shutting down: stopping drift + rescore schedulers.",
+      );
       driftScheduler.stop();
+      rescoreScheduler.stop();
     });
   }
 });
