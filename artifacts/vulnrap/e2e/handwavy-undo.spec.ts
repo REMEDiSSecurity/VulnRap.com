@@ -452,4 +452,181 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await apiCtx.dispose();
     }
   });
+
+  // Task #309 — popstate (browser back/forward) variant of the navigate-
+  // away guard. Task #222's existing tests above only exercise the in-app
+  // <Link> branch; the popstate branch has its own bookkeeping (a sentinel
+  // history entry pushed when an undo candidate first appears, plus a
+  // history.go(-2) replay in `proceedPendingNavigation` so a single
+  // "Leave anyway" click pops both the re-pushed sentinel AND the entry
+  // the reviewer's original Back press was aimed at). This test seeds an
+  // add, hits the browser Back button, asserts the same leave-confirm
+  // dialog surfaces with the phrase + remaining-time copy, then verifies
+  // both Stay (URL unchanged + phrase intact) and Leave anyway (lands on
+  // the page that was below /feedback-analytics in history) work end-to-
+  // end. Locking this in catches regressions if the sentinel/-2 logic is
+  // ever touched — e.g. dropping the re-push would break the re-armed
+  // dialog after the first Stay; switching `history.go(-2)` to
+  // `history.back()` would leave the reviewer stranded on the sentinel
+  // entry instead of actually navigating.
+  test("hitting the browser Back button while an undo window is still ticking pops the leave-confirm dialog with phrase + remaining time, and dismissing it keeps the reviewer on the panel", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task309 popstate", "phrase");
+
+    try {
+      // We need a real previous history entry for Back to land on,
+      // otherwise the `history.go(-2)` inside proceedPendingNavigation
+      // has nowhere meaningful to go and the post-Leave URL assertion
+      // would be meaningless. Visit the home page first, then navigate
+      // to the panel via a second goto so both entries are in the stack.
+      await page.goto("/", { waitUntil: "networkidle" });
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const reviewer = page.getByTestId("handwavy-reviewer");
+      await expect(reviewer).toBeVisible({ timeout: 15_000 });
+      await reviewer.fill("e2e-task309");
+
+      await addPhraseViaUi(page, phrase);
+
+      // Sanity: the row carries an Undo button so the guard has
+      // something to protect — same belt-and-braces check the in-app
+      // Link variant of this test does for the same reason.
+      const newRow = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
+
+      // Hit the browser Back button. Without the popstate handler this
+      // would pop the sentinel and then immediately navigate back to
+      // "/" (the entry below /feedback-analytics), unmounting the
+      // panel and the row-level Undo affordance with it. The handler
+      // intercepts: it re-pushes the sentinel and surfaces the prompt.
+      // We use `window.history.back()` via evaluate rather than
+      // `page.goBack()` because Playwright's goBack waits for a load
+      // lifecycle event that never fires for same-document popstate
+      // navigation (the sentinel pop doesn't change the URL).
+      await page.evaluate(() => window.history.back());
+
+      // Same dialog as the in-app Link branch — the popstate handler
+      // sets the same `pendingNavigation` state shape, so the same
+      // testid + copy contract applies.
+      const dialog = page.getByTestId("handwavy-undo-leave-confirm");
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+      await expect(
+        dialog.getByTestId("handwavy-undo-leave-confirm-phrase"),
+      ).toContainText(phrase);
+      const remainingText = await dialog
+        .getByTestId("handwavy-undo-leave-confirm-remaining")
+        .textContent();
+      expect(remainingText ?? "").toMatch(/^\d+m \d{2}s$/);
+
+      // "Stay on this page" must dismiss the dialog WITHOUT navigating.
+      // The handler re-pushed the sentinel before opening the dialog,
+      // so the URL must still be /feedback-analytics and the phrase
+      // row + Undo affordance must still be intact.
+      await dialog.getByTestId("handwavy-undo-leave-confirm-cancel").click();
+      await expect(dialog).not.toBeVisible();
+      expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+      ).toHaveCount(1);
+      await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
+
+      // Hitting Back a second time must re-arm the dialog — the guard
+      // is not a one-shot, the re-pushed sentinel above keeps the
+      // popstate listener primed for the next Back press.
+      await page.evaluate(() => window.history.back());
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+      // "Leave anyway" must actually navigate. The popstate branch of
+      // proceedPendingNavigation calls `history.go(-2)`, popping both
+      // the most-recently-re-pushed sentinel AND the entry the
+      // reviewer's original Back press was aimed at, so we should land
+      // on "/" — the page we navigated from before opening the panel.
+      // We assert via the URL pathname (rather than waiting for a
+      // selector on "/") because the home page is lazy-loaded and
+      // could take a moment to render under load.
+      await dialog.getByTestId("handwavy-undo-leave-confirm-confirm").click();
+      await expect(dialog).not.toBeVisible();
+      await expect
+        .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
+        .toBe("/");
+    } finally {
+      await cleanup(apiCtx, phrase, { reviewer: "e2e-task309-cleanup" });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #309 — popstate variant of the suppression contract that
+  // already exists for in-app Link clicks above. Once the reviewer
+  // clicks the row-level Undo button the candidate retires from
+  // `undoCandidates`, `hasActiveUndo` flips to false, and the popstate
+  // listener self-uninstalls (the useEffect cleanup runs). Hitting Back
+  // after that must therefore NOT pop the leave-confirm dialog: the
+  // reviewer already chose the audit-friendly rollback path, and
+  // surfacing a "Leave before undoing?" prompt at that point would
+  // actively undermine the very behaviour the guard is meant to
+  // encourage. The sentinel that was pushed when the candidate first
+  // appeared is left in history (the effect cleanup deliberately does
+  // not scrub it), so Back simply pops the sentinel and the URL stays
+  // on /feedback-analytics — no dialog, no nav.
+  test("hitting the browser Back button right after the reviewer's own Undo click does not pop the leave-confirm dialog", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task309 popstate", "self-undo");
+
+    try {
+      // Same setup as the Back+dialog spec above — a real previous
+      // entry so Back has somewhere to land and the negative assertion
+      // doesn't pass for the wrong reason (a no-op Back).
+      await page.goto("/", { waitUntil: "networkidle" });
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const reviewer = page.getByTestId("handwavy-reviewer");
+      await expect(reviewer).toBeVisible({ timeout: 15_000 });
+      await reviewer.fill("e2e-task309-self");
+
+      await addPhraseViaUi(page, phrase);
+
+      const newRow = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      const undoBtn = newRow.getByTestId("handwavy-undo");
+      await expect(undoBtn).toBeVisible();
+
+      await undoBtn.click();
+
+      // Wait for the undo to take effect — the phrase disappears from
+      // the active list, which means the refresh has landed and the
+      // candidate is gone from `undoCandidates`. At that point
+      // hasActiveUndo is false and the popstate listener has been torn
+      // down by the effect cleanup.
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+      ).toHaveCount(0, { timeout: 15_000 });
+
+      // Now hit Back. The sentinel pushed when the candidate first
+      // appeared is still on the stack, so this pops it and lands us
+      // back on /feedback-analytics with the URL unchanged. With the
+      // listener removed the dialog must NEVER appear.
+      await page.evaluate(() => window.history.back());
+      // Give the popstate event a beat to flush through the React
+      // render cycle so a regression that re-armed the prompt would
+      // have time to surface before we assert non-visibility.
+      await page.waitForTimeout(500);
+      await expect(
+        page.getByTestId("handwavy-undo-leave-confirm"),
+      ).not.toBeVisible();
+
+      // Belt-and-braces: still on /feedback-analytics, no stray
+      // navigation triggered by the back press.
+      expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
+    } finally {
+      await cleanup(apiCtx, phrase, { reviewer: "e2e-task309-self-cleanup" });
+      await apiCtx.dispose();
+    }
+  });
 });
