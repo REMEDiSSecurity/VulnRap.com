@@ -1,5 +1,11 @@
-import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { test, expect } from "@playwright/test";
+import {
+  addPhrase,
+  cleanup,
+  injectCalibrationTokenIntoPage,
+  newApiContext,
+  uniquePhrases,
+} from "./helpers/handwavy";
 
 // Task #233 — End-to-end coverage for the panel-level "Undo last N adds"
 // affordance on the FLAT Hand-wavy Marker Phrases reviewer panel. The
@@ -8,68 +14,30 @@ import { randomUUID } from "node:crypto";
 // panel's bulk-undo button + confirm dialog and asserts every phrase is
 // rolled back in one round-trip — and that each one keeps its own
 // `undone: true` history row (no batch-merge that hides per-phrase
-// provenance). Mirrors the helper / token-injection pattern from
+// provenance).
+//
+// Task #348 — This spec is verified end-to-end against the production-build
+// webServer that bakes `VITE_CALIBRATION_TOKEN` into the page (see the
+// non-dev branch of playwright.config.ts). The dev-mode webServer
+// (`E2E_DEV_SERVERS=1`) also passes today because playwright.config.ts sets
+// `VITE_CALIBRATION_TOKEN` on the Vite dev server's env AND attaches a
+// global `X-Calibration-Token` via `extraHTTPHeaders`; the call to
+// `injectCalibrationTokenIntoPage` below is a forward-compatible hook for
+// any future dev mode that doesn't bake the token into the bundle.
+// Mirrors the helper / token-injection pattern from
 // handwavy-bulk-undo.spec.ts so both suites stay in lockstep.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
-
-function uniquePhrases(count: number, label = "synthetic"): string[] {
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return Array.from(
-    { length: count },
-    (_, i) => `task233 undo-all ${id} ${label} ${i + 1}`,
-  );
-}
-
-function authHeaders(): Record<string, string> {
-  return CALIBRATION_TOKEN
-    ? { "X-Calibration-Token": CALIBRATION_TOKEN }
-    : {};
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    headers: authHeaders(),
-    data: { phrase, category: "hedging", reviewer: "e2e-task233" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      headers: authHeaders(),
-      data: { phrases, reviewer: "e2e-task233-cleanup" },
-    })
-    .catch(() => undefined);
-}
-
-// Mirror handwavy-bulk-undo.spec.ts: the calibration token has to be
-// available to the page itself so the strict-auth GETs that hydrate the
-// active list don't 401 in CI.
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
-}
+const REVIEWER = "e2e-task233";
 
 test.describe("Panel-level Undo last N adds (Task #233)", () => {
   test("rolls back every still-in-window phrase in one round-trip and emits one undone:true history row per phrase", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(3, "happy");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3, "task233 undo-all happy");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -110,7 +78,6 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
       // batch-merge collapse).
       const preHistoryRes = await apiCtx.get(
         "/api/feedback/calibration/handwavy-phrases",
-        { headers: authHeaders() },
       );
       expect(preHistoryRes.ok()).toBeTruthy();
       const preHistory = (await preHistoryRes.json()) as {
@@ -137,7 +104,6 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
       // into a single batch entry.
       const postRes = await apiCtx.get(
         "/api/feedback/calibration/handwavy-phrases",
-        { headers: authHeaders() },
       );
       expect(postRes.ok()).toBeTruthy();
       const post = (await postRes.json()) as {
@@ -159,7 +125,7 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
       const undonePhrases = new Set(postUndoneForPhrases.map((r) => r.phrase));
       for (const p of phrases) expect(undonePhrases.has(p)).toBe(true);
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -167,11 +133,11 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
   test("the bulk-undo button is hidden when fewer than two reviewer-added phrases are inside their undo window", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(1, "single");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(1, "task233 undo-all single");
 
     try {
-      await addPhrase(apiCtx, phrases[0]);
+      await addPhrase(apiCtx, phrases[0], { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -186,7 +152,7 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
       // render at all (the show/hide gate is `undoCandidates.size >= 2`).
       await expect(page.getByTestId("handwavy-undo-all")).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -194,11 +160,11 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
   test("dialog Cancel leaves every phrase active and emits no audit rows", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(2, "cancel");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task233 undo-all cancel");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -222,7 +188,6 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
 
       const res = await apiCtx.get(
         "/api/feedback/calibration/handwavy-phrases",
-        { headers: authHeaders() },
       );
       expect(res.ok()).toBeTruthy();
       const body = (await res.json()) as {
@@ -233,7 +198,7 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
       );
       expect(undoneRows).toHaveLength(0);
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
