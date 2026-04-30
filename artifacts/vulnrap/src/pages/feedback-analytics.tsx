@@ -4482,6 +4482,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // unmount).
   const [bulkPreviewRefreshing, setBulkPreviewRefreshing] = useState(false);
 
+  // Task #376 — surface non-abort failures of the post-drop dry-run
+  // re-fetch so reviewers know the on-screen impact figures are stale.
+  // The previous `validDetectionsLost` totals stay in place (over-warning
+  // is the safe direction) but a tiny inline hint + Retry button now
+  // gives the reviewer a way to know the figures didn't refresh and to
+  // re-fire the dry-run before confirming the destructive action.
+  const [bulkPreviewRefetchFailed, setBulkPreviewRefetchFailed] =
+    useState(false);
+
   // `keepIndicator` is set when the cancel is part of a chained re-schedule
   // (a second drop arriving before the first refetch lands) — clearing
   // the indicator there would briefly hide it between the two refetches
@@ -4559,6 +4568,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               acknowledged: stillRequiresAck ? prev.acknowledged : false,
             };
           });
+          // Task #376 — a fresh response landed, so any prior "couldn't
+          // refresh impact" hint is no longer accurate.
+          setBulkPreviewRefetchFailed(false);
         })
         .catch((err) => {
           // Aborts (the reviewer dropped another phrase or closed the
@@ -4567,6 +4579,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           // failure is the safe direction.
           if (err && (err as { name?: string }).name === "AbortError") return;
           if (controller.signal.aborted) return;
+          // Task #376 — non-abort failure (network blip, 5xx, etc.).
+          // The displayed impact figures are now stale relative to
+          // `requestedPhrases`; surface a small inline retry affordance
+          // so the reviewer can re-fire the dry-run before confirming.
+          setBulkPreviewRefetchFailed(true);
         })
         .finally(() => {
           if (bulkPreviewRefetchRef.current.controller === controller) {
@@ -4593,6 +4610,30 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     setBulkPreview(null);
   };
 
+  // Task #376 — every transition that closes the bulk-remove preview
+  // (Back out, dropping the last phrase, confirming the destructive
+  // removal) discards any prior "couldn't refresh impact" hint so the
+  // next preview opens with a clean slate. Centralized here instead of
+  // scattering `setBulkPreviewRefetchFailed(false)` across each callsite.
+  useEffect(() => {
+    if (bulkPreview === null) {
+      setBulkPreviewRefetchFailed(false);
+    }
+  }, [bulkPreview]);
+
+  // Task #376 — manual retry of the post-drop dry-run re-fetch. Wired up
+  // from the inline "couldn't refresh impact" hint so a reviewer who hit
+  // a transient network/5xx error can re-fire the dry-run for the
+  // current `requestedPhrases` without backing out and re-previewing.
+  // Optimistically clears the hint on click so the reviewer sees their
+  // action take effect; if the retry also fails the catch handler in
+  // `scheduleBulkPreviewRefetch` flips it back on.
+  const retryBulkPreviewRefetch = () => {
+    if (!bulkPreview) return;
+    setBulkPreviewRefetchFailed(false);
+    scheduleBulkPreviewRefetch(bulkPreview.requestedPhrases);
+  };
+
   const setBulkPreviewAcknowledged = (ack: boolean) => {
     setBulkPreview((prev) => (prev ? { ...prev, acknowledged: ack } : prev));
   };
@@ -4617,29 +4658,52 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // in-flight refetch in that case so a late response can't try to
   // resurrect it.
   const dropPhraseFromBulkPreview = (phrase: string) => {
+    // Task #376 fix — the previous implementation set
+    // `scheduledForRefetch` from inside the `setBulkPreview` updater
+    // closure, then read it back synchronously after the call. That
+    // pattern only works when React eagerly evaluates the updater
+    // (`fiber.lanes === NoLanes`); but `setSelected` above this call
+    // already enqueues an update on the same fiber, so the eager-bailout
+    // path is skipped and the `setBulkPreview` updater is deferred to
+    // the next render. The end result was that `scheduledForRefetch`
+    // stayed null on every drop and the post-drop dry-run re-fetch
+    // (Task #258) was silently never scheduled — which in turn meant
+    // the Task #376 "couldn't refresh impact" hint could never appear.
+    // Compute `remaining` from the current `bulkPreview` ref outside any
+    // updater so the side-effect (scheduling / cancelling the refetch)
+    // is driven by a value React has actually committed.
+    const remaining = bulkPreview
+      ? bulkPreview.requestedPhrases.filter((p) => p !== phrase)
+      : null;
     setSelected((prev) => {
       if (!prev.has(phrase)) return prev;
       const next = new Set(prev);
       next.delete(phrase);
       return next;
     });
-    // Decide what to do based on the latest committed `bulkPreview`
-    // value (closure) instead of mutating a sentinel inside the
-    // `setBulkPreview` updater — React 18 does not guarantee the
-    // updater runs synchronously during dispatch, so the post-dispatch
-    // `if (sentinel)` check could observe the pre-update value and
-    // silently skip scheduling the dry-run refetch (Task #258 / Task
-    // #375). Reading from the closure keeps the decision deterministic
-    // and lines up with the optimistic update we hand React next.
-    if (!bulkPreview) return;
-    if (!bulkPreview.requestedPhrases.includes(phrase)) return;
-    const remaining = bulkPreview.requestedPhrases.filter((p) => p !== phrase);
+    if (remaining === null) {
+      // Panel was already closed — nothing to do, but make sure no
+      // stale refetch is left in flight from a prior drop.
+      cancelBulkPreviewRefetch();
+      return;
+    }
+    if (remaining.length === bulkPreview!.requestedPhrases.length) {
+      // Phrase wasn't in the preview at all — no state change, no
+      // refetch needed, but still cancel any in-flight stale refetch.
+      cancelBulkPreviewRefetch();
+      return;
+    }
     if (remaining.length === 0) {
+      // Dropping the last phrase closes the panel — same end state as
+      // Back out. Cancel any pending refetch so a late response can't
+      // try to resurrect a closed panel.
       setBulkPreview(null);
       cancelBulkPreviewRefetch();
       return;
     }
-    setBulkPreview({ ...bulkPreview, requestedPhrases: remaining });
+    setBulkPreview((prev) =>
+      prev ? { ...prev, requestedPhrases: remaining } : prev,
+    );
     scheduleBulkPreviewRefetch(remaining);
   };
 
@@ -6447,6 +6511,37 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 </div>
               )}
             </div>
+            {/* Task #376 — surface non-abort failures of the post-drop
+                debounced dry-run re-fetch. The previous response's
+                impact figures stay rendered above (over-warning is the
+                safe direction) but a small inline hint tells the
+                reviewer the numbers didn't refresh against the current
+                `requestedPhrases` list, with a Retry button that
+                re-fires the dry-run on demand. */}
+            {bulkPreviewRefetchFailed && (
+              <div
+                className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100"
+                data-testid="handwavy-bulk-preview-refetch-failed"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+                <div className="flex-1">
+                  Couldn't refresh impact — showing the last estimate.
+                  The figures above may be stale relative to your current
+                  selection.
+                </div>
+                <button
+                  type="button"
+                  onClick={retryBulkPreviewRefetch}
+                  className="shrink-0 inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-100 hover:bg-amber-500/20 hover:text-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-300/60"
+                  data-testid="handwavy-bulk-preview-refetch-retry"
+                  aria-label="Retry refreshing the removal impact estimate"
+                  title="Retry the impact dry-run"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Retry
+                </button>
+              </div>
+            )}
             {/* Task #344 — render the per-tier `sampleMatches` inline so a
                 reviewer running a bulk retire sees the same affordance the
                 per-row Trash preview added in Task #245: curated fixture +

@@ -1280,4 +1280,186 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       await apiCtx.dispose();
     }
   });
+
+  // Task #376 — when the post-drop debounced dry-run re-fetch fails with
+  // anything other than an AbortError (network blip, 5xx, etc.), the
+  // panel must surface a small inline "couldn't refresh impact" hint
+  // with a Retry button. The previously-rendered impact figures stay in
+  // place (over-warning is the safe direction) but the reviewer is no
+  // longer left believing the on-screen numbers reflect their current
+  // selection. Clicking Retry re-fires the dry-run and clears the hint
+  // on success.
+  test("A 500 on the post-drop dry-run re-fetch surfaces a 'couldn't refresh impact' hint with a working Retry", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const id = randomUUID().replace(/-/g, "").slice(0, 12);
+    const phrases = [
+      `task376 first ${id}`,
+      `task376 second ${id}`,
+      `task376 third ${id}`,
+    ];
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+
+      // Mock the dry-run DELETE so we can deterministically control the
+      // pass/fail outcome of each call:
+      //  1. The initial 3-phrase preview (200, validDetectionsLost > 0)
+      //  2. The first post-drop re-fetch with the surviving 2-phrase
+      //     list (500 — the case under test) — only the FIRST 2-phrase
+      //     dry-run fails.
+      //  3. The Retry-triggered re-fetch (200, fresh figures).
+      // Branching on payload (rather than a global counter) means the
+      // spec stays robust if any unrelated dry-run slips into the mix
+      // — only the surviving-2-phrase refetch is forced to 500, and
+      // only on its very first arrival.
+      const dryRunBodies: Array<{ phrases: string[] }> = [];
+      let firstRefetchAfterDropFailed = false;
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrases?: string[] }
+            | undefined;
+          if (!body?.dryRun) {
+            await route.fallback();
+            return;
+          }
+          const requested = body.phrases ?? [];
+          dryRunBodies.push({ phrases: [...requested] });
+          const isPostDropRefetch = requested.length === 2;
+          if (isPostDropRefetch && !firstRefetchAfterDropFailed) {
+            firstRefetchAfterDropFailed = true;
+            await route.fulfill({
+              status: 500,
+              contentType: "application/json",
+              body: JSON.stringify({ error: "synthetic refetch 500" }),
+            });
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              dryRun: true,
+              wouldRemove: requested.length,
+              notFound: 0,
+              duplicateInBatch: 0,
+              total: 99,
+              projectedTotal: 99 - requested.length,
+              results: requested.map((raw: string) => ({
+                raw,
+                phrase: raw,
+                removed: true,
+              })),
+              dryRunImpact: {
+                corpus: {
+                  total: 5,
+                  validDetectionsLost: 3,
+                  falsePositivesDropped: 2,
+                  byTier: {
+                    t1Legit: 2,
+                    t2Borderline: 0,
+                    t3Slop: 1,
+                    t4Hallucinated: 0,
+                  },
+                  sampleMatches: [],
+                  warning:
+                    "3 legitimate detections would be lost from the curated benchmark",
+                  corpusSize: 47,
+                },
+                production: null,
+                productionError:
+                  "Production scan unavailable in this synthetic fixture",
+              },
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, phrases);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Pre-conditions: the initial 3-phrase preview reports valid
+      // detections lost, so the ack section renders and the hint is NOT
+      // present yet.
+      const ack = panel.getByTestId("handwavy-bulk-preview-ack");
+      await expect(ack).toBeVisible();
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-refetch-failed"),
+      ).toHaveCount(0);
+      expect(dryRunBodies).toHaveLength(1);
+      expect([...dryRunBodies[0].phrases].sort()).toEqual([...phrases].sort());
+
+      // Drop one phrase via its inline dismiss button — fires the
+      // debounced (~250ms) re-fetch with the surviving 2 phrases, which
+      // the mock above answers with a 500.
+      await panel
+        .getByTestId("handwavy-bulk-preview-results-details")
+        .locator("summary")
+        .click();
+      const droppedPhrase = phrases[0];
+      await panel
+        .locator(
+          `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${droppedPhrase}"]`,
+        )
+        .click();
+
+      // The "couldn't refresh impact" hint appears with a Retry button.
+      const refetchFailed = panel.getByTestId(
+        "handwavy-bulk-preview-refetch-failed",
+      );
+      await expect(refetchFailed).toBeVisible({ timeout: 5_000 });
+      await expect(refetchFailed).toContainText(/couldn't refresh impact/i);
+      const retryBtn = panel.getByTestId(
+        "handwavy-bulk-preview-refetch-retry",
+      );
+      await expect(retryBtn).toBeVisible();
+
+      // Critical: the previous response's impact figures stay in place
+      // (over-warning is the safe direction) — the ack checkbox is still
+      // rendered, NOT silently cleared by the failed refetch.
+      await expect(ack).toBeVisible();
+
+      // The 500 we returned must actually have been issued against the
+      // surviving 2-phrase list (not the original 3) so the test isn't
+      // accidentally asserting against the initial preview's request.
+      expect(dryRunBodies.length).toBeGreaterThanOrEqual(2);
+      expect([...dryRunBodies[1].phrases].sort()).toEqual(
+        [phrases[1], phrases[2]].sort(),
+      );
+      const failedRefetchCallCount = dryRunBodies.length;
+
+      // Click Retry — fires a new debounced dry-run with the same
+      // surviving 2-phrase list. The mock returns 200 this time, so the
+      // hint must clear and the dry-run impact stays (still > 0 in this
+      // mock, so the ack section also stays).
+      await retryBtn.click();
+      await expect(refetchFailed).toHaveCount(0, { timeout: 5_000 });
+      await expect(ack).toBeVisible();
+
+      // The retry actually re-issued the dry-run for the current
+      // requested phrase set — not just hidden the hint client-side.
+      await expect
+        .poll(() => dryRunBodies.length, { timeout: 5_000 })
+        .toBeGreaterThan(failedRefetchCallCount);
+      const retryBody = dryRunBodies[dryRunBodies.length - 1];
+      expect([...retryBody.phrases].sort()).toEqual(
+        [phrases[1], phrases[2]].sort(),
+      );
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
 });
