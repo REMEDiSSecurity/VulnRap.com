@@ -19,6 +19,7 @@ import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport } from "@/components/evidence-highlighter";
 import { DiagnosticsPanel, buildMarkdownSummary, loadDiagnosticsForExport as loadCachedDiagnosticsForExport, type DiagnosticsResponse } from "@/components/diagnostics-panel";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
+import { TriageEngineCard, type VulnrapEngineResultPanel } from "@/components/triage-engine-card";
 import { useQueryClient } from "@tanstack/react-query";
 
 function getQualityColor(score: number) {
@@ -622,16 +623,6 @@ function RecipeTabContent({ recipe, toast }: { recipe: ReproRecipe; toast: Retur
 
 type AssistantTab = "reproduce" | "recipe" | "gaps" | "dontmiss" | "feedback";
 
-interface VulnrapEngineResultPanel {
-  engine: string;
-  score: number;
-  verdict: "GREEN" | "YELLOW" | "RED" | "GREY";
-  confidence: "HIGH" | "MEDIUM" | "LOW";
-  triggeredIndicators?: Array<{ signal: string; explanation: string; strength?: "HIGH" | "MEDIUM" | "LOW" }>;
-  signalBreakdown?: Record<string, unknown>;
-  note?: string;
-}
-
 // Task #389 — chronological audit trail of times the bulk vulnrap
 // backfill rewrote this report's composite. Surfaced by the report-detail
 // API (routes/reports.ts) so reviewers can tell from the UI that a
@@ -669,13 +660,6 @@ const VULNRAP_LABEL_COLOR: Record<string, string> = {
   REASONABLE: "text-emerald-300 border-emerald-500/40",
   PROMISING: "text-emerald-400 border-emerald-500/40",
   STRONG: "text-green-400 border-green-500/40",
-};
-
-const VULNRAP_VERDICT_COLOR: Record<string, string> = {
-  RED: "bg-destructive",
-  YELLOW: "bg-yellow-500",
-  GREEN: "bg-green-500",
-  GREY: "bg-muted",
 };
 
 function TriageAssistantPanel({ assistant, toast }: { assistant: TriageAssistant; toast: ReturnType<typeof useToast>["toast"] }) {
@@ -1562,54 +1546,7 @@ export default function Results() {
             </div>
             <div className="space-y-3">
               {vulnrap.engines.map((eng) => (
-                <div key={eng.engine} className="glass-card rounded-lg p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-semibold truncate">{eng.engine}</span>
-                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 font-mono ${eng.verdict === "RED" ? "text-red-400 border-red-500/40" : eng.verdict === "YELLOW" ? "text-yellow-400 border-yellow-500/40" : eng.verdict === "GREEN" ? "text-green-400 border-green-500/40" : "text-muted-foreground"}`}>
-                        {eng.verdict}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">conf: {eng.confidence}</span>
-                    </div>
-                    <span className="font-mono text-sm font-bold">{eng.score}</span>
-                  </div>
-                  <Progress value={eng.score} className="h-1.5" indicatorClassName={VULNRAP_VERDICT_COLOR[eng.verdict] || "bg-muted"} />
-                  {eng.note && <p className="text-[11px] text-muted-foreground leading-relaxed">{eng.note}</p>}
-                  {(() => {
-                    const sb = (eng.signalBreakdown ?? {}) as {
-                      softCitation?: { name?: string; inferredCwe?: string } | null;
-                      avri?: { softCitation?: { name?: string; inferredCwe?: string } | null } | null;
-                    };
-                    const soft = sb.avri?.softCitation ?? sb.softCitation ?? null;
-                    if (!soft || !soft.name || !soft.inferredCwe) return null;
-                    const source = sb.avri?.softCitation ? "avri" : "legacy";
-                    return (
-                      <div
-                        className="flex items-center gap-2 text-[11px] rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1"
-                        data-testid={`badge-soft-citation-${source}`}
-                      >
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 font-mono shrink-0 text-cyan-300 border-cyan-500/40">
-                          INFERRED CWE
-                        </Badge>
-                        <span className="text-cyan-200/90 leading-snug">
-                          Soft citation: <span className="font-semibold">{soft.name}</span> → <span className="font-mono">{soft.inferredCwe}</span>
-                        </span>
-                      </div>
-                    );
-                  })()}
-                  {eng.triggeredIndicators && eng.triggeredIndicators.length > 0 && (
-                    <div className="space-y-1 pt-1">
-                      {eng.triggeredIndicators.slice(0, 4).map((ind, i) => (
-                        <div key={i} className="flex items-start gap-2 text-[11px]">
-                          <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 font-mono shrink-0 ${ind.strength === "HIGH" ? "text-red-400 border-red-500/40" : ind.strength === "MEDIUM" ? "text-yellow-400 border-yellow-500/40" : "text-muted-foreground"}`}>
-                            {ind.signal}
-                          </Badge>
-                          <span className="text-muted-foreground leading-snug">{ind.explanation}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <TriageEngineCard key={eng.engine} engine={eng} />
               ))}
             </div>
             {vulnrap.overridesApplied && vulnrap.overridesApplied.length > 0 && (
