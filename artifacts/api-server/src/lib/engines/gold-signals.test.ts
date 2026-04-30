@@ -15,6 +15,7 @@
 import { describe, it, expect } from "vitest";
 import { runEngine2 } from "./engines";
 import { extractSignals } from "./extractors";
+import { GOLD_SIGNAL_WEIGHTS, GOLD_SIGNAL_BONUS_CAP } from "./gold-signals";
 
 function goldValues(text: string, claimedCwes: string[] = []): string[] {
   const sig = extractSignals(text, claimedCwes);
@@ -22,6 +23,11 @@ function goldValues(text: string, claimedCwes: string[] = []): string[] {
   return e2.triggeredIndicators
     .filter((i) => i.signal === "GOLD_SIGNAL")
     .map((i) => String(i.value));
+}
+
+function runE2(text: string, claimedCwes: string[] = []) {
+  const sig = extractSignals(text, claimedCwes);
+  return runEngine2(sig, text);
 }
 
 // All payload-bearing categories need at least one typed evidence
@@ -594,6 +600,233 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEifQ.M2y7fT_kQpL9Zt
     const golds = goldValues(text, ["CWE-122"]);
     expect(golds).toContain("code_diff");
     expect(golds).toContain("auth_token");
+  });
+
+  // -----------------------------------------------------------------
+  // Task #240: per-category substance score weighting.
+  //
+  // Verifies that the weights in GOLD_SIGNAL_WEIGHTS actually move the
+  // technical-substance score (and that the cap holds when a single
+  // report fires several payload-class categories).
+  // -----------------------------------------------------------------
+  describe("Task #240: per-category substance score bonus", () => {
+    it("HIGH-weight category (sql_injection_payload, +5) credits the full per-category weight to the substance breakdown", () => {
+      const withSqlPayload = `
+# SQLi in /api/items via limit parameter
+
+The /api/items endpoint at \`src/api/items.py:88\` concatenates the
+\`limit\` query parameter into a SQL statement unsanitized.
+
+\`\`\`http
+POST /api/items HTTP/1.1
+Host: app.example.com
+Content-Type: application/x-www-form-urlencoded
+
+limit=1' UNION SELECT username, password FROM users--
+\`\`\`
+
+Reproduce by sending the request above; the response leaks the users
+table.
+`;
+      const boosted = runE2(withSqlPayload, ["CWE-89"]);
+      const golds = boosted.triggeredIndicators
+        .filter((i) => i.signal === "GOLD_SIGNAL")
+        .map((i) => String(i.value));
+      expect(golds).toContain("sql_injection_payload");
+
+      // Diagnostics breakdown surfaces the per-category contribution: the
+      // sql_injection_payload entry must carry the configured +5 weight.
+      const breakdown = boosted.signalBreakdown.goldSignalBonus as {
+        bonus: number;
+        rawSum: number;
+        cap: number;
+        signals: Array<{ id: string; weight: number }>;
+      };
+      expect(breakdown.bonus).toBeGreaterThan(0);
+      const sqlEntry = breakdown.signals.find((s) => s.id === "sql_injection_payload");
+      expect(sqlEntry?.weight).toBe(GOLD_SIGNAL_WEIGHTS.sql_injection_payload);
+      // Sum of per-category weights matches the rawSum reported.
+      const reportedSum = breakdown.signals.reduce((acc, s) => acc + s.weight, 0);
+      expect(reportedSum).toBe(breakdown.rawSum);
+      // Applied bonus equals min(rawSum, cap).
+      expect(breakdown.bonus).toBe(Math.min(breakdown.rawSum, breakdown.cap));
+    });
+
+    it("LOW-weight category (filesystem_toctou, +2) credits less than a HIGH-weight category to the substance breakdown", () => {
+      const withToctou = `
+# TOCTOU in /api/items handler
+
+\`\`\`c
+// src/api/items.c:88
+if (access(user_path, R_OK) != 0) {
+    return -EACCES;
+}
+// attacker swaps user_path → /etc/shadow via symlink here
+fd = open(user_path, O_RDONLY);
+\`\`\`
+
+Reproduce by spawning a tight loop that flips the symlink between an
+attacker-readable file and /etc/shadow.
+`;
+
+      const lowBoost = runE2(withToctou, ["CWE-367"]);
+      const lowGolds = lowBoost.triggeredIndicators
+        .filter((i) => i.signal === "GOLD_SIGNAL")
+        .map((i) => String(i.value));
+      expect(lowGolds).toContain("filesystem_toctou");
+
+      const breakdown = lowBoost.signalBreakdown.goldSignalBonus as {
+        bonus: number;
+        signals: Array<{ id: string; weight: number }>;
+      };
+      const toctouEntry = breakdown.signals.find((s) => s.id === "filesystem_toctou");
+      expect(toctouEntry?.weight).toBe(GOLD_SIGNAL_WEIGHTS.filesystem_toctou);
+      // The configured per-category weight is strictly lower than the
+      // payload-class HIGH-weight categories.
+      expect(GOLD_SIGNAL_WEIGHTS.filesystem_toctou).toBeLessThan(
+        GOLD_SIGNAL_WEIGHTS.sql_injection_payload,
+      );
+      expect(GOLD_SIGNAL_WEIGHTS.filesystem_toctou).toBeLessThan(
+        GOLD_SIGNAL_WEIGHTS.xss_payload,
+      );
+    });
+
+    it("caps the summed gold-category bonus when many categories fire", () => {
+      // Build a fixture that intentionally trips several payload-class
+      // categories: sql_injection_payload (5) + xss_payload (5) +
+      // ssrf_metadata_target (4) + path_traversal_payload (4) +
+      // auth_token (3) = 21 raw, capped to GOLD_SIGNAL_BONUS_CAP.
+      const multiPayload = `
+# Multi-class proof against /api/proxy
+
+\`\`\`http
+POST /api/search HTTP/1.1
+Host: app.example.com
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEifQ.M2y7fT_kQpL9Ztq8RxYbN3wVcGdHaJoP5sB1uEiKxzA
+Content-Type: application/x-www-form-urlencoded
+
+q=' UNION SELECT username, password FROM users--
+\`\`\`
+
+XSS reflected:
+
+\`\`\`html
+<script>alert(document.cookie)</script>
+\`\`\`
+
+SSRF via /api/fetch?url=:
+
+\`\`\`
+GET /api/fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/admin HTTP/1.1
+Host: app.example.com
+\`\`\`
+
+Path traversal:
+
+\`\`\`
+GET /download?file=../../../../etc/passwd HTTP/1.1
+Host: app.example.com
+\`\`\`
+
+Sources:
+- src/api/search.py:42
+- src/views/comment.tsx:94
+- src/api/fetch.py:18
+- src/api/download.go:21
+`;
+
+      const r = runE2(multiPayload, ["CWE-89"]);
+      const breakdown = r.signalBreakdown.goldSignalBonus as {
+        bonus: number;
+        rawSum: number;
+        cap: number;
+      };
+      // Several distinct GOLD_SIGNAL ids fired, summed weight far exceeds
+      // the cap, so the applied bonus equals the cap.
+      expect(breakdown.rawSum).toBeGreaterThan(GOLD_SIGNAL_BONUS_CAP);
+      expect(breakdown.bonus).toBe(GOLD_SIGNAL_BONUS_CAP);
+      expect(breakdown.cap).toBe(GOLD_SIGNAL_BONUS_CAP);
+    });
+
+    it("end-to-end score delta equals the per-category bonus when only one GOLD_SIGNAL category differs", () => {
+      // Two fixtures with identical prose, file paths, and code-block
+      // structure. The ONLY substantive difference is whether the body
+      // of the code block carries a real SQL injection payload or a
+      // generic placeholder line that does not trip any GOLD_SIGNAL
+      // pattern. This isolates the bonus contribution end-to-end.
+      const PROSE = `# SQLi in /api/items via limit parameter
+
+The /api/items endpoint at \`src/api/items.py:88\` concatenates the
+\`limit\` query parameter into a SQL statement unsanitized.
+
+Reproduce by sending the request below; the response leaks the users
+table.
+
+`;
+
+      const placeholderFixture =
+        PROSE +
+        "```sql\n" +
+        "SELECT id, name FROM items WHERE id = 42\n" +
+        "```\n";
+
+      const realPayloadFixture =
+        PROSE +
+        "```sql\n" +
+        "SELECT id, name FROM items WHERE id = 1' UNION SELECT username, password FROM users--\n" +
+        "```\n";
+
+      const baseline = runE2(placeholderFixture, ["CWE-89"]);
+      const boosted = runE2(realPayloadFixture, ["CWE-89"]);
+
+      const baseGold = baseline.triggeredIndicators
+        .filter((i) => i.signal === "GOLD_SIGNAL")
+        .map((i) => String(i.value));
+      const boostedGold = boosted.triggeredIndicators
+        .filter((i) => i.signal === "GOLD_SIGNAL")
+        .map((i) => String(i.value));
+
+      // Pre-condition: the baseline does not fire sql_injection_payload
+      // and the boosted fixture adds exactly that one category on top.
+      expect(baseGold).not.toContain("sql_injection_payload");
+      expect(boostedGold).toContain("sql_injection_payload");
+      const onlyDiff = boostedGold.filter((g) => !baseGold.includes(g));
+      expect(onlyDiff).toEqual(["sql_injection_payload"]);
+
+      const baseBonus =
+        (baseline.signalBreakdown.goldSignalBonus as { bonus: number }).bonus;
+      const boostedBonus =
+        (boosted.signalBreakdown.goldSignalBonus as { bonus: number }).bonus;
+
+      // The applied bonus delta equals the sql_injection_payload weight,
+      // and (since the boosted score is well below the +95 ceiling) the
+      // end-to-end final-score delta equals that same delta.
+      const bonusDelta = boostedBonus - baseBonus;
+      expect(bonusDelta).toBe(GOLD_SIGNAL_WEIGHTS.sql_injection_payload);
+      expect(boosted.score).toBeLessThan(95);
+      expect(boosted.score - baseline.score).toBe(bonusDelta);
+    });
+
+    it("does not award a bonus when all GOLD_SIGNAL evidence is placeholder", () => {
+      const slopText = `
+# Critical SQLi + XSS + SSRF + XXE
+
+\`\`\`
+GET /api/<endpoint>?q=<sql payload here> HTTP/1.1
+Host: <target>
+Authorization: Bearer <token>
+\`\`\`
+
+Payloads: \`<inject>\`, \`<script>\`, \`<metadata-url>\`, \`<entity>\`.
+`;
+      const r = runE2(slopText, ["CWE-89"]);
+      const breakdown = r.signalBreakdown.goldSignalBonus as {
+        bonus: number;
+        rawSum: number;
+      };
+      expect(breakdown.bonus).toBe(0);
+      expect(breakdown.rawSum).toBe(0);
+    });
   });
 
   it("emits no GOLD_SIGNAL on a slop report with only placeholder evidence", () => {

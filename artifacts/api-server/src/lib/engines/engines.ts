@@ -6,7 +6,11 @@ import { detectSoftCitation, detectVulnerabilityType } from "./extractors";
 import { CWE_FINGERPRINTS, HIGH_REJECTION_CWES } from "./cwe-fingerprints";
 import { evaluateCrashTrace } from "./avri/crash-trace";
 import { evaluateRawHttpRequest } from "./avri/raw-http";
-import { detectAdditionalGoldSignals } from "./gold-signals";
+import {
+  detectAdditionalGoldSignals,
+  GOLD_SIGNAL_WEIGHTS,
+  GOLD_SIGNAL_BONUS_CAP,
+} from "./gold-signals";
 import { detectHallucinationSignals, type HallucinationResult } from "../hallucination-detector";
 
 export type Verdict = "GREEN" | "YELLOW" | "RED" | "GREY";
@@ -303,11 +307,6 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
     if (strengthBonus > 0) finalScore = Math.min(finalScore, 95);
   }
 
-  const verdict: Verdict =
-    finalScore >= 61 ? "GREEN" :
-    finalScore >= 41 ? "YELLOW" :
-    "RED";
-
   const indicators: TriggeredIndicator[] = [];
   if (s.claimsPoCPresent && s.codeBlockCount === 0) {
     indicators.push({
@@ -434,6 +433,35 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
     }
   }
 
+  // Task #240: per-category bonus for the GOLD_SIGNAL indicators emitted
+  // above. Each category id in GOLD_SIGNAL_WEIGHTS contributes a small
+  // (2-5pt) bump to the substance score, calibrated against the AVRI
+  // family rubric weight that originated the category (see the rationale
+  // table in gold-signals.ts). The summed bonus is capped by
+  // GOLD_SIGNAL_BONUS_CAP so a report with several payload classes can't
+  // balloon past the +95 strengthBonus ceiling, and the same +95 ceiling
+  // applies after the bump so AVRI-on and AVRI-off reports converge on a
+  // similar maximum.
+  const goldBreakdown: Array<{ id: string; weight: number }> = [];
+  let goldCategoryBonusRaw = 0;
+  for (const ind of indicators) {
+    if (ind.signal !== "GOLD_SIGNAL") continue;
+    const id = String(ind.value);
+    const w = GOLD_SIGNAL_WEIGHTS[id];
+    if (!w) continue;
+    goldBreakdown.push({ id, weight: w });
+    goldCategoryBonusRaw += w;
+  }
+  const goldCategoryBonus = Math.min(GOLD_SIGNAL_BONUS_CAP, goldCategoryBonusRaw);
+  if (goldCategoryBonus > 0) {
+    finalScore = Math.min(95, clamp(Math.round(finalScore + goldCategoryBonus)));
+  }
+
+  const verdict: Verdict =
+    finalScore >= 61 ? "GREEN" :
+    finalScore >= 41 ? "YELLOW" :
+    "RED";
+
   return {
     engine: "Technical Substance Analyzer",
     score: finalScore,
@@ -456,8 +484,14 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
           multiplier: sig.strengthMultiplier,
         })),
       },
+      goldSignalBonus: {
+        bonus: goldCategoryBonus,
+        rawSum: goldCategoryBonusRaw,
+        cap: GOLD_SIGNAL_BONUS_CAP,
+        signals: goldBreakdown,
+      },
     },
-    note: `Substance is the strongest predictor of report quality. Claim:evidence ratio ${ce.ratio.toFixed(2)} (expert=0.27, slop=0.03). Evidence-strength bonus: ${strengthBonus.toFixed(1)}pt across ${s.evidenceSignals?.length ?? 0} typed signal(s).`,
+    note: `Substance is the strongest predictor of report quality. Claim:evidence ratio ${ce.ratio.toFixed(2)} (expert=0.27, slop=0.03). Evidence-strength bonus: ${strengthBonus.toFixed(1)}pt across ${s.evidenceSignals?.length ?? 0} typed signal(s). Gold-category bonus: +${goldCategoryBonus}pt across ${goldBreakdown.length} GOLD_SIGNAL(s).`,
   };
 }
 

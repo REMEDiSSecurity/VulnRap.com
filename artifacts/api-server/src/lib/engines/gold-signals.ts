@@ -321,6 +321,92 @@ function detectFilesystemToctou(text: string): AdditionalGoldSignal | null {
 }
 
 // ---------------------------------------------------------------------------
+// Per-category substance score weights (Task #240).
+// ---------------------------------------------------------------------------
+//
+// AVRI Engine 2 (avri/engine2-avri.ts) awards each family gold signal between
+// 8 and 22 points, normalizes by `calibratedMax = totalPossible * 0.55`, and
+// blends 50/50 with the legacy substance score. The default Engine 2 path
+// has no such blend, so the weights below translate AVRI's per-signal points
+// into a smaller bonus on top of the legacy substance score (capped to keep
+// the path bounded).
+//
+// Scaling rule of thumb (AVRI source weight in parentheses):
+//   AVRI 22 → 5pt    AVRI 18-20 → 4pt    AVRI 12-14 → 3pt    AVRI ≤10 → 2pt
+//
+// The cap (GOLD_SIGNAL_BONUS_CAP, applied in engines.ts) keeps even a
+// fully-evidenced report's bonus bounded, mirroring the strengthBonus
+// (max +15) and the AVRI baseScore cap (max 84). The combined effect on
+// substance is therefore bounded by ~25pt, which is consistent with how
+// far a maximally-evidenced report can move under AVRI alone.
+//
+// Per-category rationale:
+//   - sql_injection_payload  (5)  INJECTION/concrete_payload=22.
+//     A real UNION SELECT, OR 1=1, SLEEP(), or BENCHMARK() payload IS the
+//     textbook injection rubric proof — strongest weight.
+//   - command_injection_payload (5)  INJECTION/concrete_payload=22.
+//     `;cat /etc/passwd`, `$(...)`, JNDI Log4Shell — same rubric tier as
+//     sql_injection_payload.
+//   - xss_payload            (5)  WEB_CLIENT/concrete_payload=22.
+//     `<script>alert(document.cookie)</script>` or onerror payloads with
+//     active sinks — strongest WEB_CLIENT proof.
+//   - ssrf_metadata_target   (4)  WEB_CLIENT/ssrf_internal_metadata=20.
+//     Concrete cloud-metadata URL with path is highly specific; one notch
+//     below the payload-class triad because the URL alone doesn't show
+//     exploitation.
+//   - path_traversal_payload (4)  WEB_CLIENT/path_traversal_payload=18.
+//     `../../etc/passwd`-style with sensitive-file landing — mirrors AVRI 1:1.
+//   - xxe_external_entity    (4)  DESERIALIZATION/xxe_doctype_entity=18.
+//     `<!ENTITY xxe SYSTEM "file:///etc/passwd">` is the canonical XXE
+//     proof — same tier as path_traversal_payload.
+//   - deserialization_gadget (4)  DESERIALIZATION/concrete_gadget_or_payload=18.
+//     ysoserial CommonsCollections1 / pickle.loads(b'\x...') / yaml.unsafe_load
+//     — actual sink invocation, not just a name-drop.
+//   - real_crash_trace       (5)  MEMORY_CORRUPTION/asan_or_sanitizer=22 +
+//     stack_trace_with_offset=12. A non-stripped sanitizer trace with ≥3
+//     resolved frames is the strongest MEMORY_CORRUPTION rubric proof.
+//   - real_raw_http          (4)  REQUEST_SMUGGLING/raw_http_request=18.
+//     Non-fabricated HTTP/1.x request bytes; gold-tier smuggling proof and
+//     also strengthens INJECTION / AUTHN_AUTHZ reports.
+//   - auth_token             (3)  AUTHN_AUTHZ/authorization_header_swap=12.
+//     Concrete bearer/cookie value shows real session evidence rather than
+//     a hand-wavy "use your token here" template.
+//   - code_diff              (3)  FLAT/code_diff=12, also MEMORY_CORRUPTION
+//     /code_diff_in_c=12 and WEB_CLIENT/code_diff_for_fix=10. Present
+//     across nearly every family; meaningful but lower per-category weight
+//     because diff hunks alone don't characterize the vulnerability class.
+//   - crypto_misuse          (2)  CRYPTO/specific_misuse=10.
+//     Static IV / ECB / hashlib.md5() — important but only one of three
+//     crypto rubric prongs (specific_algo_or_lib + kat_or_test_vector
+//     remain default-path absent), so deliberately lower than payload-class.
+//   - filesystem_toctou      (2)  RACE_CONCURRENCY/filesystem_toctou=10.
+//     access(2)→open(2) sequence — same reasoning as crypto_misuse: it's a
+//     supporting prong, not the strongest proof of a race (TSan / two-thread
+//     interleaving carry more weight in AVRI).
+export const GOLD_SIGNAL_WEIGHTS: Readonly<Record<string, number>> = {
+  // Curated three (Task #170).
+  real_crash_trace: 5,
+  real_raw_http: 4,
+  code_diff: 3,
+  // Additional ten (Task #174).
+  sql_injection_payload: 5,
+  command_injection_payload: 5,
+  xss_payload: 5,
+  ssrf_metadata_target: 4,
+  path_traversal_payload: 4,
+  xxe_external_entity: 4,
+  deserialization_gadget: 4,
+  auth_token: 3,
+  crypto_misuse: 2,
+  filesystem_toctou: 2,
+};
+
+/** Cap for the summed per-category bonus applied to the substance score.
+ * Keeps a bounded translation from AVRI per-signal points into the default
+ * Engine 2 path (mirrors the +15 strengthBonus cap). */
+export const GOLD_SIGNAL_BONUS_CAP = 12;
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
