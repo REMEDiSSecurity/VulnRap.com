@@ -66,7 +66,7 @@ import {
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
   Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
-  KeyRound, ArrowLeftRight, Calendar,
+  KeyRound, ArrowLeftRight, Calendar, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -8068,6 +8068,20 @@ interface DatasetCohort {
   engine2Mean: number | null;
 }
 
+// Task #255 — per-report sample row mirrored from
+// `datasetSamples.samples` so reviewers can drill from a cohort mean
+// into the individual reports that drove it.
+export interface DatasetSampleRow {
+  id: string;
+  label: string;
+  tier: string;
+  composite: number;
+  e1: number | null;
+  e2: number | null;
+  e3: number | null;
+  triage: string;
+}
+
 type DatasetSamples =
   | { available: false }
   | {
@@ -8082,6 +8096,7 @@ type DatasetSamples =
       gap: number | null;
       gapTarget: number;
       gapMeetsTarget: boolean;
+      samples: DatasetSampleRow[];
     };
 
 // Task #256 — per-tier synthetic-fixture summary block from /api/test/run.
@@ -9092,6 +9107,129 @@ const DATASET_COHORT_TIER_LABELS: Record<string, string> = {
 };
 const DATASET_COHORT_ORDER = ["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"] as const;
 
+// Task #255 — sort a cohort's sample rows so the reports that pulled the
+// cohort mean off-target surface first. Distance is the absolute deviation
+// from the cohort's composite mean; ties break on lower id so the order is
+// stable across renders. When the cohort mean is null (empty cohort) the
+// rows are returned in the upstream order — there's nothing to anchor a
+// distance to. Exported so the unit test can pin the ordering contract.
+export function sortDatasetSamplesByDistanceFromMean(
+  rows: readonly DatasetSampleRow[],
+  cohortMean: number | null,
+): DatasetSampleRow[] {
+  const out = rows.slice();
+  if (cohortMean == null) return out;
+  out.sort((a, b) => {
+    const da = Math.abs(a.composite - cohortMean);
+    const db = Math.abs(b.composite - cohortMean);
+    if (db !== da) return db - da;
+    return a.id.localeCompare(b.id);
+  });
+  return out;
+}
+
+// Lightweight triage badge palette mirroring the broader app's colour
+// scheme so reviewers can scan the per-cohort sample table at a glance.
+// Keys mirror the TriageAction union in triage-recommendation.ts.
+const DATASET_SAMPLE_TRIAGE_COLOR: Record<string, string> = {
+  PRIORITIZE: "text-red-400 bg-red-400/10 border-red-400/30",
+  STANDARD_TRIAGE: "text-blue-400 bg-blue-400/10 border-blue-400/30",
+  MANUAL_REVIEW: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
+  CHALLENGE_REPORTER: "text-orange-400 bg-orange-400/10 border-orange-400/30",
+  AUTO_CLOSE: "text-muted-foreground bg-muted/30 border-border/40",
+};
+
+function DatasetCohortSampleTable({
+  cohort,
+  samples,
+}: {
+  cohort: DatasetCohort;
+  samples: DatasetSampleRow[];
+}) {
+  const cohortSamples = samples.filter(s => s.tier === cohort.tier);
+  const sorted = sortDatasetSamplesByDistanceFromMean(cohortSamples, cohort.compositeMean);
+
+  if (sorted.length === 0) {
+    return (
+      <div className="rounded-md border border-border/40 bg-muted/[0.03] px-3 py-2 text-[11px] text-muted-foreground">
+        No sampled reports in this cohort on the current run.
+      </div>
+    );
+  }
+
+  const meanLabel = cohort.compositeMean != null
+    ? `mean ${cohort.compositeMean.toFixed(1)}`
+    : "no cohort mean";
+
+  return (
+    <div className="rounded-md border border-border/40 bg-muted/[0.03] overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground/80">
+        <span>
+          {DATASET_COHORT_TIER_LABELS[cohort.tier] ?? cohort.tier}
+          {" "}<span className="font-mono normal-case tracking-normal text-muted-foreground/60">· {sorted.length} sample{sorted.length === 1 ? "" : "s"}, {meanLabel}, sorted by |Δ| from mean</span>
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px] tabular-nums">
+          <thead className="text-[10px] uppercase tracking-wider text-muted-foreground/70 bg-muted/[0.04]">
+            <tr>
+              <th className="text-left font-medium px-3 py-1.5">Report</th>
+              <th className="text-right font-medium px-2 py-1.5">Composite</th>
+              <th className="text-right font-medium px-2 py-1.5" title="Composite minus cohort mean">Δ mean</th>
+              <th className="text-right font-medium px-2 py-1.5">E1</th>
+              <th className="text-right font-medium px-2 py-1.5">E2</th>
+              <th className="text-right font-medium px-2 py-1.5">E3</th>
+              <th className="text-left font-medium px-3 py-1.5">Triage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(s => {
+              const delta = cohort.compositeMean != null
+                ? s.composite - cohort.compositeMean
+                : null;
+              const deltaText = delta == null
+                ? "—"
+                : `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)}`;
+              const triageColor = DATASET_SAMPLE_TRIAGE_COLOR[s.triage]
+                ?? "text-muted-foreground bg-muted/20 border-border/40";
+              return (
+                <tr key={s.id} className="border-t border-border/30">
+                  <td className="px-3 py-1 font-mono text-foreground/90 max-w-[16rem] truncate" title={s.id}>
+                    {s.id}
+                  </td>
+                  <td className="px-2 py-1 text-right text-foreground">{s.composite.toFixed(1)}</td>
+                  <td className={cn(
+                    "px-2 py-1 text-right",
+                    delta == null
+                      ? "text-muted-foreground"
+                      : Math.abs(delta) >= 15
+                        ? "text-orange-400"
+                        : "text-muted-foreground",
+                  )}>{deltaText}</td>
+                  <td className="px-2 py-1 text-right text-muted-foreground">
+                    {s.e1 != null ? s.e1.toFixed(1) : "—"}
+                  </td>
+                  <td className="px-2 py-1 text-right text-muted-foreground">
+                    {s.e2 != null ? s.e2.toFixed(1) : "—"}
+                  </td>
+                  <td className="px-2 py-1 text-right text-muted-foreground">
+                    {s.e3 != null ? s.e3.toFixed(1) : "—"}
+                  </td>
+                  <td className="px-3 py-1">
+                    <Badge variant="outline" className={cn("text-[9px] font-mono", triageColor)}>
+                      {s.triage}
+                    </Badge>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DatasetCohortMeansSection() {
   const { data, isLoading, isError } = useQuery<TestRunResponse>({
     queryKey: ["test-run-archetypes"],
@@ -9104,6 +9242,20 @@ function DatasetCohortMeansSection() {
     refetchInterval: 300_000,
     retry: false,
   });
+
+  // Task #255 — track which cohort tiles are expanded so reviewers can
+  // drill into the underlying dataset reports behind each cohort mean.
+  // Stored as a Set keyed by tier so multiple cohorts can be open at
+  // once for side-by-side comparison.
+  const [expandedTiers, setExpandedTiers] = useState<Set<string>>(() => new Set());
+  const toggleTier = (tier: string) => {
+    setExpandedTiers(prev => {
+      const next = new Set(prev);
+      if (next.has(tier)) next.delete(tier);
+      else next.add(tier);
+      return next;
+    });
+  };
 
   if (isLoading) return <Skeleton className="h-40 rounded-xl" />;
   // /api/test/run is dev-only; in production the endpoint 404s. Hide
@@ -9199,6 +9351,8 @@ function DatasetCohortMeansSection() {
       <CardContent className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {orderedCohorts.map(c => {
+            // Task #256 — per-tier fixture-vs-dataset delta data, surfaced as
+            // a sub-block inside each tile (see below).
             const tierDelta = tierDeltas.find(d => d.tier === c.tier);
             const delta = tierDelta?.delta ?? null;
             const fxMean = tierDelta?.fxMean ?? null;
@@ -9214,14 +9368,33 @@ function DatasetCohortMeansSection() {
             const deltaText = delta == null
               ? "Δ —"
               : `Δ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`;
+            // Task #255 — chevron-toggle expansion state for the per-tile
+            // sampled-reports drilldown (rendered after the grid).
+            const isExpanded = expandedTiers.has(c.tier);
+            const hasSamples = c.count > 0;
+            const Chevron = isExpanded ? ChevronDown : ChevronRight;
             return (
-              <div
+              <button
                 key={c.tier}
+                type="button"
                 data-testid={`dataset-cohort-tile-${c.tier}`}
-                className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2"
+                onClick={() => toggleTier(c.tier)}
+                disabled={!hasSamples}
+                aria-expanded={isExpanded}
+                aria-controls={`dataset-cohort-samples-${c.tier}`}
+                className={cn(
+                  "text-left rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 transition-colors",
+                  hasSamples
+                    ? "cursor-pointer hover:bg-muted/[0.08] hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    : "cursor-not-allowed opacity-80",
+                  isExpanded && "border-primary/30 bg-muted/[0.08]",
+                )}
               >
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span className="font-mono">{DATASET_COHORT_TIER_LABELS[c.tier] ?? c.tier}</span>
+                  <span className="font-mono flex items-center gap-1">
+                    <Chevron className="w-3 h-3" />
+                    {DATASET_COHORT_TIER_LABELS[c.tier] ?? c.tier}
+                  </span>
                   <span className="tabular-nums text-muted-foreground/60">n={c.count}</span>
                 </div>
                 <div className="mt-1 flex items-baseline gap-2">
@@ -9256,7 +9429,12 @@ function DatasetCohortMeansSection() {
                     <> · E2 mean {c.engine2Mean.toFixed(1)}</>
                   )}
                 </div>
-              </div>
+                <div className="mt-1 text-[10px] text-muted-foreground/60">
+                  {hasSamples
+                    ? (isExpanded ? "Hide sampled reports" : "Show sampled reports")
+                    : "No sampled reports to drill into"}
+                </div>
+              </button>
             );
           })}
         </div>
@@ -9281,6 +9459,16 @@ function DatasetCohortMeansSection() {
             </span>
           </div>
         )}
+        {/* Task #255 — per-tier sampled-reports drilldown. Each expanded tile
+            mounts its own table below the grid so multiple cohorts can be
+            compared side-by-side. */}
+        {orderedCohorts
+          .filter(c => expandedTiers.has(c.tier))
+          .map(c => (
+            <div key={c.tier} id={`dataset-cohort-samples-${c.tier}`}>
+              <DatasetCohortSampleTable cohort={c} samples={ds.samples} />
+            </div>
+          ))}
         <div className="text-[10px] text-muted-foreground/70 font-mono break-all">
           source: {ds.sourcePath}
         </div>

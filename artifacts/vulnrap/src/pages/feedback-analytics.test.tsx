@@ -11,6 +11,8 @@ import {
   summarizeDatasetHistory,
   computeCohortFixtureDelta,
   FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
+  sortDatasetSamplesByDistanceFromMean,
+  type DatasetSampleRow,
 } from "./feedback-analytics";
 import type {
   HandwavyEditEntry,
@@ -605,5 +607,46 @@ describe("computeCohortFixtureDelta (Task #256 — surface synthetic-vs-dataset 
     // confirming the override travels through both the magnitude and the
     // boundary-strictness logic.
     expect(computeCohortFixtureDelta(75, 70, 10).isDivergent).toBe(false);
+  });
+});
+
+describe("sortDatasetSamplesByDistanceFromMean (Task #255 — surface cohort outliers first)", () => {
+  const make = (id: string, composite: number): DatasetSampleRow => ({
+    id, label: "human_authentic", tier: "T1_LEGIT",
+    composite, e1: null, e2: null, e3: null, triage: "MANUAL_REVIEW",
+  });
+
+  it("sorts rows by absolute distance from the cohort mean, descending", () => {
+    const rows = [make("a", 80), make("b", 50), make("c", 90), make("d", 75)];
+    const sorted = sortDatasetSamplesByDistanceFromMean(rows, 75);
+    // |50-75|=25, |90-75|=15, |80-75|=5, |75-75|=0 → b, c, a, d
+    expect(sorted.map(r => r.id)).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("breaks ties on equal distances by report id so the order is stable", () => {
+    // Both 70 and 80 are 5 away from 75; tie-break should put "x" before "y".
+    const rows = [make("y", 70), make("x", 80), make("z", 75)];
+    const sorted = sortDatasetSamplesByDistanceFromMean(rows, 75);
+    expect(sorted.map(r => r.id)).toEqual(["x", "y", "z"]);
+  });
+
+  it("does not mutate the input array", () => {
+    const rows = [make("a", 80), make("b", 50)];
+    const snapshot = rows.map(r => r.id);
+    sortDatasetSamplesByDistanceFromMean(rows, 75);
+    expect(rows.map(r => r.id)).toEqual(snapshot);
+  });
+
+  it("returns rows in upstream order when the cohort mean is null (empty cohort)", () => {
+    // Without a mean to anchor distance, falling back to the original
+    // order is preferable to picking an arbitrary one.
+    const rows = [make("c", 90), make("a", 80), make("b", 50)];
+    const sorted = sortDatasetSamplesByDistanceFromMean(rows, null);
+    expect(sorted.map(r => r.id)).toEqual(["c", "a", "b"]);
+  });
+
+  it("handles an empty input without throwing", () => {
+    expect(sortDatasetSamplesByDistanceFromMean([], 75)).toEqual([]);
+    expect(sortDatasetSamplesByDistanceFromMean([], null)).toEqual([]);
   });
 });
