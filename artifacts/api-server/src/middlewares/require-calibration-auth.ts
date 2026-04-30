@@ -77,28 +77,29 @@ function constantTimeEquals(a: string, b: string): boolean {
   return timingSafeEqual(aBuf, bBuf);
 }
 
-// Lazy singleton so the production process gets a single limiter built from
-// env vars on first use, while tests can inject their own (smaller-window,
-// isolated) instance via __setCalibrationAuthLimiterForTests.
-let limiterInstance: RateLimitRequestHandler | null = null;
+// Build the production limiter eagerly at module load so express-rate-limit's
+// own validator doesn't fire ERR_ERL_CREATED_IN_REQUEST_HANDLER ("instance
+// should be created at app initialization, not when responding to a request"),
+// which it would the first time a request hit the lazy path. Tests can swap
+// in a smaller-window, isolated instance via __setCalibrationAuthLimiterForTests
+// and reset back to the production limiter by passing `null`.
+const productionLimiter: RateLimitRequestHandler = createCalibrationAuthLimiter();
+let limiterInstance: RateLimitRequestHandler = productionLimiter;
 
 function getLimiter(): RateLimitRequestHandler {
-  if (limiterInstance === null) {
-    limiterInstance = createCalibrationAuthLimiter();
-  }
   return limiterInstance;
 }
 
 /**
- * Test seam — replace the lazy limiter with a freshly built one (or null to
- * force the next request to construct from env on demand). Each test should
- * inject a dedicated limiter so its in-memory hit store cannot leak counts
- * to neighbouring tests.
+ * Test seam — replace the limiter with a freshly built one for the duration
+ * of a test, or pass `null` to restore the eagerly-built production limiter.
+ * Each test should inject a dedicated limiter so its in-memory hit store
+ * cannot leak counts to neighbouring tests.
  */
 export function __setCalibrationAuthLimiterForTests(
   limiter: RateLimitRequestHandler | null,
 ): void {
-  limiterInstance = limiter;
+  limiterInstance = limiter ?? productionLimiter;
 }
 
 const WRONG_TOKEN_MESSAGE =

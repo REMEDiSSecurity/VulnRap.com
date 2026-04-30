@@ -80,6 +80,7 @@ interface Harness {
 
 let activeHarness: Harness | null = null;
 let restoreLimiter: (() => void) | null = null;
+let restoreAlerter: (() => void) | null = null;
 
 async function startHarness(opts: { max?: number } = {}): Promise<Harness> {
   process.env.CALIBRATION_TOKEN = TOKEN;
@@ -88,6 +89,9 @@ async function startHarness(opts: { max?: number } = {}): Promise<Harness> {
     "./require-calibration-auth"
   );
   const { createCalibrationAuthLimiter } = await import("./calibration-auth-rate-limit");
+  const { createBruteForceAlerter, __setBruteForceAlerterForTests } = await import(
+    "./calibration-auth-brute-force-alert"
+  );
 
   const limiter = createCalibrationAuthLimiter({
     windowMs: 60_000,
@@ -95,6 +99,20 @@ async function startHarness(opts: { max?: number } = {}): Promise<Harness> {
   });
   __setCalibrationAuthLimiterForTests(limiter);
   restoreLimiter = () => __setCalibrationAuthLimiterForTests(null);
+
+  // Inject a fresh brute-force alerter per harness so cumulative wrong-token
+  // events from earlier tests in this file can't push the alerter past its
+  // default threshold (10) mid-test and emit an unexpected
+  // "brute-force probe threshold crossed" warn that would inflate warnSpy
+  // call counts. statePath:null keeps tests off the shipped JSON state file.
+  const alerter = createBruteForceAlerter({
+    windowMs: 60_000,
+    threshold: 1_000_000,
+    webhookUrl: "",
+    statePath: null,
+  });
+  __setBruteForceAlerterForTests(alerter);
+  restoreAlerter = () => __setBruteForceAlerterForTests(null);
 
   const app = express();
   app.set("trust proxy", 1);
@@ -127,6 +145,10 @@ afterEach(async () => {
   if (restoreLimiter) {
     restoreLimiter();
     restoreLimiter = null;
+  }
+  if (restoreAlerter) {
+    restoreAlerter();
+    restoreAlerter = null;
   }
   if (activeHarness) {
     await activeHarness.close();
