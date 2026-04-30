@@ -1,0 +1,4 @@
+{
+  "_meta": "Persisted per-IP cooldown state for the calibration-auth brute-force alerter. Each entry records the last time an alert was dispatched for this IP so a process restart inside the cooldown window does not re-page the on-call. Capped at 256 entries (oldest dropped first). Override the location via CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH; safe to delete or truncate to clear cooldown state.",
+  "perIp": []
+}

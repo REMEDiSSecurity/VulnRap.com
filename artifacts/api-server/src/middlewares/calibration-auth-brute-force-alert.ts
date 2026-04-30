@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { logger } from "../lib/logger";
 import { buildPublicUrl } from "../lib/public-url";
 import { __CALIBRATION_AUTH_RATE_LIMIT_DEFAULTS } from "./calibration-auth-rate-limit";
@@ -76,6 +79,21 @@ export interface BruteForceAlerterOptions {
   dispatch?: BruteForceDispatcher;
   now?: () => number;
   maxTrackedIps?: number;
+  /**
+   * Path to the JSON file used to persist per-IP cooldown state across
+   * process restarts. When `undefined` (the default) the path is read
+   * from `CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH`, falling back to
+   * `artifacts/api-server/data/calibration-auth-brute-force-state.json`.
+   * Pass `null` to disable persistence (memory-only — useful for unit
+   * tests that don't want to touch the shipped file).
+   */
+  statePath?: string | null;
+  /**
+   * Max number of per-IP cooldown records to persist on disk. Bounded
+   * so the state file stays small and trivially diffable; oldest
+   * entries (by `lastAlertedAt`) are dropped first.
+   */
+  persistHistoryLimit?: number;
 }
 
 export interface BruteForceAlerter {
@@ -85,6 +103,114 @@ export interface BruteForceAlerter {
 }
 
 const DEFAULT_MAX_TRACKED_IPS = 1024;
+// Cap the persisted cooldown table so the file stays small and
+// trivially diffable. Oldest (by lastAlertedAt) drops first.
+const DEFAULT_PERSIST_HISTORY_LIMIT = 256;
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const STATE_FILE_NAME = "calibration-auth-brute-force-state.json";
+
+// Resolve the state file relative to the package, then fall back to
+// cwd-based candidates so the file is found regardless of where the
+// process was launched from. The first candidate is also used for
+// writes when no existing file is found.
+const STATE_FILE_CANDIDATE_PATHS = [
+  path.resolve(__dirname, "../../data", STATE_FILE_NAME),
+  path.resolve(process.cwd(), "artifacts/api-server/data", STATE_FILE_NAME),
+  path.resolve(process.cwd(), "data", STATE_FILE_NAME),
+];
+
+/**
+ * Single record persisted to disk for one IP. Only `lastAlertedAt` is
+ * load-bearing for cooldown — the in-window event list is intentionally
+ * NOT persisted because it repopulates from incoming requests after
+ * restart, and the cooldown check (lastAlertedAt + windowMs) is what
+ * suppresses re-pages in the meantime.
+ */
+interface PersistedIpRecord {
+  ip: string;
+  lastAlertedAt: number;
+}
+
+interface PersistedState {
+  _meta?: unknown;
+  perIp: PersistedIpRecord[];
+}
+
+const PERSIST_META =
+  "Persisted per-IP cooldown state for the calibration-auth brute-force alerter. Each entry records the last time an alert was dispatched for this IP so a process restart inside the cooldown window does not re-page the on-call. Capped at 256 entries (oldest dropped first). Override the location via CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH; safe to delete or truncate to clear cooldown state.";
+
+function isPersistedIpRecord(value: unknown): value is PersistedIpRecord {
+  if (value === null || typeof value !== "object") return false;
+  const v = value as { ip?: unknown; lastAlertedAt?: unknown };
+  return (
+    typeof v.ip === "string" &&
+    v.ip.length > 0 &&
+    typeof v.lastAlertedAt === "number" &&
+    Number.isFinite(v.lastAlertedAt)
+  );
+}
+
+function readPersistedState(filePath: string): PersistedIpRecord[] {
+  if (!existsSync(filePath)) return [];
+  try {
+    const raw = readFileSync(filePath, "utf8");
+    if (raw.trim().length === 0) return [];
+    const parsed = JSON.parse(raw) as Partial<PersistedState>;
+    const list = Array.isArray(parsed.perIp) ? parsed.perIp : [];
+    const cleaned: PersistedIpRecord[] = [];
+    for (const entry of list) {
+      if (isPersistedIpRecord(entry)) {
+        cleaned.push({ ip: entry.ip, lastAlertedAt: entry.lastAlertedAt });
+      }
+    }
+    return cleaned;
+  } catch (err) {
+    logger.warn(
+      { err, path: filePath },
+      "calibration auth: failed to read persisted brute-force cooldown state; starting from empty",
+    );
+    return [];
+  }
+}
+
+function writePersistedState(
+  filePath: string,
+  records: PersistedIpRecord[],
+  limit: number,
+): void {
+  const dir = path.dirname(filePath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  // Keep the most recently alerted entries when over the cap. Sort
+  // descending by lastAlertedAt so the slice keeps the freshest N.
+  const trimmed = [...records]
+    .sort((a, b) => b.lastAlertedAt - a.lastAlertedAt)
+    .slice(0, limit);
+  const payload: PersistedState = {
+    _meta: PERSIST_META,
+    perIp: trimmed,
+  };
+  writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+}
+
+function resolveStatePath(opt: string | null | undefined): string | null {
+  if (opt === null) return null;
+  if (typeof opt === "string" && opt.trim().length > 0) {
+    return path.resolve(opt);
+  }
+  const envOverride = process.env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH;
+  if (typeof envOverride === "string" && envOverride.trim().length > 0) {
+    return path.resolve(envOverride);
+  }
+  for (const p of STATE_FILE_CANDIDATE_PATHS) {
+    if (existsSync(p)) return p;
+  }
+  // Fall back to the first candidate so writes can create it on demand.
+  return STATE_FILE_CANDIDATE_PATHS[0]!;
+}
 
 const RECOMMENDED_ACTIONS: ReadonlyArray<string> = [
   "Confirm the source IP is not a legitimate reviewer (NAT / office Wi-Fi).",
@@ -221,8 +347,55 @@ export function createBruteForceAlerter(
   const webhookOverridden = opts.webhookUrl !== undefined;
   const pinnedWebhook = opts.webhookUrl ?? "";
 
+  const statePath = resolveStatePath(opts.statePath);
+  const persistHistoryLimit = opts.persistHistoryLimit ?? DEFAULT_PERSIST_HISTORY_LIMIT;
+
   const perIp = new Map<string, PerIpState>();
   const inFlight = new Set<Promise<unknown>>();
+
+  // Seed the in-memory cooldown table from the persisted state file so
+  // an attack that crossed the threshold before a deploy doesn't re-fire
+  // the alert for the same IP inside its cooldown window after restart.
+  // Only `lastAlertedAt` is loaded; the in-window event list rebuilds
+  // itself from incoming traffic — the cooldown check (driven by
+  // lastAlertedAt) is what suppresses the re-page in the meantime.
+  if (statePath !== null) {
+    const persisted = readPersistedState(statePath);
+    // Sort ascending by lastAlertedAt so Map insertion order matches
+    // recency: the most-recently alerted IP is the most-recently
+    // touched, which keeps the LRU eviction in `evictOldestIfFull`
+    // consistent with what we wrote out.
+    persisted.sort((a, b) => a.lastAlertedAt - b.lastAlertedAt);
+    for (const rec of persisted) {
+      if (perIp.size >= maxTrackedIps) {
+        const oldestKey = perIp.keys().next().value;
+        if (oldestKey !== undefined) perIp.delete(oldestKey);
+      }
+      perIp.set(rec.ip, { events: [], lastAlertedAt: rec.lastAlertedAt });
+    }
+  }
+
+  function persistCooldownState(): void {
+    if (statePath === null) return;
+    const records: PersistedIpRecord[] = [];
+    for (const [ip, state] of perIp) {
+      if (state.lastAlertedAt !== null) {
+        records.push({ ip, lastAlertedAt: state.lastAlertedAt });
+      }
+    }
+    try {
+      writePersistedState(statePath, records, persistHistoryLimit);
+    } catch (err) {
+      // A failure to persist must not crash the request that triggered
+      // the alert — we still alerted in-memory and via the dispatcher,
+      // so degraded operation here just means the cooldown won't
+      // survive a restart this one time.
+      logger.warn(
+        { err, path: statePath },
+        "calibration auth: failed to persist brute-force cooldown state (cooldown will not survive a restart for this alert)",
+      );
+    }
+  }
 
   function pruneIp(state: PerIpState, cutoff: number): void {
     let dropUntil = 0;
@@ -253,6 +426,10 @@ export function createBruteForceAlerter(
     const cfg = { windowMs, threshold, runbookUrl };
     const payload = buildPayload(ip, state, cfg, t);
     state.lastAlertedAt = t;
+    // Persist the bumped cooldown timestamp BEFORE we await the webhook
+    // dispatch so a crash mid-dispatch still leaves the cooldown intact
+    // and a fast restart doesn't immediately re-page the on-call.
+    persistCooldownState();
 
     const webhookUrl = webhookOverridden ? pinnedWebhook : readWebhookUrlEnv();
 
@@ -386,4 +563,6 @@ export const __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS = {
   maxTrackedIps: DEFAULT_MAX_TRACKED_IPS,
   runbookPath: RUNBOOK_URL_PATH,
   recommendedActions: RECOMMENDED_ACTIONS,
+  persistHistoryLimit: DEFAULT_PERSIST_HISTORY_LIMIT,
+  stateFileName: STATE_FILE_NAME,
 };

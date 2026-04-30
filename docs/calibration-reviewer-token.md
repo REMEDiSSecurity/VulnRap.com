@@ -169,6 +169,7 @@ webhook is dispatched naming the offending IP and linking back to the
 | `CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS`     | `CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS` (60 000 ms)  | Sliding window for counting wrong-token events per IP.        |
 | `CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD`     | `CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES` (10)      | Wrong-token attempts per IP per window before an alert fires. |
 | `CALIBRATION_AUTH_BRUTE_FORCE_RUNBOOK_URL`         | `${PUBLIC_URL}/docs/calibration-reviewer-token.md#rotation` | Link included in the dispatched payload.               |
+| `CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH`          | `artifacts/api-server/data/calibration-auth-brute-force-state.json` | JSON file used to persist per-IP cooldown timestamps so a deploy / restart mid-attack does not re-page the on-call inside the cooldown window. Capped at 256 entries. |
 
 The window/threshold defaults are *intentionally* the same env vars
 the limiter already exposes — set `CALIBRATION_AUTH_RATE_LIMIT_*` once

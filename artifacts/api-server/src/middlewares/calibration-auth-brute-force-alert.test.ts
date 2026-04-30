@@ -1,6 +1,9 @@
 import express from "express";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const warnSpy = vi.fn();
@@ -153,9 +156,19 @@ async function startHarness(opts: HarnessOpts = {}): Promise<HarnessHandles> {
   };
 }
 
+let tmpStateDir: string | null = null;
+
 beforeEach(() => {
   warnSpy.mockClear();
   infoSpy.mockClear();
+  // Pin every alerter built in this suite to a per-test scratch dir so
+  // unit tests never touch the shipped
+  // artifacts/api-server/data/calibration-auth-brute-force-state.json.
+  tmpStateDir = mkdtempSync(path.join(tmpdir(), "bf-alert-state-"));
+  process.env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH = path.join(
+    tmpStateDir,
+    "state.json",
+  );
 });
 
 afterEach(async () => {
@@ -176,8 +189,13 @@ afterEach(async () => {
   delete process.env.CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD;
   delete process.env.CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS;
   delete process.env.CALIBRATION_AUTH_BRUTE_FORCE_RUNBOOK_URL;
+  delete process.env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH;
   delete process.env.CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS;
   delete process.env.CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES;
+  if (tmpStateDir !== null) {
+    rmSync(tmpStateDir, { recursive: true, force: true });
+    tmpStateDir = null;
+  }
 });
 
 describe("threshold crossing dispatches a webhook", () => {
@@ -577,3 +595,218 @@ describe("a thrown dispatcher does not crash the request", () => {
     expect(dispatchCount).toBe(1);
   });
 });
+
+describe("per-IP cooldown is persisted across process restarts (Task #400)", () => {
+  it("a fresh alerter rebuilt with the same state path does not re-fire for an IP still inside its cooldown window", async () => {
+    const { createBruteForceAlerter } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+
+    let mockNow = 1_000_000;
+    const tick = (deltaMs: number) => {
+      mockNow += deltaMs;
+    };
+
+    // -- Process #1: cross the threshold so the cooldown is recorded.
+    const callsA: string[] = [];
+    const alerterA = createBruteForceAlerter({
+      threshold: 2,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async (_url, payload) => {
+        callsA.push(payload.ip);
+        return { ok: true, status: 200 };
+      },
+    });
+    for (let i = 0; i < 2; i++) {
+      alerterA.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/x",
+        method: "POST",
+        ip: "203.0.113.42",
+      });
+    }
+    await alerterA.flushPending();
+    expect(callsA).toEqual(["203.0.113.42"]);
+
+    // The state file should now exist and carry the cooldown stamp.
+    const statePath = process.env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH!;
+    expect(existsSync(statePath)).toBe(true);
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      perIp: Array<{ ip: string; lastAlertedAt: number }>;
+    };
+    expect(persisted.perIp).toEqual([
+      { ip: "203.0.113.42", lastAlertedAt: 1_000_000 },
+    ]);
+
+    // -- Simulated restart: advance the clock a little (still well
+    // inside the cooldown window) and build a brand-new alerter that
+    // shares the persisted state file.
+    tick(5_000);
+    const callsB: string[] = [];
+    const alerterB = createBruteForceAlerter({
+      threshold: 2,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async (_url, payload) => {
+        callsB.push(payload.ip);
+        return { ok: true, status: 200 };
+      },
+    });
+    for (let i = 0; i < 4; i++) {
+      alerterB.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/x",
+        method: "POST",
+        ip: "203.0.113.42",
+      });
+    }
+    await alerterB.flushPending();
+    // No re-page across the restart: cooldown survived.
+    expect(callsB).toEqual([]);
+  });
+
+  it("once the cooldown window has elapsed after a restart, the same IP can re-fire", async () => {
+    const { createBruteForceAlerter } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+
+    let mockNow = 2_000_000;
+    const tick = (deltaMs: number) => {
+      mockNow += deltaMs;
+    };
+
+    const callsA: string[] = [];
+    const alerterA = createBruteForceAlerter({
+      threshold: 2,
+      windowMs: 1_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async (_url, payload) => {
+        callsA.push(payload.ip);
+        return { ok: true, status: 200 };
+      },
+    });
+    for (let i = 0; i < 2; i++) {
+      alerterA.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/x",
+        method: "POST",
+        ip: "198.51.100.7",
+      });
+    }
+    await alerterA.flushPending();
+    expect(callsA.length).toBe(1);
+
+    // Restart well after the cooldown window has expired.
+    tick(60_000);
+
+    const callsB: string[] = [];
+    const alerterB = createBruteForceAlerter({
+      threshold: 2,
+      windowMs: 1_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async (_url, payload) => {
+        callsB.push(payload.ip);
+        return { ok: true, status: 200 };
+      },
+    });
+    for (let i = 0; i < 2; i++) {
+      alerterB.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/x",
+        method: "POST",
+        ip: "198.51.100.7",
+      });
+    }
+    await alerterB.flushPending();
+    // Cooldown window has lapsed, so the IP is allowed to re-page.
+    expect(callsB).toEqual(["198.51.100.7"]);
+  });
+
+  it("statePath: null disables persistence (memory-only alerter)", async () => {
+    const { createBruteForceAlerter } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+
+    const calls: string[] = [];
+    const alerter = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      statePath: null,
+      dispatch: async (_url, payload) => {
+        calls.push(payload.ip);
+        return { ok: true, status: 200 };
+      },
+    });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "192.0.2.99",
+    });
+    await alerter.flushPending();
+    expect(calls).toEqual(["192.0.2.99"]);
+
+    // The per-test scratch file should not have been touched.
+    const statePath = process.env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH!;
+    expect(existsSync(statePath)).toBe(false);
+  });
+
+  it("per-IP cooldown records are capped on disk by persistHistoryLimit (oldest dropped first)", async () => {
+    const { createBruteForceAlerter } = await import(
+      "./calibration-auth-brute-force-alert"
+    );
+
+    let mockNow = 5_000_000;
+    const tick = (deltaMs: number) => {
+      mockNow += deltaMs;
+    };
+
+    const alerter = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      persistHistoryLimit: 2,
+      now: () => mockNow,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+
+    for (const ip of ["10.0.0.1", "10.0.0.2", "10.0.0.3"]) {
+      alerter.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/x",
+        method: "POST",
+        ip,
+      });
+      tick(1_000);
+    }
+    await alerter.flushPending();
+
+    const statePath = process.env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH!;
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      perIp: Array<{ ip: string; lastAlertedAt: number }>;
+    };
+    // Three IPs alerted, capped at two persisted records, oldest (10.0.0.1) dropped.
+    expect(persisted.perIp.length).toBe(2);
+    const ips = persisted.perIp.map((r) => r.ip).sort();
+    expect(ips).toEqual(["10.0.0.2", "10.0.0.3"]);
+  });
+});
+
