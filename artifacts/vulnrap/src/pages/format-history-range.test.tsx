@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatHistoryRange, type ArchetypeHistorySnapshot } from "./feedback-analytics";
+import { formatHistoryRange, type ArchetypeHistorySnapshot } from "@/lib/archetype-history";
 
 const snap = (
   timestamp: string,

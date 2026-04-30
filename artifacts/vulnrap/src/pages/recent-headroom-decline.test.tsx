@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   recentHeadroomDecline,
   type ArchetypeHistorySnapshot,
-} from "./feedback-analytics";
+} from "@/lib/archetype-history";
 
 const snap = (
   minDistanceToCeiling: number,
