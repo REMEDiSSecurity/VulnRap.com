@@ -166,6 +166,59 @@ function emitUnauthorized(
   }
 }
 
+// Task #421 — surface successful (2xx) responses to subscribers so the
+// vulnrap calibration UI can clear its sticky "token rejected" banner
+// (Task #297) the moment a follow-up calibration mutation succeeds. The
+// observer is intentionally generic: the shared client publishes every
+// 2xx with method + url + status, and the subscriber decides whether to
+// react (the calibration consumer filters down to mutations on the
+// `/feedback/calibration/*` namespace). Putting the wiring in one place
+// mirrors the rate-limit and unauthorized observers above so every
+// generated mutation hook automatically gets the signal without each
+// call site having to inspect the response itself.
+export interface SuccessNotice {
+  /** HTTP method of the successful request (uppercased). */
+  method: string;
+  /** Fully-resolved request URL (path + query). */
+  url: string;
+  /** HTTP status of the response (always in the 2xx range). */
+  status: number;
+  /** Raw response headers, in case a subscriber needs the exact wire values. */
+  headers: Headers;
+}
+
+type SuccessObserver = (notice: SuccessNotice) => void;
+
+const successObservers = new Set<SuccessObserver>();
+
+export function addSuccessObserver(observer: SuccessObserver): () => void {
+  successObservers.add(observer);
+  return () => {
+    successObservers.delete(observer);
+  };
+}
+
+function emitSuccess(
+  response: Response,
+  requestInfo: { method: string; url: string },
+): void {
+  if (successObservers.size === 0) return;
+  const notice: SuccessNotice = {
+    method: requestInfo.method,
+    url: response.url || requestInfo.url,
+    status: response.status,
+    headers: response.headers,
+  };
+  for (const observer of Array.from(successObservers)) {
+    try {
+      observer(notice);
+    } catch {
+      // Swallow observer failures — a misbehaving subscriber must not
+      // disrupt the request's normal success path below.
+    }
+  }
+}
+
 export type ErrorType<T = unknown> = ApiError<T>;
 
 export type BodyType<T> = T;
@@ -488,6 +541,14 @@ export async function customFetch<T = unknown>(
     }
     throw new ApiError(response, errorData, requestInfo);
   }
+
+  // Task #421 — fan a 2xx out to success subscribers BEFORE we read the
+  // body. The calibration UI listens here so a successful mutation on
+  // `/feedback/calibration/*` clears the sticky "token rejected" banner
+  // (Task #297) immediately, even when the body is large or the
+  // consumer never awaits it. emitSuccess is isolated (see above) so a
+  // thrown listener cannot interfere with the body parse below.
+  emitSuccess(response, requestInfo);
 
   return (await parseSuccessBody(response, responseType, requestInfo)) as T;
 }

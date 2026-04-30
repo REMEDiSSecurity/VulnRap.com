@@ -12,6 +12,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  applySuccessNotice,
   applyUnauthorizedNotice,
   resetCalibrationTokenRejection,
   useCalibrationTokenRejection,
@@ -131,6 +132,134 @@ describe("calibration-token-rejection store", () => {
     expect(cleared.rejected).toBe(false);
     expect(cleared.serverMessage).toBeNull();
     expect(cleared.noticeId).toBe(0);
+  });
+});
+
+// Task #421 — auto-clear on a successful calibration mutation. The store
+// listens to the shared client's success observer and resets the banner
+// the moment a non-401 2xx lands on `/feedback/calibration/*`. These
+// tests push success notices through `applySuccessNotice` directly,
+// which is the same path the observer takes.
+function makeSuccessNotice(overrides: {
+  url?: string;
+  method?: string;
+  status?: number;
+} = {}) {
+  return {
+    method: overrides.method ?? "POST",
+    url: overrides.url ?? "/api/feedback/calibration/handwavy-phrases",
+    status: overrides.status ?? 200,
+    headers: new Headers(),
+  };
+}
+
+describe("calibration-token-rejection auto-clear on success", () => {
+  beforeEach(() => {
+    resetCalibrationTokenRejection();
+  });
+
+  afterEach(() => {
+    resetCalibrationTokenRejection();
+  });
+
+  it("clears the banner when a calibration mutation returns 2xx", () => {
+    applyUnauthorizedNotice(makeNotice());
+    const after = applySuccessNotice(makeSuccessNotice());
+    expect(after.rejected).toBe(false);
+    expect(after.serverMessage).toBeNull();
+    expect(after.url).toBeNull();
+    expect(after.method).toBeNull();
+    expect(after.noticeId).toBe(0);
+  });
+
+  it("clears the banner for every 2xx status (200/201/202/204)", () => {
+    for (const status of [200, 201, 202, 204] as const) {
+      resetCalibrationTokenRejection();
+      applyUnauthorizedNotice(makeNotice());
+      const after = applySuccessNotice(makeSuccessNotice({ status }));
+      expect(after.rejected).toBe(false);
+    }
+  });
+
+  it("clears the banner for every mutation verb (POST/PUT/PATCH/DELETE)", () => {
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"] as const) {
+      resetCalibrationTokenRejection();
+      applyUnauthorizedNotice(makeNotice());
+      const after = applySuccessNotice(makeSuccessNotice({ method }));
+      expect(after.rejected).toBe(false);
+    }
+  });
+
+  it("normalizes the success method to uppercase before checking it", () => {
+    applyUnauthorizedNotice(makeNotice());
+    const after = applySuccessNotice(makeSuccessNotice({ method: "delete" }));
+    expect(after.rejected).toBe(false);
+  });
+
+  it("ignores 2xx responses on non-calibration URLs", () => {
+    applyUnauthorizedNotice(makeNotice());
+    const after = applySuccessNotice(
+      makeSuccessNotice({ url: "/api/reports/submit" }),
+    );
+    // Banner is still up — a successful POST to an unrelated endpoint
+    // says nothing about the calibration token's validity.
+    expect(after.rejected).toBe(true);
+  });
+
+  it("ignores 2xx GETs — only mutations should clear the banner", () => {
+    // The handwavy-phrases LIST endpoint is a strict-auth GET that the
+    // page can refetch on its own. A successful GET could happen as
+    // part of a background poll and shouldn't blank a banner the
+    // reviewer is actively reading before they've actually retried
+    // their original mutation.
+    applyUnauthorizedNotice(makeNotice());
+    const after = applySuccessNotice(makeSuccessNotice({ method: "GET" }));
+    expect(after.rejected).toBe(true);
+  });
+
+  it("ignores non-2xx statuses even when shaped like a success notice", () => {
+    applyUnauthorizedNotice(makeNotice());
+    // Defensive: today the shared client only fires success observers
+    // for 2xx, but the consumer re-checks so a future fan-out widening
+    // can't accidentally clear the banner for, say, a 3xx redirect.
+    const redirected = applySuccessNotice(makeSuccessNotice({ status: 302 }));
+    expect(redirected.rejected).toBe(true);
+    const errored = applySuccessNotice(makeSuccessNotice({ status: 500 }));
+    expect(errored.rejected).toBe(true);
+  });
+
+  it("is a no-op when the banner is not currently up", () => {
+    // No prior 401 — the success path must not bump noticeId or notify
+    // subscribers needlessly on every successful mutation.
+    let notifyCount = 0;
+    const { result, unmount } = renderHook(() => {
+      notifyCount += 1;
+      return useCalibrationTokenRejection();
+    });
+    const initialRenders = notifyCount;
+    act(() => {
+      applySuccessNotice(makeSuccessNotice());
+    });
+    expect(result.current.rejected).toBe(false);
+    expect(result.current.noticeId).toBe(0);
+    expect(notifyCount).toBe(initialRenders);
+    unmount();
+  });
+
+  it("re-renders the hook when a calibration mutation success clears the banner", () => {
+    const { result } = renderHook(() => useCalibrationTokenRejection());
+
+    act(() => {
+      applyUnauthorizedNotice(makeNotice());
+    });
+    expect(result.current.rejected).toBe(true);
+
+    act(() => {
+      applySuccessNotice(makeSuccessNotice());
+    });
+    expect(result.current.rejected).toBe(false);
+    expect(result.current.serverMessage).toBeNull();
+    expect(result.current.noticeId).toBe(0);
   });
 });
 

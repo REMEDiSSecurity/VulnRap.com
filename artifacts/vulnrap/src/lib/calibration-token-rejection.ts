@@ -32,7 +32,9 @@
 
 import { useSyncExternalStore } from "react";
 import {
+  addSuccessObserver,
   addUnauthorizedObserver,
+  type SuccessNotice,
   type UnauthorizedNotice,
 } from "@workspace/api-client-react";
 
@@ -172,15 +174,54 @@ export function resetCalibrationTokenRejection(): void {
   setState(INITIAL_STATE);
 }
 
+/**
+ * Task #421 — auto-clear the rejection banner when a calibration mutation
+ * succeeds. Without this, a reviewer who fixes a server-side rotation
+ * (e.g. updates `CALIBRATION_TOKEN` on the server, or pastes the right
+ * value into a runtime override) keeps seeing the sticky banner from
+ * Task #297 even though their next add/remove is now sailing through.
+ *
+ * Filters mirror the rejection path:
+ *   - Status MUST be 2xx (the shared client only emits success notices
+ *     for 2xx today, but we re-check defensively in case a future status
+ *     is added to the observer fan-out).
+ *   - URL MUST live under the calibration namespace — a successful POST
+ *     on `/api/reports/submit` says nothing about the calibration token.
+ *   - Method MUST be a mutation. A successful GET on the handwavy list
+ *     can happen on any page load and proves nothing about the token
+ *     used by mutations (the GET endpoint also requires the token, but
+ *     a fresh page load reading the cached list ahead of any reviewer
+ *     action would clear the banner before the reviewer ever sees it).
+ *
+ * Exported for tests and for the rare consumer that wants to push a
+ * success in directly. Returns the new state snapshot for convenience.
+ */
+export function applySuccessNotice(
+  notice: SuccessNotice,
+): CalibrationTokenRejectionState {
+  if (notice.status < 200 || notice.status >= 300) return state;
+  if (!isCalibrationMutationUrl(notice.url)) return state;
+  if (!MUTATION_METHODS.has(notice.method.toUpperCase())) return state;
+  // Nothing to clear — short-circuit so we don't notify subscribers on
+  // every successful mutation when the banner was never up to begin with.
+  if (!state.rejected) return state;
+
+  setState(INITIAL_STATE);
+  return state;
+}
+
 // ---------------------------------------------------------------------------
-// Wire the observer ONCE at module load. Importing this module is enough to
-// start receiving 401s; the calibration UI just calls
-// `useCalibrationTokenRejection`. We do not unsubscribe — the subscriber
-// lives for the lifetime of the page, matching the lifetime of the
+// Wire the observers ONCE at module load. Importing this module is enough to
+// start receiving 401s and 2xx successes; the calibration UI just calls
+// `useCalibrationTokenRejection`. We do not unsubscribe — the subscribers
+// live for the lifetime of the page, matching the lifetime of the
 // feedback-analytics route.
 // ---------------------------------------------------------------------------
 addUnauthorizedObserver((notice) => {
   applyUnauthorizedNotice(notice);
+});
+addSuccessObserver((notice) => {
+  applySuccessNotice(notice);
 });
 
 /**
