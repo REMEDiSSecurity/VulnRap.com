@@ -3460,6 +3460,83 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       highlightTimeoutRef.current = null;
     }, 2500);
   };
+  // Task #412 — sibling of `jumpToActivePhrase` for the Task #221
+  // "Previously removed" hint. Keyed on phrase + removedAt so a
+  // remove → reinstate → remove cycle only lights the entry the hint
+  // points at. Visual amber highlight clears after ~2.5s.
+  const [highlightedHistoryRow, setHighlightedHistoryRow] = useState<{
+    phrase: string;
+    removedAt: string;
+  } | null>(null);
+  // Pin keeps the jumped-to group mounted in `visibleHistoryGroups`
+  // even if it's older than HISTORY_ROW_CAP. Decoupled from the 2.5s
+  // highlight so reviewers can still read the rationale and use the
+  // row's Reinstate button after the amber fades. Cleared on panel
+  // collapse (see effect below).
+  const [pinnedHistoryRow, setPinnedHistoryRow] = useState<{
+    phrase: string;
+    removedAt: string;
+  } | null>(null);
+  const historyHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (historyHighlightTimeoutRef.current !== null) {
+        clearTimeout(historyHighlightTimeoutRef.current);
+      }
+    };
+  }, []);
+  // Drop the cap-bypass pin when the user collapses the history panel,
+  // so the visible list returns to the normal HISTORY_ROW_CAP prefix.
+  useEffect(() => {
+    if (!showHistory && pinnedHistoryRow !== null) {
+      setPinnedHistoryRow(null);
+    }
+  }, [showHistory, pinnedHistoryRow]);
+  const jumpToHistoryRow = (phrase: string, removedAt: string) => {
+    if (historyHighlightTimeoutRef.current !== null) {
+      clearTimeout(historyHighlightTimeoutRef.current);
+      historyHighlightTimeoutRef.current = null;
+    }
+    setHighlightedHistoryRow({ phrase, removedAt });
+    setPinnedHistoryRow({ phrase, removedAt });
+    setShowHistory(true);
+    // Force-open the matching batch's per-phrase <details> (Task #366).
+    // No-op for single-row history groups — they don't consult this map.
+    setHistoryBatchRowsExplicit((prev) => {
+      const next = new Map(prev);
+      next.set(removedAt, true);
+      return next;
+    });
+    if (typeof window !== "undefined") {
+      // Defer the DOM lookup so the panel + nested <details> have a chance
+      // to render the row before we query it (mirrors `jumpToActivePhrase`).
+      window.requestAnimationFrame(() => {
+        try {
+          const escapePhrase =
+            typeof CSS !== "undefined" && typeof CSS.escape === "function"
+              ? CSS.escape(phrase)
+              : phrase.replace(/(["\\])/g, "\\$1");
+          const escapeRemovedAt =
+            typeof CSS !== "undefined" && typeof CSS.escape === "function"
+              ? CSS.escape(removedAt)
+              : removedAt.replace(/(["\\])/g, "\\$1");
+          const el = document.querySelector(
+            `[data-handwavy-history-phrase="${escapePhrase}"][data-handwavy-history-removed-at="${escapeRemovedAt}"]`,
+          ) as HTMLElement | null;
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        } catch {
+          // querySelector can throw on exotic phrase content; the highlight
+          // still pulses on the row even if scroll fails.
+        }
+      });
+    }
+    historyHighlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedHistoryRow(null);
+      historyHighlightTimeoutRef.current = null;
+    }, 2500);
+  };
   const CATEGORY_LABELS: Record<"absence" | "hedging" | "buzzword", string> = {
     absence: "Self-admitted absence of evidence",
     hedging: "Generic hedging",
@@ -5718,6 +5795,28 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     visibleHistoryGroups.push(g);
     runningRowCount += rowsInGroup;
   }
+  // Task #412 — when the reviewer has jumped to a row via the
+  // "Previously removed" hint, append the matching group to the visible
+  // list even if it's older than HISTORY_ROW_CAP. Pin persists past the
+  // 2.5s highlight (cleared on panel collapse) so the audit row stays
+  // available for reading the rationale and using its Reinstate button.
+  if (pinnedHistoryRow !== null) {
+    const target = pinnedHistoryRow;
+    const matchesTarget = (g: DisplayHistoryGroup): boolean =>
+      g.kind === "single"
+        ? g.row.phrase === target.phrase &&
+          String(g.row.removedAt) === target.removedAt
+        : g.removedAtIso === target.removedAt &&
+          g.rows.some((r) => r.phrase === target.phrase);
+    if (!visibleHistoryGroups.some(matchesTarget)) {
+      const overflowMatch = sortedHistoryGroups.find(matchesTarget);
+      if (overflowMatch) {
+        visibleHistoryGroups.push(overflowMatch);
+        runningRowCount +=
+          overflowMatch.kind === "single" ? 1 : overflowMatch.rows.length;
+      }
+    }
+  }
   const visibleHistoryRowCount = runningRowCount;
 
   // Task #131 — per-phrase "thrash" counter. A cycle is a remove+reinstate
@@ -6157,7 +6256,17 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 </span>{" "}
                 <span data-testid="handwavy-history-overlap-hint-top">
                   {describeHandwavyOverlapRelation(top.relation)}{" "}
-                  <span className="font-mono">&ldquo;{top.phrase}&rdquo;</span>{" "}
+                  {/* Task #412 — mirrors `handwavy-overlap-hint-jump`
+                      on the active-list hint. */}
+                  <button
+                    type="button"
+                    onClick={() => jumpToHistoryRow(top.phrase, top.removedAt)}
+                    className="font-mono underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm"
+                    data-testid="handwavy-history-overlap-hint-jump"
+                    aria-label={`Jump to "${top.phrase}" in the removal history`}
+                  >
+                    &ldquo;{top.phrase}&rdquo;
+                  </button>{" "}
                   <span className="text-amber-200/70">
                     [{CATEGORY_LABELS[top.category]}]
                   </span>
@@ -8786,16 +8895,33 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     // phrase (not aggregated across the batch), matching how
                     // category flips are surfaced.
                     const historyRenameEdits = getRenameEdits(h.edits);
+                    // Task #412 — pulse-highlight the row the
+                    // "Previously removed" hint just jumped to. Keyed on
+                    // phrase + removedAt so a remove → reinstate → remove
+                    // cycle only lights the exact retirement entry.
+                    const isHistoryHighlighted =
+                      highlightedHistoryRow !== null &&
+                      highlightedHistoryRow.phrase === h.phrase &&
+                      highlightedHistoryRow.removedAt === removedAtKey;
                     return (
                       <div
                         key={`${h.phrase}-${removedAtKey}-${rowIdx}`}
                         className={cn(
-                          "px-3 py-2 text-[11px] text-muted-foreground space-y-0.5",
+                          "px-3 py-2 text-[11px] text-muted-foreground space-y-0.5 transition-colors duration-700",
                           isUndone && "bg-amber-500/5 border-l-2 border-amber-500/40",
                           opts.insideBatch && "pl-6 bg-background/20",
+                          // Task #412 — amber pulse matches the
+                          // active-list jump so reviewers learn one cue.
+                          isHistoryHighlighted &&
+                            "bg-amber-500/15 ring-1 ring-amber-400/60 ring-inset",
                         )}
                         data-testid="handwavy-history-row"
                         data-history-kind={isUndone ? "undone" : "removed"}
+                        // Task #412 — DOM-queryable selectors for
+                        // `jumpToHistoryRow` (React key isn't queryable).
+                        data-handwavy-history-phrase={h.phrase}
+                        data-handwavy-history-removed-at={removedAtKey}
+                        data-highlighted={isHistoryHighlighted ? "true" : undefined}
                       >
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-foreground/70 break-all flex-1 line-through">{h.phrase}</span>
