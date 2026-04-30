@@ -413,7 +413,11 @@ function seedReport(overrides: Partial<FakeRow> = {}): FakeRow {
     vulnrapOverridesApplied: null,
     vulnrapCorrelationId: null,
     vulnrapDurationMs: null,
-    showInFeed: false,
+    // Task #265: the public diagnostics route filters on showInFeed and 404s
+    // hidden reports. The happy-path tests in this file expect 200, so the
+    // default has to be visible — the privacy regression suite explicitly
+    // overrides this to false to exercise the hidden-report 404 path.
+    showInFeed: true,
     fileName: null,
     fileSize: 0,
     createdAt: new Date(),

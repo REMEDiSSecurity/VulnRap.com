@@ -77,14 +77,21 @@ vi.mock("../lib/llm-slop", () => ({
 }));
 
 vi.mock("../lib/triage-recommendation", () => ({
+  // The route spreads this object straight into the response and then runs
+  // GetReportResponse.parse(...). The zod schema requires a real
+  // TriageRecommendation shape (action ∈ AUTO_CLOSE|MANUAL_REVIEW|
+  // CHALLENGE_REPORTER|PRIORITIZE|STANDARD_TRIAGE, plus reason/note/
+  // matrixInputs), so the mock has to satisfy that or the parse throws and
+  // turns into a 500 — which is exactly what kept the 200-path tests broken.
   generateTriageRecommendation: vi.fn(() => ({
-    action: "ACCEPT",
-    confidence: "high",
-    rationale: "test",
+    action: "STANDARD_TRIAGE",
+    reason: "test",
+    note: "test",
     challengeQuestions: [],
     temporalSignals: [],
     templateMatch: null,
-    revisionResult: null,
+    revision: null,
+    matrixInputs: null,
   })),
   buildV36TriageContext: vi.fn(() => ({})),
   computeTemporalSignals: vi.fn(() => []),
@@ -323,6 +330,13 @@ vi.mock("@workspace/db", async () => {
     similarityResultsTable: schema.similarityResultsTable,
     reportStatsTable: schema.reportStatsTable,
     userFeedbackTable: schema.userFeedbackTable,
+    // /reports/:id/diagnostics looks up analysis_traces by correlation_id and
+    // again by report_id. Without exporting this table the route resolves it
+    // to undefined and the drizzle chain throws on `.where(eq(undefined.col,
+    // ...))`, which surfaced to the harness as a 500. We don't seed any rows
+    // for it here — the fake selectChain just returns [] for unknown tables,
+    // which exercises the legacy "no trace" branch the route handles fine.
+    analysisTracesTable: schema.analysisTracesTable,
     pool: { end: async () => undefined },
   };
 });
@@ -431,9 +445,38 @@ describe("GET /api/reports/:id — showInFeed enforcement", () => {
   });
 
   it("returns 200 for a public report", async () => {
-    const r = seedReport({ showInFeed: true });
+    const r = seedReport({
+      showInFeed: true,
+      contentHash: "hash-detail-200",
+      slopScore: 42,
+      slopTier: "Likely Slop",
+    });
     const res = await get(`/api/reports/${r.id}`);
     expect(res.status).toBe(200);
+    // Task #265: previously the 200 path was masked behind a 500 from a
+    // schema-invalid triage mock + a missing analysisTracesTable export.
+    // Lock the response body shape so future regressions on
+    // GetReportResponse.parse(...) (e.g. a new required zod field) are
+    // caught here instead of silently flipping the status back to 500.
+    const body = res.body as Record<string, unknown>;
+    expect(body.id).toBe(r.id);
+    expect(body.contentHash).toBe("hash-detail-200");
+    expect(body.slopScore).toBe(42);
+    expect(body.slopTier).toBe("Likely Slop");
+    expect(body.contentMode).toBe("full");
+    expect(body.redactionSummary).toEqual({ totalRedactions: 0, categories: {} });
+    expect(body.evidence).toEqual([]);
+    expect(body.similarityMatches).toEqual([]);
+    expect(body.feedback).toEqual([]);
+    // verification + triageRecommendation are computed downstream of the
+    // mocked libs; the shape (not the value) is what protects this route.
+    expect(body.verification).toBeNull();
+    expect(body.triageRecommendation).toMatchObject({
+      action: "STANDARD_TRIAGE",
+      reason: expect.any(String),
+      note: expect.any(String),
+    });
+    expect(body.vulnrap).toBeNull();
   });
 });
 
@@ -459,9 +502,38 @@ describe("GET /api/reports/:id/diagnostics — showInFeed enforcement", () => {
   });
 
   it("returns 200 for a public report", async () => {
-    const r = seedReport({ showInFeed: true });
+    const r = seedReport({
+      showInFeed: true,
+      vulnrapCompositeScore: 65,
+      vulnrapCompositeLabel: "REASONABLE",
+      vulnrapCorrelationId: "diag-200",
+      vulnrapDurationMs: 17,
+      vulnrapOverridesApplied: ["TEST_OVERRIDE"],
+      vulnrapEngineResults: { engines: [], compositeBreakdown: {}, warnings: [], engineCount: 0 },
+    });
     const res = await get(`/api/reports/${r.id}/diagnostics`);
     expect(res.status).toBe(200);
+    // Task #265: lock the diagnostics body shape so a future regression that
+    // breaks the trace lookup or composite block can't silently revert this
+    // back to 500. The harness no longer seeds analysis_traces rows, so the
+    // route exercises the "no trace" fallback path.
+    const body = res.body as Record<string, unknown>;
+    expect(body.reportId).toBe(r.id);
+    expect(body.correlationId).toBe("diag-200");
+    expect(body.durationMs).toBe(17);
+    expect(body.composite).toEqual({
+      score: 65,
+      label: "REASONABLE",
+      overridesApplied: ["TEST_OVERRIDE"],
+    });
+    expect(body.legacyMapping).toMatchObject({
+      slopScore: 35,
+      displayMode: expect.any(String),
+    });
+    expect(body.featureFlags).toMatchObject({
+      VULNRAP_USE_NEW_COMPOSITE: expect.any(Boolean),
+    });
+    expect(body.trace).toBeNull();
   });
 });
 
