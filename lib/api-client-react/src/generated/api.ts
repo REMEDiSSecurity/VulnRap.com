@@ -2022,13 +2022,20 @@ export const useAddHandwavyPhrase = <
 };
 
 /**
- * Updates the `category` and/or `rationale` of an existing curated
-phrase without losing the original add audit context. Each
-edit appends a `HandwavyEditEntry` to the marker's `edits` log
-recording who made the change, when, and the before/after for any
-field that actually changed. The phrase string itself is the row
-identity and cannot be mutated here — to rename a phrase, reviewers
-must remove + re-add (which already records both events independently).
+ * Updates the `category`, `rationale`, and/or the phrase string itself
+of an existing curated marker without losing the original add audit
+context. Each edit appends a `HandwavyEditEntry` to the marker's
+`edits` log recording who made the change, when, and the
+before/after for any field that actually changed.
+
+Task #247 — when `newPhrase` is provided AND its normalized form
+(lowercase + collapsed whitespace) differs from the existing
+phrase, the marker's row identity is rewritten in place to the new
+phrase. The marker keeps its original `addedBy`/`addedAt`/
+`rationale` and the rename is recorded as a `phrase` before/after
+change on the appended audit entry. Renaming to a normalized form
+already used by another active phrase is rejected so the active
+list stays a set.
 
  * @summary Edit a curated FLAT hand-wavy marker phrase in place
  */

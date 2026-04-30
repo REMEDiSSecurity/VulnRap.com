@@ -2287,10 +2287,31 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   }, [productionScanLimitValid, effectiveProductionScanLimit]);
   // Task #120 — in-place edit state. Only one row can be in edit mode at a
   // time so the audit-trail save button doesn't get visually ambiguous.
+  // Task #247 — `newPhrase` is the rename input value (initialized to
+  // the original `phrase` so a no-op save still applies category /
+  // rationale edits without triggering the rename branch).
   const [editing, setEditing] = useState<{
     phrase: string;
+    newPhrase: string;
     category: "absence" | "hedging" | "buzzword";
     rationale: string;
+  } | null>(null);
+  // Task #247 — removal-impact preview state for the per-row Edit save
+  // when the reviewer rewrote the phrase to a different normalized
+  // form. Mirrors `removePreview` (Task #173) but the "Confirm" button
+  // fires the live PATCH (rename) instead of a DELETE. Reuses the same
+  // BulkRemovalImpactBlock renderer so reviewers see one consistent
+  // impact summary across the Trash / bulk / Edit-then-rename flows.
+  const [editPreview, setEditPreview] = useState<{
+    originalPhrase: string;
+    pending: {
+      phrase: string;
+      newPhrase: string;
+      category: "absence" | "hedging" | "buzzword";
+      rationale: string;
+    };
+    data: HandwavyPhraseSingleRemoveDryRunResponse;
+    acknowledged: boolean;
   } | null>(null);
 
   const { data, isLoading } = useGetHandwavyPhrases({
@@ -2638,30 +2659,59 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   };
 
   const handleStartEdit = (phrase: string, category: "absence" | "hedging" | "buzzword", rationale: string | undefined) => {
-    setEditing({ phrase, category, rationale: rationale ?? "" });
+    // Task #247 — initialize newPhrase to the existing phrase so a save
+    // that didn't touch the phrase input falls into the no-rename
+    // branch (no dry-run preview round-trip is needed).
+    setEditing({ phrase, newPhrase: phrase, category, rationale: rationale ?? "" });
   };
 
   const handleCancelEdit = () => {
     setEditing(null);
   };
 
-  const handleSaveEdit = async () => {
-    if (!editing) return;
-    if (bailOnCooldown("Save edit")) return;
-    setBusy(`edit:${editing.phrase}`);
+  // Task #247 — fire the live PATCH for an edit. Shared by both the
+  // no-rename happy path and the post-acknowledgment confirm from the
+  // rename-impact preview panel below. `pending` carries the values to
+  // apply; `original` is the phrase as it lives in the active list and
+  // must always be sent in the request body so the server can find the
+  // marker even when the phrase is being renamed.
+  const applyEdit = async (
+    original: string,
+    pending: {
+      phrase: string;
+      newPhrase: string;
+      category: "absence" | "hedging" | "buzzword";
+      rationale: string;
+    },
+  ): Promise<void> => {
+    setBusy(`edit:${original}`);
     try {
+      const renamed =
+        pending.newPhrase.toLowerCase().replace(/\s+/g, " ").trim() !==
+        original.toLowerCase().replace(/\s+/g, " ").trim();
       const result = await editHandwavyPhrase({
-        phrase: editing.phrase,
-        category: editing.category,
-        rationale: editing.rationale,
+        phrase: original,
+        category: pending.category,
+        rationale: pending.rationale,
+        // Only send newPhrase when the reviewer actually changed the
+        // text — keeps the request body minimal for the legacy
+        // category/rationale-only edits and avoids sending the same
+        // value back to the server for no reason.
+        ...(renamed ? { newPhrase: pending.newPhrase } : {}),
         reviewer: reviewer.trim() || undefined,
       });
       if (result.edited === false) {
-        toast({ title: "No changes", description: `"${editing.phrase}" already matched the supplied values.` });
+        toast({ title: "No changes", description: `"${original}" already matched the supplied values.` });
+      } else if (renamed) {
+        toast({
+          title: "Phrase renamed",
+          description: `"${original}" was renamed to "${result.phrase}". Edit recorded in the audit trail.`,
+        });
       } else {
-        toast({ title: "Phrase updated", description: `"${editing.phrase}" was updated. Edit recorded in the audit trail.` });
+        toast({ title: "Phrase updated", description: `"${original}" was updated. Edit recorded in the audit trail.` });
       }
       setEditing(null);
+      setEditPreview(null);
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to edit phrase.";
@@ -2669,6 +2719,108 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editing) return;
+    if (bailOnCooldown("Save edit")) return;
+    // Task #247 — when the reviewer rewrote the phrase to a different
+    // normalized form, the save is functionally equivalent to "remove
+    // the old phrase + add the new one". Removing the old phrase can
+    // un-flag legitimate detections in exactly the same way as a
+    // direct Trash, so we issue the Task #155 single-phrase dry-run
+    // for the ORIGINAL phrase first and surface the same impact +
+    // ack-checkbox gate the Trash flow uses before letting the live
+    // PATCH land. No-rename edits skip the round-trip and behave
+    // exactly like the legacy Task #120 path.
+    const renamedNormalized = editing.newPhrase
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    const originalNormalized = editing.phrase
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    const renamed = renamedNormalized !== originalNormalized;
+    if (!renamed) {
+      await applyEdit(editing.phrase, editing);
+      return;
+    }
+    if (renamedNormalized.length < 3) {
+      toast({
+        title: "Phrase too short",
+        description: "The new phrase must be at least 3 characters after normalization.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (renamedNormalized.length > 200) {
+      toast({
+        title: "Phrase too long",
+        description: "The new phrase must be at most 200 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setBusy(`edit-preview:${editing.phrase}`);
+    try {
+      const resp = await removeHandwavyPhrase({
+        phrase: editing.phrase,
+        dryRun: true,
+        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+          ? { productionScanLimit: effectiveProductionScanLimit }
+          : {}),
+      });
+      if (
+        !("dryRun" in resp) ||
+        resp.dryRun !== true ||
+        !("dryRunImpact" in resp) ||
+        ("batch" in resp && resp.batch !== false)
+      ) {
+        toast({
+          title: "Preview unavailable",
+          description:
+            "The server did not return a removal preview for the rename. The edit was not applied — please retry.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const single = resp as HandwavyPhraseSingleRemoveDryRunResponse;
+      const corpusLost = single.dryRunImpact.corpus.validDetectionsLost;
+      const productionLost = single.dryRunImpact.production?.validDetectionsLost ?? 0;
+      const totalValidLost = corpusLost + productionLost;
+      // Zero-impact renames stay a single click — no extra confirmation
+      // friction when the original phrase isn't doing real work.
+      if (totalValidLost === 0) {
+        await applyEdit(editing.phrase, editing);
+        return;
+      }
+      setEditPreview({
+        originalPhrase: editing.phrase,
+        pending: { ...editing },
+        data: single,
+        acknowledged: false,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to preview rename.";
+      toast({ title: "Preview failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Task #247 — edit-rename preview-panel handlers, mirroring the Task
+  // #173 single-phrase removal preview gates.
+  const cancelEditPreview = () => {
+    setEditPreview(null);
+  };
+  const setEditPreviewAcknowledged = (ack: boolean) => {
+    setEditPreview((prev) => (prev ? { ...prev, acknowledged: ack } : prev));
+  };
+  const confirmEditFromPreview = async () => {
+    if (!editPreview) return;
+    const { originalPhrase, pending } = editPreview;
+    await applyEdit(originalPhrase, pending);
   };
 
   // Task #132 — one-click undo of a single edit-history entry. The server
@@ -5040,6 +5192,147 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
             </div>
           );
         })()}
+        {/* Task #247 — edit-then-rename impact preview. Reuses the
+            single-phrase Task #155 dry-run + the same
+            `BulkRemovalImpactBlock` renderer the Trash flow uses so a
+            reviewer who renamed a phrase from inside the per-row Edit
+            sees the same impact summary + ack-checkbox gate before
+            the live PATCH lands. Only mounts when the rename's
+            removal-impact dry-run reported a non-zero
+            validDetectionsLost — zero-impact renames apply directly. */}
+        {editPreview && (() => {
+          const { originalPhrase, pending, data, acknowledged } = editPreview;
+          const corpus = data.dryRunImpact.corpus;
+          const production = data.dryRunImpact.production ?? null;
+          const productionError = data.dryRunImpact.productionError;
+          const productionLimit = data.dryRunImpact.productionLimit;
+          const corpusLost = corpus.validDetectionsLost;
+          const productionLost = production?.validDetectionsLost ?? 0;
+          const totalValidLost = corpusLost + productionLost;
+          const requireAck = totalValidLost > 0;
+          const inFlight =
+            busy === `edit:${originalPhrase}` ||
+            busy === `edit-preview:${originalPhrase}`;
+          const renamedTo = pending.newPhrase
+            .toLowerCase()
+            .replace(/\s+/g, " ")
+            .trim();
+          return (
+            <div
+              className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-3 text-xs"
+              data-testid="handwavy-edit-preview"
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
+                <div className="flex-1">
+                  <div className="font-semibold text-foreground">
+                    Rename "{originalPhrase}" → "{renamedTo}"?
+                  </div>
+                  <div
+                    className="text-[10px] text-muted-foreground mt-0.5"
+                    data-testid="handwavy-edit-preview-summary"
+                  >
+                    Renaming this phrase first removes the original from
+                    the active list, which would un-flag{" "}
+                    <span className="text-amber-300 font-semibold">
+                      {totalValidLost}
+                    </span>{" "}
+                    valid hand-wavy detection{totalValidLost === 1 ? "" : "s"}
+                    {corpusLost > 0 && productionLost > 0
+                      ? ` (${corpusLost} curated + ${productionLost} production)`
+                      : corpusLost > 0
+                        ? " in the curated benchmark"
+                        : " in the production archive"}
+                    . Review the impact below before confirming the
+                    rename.
+                  </div>
+                </div>
+              </div>
+              <div
+                className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                data-testid="handwavy-edit-preview-impact"
+              >
+                <BulkRemovalImpactBlock
+                  kind="curated"
+                  title="Curated benchmark"
+                  subtitle={`${corpus.corpusSize} fixtures`}
+                  impact={corpus}
+                  emptyHint="No curated detections would be lost"
+                />
+                {production ? (
+                  <BulkRemovalImpactBlock
+                    kind="production"
+                    title="Production archive"
+                    subtitle={
+                      productionLimit != null
+                        ? `last ${production.corpusSize} of up to ${productionLimit} reports`
+                        : `last ${production.corpusSize} reports`
+                    }
+                    impact={production}
+                    emptyHint="No production detections would be lost"
+                  />
+                ) : (
+                  <div
+                    className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
+                    data-testid="handwavy-edit-preview-production-error"
+                  >
+                    <div className="font-semibold flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Production archive scan unavailable
+                    </div>
+                    <div className="mt-1 text-amber-100/80">
+                      {productionError ??
+                        "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {requireAck && (
+                <label
+                  className="flex items-start gap-2 text-[11px] text-foreground/90 cursor-pointer select-none"
+                  data-testid="handwavy-edit-preview-ack-label"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={acknowledged}
+                    onChange={(e) => setEditPreviewAcknowledged(e.target.checked)}
+                    disabled={inFlight}
+                    data-testid="handwavy-edit-preview-ack"
+                  />
+                  <span>
+                    I understand renaming "{originalPhrase}" will un-flag{" "}
+                    {totalValidLost} valid hand-wavy detection
+                    {totalValidLost === 1 ? "" : "s"} and want to apply
+                    the rename anyway.
+                  </span>
+                </label>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={cancelEditPreview}
+                  disabled={inFlight}
+                  data-testid="handwavy-edit-preview-cancel"
+                >
+                  Back out
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={confirmEditFromPreview}
+                  disabled={inFlight || (requireAck && !acknowledged) || !mutationsAllowed}
+                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                  data-testid="handwavy-edit-preview-confirm"
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                >
+                  Rename anyway
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
         {/* Task #134 — per-phrase results banner shown after a bulk batch
             finishes, mirroring the CLI's per-phrase outcome summary.
             Task #142 — the same banner is reused for the "Undo this batch"
@@ -5476,7 +5769,29 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                       aria-label={`Select phrase ${m.phrase} for bulk removal`}
                       data-testid="handwavy-select"
                     />
-                    <span className="flex-1 font-mono text-foreground/80 break-all">{m.phrase}</span>
+                    {isEditing ? (
+                      // Task #247 — when this row is in edit mode, the
+                      // phrase becomes editable. Saving with a value
+                      // that normalizes to a different string than the
+                      // current phrase triggers the rename + impact
+                      // preview gate; otherwise the input is a no-op
+                      // and the legacy category/rationale edit path
+                      // runs unchanged.
+                      <input
+                        type="text"
+                        value={editing!.newPhrase}
+                        onChange={(e) =>
+                          setEditing((prev) =>
+                            prev ? { ...prev, newPhrase: e.target.value } : prev,
+                          )
+                        }
+                        className="flex-1 h-7 px-2 rounded border border-border/40 bg-background/40 font-mono text-[11px] text-foreground/90"
+                        data-testid="handwavy-edit-phrase"
+                        aria-label={`Edit phrase text for ${m.phrase}`}
+                      />
+                    ) : (
+                      <span className="flex-1 font-mono text-foreground/80 break-all">{m.phrase}</span>
+                    )}
                     {/* Task #131 — thrash counter badge appears before the
                        category/edit affordances so reviewers see the
                        contentious-marker signal alongside the existing

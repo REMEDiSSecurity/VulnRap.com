@@ -1316,15 +1316,24 @@ router.post(
 );
 
 // Task #120 — In-place edit of a curated phrase. Supports updating `category`
-// and/or `rationale` while preserving the original add audit context. The
-// phrase string itself is the row identity and is NOT mutable here — to
-// rename, reviewers must remove + re-add (which already records both events).
+// and/or `rationale` while preserving the original add audit context.
+//
+// Task #247 — also supports renaming the phrase string itself via the
+// optional `newPhrase` field. When the normalized form of `newPhrase`
+// differs from the existing phrase, the engine rewrites the marker's
+// identity in place (preserving addedBy/addedAt/rationale) and records
+// the rename as a `phrase` before/after change on the appended audit
+// entry. A `newPhrase` whose normalized form equals the existing phrase
+// is a rename no-op; the request can still apply concurrent
+// category/rationale updates. A normalized `newPhrase` that collides
+// with another active marker is rejected.
 router.patch("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
   try {
-    const { phrase, category, rationale, reviewer } = (req.body ?? {}) as {
+    const { phrase, category, rationale, newPhrase, reviewer } = (req.body ?? {}) as {
       phrase?: unknown;
       category?: unknown;
       rationale?: unknown;
+      newPhrase?: unknown;
       reviewer?: unknown;
     };
     if (typeof phrase !== "string" || phrase.trim().length === 0) {
@@ -1344,12 +1353,22 @@ router.patch("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (
       res.status(400).json({ error: "rationale must be a string when provided." });
       return;
     }
+    if (newPhrase !== undefined && typeof newPhrase !== "string") {
+      res.status(400).json({ error: "newPhrase must be a string when provided." });
+      return;
+    }
+    if (typeof newPhrase === "string" && newPhrase.trim().length === 0) {
+      res.status(400).json({ error: "newPhrase must be a non-empty string when provided." });
+      return;
+    }
     if (reviewer !== undefined && typeof reviewer !== "string") {
       res.status(400).json({ error: "reviewer must be a string when provided." });
       return;
     }
-    if (category === undefined && rationale === undefined) {
-      res.status(400).json({ error: "Provide at least one of 'category' or 'rationale' to edit." });
+    if (category === undefined && rationale === undefined && newPhrase === undefined) {
+      res.status(400).json({
+        error: "Provide at least one of 'category', 'rationale', or 'newPhrase' to edit.",
+      });
       return;
     }
     const result = editHandwavyPhrase(
@@ -1357,6 +1376,7 @@ router.patch("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (
       {
         category: category as "absence" | "hedging" | "buzzword" | undefined,
         rationale: typeof rationale === "string" ? rationale : undefined,
+        newPhrase: typeof newPhrase === "string" ? newPhrase : undefined,
       },
       { reviewer: typeof reviewer === "string" ? reviewer : undefined },
     );
@@ -1373,7 +1393,11 @@ router.patch("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (
       res.status(404).json({ error: err.message });
       return;
     }
-    if (err instanceof Error && /(must be|category)/i.test(err.message)) {
+    if (err instanceof Error && /already uses that normalized form/i.test(err.message)) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Error && /(must be|category|Phrase must|Rationale)/i.test(err.message)) {
       res.status(400).json({ error: err.message });
       return;
     }

@@ -50,6 +50,12 @@ export interface HandwavyEditEntry {
   category?: { from: HandwavyCategory; to: HandwavyCategory };
   /** Rationale change, present only when the rationale was actually altered. `from`/`to` may be empty strings to indicate the rationale was set or cleared. */
   rationale?: { from?: string; to?: string };
+  /**
+   * Task #247 — present only when the reviewer renamed the marker via the
+   * edit endpoint's `newPhrase` field. Both values are stored already
+   * normalized (lowercase + collapsed whitespace).
+   */
+  phrase?: { from: string; to: string };
 }
 
 export interface HandwavyMarker {
@@ -240,8 +246,23 @@ function coerceEditEntry(entry: unknown): HandwavyEditEntry | null {
       if (to !== undefined) out.rationale.to = to;
     }
   }
-  // An edit entry with neither category nor rationale change carries no info.
-  if (!out.category && !out.rationale) return null;
+  // Task #247 — rename audit. Both endpoints required (a rename always has
+  // a meaningful before/after) and they must actually differ for the entry
+  // to carry information.
+  if (obj.phrase && typeof obj.phrase === "object") {
+    const p = obj.phrase as Record<string, unknown>;
+    if (
+      typeof p.from === "string" &&
+      typeof p.to === "string" &&
+      p.from.length > 0 &&
+      p.to.length > 0 &&
+      p.from !== p.to
+    ) {
+      out.phrase = { from: p.from, to: p.to };
+    }
+  }
+  // An edit entry with no recorded change carries no info.
+  if (!out.category && !out.rationale && !out.phrase) return null;
   return out;
 }
 
@@ -987,6 +1008,15 @@ export interface EditPhraseUpdates {
    * and length-validated like the original add path.
    */
   rationale?: string;
+  /**
+   * Task #247 — Rename target. `undefined` means "leave the phrase
+   * unchanged". Otherwise the value is normalized (lowercase + collapsed
+   * whitespace) and length-validated like the original add path. A
+   * normalized value matching the existing phrase is treated as a
+   * no-op rename. A normalized value matching some OTHER active phrase
+   * is rejected so the active list stays a set.
+   */
+  newPhrase?: string;
 }
 
 export interface EditPhraseResult {
@@ -1063,8 +1093,34 @@ export function editHandwavyPhrase(
     }
   }
 
+  // Task #247 — rename. Only triggers when the supplied newPhrase
+  // normalizes to a value distinct from the current phrase. The new
+  // value is length-validated (mirroring the add path) and rejected if
+  // it would collide with another active phrase.
+  if (updates.newPhrase !== undefined) {
+    const renamedTo = normalizePhrase(updates.newPhrase);
+    if (renamedTo.length < 3) {
+      throw new Error("Phrase must be at least 3 characters after normalization.");
+    }
+    if (renamedTo.length > 200) {
+      throw new Error("Phrase must be at most 200 characters.");
+    }
+    if (renamedTo !== phrase) {
+      const collision = current.find(
+        (m, i) => i !== idx && m.phrase === renamedTo,
+      );
+      if (collision) {
+        throw new Error(
+          `Cannot rename to "${renamedTo}": another active phrase already uses that normalized form.`,
+        );
+      }
+      editEntry.phrase = { from: phrase, to: renamedTo };
+      updated.phrase = renamedTo;
+    }
+  }
+
   // No effective change — short-circuit without persisting an audit entry.
-  if (!editEntry.category && !editEntry.rationale) {
+  if (!editEntry.category && !editEntry.rationale && !editEntry.phrase) {
     return { edited: false, phrase, marker: { ...target }, total: current.length };
   }
 
@@ -1083,7 +1139,9 @@ export function editHandwavyPhrase(
   CACHED_HISTORY = trimmed;
   return {
     edited: true,
-    phrase,
+    // Task #247 — when the marker was renamed, the result should report
+    // the marker's NEW identity so callers can keep referencing it.
+    phrase: updated.phrase,
     marker: { ...updated, edits: updated.edits ? updated.edits.map((e) => ({ ...e })) : undefined },
     total: next.length,
     editEntry: { ...editEntry },

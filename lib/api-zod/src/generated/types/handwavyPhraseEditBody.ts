@@ -8,10 +8,13 @@
 import type { HandwavyCategory } from "./handwavyCategory";
 
 /**
- * Request body for the in-place edit endpoint. The phrase string
+ * Request body for the in-place edit endpoint. The `phrase` string
 identifies which curated marker to update; provide at least one of
-`category` or `rationale` to actually change something. Send an empty
-`rationale` string to clear an existing rationale.
+`category`, `rationale`, or `newPhrase` to actually change
+something. Send an empty `rationale` string to clear an existing
+rationale. Task #247 — `newPhrase` is the rename target; the edit
+only changes the row identity when its normalized form differs
+from the existing phrase, otherwise it is treated as a no-op.
 
  */
 export interface HandwavyPhraseEditBody {
@@ -20,6 +23,14 @@ export interface HandwavyPhraseEditBody {
   category?: HandwavyCategory;
   /** New rationale text. Empty string clears the existing rationale. */
   rationale?: string;
+  /** Task #247 — Rename target. Normalized to lowercase + collapsed
+whitespace before matching, and rejected when the normalized
+form already belongs to another active marker. When the
+normalized form matches the existing `phrase`, the rename is a
+no-op; the request can still apply concurrent
+`category`/`rationale` updates.
+ */
+  newPhrase?: string;
   /** Reviewer name or email recorded in the edit audit entry. Optional. */
   reviewer?: string;
 }

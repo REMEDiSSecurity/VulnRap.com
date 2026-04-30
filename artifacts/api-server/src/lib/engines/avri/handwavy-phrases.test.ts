@@ -390,6 +390,96 @@ describe("handwavy-phrases loader", () => {
       expect(() => editHandwavyPhrase("editable phrase seven", { rationale: "ab" })).toThrow(/Rationale/);
     });
 
+    // Task #247 — rename support on the same edit endpoint.
+    it("renames the marker in place and records a phrase before/after audit entry", () => {
+      addHandwavyPhrase("rename source", "hedging", {
+        reviewer: "alice@team.com",
+        rationale: "Original wording.",
+        now: "2026-04-22T08:00:00.000Z",
+      });
+      const result = editHandwavyPhrase(
+        "rename source",
+        { newPhrase: "rename TARGET" },
+        { reviewer: "bob@team.com", now: "2026-04-22T09:00:00.000Z" },
+      );
+      expect(result.edited).toBe(true);
+      // The result should refer to the marker's NEW identity so callers
+      // can keep referencing it after a rename.
+      expect(result.phrase).toBe("rename target");
+      expect(result.marker.phrase).toBe("rename target");
+      // addedBy / addedAt / rationale are preserved across the rename.
+      expect(result.marker.addedBy).toBe("alice@team.com");
+      expect(result.marker.addedAt).toBe("2026-04-22T08:00:00.000Z");
+      expect(result.marker.rationale).toBe("Original wording.");
+      // Audit entry records the rename as a from/to pair.
+      expect(result.editEntry?.phrase).toEqual({
+        from: "rename source",
+        to: "rename target",
+      });
+      // Active list reflects the new identity; old phrase is gone.
+      const phrases = getHandwavyPhrases().map((m) => m.phrase);
+      expect(phrases).toContain("rename target");
+      expect(phrases).not.toContain("rename source");
+    });
+
+    it("treats a newPhrase that normalizes to the existing phrase as a rename no-op", () => {
+      addHandwavyPhrase("noop rename phrase", "hedging");
+      // A no-op rename with no other updates is a no-op overall and
+      // should NOT append an audit entry.
+      const result = editHandwavyPhrase("noop rename phrase", {
+        newPhrase: "  Noop   Rename  Phrase  ",
+      });
+      expect(result.edited).toBe(false);
+      const marker = getHandwavyPhrases().find(
+        (m) => m.phrase === "noop rename phrase",
+      );
+      expect(marker?.edits ?? []).toHaveLength(0);
+    });
+
+    it("applies concurrent category edits even when the rename is a no-op", () => {
+      addHandwavyPhrase("noop rename two", "hedging");
+      const result = editHandwavyPhrase(
+        "noop rename two",
+        { newPhrase: "noop rename two", category: "buzzword" },
+        { reviewer: "carol@team.com" },
+      );
+      expect(result.edited).toBe(true);
+      // Category change recorded but no rename audit field.
+      expect(result.editEntry?.category).toEqual({
+        from: "hedging",
+        to: "buzzword",
+      });
+      expect(result.editEntry?.phrase).toBeUndefined();
+      expect(result.marker.phrase).toBe("noop rename two");
+      expect(result.marker.category).toBe("buzzword");
+    });
+
+    it("rejects a rename whose normalized form collides with another active phrase", () => {
+      addHandwavyPhrase("collision source phrase", "hedging");
+      addHandwavyPhrase("collision target phrase", "buzzword");
+      expect(() =>
+        editHandwavyPhrase("collision source phrase", {
+          newPhrase: "Collision Target Phrase",
+        }),
+      ).toThrow(/already uses that normalized form/i);
+      // Active list is unchanged on the failed rename.
+      const phrases = getHandwavyPhrases().map((m) => m.phrase);
+      expect(phrases).toContain("collision source phrase");
+      expect(phrases).toContain("collision target phrase");
+    });
+
+    it("rejects too-short and too-long rename targets like the add path", () => {
+      addHandwavyPhrase("rename validation phrase", "hedging");
+      expect(() =>
+        editHandwavyPhrase("rename validation phrase", { newPhrase: "ab" }),
+      ).toThrow(/Phrase must be at least 3 characters/);
+      expect(() =>
+        editHandwavyPhrase("rename validation phrase", {
+          newPhrase: "x".repeat(201),
+        }),
+      ).toThrow(/Phrase must be at most 200 characters/);
+    });
+
     it("caps the per-marker edit log at 50 entries, pruning the oldest", () => {
       addHandwavyPhrase("editable phrase eight", "absence", { now: "2026-04-01T00:00:00.000Z" });
       // Apply 60 alternating-category edits so each one is a real change.

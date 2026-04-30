@@ -6,13 +6,16 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { HandwavyEditEntryCategory } from "./handwavyEditEntryCategory";
+import type { HandwavyEditEntryPhrase } from "./handwavyEditEntryPhrase";
 import type { HandwavyEditEntryRationale } from "./handwavyEditEntryRationale";
 
 /**
  * Single in-place edit applied to a curated hand-wavy marker phrase.
 Records who made the change, when, and the before/after for whichever
-fields actually changed (`category` and/or `rationale`). Fields that
-did not change are omitted to keep the audit log compact.
+fields actually changed (`category`, `rationale`, and/or — Task
+#247 — the phrase string itself when a reviewer renamed it).
+Fields that did not change are omitted to keep the audit log
+compact.
 
  */
 export interface HandwavyEditEntry {
@@ -23,4 +26,10 @@ export interface HandwavyEditEntry {
   category?: HandwavyEditEntryCategory;
   /** Before/after values for the rationale text. Empty string indicates the rationale was set or cleared. */
   rationale?: HandwavyEditEntryRationale;
+  /** Task #247 — before/after values for the phrase string itself,
+present only when the reviewer renamed the marker via the
+edit endpoint's `newPhrase` field. Both values are stored
+already normalized (lowercase + collapsed whitespace).
+ */
+  phrase?: HandwavyEditEntryPhrase;
 }

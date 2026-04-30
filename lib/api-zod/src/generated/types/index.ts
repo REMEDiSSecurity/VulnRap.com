@@ -75,6 +75,7 @@ export * from "./handwavyBatchHistoryPhrase";
 export * from "./handwavyCategory";
 export * from "./handwavyEditEntry";
 export * from "./handwavyEditEntryCategory";
+export * from "./handwavyEditEntryPhrase";
 export * from "./handwavyEditEntryRationale";
 export * from "./handwavyHistoryEntry";
 export * from "./handwavyMarker";

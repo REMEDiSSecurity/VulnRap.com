@@ -1701,10 +1701,24 @@ export type HandwavyEditEntryRationale = {
 };
 
 /**
+ * Task #247 — before/after values for the phrase string itself,
+present only when the reviewer renamed the marker via the
+edit endpoint's `newPhrase` field. Both values are stored
+already normalized (lowercase + collapsed whitespace).
+
+ */
+export type HandwavyEditEntryPhrase = {
+  from: string;
+  to: string;
+};
+
+/**
  * Single in-place edit applied to a curated hand-wavy marker phrase.
 Records who made the change, when, and the before/after for whichever
-fields actually changed (`category` and/or `rationale`). Fields that
-did not change are omitted to keep the audit log compact.
+fields actually changed (`category`, `rationale`, and/or — Task
+#247 — the phrase string itself when a reviewer renamed it).
+Fields that did not change are omitted to keep the audit log
+compact.
 
  */
 export interface HandwavyEditEntry {
@@ -1715,6 +1729,12 @@ export interface HandwavyEditEntry {
   category?: HandwavyEditEntryCategory;
   /** Before/after values for the rationale text. Empty string indicates the rationale was set or cleared. */
   rationale?: HandwavyEditEntryRationale;
+  /** Task #247 — before/after values for the phrase string itself,
+present only when the reviewer renamed the marker via the
+edit endpoint's `newPhrase` field. Both values are stored
+already normalized (lowercase + collapsed whitespace).
+ */
+  phrase?: HandwavyEditEntryPhrase;
 }
 
 export interface HandwavyMarker {
@@ -1850,10 +1870,13 @@ export interface HandwavyPhrasesList {
 }
 
 /**
- * Request body for the in-place edit endpoint. The phrase string
+ * Request body for the in-place edit endpoint. The `phrase` string
 identifies which curated marker to update; provide at least one of
-`category` or `rationale` to actually change something. Send an empty
-`rationale` string to clear an existing rationale.
+`category`, `rationale`, or `newPhrase` to actually change
+something. Send an empty `rationale` string to clear an existing
+rationale. Task #247 — `newPhrase` is the rename target; the edit
+only changes the row identity when its normalized form differs
+from the existing phrase, otherwise it is treated as a no-op.
 
  */
 export interface HandwavyPhraseEditBody {
@@ -1862,6 +1885,14 @@ export interface HandwavyPhraseEditBody {
   category?: HandwavyCategory;
   /** New rationale text. Empty string clears the existing rationale. */
   rationale?: string;
+  /** Task #247 — Rename target. Normalized to lowercase + collapsed
+whitespace before matching, and rejected when the normalized
+form already belongs to another active marker. When the
+normalized form matches the existing `phrase`, the rename is a
+no-op; the request can still apply concurrent
+`category`/`rationale` updates.
+ */
+  newPhrase?: string;
   /** Reviewer name or email recorded in the edit audit entry. Optional. */
   reviewer?: string;
 }
