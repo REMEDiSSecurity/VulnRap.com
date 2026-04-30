@@ -155,6 +155,7 @@ export interface AvriRubricInput {
   composite: AvriCompositeBlock | null;
   engine2: AvriEngine2Block | null;
   overridesApplied?: string[];
+  docsLink?: string | null;
 }
 
 // Task 272: also exported for the on-screen `AvriFamilySection` React
@@ -223,6 +224,12 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
 
   lines.push("## AVRI Family Rubric");
   lines.push("");
+  const docsLink =
+    typeof input.docsLink === "string" ? input.docsLink.trim() : "";
+  if (docsLink.length > 0) {
+    lines.push(`_Learn more about the AVRI Family Rubric: ${docsLink}_`);
+    lines.push("");
+  }
   lines.push(`- **Family**: ${familyName}`);
   if (composite?.classification?.confidence) {
     lines.push(

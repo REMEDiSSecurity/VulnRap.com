@@ -2521,23 +2521,8 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     composite: avriComposite as AvriRubricCompositeBlock | null,
     engine2: e2Avri as AvriRubricEngine2Block | null,
     overridesApplied: (report.vulnrapOverridesApplied ?? []) as string[],
+    docsLink: buildChangelogDocsLink(req, "avri-family-rubric"),
   });
-  // Task 259: inject the docs pointer right after the AVRI heading so the
-  // export matches the other section headers. The injection lives here (not
-  // inside buildAvriRubricMarkdown) because the shared @workspace/avri-rubric
-  // helper has no Express request context — request-origin resolution
-  // belongs at the route boundary.
-  if (avriLines.length > 0) {
-    const headerIdx = avriLines.findIndex((l: string) => l === "## AVRI Family Rubric");
-    if (headerIdx >= 0) {
-      avriLines.splice(
-        headerIdx + 2,
-        0,
-        `_Learn more about the AVRI Family Rubric: ${buildChangelogDocsLink(req, "avri-family-rubric")}_`,
-        "",
-      );
-    }
-  }
   lines.push(...avriLines);
 
   lines.push("---");

@@ -1387,6 +1387,17 @@ function GoldSignalBonusSection({ engines }: { engines: EngineResult[] }) {
   );
 }
 
+const DEFAULT_PUBLIC_URL = "https://vulnrap.com";
+
+function buildAvriDocsLink(): string {
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : DEFAULT_PUBLIC_URL;
+  const base = origin.replace(/\/+$/, "");
+  return `${base}/changelog#avri-family-rubric`;
+}
+
 export function buildMarkdownSummary(data: DiagnosticsResponse): string {
   const lines: string[] = [];
   lines.push(`# VulnRap Diagnostics — Report ${data.reportId}`);
@@ -1474,6 +1485,7 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
       composite: avriComposite,
       engine2: e2Avri,
       overridesApplied: avriOverrides,
+      docsLink: buildAvriDocsLink(),
     }),
   );
 

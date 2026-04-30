@@ -1127,6 +1127,70 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(buzzwordIdx).toBeGreaterThan(hedgingIdx);
   });
 
+  it("emits the AVRI Family Rubric docs pointer in the printable markdown export", () => {
+    const withAvri: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      avri: {
+        family: "MEMORY_CORRUPTION",
+        familyName: "Memory corruption / unsafe C",
+        classification: {
+          confidence: "HIGH" as const,
+          reason: "matched member CWE-787",
+          evidence: ["CWE-787"],
+          technology: null,
+        },
+        goldHitCount: 1,
+        velocityPenalty: 0,
+        templatePenalty: 0,
+        rawCompositeBeforeBehavioralPenalties: 42,
+      },
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 38,
+            verdict: "RED" as const,
+            confidence: "MEDIUM" as const,
+            signalBreakdown: {
+              avri: {
+                family: "MEMORY_CORRUPTION",
+                familyName: "Memory corruption / unsafe C",
+                baseScore: 22,
+                goldHitCount: 1,
+                goldTotalCount: 8,
+                goldHits: [
+                  { id: "asan_or_sanitizer", description: "AddressSanitizer crash output", points: 22 },
+                ],
+                goldMisses: [],
+                absencePenalty: 0,
+                absencePenalties: [],
+                contradictions: [],
+                contradictionPenalty: 0,
+                rawAvriScore: 22,
+                legacyScore: 50,
+                blendedScore: 38,
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const md = buildMarkdownSummary(withAvri);
+
+    const expectedOrigin = window.location.origin.replace(/\/+$/, "");
+    const expectedPointer = `_Learn more about the AVRI Family Rubric: ${expectedOrigin}/changelog#avri-family-rubric_`;
+    expect(md).toContain(expectedPointer);
+
+    const headingIdx = md.indexOf("## AVRI Family Rubric");
+    const pointerIdx = md.indexOf(expectedPointer);
+    const familyIdx = md.indexOf("- **Family**: Memory corruption / unsafe C");
+    expect(headingIdx).toBeGreaterThan(-1);
+    expect(pointerIdx).toBeGreaterThan(headingIdx);
+    expect(familyIdx).toBeGreaterThan(pointerIdx);
+  });
+
   it("keeps non-FLAT absence penalties as a flat list in the printable markdown export", () => {
     // Task 110: only FLAT entries carry a flatHandwavyCategory. Family-rubric
     // absence penalties (no category) keep the existing flat rendering.

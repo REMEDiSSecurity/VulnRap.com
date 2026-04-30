@@ -420,4 +420,33 @@ describe("buildAvriRubricMarkdown", () => {
       false,
     );
   });
+
+  it("injects the AVRI Family Rubric docs pointer line right after the heading when docsLink is provided", () => {
+    const lines = buildAvriRubricMarkdown({
+      composite: { family: "TYPE_CONFUSION", familyName: "Type Confusion" },
+      engine2: null,
+      docsLink: "https://vulnrap.com/changelog#avri-family-rubric",
+    });
+    expect(lines).toEqual([
+      "## AVRI Family Rubric",
+      "",
+      "_Learn more about the AVRI Family Rubric: https://vulnrap.com/changelog#avri-family-rubric_",
+      "",
+      "- **Family**: Type Confusion",
+      "",
+    ]);
+  });
+
+  it("omits the AVRI Family Rubric docs pointer line when docsLink is empty/whitespace/undefined", () => {
+    const baseInput = {
+      composite: { family: "TYPE_CONFUSION", familyName: "Type Confusion" },
+      engine2: null,
+    };
+    for (const docsLink of [undefined, "", "   ", null]) {
+      const lines = buildAvriRubricMarkdown({ ...baseInput, docsLink });
+      expect(lines.some((l) => l.startsWith("_Learn more about the AVRI"))).toBe(
+        false,
+      );
+    }
+  });
 });
