@@ -2582,6 +2582,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   type BulkResultsState = {
     kind: "remove" | "undo";
     rows: BulkResultRow[];
+    // Task #336 — set only by `handleRetryFailedBulkResults` so the banner
+    // can render a "retried N rows from the previous batch" hint and the
+    // reviewer can tell it's a retry result, not a fresh top-level batch.
+    retried?: { count: number; parentKind: "remove" | "undo" };
   };
   const [bulkResults, setBulkResults] = useState<BulkResultsState | null>(null);
   // Task #237 / #332 — post-Trash one-click Undo. Each successful per-
@@ -3783,6 +3787,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // batch gets reinstated.
   const handleUndoBulkBatch = async (
     rowsToReinstate?: { phrase: string; removedAt?: string }[],
+    retriedFrom?: { count: number; parentKind: "remove" | "undo" },
   ) => {
     let removedRows: { phrase: string; removedAt?: string }[];
     if (rowsToReinstate) {
@@ -3860,7 +3865,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       }
     }
     refresh();
-    setBulkResults({ kind: "undo", rows: results });
+    setBulkResults({
+      kind: "undo",
+      rows: results,
+      ...(retriedFrom ? { retried: retriedFrom } : {}),
+    });
     setBusy(null);
 
     const reinstated = results.filter((r) => r.status === "reinstated").length;
@@ -4192,11 +4201,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     await confirmBulkRemove(phrasesToRemove);
   };
 
-  // The destructive bulk-remove path. Always called with the explicit
-  // phrase list the reviewer just acknowledged in the preview panel
-  // (Task #154 made the preview mandatory; nothing else may invoke this
-  // helper).
-  const confirmBulkRemove = async (phrasesToRemove: string[]) => {
+  // The destructive bulk-remove path. Called with the explicit phrase
+  // list the reviewer just acknowledged in the preview panel (Task #154
+  // made the preview mandatory for a reviewer-driven batch), or with the
+  // failed-row subset by `handleRetryFailedBulkResults` (Task #238) — the
+  // retry path skips the preview because those rows already cleared it
+  // on the original click. No other callers.
+  const confirmBulkRemove = async (
+    phrasesToRemove: string[],
+    retriedFrom?: { count: number; parentKind: "remove" | "undo" },
+  ) => {
     if (!phrasesToRemove || phrasesToRemove.length === 0) return;
     setBusy("bulk-remove");
     const results: BulkResultRow[] = [];
@@ -4265,7 +4279,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       }
       return next;
     });
-    setBulkResults({ kind: "remove", rows: results });
+    setBulkResults({
+      kind: "remove",
+      rows: results,
+      ...(retriedFrom ? { retried: retriedFrom } : {}),
+    });
     setBusy(null);
 
     const removed = results.filter((r) => r.status === "removed").length;
@@ -4323,13 +4341,19 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     if (!bulkResults) return;
     const failedRows = retryableFailedRows(bulkResults);
     if (failedRows.length === 0) return;
+    // Task #336 — snapshot the parent banner's kind + retry-pool size so
+    // the resulting banner can render the retry hint (see BulkResultsState).
+    const retriedFrom = {
+      count: failedRows.length,
+      parentKind: bulkResults.kind,
+    };
     if (bulkResults.kind === "remove") {
       // confirmBulkRemove builds a fresh banner ({ kind: "remove", rows })
       // from the new per-phrase outcomes, which is exactly the "replace
       // the banner with the new per-phrase outcomes" behaviour the task
       // calls for. Cooldown / busy / refresh handling all match the
       // original bulk-remove path.
-      await confirmBulkRemove(failedRows.map((r) => r.phrase));
+      await confirmBulkRemove(failedRows.map((r) => r.phrase), retriedFrom);
     } else {
       // Undo retries route back through handleUndoBulkBatch with an
       // explicit row list so we don't depend on bulkResults.kind ===
@@ -4338,6 +4362,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       // (Task #238 propagates it onto every undo result row).
       await handleUndoBulkBatch(
         failedRows.map((r) => ({ phrase: r.phrase, removedAt: r.removedAt })),
+        retriedFrom,
       );
     }
   };
@@ -6514,11 +6539,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           const summaryLabel = bulkResults.kind === "undo"
             ? `${reinstatedCount} / ${bulkResults.rows.length} reinstated`
             : `${removedCount} / ${bulkResults.rows.length} removed`;
+          const retried = bulkResults.retried;
+          const retryHint = retried
+            ? `Retried ${retried.count} ${retried.count === 1 ? "row" : "rows"} from the previous ${retried.parentKind === "remove" ? "remove" : "undo"} batch.`
+            : null;
           return (
           <div
             className="rounded-md border border-border/40 bg-background/40 p-3 space-y-2 text-xs"
             data-testid="handwavy-bulk-results"
             data-kind={bulkResults.kind}
+            data-retried={retried ? "true" : "false"}
           >
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-foreground">{headingLabel}</span>
@@ -6592,6 +6622,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 Dismiss
               </button>
             </div>
+            {retryHint && (
+              <div
+                className="text-[10px] text-muted-foreground italic"
+                data-testid="handwavy-bulk-retry-hint"
+                data-parent-kind={retried?.parentKind}
+                data-retried-count={retried?.count}
+              >
+                {retryHint}
+              </div>
+            )}
             <ul className="space-y-0.5">
               {bulkResults.rows.map((r) => {
                 const cfg =
