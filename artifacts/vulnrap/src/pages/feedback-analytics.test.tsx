@@ -29,10 +29,12 @@ import {
   readStoredDriftLookback,
   AVRI_DRIFT_LOOKBACK_STORAGE_KEY,
   describeHandwavyDisabledReason,
+  BulkRemovalImpactBlock,
 } from "./feedback-analytics";
 import type {
   HandwavyEditEntry,
   HandwavyPhraseSingleRemoveDryRunResponse,
+  HandwavyPhraseBatchRemoveDryRunImpact,
 } from "@workspace/api-client-react";
 
 describe("revertWouldBeNoop (Task #148 — disable Revert when it would be a no-op)", () => {
@@ -166,6 +168,106 @@ describe("productionScanStalenessDays / isProductionScanStale (Task #219 — war
     expect(Number.isInteger(PRODUCTION_SCAN_FRESHNESS_DAYS)).toBe(true);
     expect(PRODUCTION_SCAN_FRESHNESS_DAYS).toBeGreaterThan(0);
     expect(PRODUCTION_SCAN_FRESHNESS_DAYS).toBeLessThanOrEqual(90);
+  });
+});
+
+describe("BulkRemovalImpactBlock — production-sample staleness notice (Task #414)", () => {
+  // Pins the bulk-removal block's render of the amber stale notice
+  // (mirrors the add-time PreviewMatchBlock notice from Task #219).
+
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+  function makeImpact(
+    overrides: Partial<HandwavyPhraseBatchRemoveDryRunImpact> = {},
+  ): HandwavyPhraseBatchRemoveDryRunImpact {
+    return {
+      total: 0,
+      byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+      validDetectionsLost: 0,
+      falsePositivesDropped: 0,
+      corpusSize: 100,
+      sampleMatches: [],
+      warning: null,
+      oldestCreatedAt: null,
+      newestCreatedAt: null,
+      archiveTotal: null,
+      ...overrides,
+    };
+  }
+
+  it("renders the amber stale notice with the threshold + day count when the production sample is older than the freshness window", () => {
+    const newest = new Date(
+      Date.now() - (PRODUCTION_SCAN_FRESHNESS_DAYS + 16) * MS_PER_DAY,
+    ).toISOString();
+    const oldest = new Date(
+      Date.now() - (PRODUCTION_SCAN_FRESHNESS_DAYS + 30) * MS_PER_DAY,
+    ).toISOString();
+
+    render(
+      <BulkRemovalImpactBlock
+        kind="production"
+        title="Production reports"
+        subtitle="recent N"
+        emptyHint="No flagged reports impacted"
+        impact={makeImpact({ oldestCreatedAt: oldest, newestCreatedAt: newest })}
+      />,
+    );
+
+    const notice = screen.getByTestId("handwavy-bulk-preview-production-stale");
+    expect(notice).toHaveTextContent(
+      `${PRODUCTION_SCAN_FRESHNESS_DAYS}-day freshness window`,
+    );
+    expect(notice).toHaveTextContent(/Production sample is \d+ days old/);
+    const days = Number(notice.getAttribute("data-stale-days"));
+    expect(Number.isFinite(days)).toBe(true);
+    expect(days).toBeGreaterThan(PRODUCTION_SCAN_FRESHNESS_DAYS);
+  });
+
+  it("does NOT render the stale notice when the production sample is fresh (within the freshness window)", () => {
+    const newest = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString();
+    const oldest = new Date(Date.now() - 2 * MS_PER_DAY).toISOString();
+
+    render(
+      <BulkRemovalImpactBlock
+        kind="production"
+        title="Production reports"
+        subtitle="recent N"
+        emptyHint="No flagged reports impacted"
+        impact={makeImpact({ oldestCreatedAt: oldest, newestCreatedAt: newest })}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("handwavy-bulk-preview-production-stale"),
+    ).toBeNull();
+    // Scan-range subtitle still renders so the absence of the notice
+    // reflects a fresh-check, not dropped timestamps.
+    expect(
+      screen.getByTestId("handwavy-bulk-preview-production-range"),
+    ).toBeInTheDocument();
+  });
+
+  it("never renders the stale notice on the curated block, even when the curated impact carries timestamps", () => {
+    const oldNewest = new Date(
+      Date.now() - (PRODUCTION_SCAN_FRESHNESS_DAYS + 60) * MS_PER_DAY,
+    ).toISOString();
+
+    render(
+      <BulkRemovalImpactBlock
+        kind="curated"
+        title="Curated fixtures"
+        subtitle="benchmark"
+        emptyHint="No fixture impact"
+        impact={makeImpact({ oldestCreatedAt: oldNewest, newestCreatedAt: oldNewest })}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("handwavy-bulk-preview-curated-stale"),
+    ).toBeNull();
+    expect(
+      screen.queryByTestId("handwavy-bulk-preview-production-stale"),
+    ).toBeNull();
   });
 });
 

@@ -1912,7 +1912,11 @@ function PreviewOverlapBucketBlock({
 // reviewers see the same affordance for both add and remove flows. The
 // `kind` prop only swaps the leading icon and the noun used for the
 // sample-match list ("fixture" vs "report").
-function BulkRemovalImpactBlock({
+//
+// Task #414 — also surfaces the same amber stale-production notice as
+// the add-time `PreviewMatchBlock` (Task #219) by reusing the shared
+// `isProductionScanStale` helper.
+export function BulkRemovalImpactBlock({
   kind,
   title,
   subtitle,
@@ -1957,6 +1961,13 @@ function BulkRemovalImpactBlock({
     impact.oldestCreatedAt,
     impact.newestCreatedAt,
   );
+  // Task #414 — gated on `kind === "production"` because the curated
+  // block has no wall-clock timestamps. Helpers floor to whole days so
+  // the rendered string is stable within a calendar day.
+  const stalenessDays = kind === "production"
+    ? productionScanStalenessDays(impact.newestCreatedAt)
+    : null;
+  const isStale = kind === "production" && isProductionScanStale(impact.newestCreatedAt);
   // Task #323 — coverage-gap notice. The bulk-removal toolbar lets reviewers
   // pick any production-scan window between 100 and 10,000. A reviewer who
   // tightens the window to 100 to "see fewer matches" may not realize they
@@ -2000,6 +2011,28 @@ function BulkRemovalImpactBlock({
         >
           Scanned {impact.corpusSize} {sourceNoun}
           {impact.corpusSize === 1 ? "" : "s"} {scanRange}
+        </div>
+      )}
+      {isStale && (
+        // Task #414 — amber stale-production notice; copy mirrors the
+        // add-time `PreviewMatchBlock` (Task #219).
+        <div
+          className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100 flex items-start gap-1.5"
+          data-testid={`handwavy-bulk-preview-${kind}-stale`}
+          data-stale-days={stalenessDays}
+        >
+          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+          <div>
+            <div className="font-semibold text-amber-200">
+              Production sample is {stalenessDays} day{stalenessDays === 1 ? "" : "s"} old
+              {" "}— may not reflect current reporter behavior
+            </div>
+            <div className="text-amber-100/80 mt-0.5">
+              The newest report in this scan is older than the {PRODUCTION_SCAN_FRESHNESS_DAYS}-day
+              freshness window. Production traffic may have dropped or the table may not be
+              up-to-date — discount the un-flag count accordingly.
+            </div>
+          </div>
         </div>
       )}
       {showCoverageGap && (
