@@ -26,6 +26,23 @@ const BASE_URL = process.env.E2E_BASE_URL || `http://127.0.0.1:${VULNRAP_PORT}`;
 // agree on the same value; CI can override via E2E_CALIBRATION_TOKEN.
 const CALIBRATION_TOKEN = process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
 
+// Task #324 — When E2E_DEV_SERVERS=1, point the Playwright webServer
+// blocks at the dev-mode commands (`vite` + the api-server's `dev`
+// script) instead of the bundled production builds. This makes
+// iterative debugging of new specs much faster: edits to api-server
+// source rebuild via the artifact's own dev script, and edits to
+// vulnrap source hot-reload through the Vite dev server. The
+// release-gate still runs against the production builds (default,
+// matches what `scripts/vulnrap-e2e-check.sh` invokes), so any
+// dev-only convenience cannot mask a release-blocking regression.
+//
+// The dev-mode swap only works because the artifact-level path
+// collision was fixed: previously the api-server claimed both `/api`
+// and `/`, so the workspace router stole `/` from vulnrap and the
+// browser never reached the Vite dev server. See
+// artifacts/api-server/.replit-artifact/artifact.toml.
+const USE_DEV_SERVERS = process.env.E2E_DEV_SERVERS === "1";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -62,7 +79,62 @@ export default defineConfig({
   ],
   webServer: process.env.E2E_NO_WEBSERVER
     ? undefined
-    : [
+    : USE_DEV_SERVERS
+      ? [
+          {
+            // Task #324 — Dev-mode api-server. The api-server's `dev`
+            // script does its own esbuild-then-start (see
+            // artifacts/api-server/package.json), so we don't need the
+            // build-if-stale wrapper here; rerunning Playwright will
+            // rebuild fresh dist/ output for whatever sources changed.
+            // NODE_ENV is left at "development" so dev-only branches
+            // (e.g. handwavy panel default token, verbose logging) are
+            // exercised — this is the whole point of the dev-mode
+            // harness, since the production-build webserver below
+            // hardcodes NODE_ENV=production.
+            command: "pnpm --filter @workspace/api-server run dev",
+            url: `http://127.0.0.1:${API_PORT}/api/healthz`,
+            reuseExistingServer: true,
+            timeout: 240_000,
+            stdout: "pipe",
+            stderr: "pipe",
+            env: {
+              VULNRAP_USE_NEW_COMPOSITE: "true",
+              PORT: String(API_PORT),
+              NODE_ENV: "development",
+              CALIBRATION_TOKEN,
+              ARCHETYPE_HISTORY_PATH,
+              HANDWAVY_ALLOW_TEST_BACKDATE: "1",
+            },
+          },
+          {
+            // Task #324 — Dev-mode vulnrap via the Vite dev server. Vite
+            // proxies /api -> DEV_API_PROXY_TARGET (default
+            // http://localhost:8080; see server.proxy in vite.config.ts),
+            // so the api-server above is reachable through the same
+            // baseURL the browser hits. We pass DEV_API_PROXY_TARGET
+            // explicitly so a caller-supplied E2E_API_PORT actually
+            // reaches the dev proxy — without this, overriding the api
+            // port in dev mode would silently still proxy to :8080.
+            // There is no build step: edits to vulnrap source HMR-
+            // reload, which is the whole convenience this dev-mode
+            // harness exists to unlock.
+            command: "pnpm --filter @workspace/vulnrap run dev",
+            url: BASE_URL,
+            reuseExistingServer: true,
+            timeout: 120_000,
+            stdout: "pipe",
+            stderr: "pipe",
+            env: {
+              PORT: String(VULNRAP_PORT),
+              BASE_PATH: "/",
+              NODE_ENV: "development",
+              VITE_CALIBRATION_TOKEN: CALIBRATION_TOKEN,
+              DEV_API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}`,
+            },
+          },
+        ]
+      : [
         {
           // Run the bundled production api-server (dist/index.mjs via `start`),
           // not `dev`. The `build-if-stale.mjs` helper rebuilds only when

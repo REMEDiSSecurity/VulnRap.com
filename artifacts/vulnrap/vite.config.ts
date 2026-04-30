@@ -44,7 +44,12 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: "http://localhost:8080",
+        // Mirror the preview block's PREVIEW_API_PROXY_TARGET escape hatch
+        // (Task #324): the dev-mode Playwright harness can override the
+        // api-server port via E2E_API_PORT, and the dev proxy must follow
+        // it. Default keeps the historical "http://localhost:8080" so
+        // local `pnpm --filter @workspace/vulnrap run dev` is unchanged.
+        target: process.env.DEV_API_PROXY_TARGET || "http://localhost:8080",
         changeOrigin: true,
       },
     },

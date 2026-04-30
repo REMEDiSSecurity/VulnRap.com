@@ -310,6 +310,41 @@ pnpm --filter @workspace/api-spec run codegen
 pnpm --filter @workspace/db run push
 ```
 
+### Running the Playwright e2e suite
+
+By default the Playwright suite under `artifacts/vulnrap/e2e/` runs against
+the **production builds** — `vite preview` for the SPA and the bundled
+`dist/index.mjs` for the api-server. This mirrors what ships and is what
+the release-blocker check (`scripts/vulnrap-e2e-check.sh`) invokes:
+
+```bash
+# Production-build harness (default; matches the release gate)
+pnpm --filter @workspace/vulnrap run test:e2e
+```
+
+For iterative debugging — e.g. when adding a new spec or chasing a
+regression in the calibration / hand-wavy phrase panel — run the same
+specs against the **dev servers** (Vite dev + the api-server's `dev`
+script) by setting `E2E_DEV_SERVERS=1`. Edits to vulnrap source then
+HMR-reload between specs without a full rebuild:
+
+```bash
+# Dev-server harness
+E2E_DEV_SERVERS=1 pnpm --filter @workspace/vulnrap run test:e2e
+
+# Or scope to one spec while iterating:
+E2E_DEV_SERVERS=1 pnpm --filter @workspace/vulnrap exec \
+  playwright test --config playwright.config.ts \
+  handwavy-mutations-blocked.spec.ts
+```
+
+If the dev workflows are already running in the workspace, Playwright
+will reuse them (`reuseExistingServer: true`) instead of spawning new
+processes. The dev-server harness depends on the api-server artifact
+declaring `paths = ["/api"]` (NOT `["/api", "/"]`) so the workspace
+path router does not steal `/` from the Vite dev server — see
+`artifacts/api-server/.replit-artifact/artifact.toml` for the rationale.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
