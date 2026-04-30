@@ -12920,6 +12920,8 @@ export interface DatasetHistorySnapshot {
    * field was added won't carry it.
    */
   sampleDateKey?: string;
+  /** Task #380 — true when the row is a daily roll-up (Task #264 compaction). */
+  aggregated?: boolean;
 }
 
 interface DatasetHistoryCohort {
@@ -12955,6 +12957,8 @@ export interface DatasetHistorySeriesPoint {
    * apart from genuine cohort drift.
    */
   sampleDateKey?: string;
+  /** Task #380 — propagated from the source snapshot's `aggregated` flag. */
+  aggregated?: boolean;
 }
 
 export interface DatasetHistorySeries {
@@ -12988,6 +12992,10 @@ export interface DatasetHistorySeries {
   deltaPoints: DatasetHistorySeriesPoint[];
   /** Latest delta value if any (the rightmost delta point). */
   latestDelta: number | null;
+  /** Task #380 — points whose source snapshot was a daily roll-up. */
+  aggregatedCount: number;
+  /** Task #380 — points whose source snapshot was raw per-run. */
+  rawCount: number;
 }
 
 export interface DatasetHistorySummary {
@@ -13000,6 +13008,9 @@ export interface DatasetHistorySummary {
   latestGap: number | null;
   /** Task #358 — latest slice key observed across any cohort, or null. */
   latestSampleDateKey: string | null;
+  /** Task #380 — agg/raw split for the deduped gap series. */
+  gapAggregatedCount: number;
+  gapRawCount: number;
 }
 
 /**
@@ -13038,6 +13049,11 @@ export function summarizeDatasetHistory(
         if (typeof s.sampleDateKey === "string" && s.sampleDateKey.length > 0) {
           point.sampleDateKey = s.sampleDateKey;
         }
+        // Task #380 — only set the flag when present so raw points stay
+        // `aggregated: undefined` (the renderer treats absent as raw).
+        if (s.aggregated === true) {
+          point.aggregated = true;
+        }
         points.push(point);
         // Task #362 — emit a delta point alongside the mean point when
         // the persisted snapshot carries a finite fixtureMean. Rows
@@ -13046,10 +13062,14 @@ export function summarizeDatasetHistory(
         // the delta series only contains real observations.
         const fx = s.fixtureMean;
         if (fx != null && Number.isFinite(fx)) {
-          deltaPoints.push({
+          const deltaPoint: DatasetHistorySeriesPoint = {
             timestamp: s.timestamp,
             value: Number((s.compositeMean - fx).toFixed(1)),
-          });
+          };
+          if (s.aggregated === true) {
+            deltaPoint.aggregated = true;
+          }
+          deltaPoints.push(deltaPoint);
         }
       }
     }
@@ -13068,6 +13088,7 @@ export function summarizeDatasetHistory(
         rotationCount += 1;
       }
     }
+    const aggregatedCount = points.reduce((n, p) => (p.aggregated === true ? n + 1 : n), 0);
     return {
       tier,
       snapshotCount: snaps.length,
@@ -13077,6 +13098,8 @@ export function summarizeDatasetHistory(
       rotationCount,
       deltaPoints,
       latestDelta: deltaPoints.length > 0 ? deltaPoints[deltaPoints.length - 1]!.value : null,
+      aggregatedCount,
+      rawCount: points.length - aggregatedCount,
     };
   });
 
@@ -13093,6 +13116,9 @@ export function summarizeDatasetHistory(
       const entry: DatasetHistorySeriesPoint = { timestamp: s.timestamp, value: s.gap };
       if (typeof s.sampleDateKey === "string" && s.sampleDateKey.length > 0) {
         entry.sampleDateKey = s.sampleDateKey;
+      }
+      if (s.aggregated === true) {
+        entry.aggregated = true;
       }
       gapEntries.push(entry);
     }
@@ -13119,12 +13145,19 @@ export function summarizeDatasetHistory(
     }
   }
 
+  const gapAggregatedCount = gapEntries.reduce(
+    (n, p) => (p.aggregated === true ? n + 1 : n),
+    0,
+  );
+
   return {
     isEmpty: total === 0 || cohorts.every(c => c.snapshots.length === 0),
     tiers,
     gapPoints: gapEntries,
     latestGap: gapEntries.length > 0 ? gapEntries[gapEntries.length - 1]!.value : null,
     latestSampleDateKey,
+    gapAggregatedCount,
+    gapRawCount: gapEntries.length - gapAggregatedCount,
   };
 }
 
@@ -13144,8 +13177,12 @@ const DATASET_HISTORY_QUERY_KEY = ["test-dataset-history"] as const;
  * for the tooltip. The target value is also folded into the y-range
  * so the line is always visible even when every observed point sits
  * comfortably above (or below) it.
+ *
+ * Task #380 — points flagged `aggregated: true` are rendered as a
+ * dashed prefix sharing its boundary point with the solid raw-recent
+ * suffix, mirroring the archetype HeadroomSparkline treatment.
  */
-function DatasetHistoryMeanSparkline({
+export function DatasetHistoryMeanSparkline({
   points,
   targetLine,
 }: {
@@ -13158,6 +13195,7 @@ function DatasetHistoryMeanSparkline({
   if (points.length === 1) {
     const onlyPt = points[0]!;
     const flagged = targetLine != null && onlyPt.value < targetLine.value;
+    const onlyAggregated = onlyPt.aggregated === true;
     return (
       <span
         className={cn(
@@ -13166,7 +13204,7 @@ function DatasetHistoryMeanSparkline({
         )}
         data-testid={flagged ? "dataset-cohort-drift-gap-breach-text" : undefined}
       >
-        1 snapshot · {onlyPt.value.toFixed(1)}
+        1 {onlyAggregated ? "daily aggregate" : "snapshot"} · {onlyPt.value.toFixed(1)}
         {targetLine != null && (
           <span className="not-italic text-muted-foreground/50">
             {" "}(target ≥{targetLine.value})
@@ -13226,10 +13264,37 @@ function DatasetHistoryMeanSparkline({
     ? points.filter(p => p.value < targetLine.value).length
     : 0;
 
+  // Task #380 — split into dashed aggregated prefix + solid raw suffix.
+  // Assumes the prefix-then-suffix shape produced by the api-server's
+  // compactor (which only rewrites rows older than the rollup window).
+  // Boundary point is shared so the line stays continuous.
+  const aggregatedPointCount = points.reduce(
+    (n, p) => (p.aggregated === true ? n + 1 : n),
+    0,
+  );
+  const rawPointCount = points.length - aggregatedPointCount;
+  const firstRawIdx = points.findIndex(p => p.aggregated !== true);
+  let aggregatedCoords: string[] = [];
+  let rawCoords: string[] = [];
+  if (firstRawIdx === -1) {
+    aggregatedCoords = coords;
+  } else if (firstRawIdx === 0) {
+    rawCoords = coords;
+  } else {
+    aggregatedCoords = coords.slice(0, firstRawIdx + 1);
+    rawCoords = coords.slice(firstRawIdx);
+  }
+
   const tooltipBase =
     `${points.length} snapshots: ${ys[0]!.toFixed(1)} → ${lastPt.value.toFixed(1)}`
     + ` (range ${dataMinY.toFixed(1)}–${dataMaxY.toFixed(1)})`;
   const tooltipParts = [tooltipBase];
+  if (aggregatedPointCount > 0) {
+    tooltipParts.push(
+      `${aggregatedPointCount} daily aggregate${aggregatedPointCount === 1 ? "" : "s"}`
+        + ` + ${rawPointCount} raw`,
+    );
+  }
   if (rotationXs.length > 0) {
     tooltipParts.push(`${rotationXs.length} slice rotation${rotationXs.length === 1 ? "" : "s"}`);
   }
@@ -13269,14 +13334,30 @@ function DatasetHistoryMeanSparkline({
           data-testid="dataset-cohort-drift-rotation-marker"
         />
       ))}
-      <polyline
-        fill="none"
-        stroke="#06b6d4"
-        strokeWidth={1.25}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={coords.join(" ")}
-      />
+      {aggregatedCoords.length >= 2 && (
+        <polyline
+          fill="none"
+          stroke="#06b6d4"
+          strokeOpacity={0.6}
+          strokeWidth={1.25}
+          strokeDasharray="2 1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={aggregatedCoords.join(" ")}
+          data-testid="dataset-cohort-drift-aggregated-segment"
+        />
+      )}
+      {rawCoords.length >= 2 && (
+        <polyline
+          fill="none"
+          stroke="#06b6d4"
+          strokeWidth={1.25}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={rawCoords.join(" ")}
+          data-testid="dataset-cohort-drift-raw-segment"
+        />
+      )}
       {breachIndices.map(({ p, i }) => (
         <circle
           key={`breach-${i}`}
@@ -13369,10 +13450,38 @@ export function DatasetCohortFixtureDeltaSparkline({
   // numeric Δ line so the sparkline highlight tracks the warn state.
   const lastColor = isDivergent ? "#fb923c" : "rgba(148,163,184,0.8)";
   const lineColor = "rgba(148,163,184,0.6)";
-  const tooltip =
+  // Task #380 — mirror DatasetHistoryMeanSparkline's split-stroke
+  // (boundary point shared between dashed aggregated prefix and solid
+  // raw suffix).
+  const aggregatedPointCount = points.reduce(
+    (n, p) => (p.aggregated === true ? n + 1 : n),
+    0,
+  );
+  const rawPointCount = points.length - aggregatedPointCount;
+  const firstRawIdx = points.findIndex(p => p.aggregated !== true);
+  let aggregatedCoords: string[] = [];
+  let rawCoords: string[] = [];
+  if (firstRawIdx === -1) {
+    aggregatedCoords = coords;
+  } else if (firstRawIdx === 0) {
+    rawCoords = coords;
+  } else {
+    aggregatedCoords = coords.slice(0, firstRawIdx + 1);
+    rawCoords = coords.slice(firstRawIdx);
+  }
+
+  const tooltipParts = [
     `${points.length} snapshots: Δ${ys[0]! >= 0 ? "+" : ""}${ys[0]!.toFixed(1)}`
-    + ` → Δ${lastPt.value >= 0 ? "+" : ""}${lastPt.value.toFixed(1)}`
-    + ` (warn band ±${warnThreshold})`;
+      + ` → Δ${lastPt.value >= 0 ? "+" : ""}${lastPt.value.toFixed(1)}`,
+    `warn band ±${warnThreshold}`,
+  ];
+  if (aggregatedPointCount > 0) {
+    tooltipParts.push(
+      `${aggregatedPointCount} daily aggregate${aggregatedPointCount === 1 ? "" : "s"}`
+        + ` + ${rawPointCount} raw`,
+    );
+  }
+  const tooltip = tooltipParts.join(" · ");
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
@@ -13400,14 +13509,30 @@ export function DatasetCohortFixtureDeltaSparkline({
         strokeWidth={0.5}
         strokeDasharray="2 2"
       />
-      <polyline
-        fill="none"
-        stroke={lineColor}
-        strokeWidth={1.25}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={coords.join(" ")}
-      />
+      {aggregatedCoords.length >= 2 && (
+        <polyline
+          fill="none"
+          stroke={lineColor}
+          strokeOpacity={0.6}
+          strokeWidth={1.25}
+          strokeDasharray="2 1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={aggregatedCoords.join(" ")}
+          data-testid="dataset-cohort-fixture-delta-aggregated-segment"
+        />
+      )}
+      {rawCoords.length >= 2 && (
+        <polyline
+          fill="none"
+          stroke={lineColor}
+          strokeWidth={1.25}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={rawCoords.join(" ")}
+          data-testid="dataset-cohort-fixture-delta-raw-segment"
+        />
+      )}
       <circle cx={lastX} cy={lastY} r={2} fill={lastColor} />
     </svg>
   );
@@ -13747,7 +13872,43 @@ function DatasetCohortDriftSection() {
             <span>Dataset not mounted on this runner — no cohort drift snapshots yet.</span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          <>
+            {/* Task #380 — legend gated on the presence of agg points. */}
+            {(summary.tiers.some(t => t.aggregatedCount > 0)
+              || summary.gapAggregatedCount > 0) && (
+              <div
+                className="mb-2 flex items-center gap-2 rounded-md border border-border/40 bg-muted/[0.03] px-3 py-1.5 text-[11px] text-muted-foreground"
+                data-testid="dataset-cohort-drift-aggregation-legend"
+              >
+                <svg viewBox="0 0 36 8" className="w-9 h-2 shrink-0" aria-hidden="true">
+                  <line
+                    x1="0"
+                    y1="4"
+                    x2="20"
+                    y2="4"
+                    stroke="#06b6d4"
+                    strokeOpacity={0.6}
+                    strokeWidth={1.5}
+                    strokeDasharray="2 1.5"
+                    strokeLinecap="round"
+                  />
+                  <line
+                    x1="20"
+                    y1="4"
+                    x2="36"
+                    y2="4"
+                    stroke="#06b6d4"
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span>
+                  Dashed prefix = daily roll-up (one row per UTC day for snapshots older than the
+                  rollup window above). Solid suffix = raw per-run resolution.
+                </span>
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             {summary.tiers.map(series => (
               <div
                 key={series.tier}
@@ -13760,6 +13921,21 @@ function DatasetCohortDriftSection() {
                   </span>
                   <span className="tabular-nums text-muted-foreground/60 flex items-center gap-1">
                     {series.snapshotCount} pt{series.snapshotCount === 1 ? "" : "s"}
+                    {/* Task #380 — agg/raw breakdown chip. */}
+                    {series.aggregatedCount > 0 && (
+                      <span
+                        className="text-cyan-400/80 font-mono normal-case"
+                        title={
+                          `${series.aggregatedCount} daily aggregate`
+                          + `${series.aggregatedCount === 1 ? "" : "s"}`
+                          + ` + ${series.rawCount} raw point${series.rawCount === 1 ? "" : "s"}.`
+                          + " Rolled-up older history is drawn as a dashed prefix on the sparkline."
+                        }
+                        data-testid={`dataset-cohort-drift-aggregated-${series.tier}`}
+                      >
+                        · {series.aggregatedCount} agg + {series.rawCount} raw
+                      </span>
+                    )}
                     {/*
                       Task #358 — note rotation count when present so a
                       jittery sparkline isn't confused for model drift.
@@ -13792,6 +13968,21 @@ function DatasetCohortDriftSection() {
                 <span className="font-mono">T1 − T3 gap</span>
                 <span className="tabular-nums text-muted-foreground/60 flex items-center gap-1">
                   {summary.gapPoints.length} pt{summary.gapPoints.length === 1 ? "" : "s"}
+                  {/* Task #380 — agg/raw breakdown chip for the gap series. */}
+                  {summary.gapAggregatedCount > 0 && (
+                    <span
+                      className="text-cyan-400/80 font-mono normal-case"
+                      title={
+                        `${summary.gapAggregatedCount} daily aggregate`
+                        + `${summary.gapAggregatedCount === 1 ? "" : "s"}`
+                        + ` + ${summary.gapRawCount} raw point${summary.gapRawCount === 1 ? "" : "s"}.`
+                        + " Rolled-up older history is drawn as a dashed prefix on the sparkline."
+                      }
+                      data-testid="dataset-cohort-drift-aggregated-gap"
+                    >
+                      · {summary.gapAggregatedCount} agg + {summary.gapRawCount} raw
+                    </span>
+                  )}
                   {/*
                     Task #370 — chip the calibration target alongside the
                     point count so reviewers know what the dashed line in
@@ -13831,7 +14022,8 @@ function DatasetCohortDriftSection() {
                 targetLine={gapTarget != null ? { value: gapTarget } : undefined}
               />
             </div>
-          </div>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

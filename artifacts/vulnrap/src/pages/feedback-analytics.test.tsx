@@ -13,6 +13,7 @@ import {
   summarizeDatasetHistory,
   computeCohortFixtureDelta,
   DatasetCohortFixtureDeltaSparkline,
+  DatasetHistoryMeanSparkline,
   FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
   COHORT_DELTA_WARN_THRESHOLD_OPTIONS,
   COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY,
@@ -963,6 +964,84 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
     expect(t1.rotationCount).toBe(0);
     expect(summary.latestSampleDateKey).toBeNull();
   });
+
+  it("threads the per-snapshot `aggregated` flag onto plotted points and counts the agg/raw split per tier and on the gap series (Task #380)", () => {
+    // Mixed history — older rows are daily roll-ups (aggregated:true)
+    // and the most recent row is raw per-run resolution. The summary
+    // should preserve `aggregated` on each plotted point AND surface
+    // the rolled-up vs raw counts so the UI can render the dashed
+    // prefix and the "X agg + Y raw" chip without re-counting.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 3,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            {
+              timestamp: "2026-04-20T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 71.0,
+              gap: 19.0,
+              aggregated: true,
+            },
+            {
+              timestamp: "2026-04-21T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 71.4,
+              gap: 18.6,
+              aggregated: true,
+            },
+            {
+              timestamp: "2026-04-22T12:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 72.1,
+              gap: 18.0,
+            },
+          ],
+        },
+      ],
+    });
+    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    // Per-point flag survives so the sparkline can split coords on it.
+    expect(t1.points.map(p => p.aggregated)).toEqual([true, true, undefined]);
+    // The summary chip's counts come straight from the series so the UI
+    // doesn't have to re-walk the points array on every render.
+    expect(t1.aggregatedCount).toBe(2);
+    expect(t1.rawCount).toBe(1);
+    // Gap dedupe path threads the same flag onto the deduped points so
+    // the T1−T3 gap sparkline can split-stroke the same way.
+    expect(summary.gapPoints.map(p => p.aggregated)).toEqual([true, true, undefined]);
+    expect(summary.gapAggregatedCount).toBe(2);
+    expect(summary.gapRawCount).toBe(1);
+  });
+
+  it("reports zero aggregated counts on a pure-raw history so the legend stays hidden (Task #380)", () => {
+    // No `aggregated` flag anywhere — the dashboard should not promise
+    // a dashed-prefix legend when there's nothing to point at.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 2,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70.5, gap: 17.8 },
+          ],
+        },
+      ],
+    });
+    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    expect(t1.aggregatedCount).toBe(0);
+    expect(t1.rawCount).toBe(2);
+    expect(summary.gapAggregatedCount).toBe(0);
+    expect(summary.gapRawCount).toBe(2);
+  });
 });
 
 describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-fixture drift sparkline)", () => {
@@ -1048,6 +1127,168 @@ describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-
     // tile's numeric Δ line above it.
     expect(divergentFill).not.toBe(calmFill);
     expect(divergentFill).toBeTruthy();
+  });
+
+  it("splits the polyline into a dashed aggregated prefix and a solid raw suffix sharing the boundary point (Task #380)", () => {
+    // 4 points: first two are daily roll-ups, last two are raw. The
+    // aggregated segment must cover indices 0..2 and the raw segment
+    // 2..3 so the boundary point is shared (line stays continuous).
+    render(
+      <DatasetCohortFixtureDeltaSparkline
+        points={[
+          { timestamp: "2026-04-20T00:00:00.000Z", value: -3.0, aggregated: true },
+          { timestamp: "2026-04-21T00:00:00.000Z", value: -2.5, aggregated: true },
+          { timestamp: "2026-04-22T00:00:00.000Z", value: -1.0 },
+          { timestamp: "2026-04-23T00:00:00.000Z", value: 0.5 },
+        ]}
+        isDivergent={false}
+      />,
+    );
+    const svg = screen.getByTestId("dataset-cohort-fixture-delta-sparkline");
+    const aggSeg = svg.querySelector(
+      "[data-testid='dataset-cohort-fixture-delta-aggregated-segment']",
+    );
+    const rawSeg = svg.querySelector(
+      "[data-testid='dataset-cohort-fixture-delta-raw-segment']",
+    );
+    expect(aggSeg).not.toBeNull();
+    expect(rawSeg).not.toBeNull();
+    // Aggregated prefix is dashed at reduced opacity so reviewers can
+    // tell rolled-up history from raw points at a glance.
+    expect(aggSeg!.getAttribute("stroke-dasharray")).toBeTruthy();
+    expect(rawSeg!.getAttribute("stroke-dasharray")).toBeNull();
+    // Boundary point (index 2) is shared between the two segments so
+    // the polyline stays continuous.
+    const aggCoords = aggSeg!.getAttribute("points")!.trim().split(/\s+/);
+    const rawCoords = rawSeg!.getAttribute("points")!.trim().split(/\s+/);
+    expect(aggCoords.length).toBe(3);
+    expect(rawCoords.length).toBe(2);
+    expect(aggCoords[2]).toBe(rawCoords[0]);
+    // Tooltip surfaces the same X agg + Y raw breakdown the per-tier
+    // chip uses so screen-reader and hover users get the same context.
+    expect(svg.getAttribute("aria-label")).toContain("2 daily aggregates + 2 raw");
+  });
+
+  it("renders only the solid suffix (no dashed prefix) on a pure-raw history (Task #380)", () => {
+    render(
+      <DatasetCohortFixtureDeltaSparkline
+        points={[
+          { timestamp: "2026-04-22T00:00:00.000Z", value: -1.0 },
+          { timestamp: "2026-04-23T00:00:00.000Z", value: 0.5 },
+        ]}
+        isDivergent={false}
+      />,
+    );
+    const svg = screen.getByTestId("dataset-cohort-fixture-delta-sparkline");
+    expect(
+      svg.querySelector("[data-testid='dataset-cohort-fixture-delta-aggregated-segment']"),
+    ).toBeNull();
+    expect(
+      svg.querySelector("[data-testid='dataset-cohort-fixture-delta-raw-segment']"),
+    ).not.toBeNull();
+    // Aria-label should not promise a roll-up split when there isn't one.
+    expect(svg.getAttribute("aria-label")).not.toContain("daily aggregate");
+  });
+});
+
+describe("DatasetHistoryMeanSparkline (Task #380 — split-stroke for daily roll-up vs raw points)", () => {
+  it("splits the polyline into a dashed aggregated prefix and a solid raw suffix sharing the boundary point", () => {
+    // 3 daily roll-ups followed by 2 raw per-run snapshots — same shape
+    // we expect when the compactor has rewritten history older than the
+    // configured rollup window. The aggregated polyline must include
+    // the boundary index so the line stays continuous when joined to
+    // the raw suffix.
+    const { container } = render(
+      <DatasetHistoryMeanSparkline
+        points={[
+          { timestamp: "2026-04-18T00:00:00.000Z", value: 70.1, aggregated: true },
+          { timestamp: "2026-04-19T00:00:00.000Z", value: 71.0, aggregated: true },
+          { timestamp: "2026-04-20T00:00:00.000Z", value: 71.4, aggregated: true },
+          { timestamp: "2026-04-21T00:00:00.000Z", value: 72.0 },
+          { timestamp: "2026-04-22T00:00:00.000Z", value: 72.3 },
+        ]}
+      />,
+    );
+    const svg = container.querySelector("svg")!;
+    const aggSeg = svg.querySelector(
+      "[data-testid='dataset-cohort-drift-aggregated-segment']",
+    );
+    const rawSeg = svg.querySelector(
+      "[data-testid='dataset-cohort-drift-raw-segment']",
+    );
+    expect(aggSeg).not.toBeNull();
+    expect(rawSeg).not.toBeNull();
+    // Dashed prefix must be visually distinct from the solid suffix.
+    expect(aggSeg!.getAttribute("stroke-dasharray")).toBeTruthy();
+    expect(rawSeg!.getAttribute("stroke-dasharray")).toBeNull();
+    // Boundary point (the last aggregated point at index 2) is shared.
+    const aggCoords = aggSeg!.getAttribute("points")!.trim().split(/\s+/);
+    const rawCoords = rawSeg!.getAttribute("points")!.trim().split(/\s+/);
+    expect(aggCoords.length).toBe(4);
+    expect(rawCoords.length).toBe(2);
+    expect(aggCoords[3]).toBe(rawCoords[0]);
+    // Tooltip / aria-label exposes the breakdown so screen-reader users
+    // get the same context as hover users.
+    expect(svg.getAttribute("aria-label")).toContain("3 daily aggregates + 2 raw");
+  });
+
+  it("renders only the solid suffix on a pure-raw history (no dashed prefix)", () => {
+    const { container } = render(
+      <DatasetHistoryMeanSparkline
+        points={[
+          { timestamp: "2026-04-22T00:00:00.000Z", value: 70.0 },
+          { timestamp: "2026-04-23T00:00:00.000Z", value: 70.5 },
+          { timestamp: "2026-04-24T00:00:00.000Z", value: 71.0 },
+        ]}
+      />,
+    );
+    const svg = container.querySelector("svg")!;
+    expect(
+      svg.querySelector("[data-testid='dataset-cohort-drift-aggregated-segment']"),
+    ).toBeNull();
+    expect(
+      svg.querySelector("[data-testid='dataset-cohort-drift-raw-segment']"),
+    ).not.toBeNull();
+    expect(svg.getAttribute("aria-label")).not.toContain("daily aggregate");
+  });
+
+  it("renders only the dashed prefix on a pure-aggregated history (no solid suffix)", () => {
+    // Edge case: every snapshot is daily-rolled (older than the rollup
+    // window). The line should be entirely dashed and the tooltip
+    // should still report the agg/raw split so the chip and the
+    // sparkline tell the same story.
+    const { container } = render(
+      <DatasetHistoryMeanSparkline
+        points={[
+          { timestamp: "2026-04-18T00:00:00.000Z", value: 69.8, aggregated: true },
+          { timestamp: "2026-04-19T00:00:00.000Z", value: 70.4, aggregated: true },
+          { timestamp: "2026-04-20T00:00:00.000Z", value: 70.9, aggregated: true },
+        ]}
+      />,
+    );
+    const svg = container.querySelector("svg")!;
+    const aggSeg = svg.querySelector(
+      "[data-testid='dataset-cohort-drift-aggregated-segment']",
+    );
+    expect(aggSeg).not.toBeNull();
+    expect(aggSeg!.getAttribute("stroke-dasharray")).toBeTruthy();
+    expect(
+      svg.querySelector("[data-testid='dataset-cohort-drift-raw-segment']"),
+    ).toBeNull();
+    expect(svg.getAttribute("aria-label")).toContain("3 daily aggregates + 0 raw");
+  });
+
+  it("annotates the single-snapshot fallback as '1 daily aggregate' when the only point is rolled up", () => {
+    // The fallback branch (points.length === 1) shouldn't mislead
+    // reviewers into thinking the lone point is raw resolution.
+    const { container } = render(
+      <DatasetHistoryMeanSparkline
+        points={[
+          { timestamp: "2026-04-22T00:00:00.000Z", value: 70.0, aggregated: true },
+        ]}
+      />,
+    );
+    expect(container.textContent).toMatch(/1 daily aggregate · 70\.0/);
   });
 });
 
