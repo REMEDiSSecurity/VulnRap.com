@@ -1439,6 +1439,238 @@ describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", ()
     );
   });
 
+  it("renders the FAKE_RAW_HTTP block with the response-side title and Response Plausibility sub-bullet when only the response is fabricated", async () => {
+    // Response-only branch: clean request side + rawHttp.response.isFake=true
+    // selects the "Fake raw HTTP response" title and appends the nested
+    // Response Plausibility sub-section under the penalty bullet.
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "injection report body",
+      vulnrapEngineResults: {
+        avri: {
+          family: "INJECTION",
+          familyName: "Injection",
+          classification: {
+            confidence: "HIGH",
+            reason: "matched member CWE-89",
+            evidence: ["CWE-89"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 12,
+        },
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 18,
+            verdict: "RED",
+            confidence: "MEDIUM",
+            signalBreakdown: {
+              avri: {
+                family: "INJECTION",
+                familyName: "Injection",
+                baseScore: 12,
+                goldHitCount: 0,
+                goldTotalCount: 5,
+                goldHits: [],
+                goldMisses: [],
+                absencePenalty: 0,
+                absencePenalties: [],
+                contradictions: [],
+                contradictionPenalty: 0,
+                rawHttp: {
+                  requestsAnalyzed: 0,
+                  totalHeaders: 0,
+                  placeholderHeaders: 0,
+                  crlfPresent: false,
+                  teClConflicts: 0,
+                  teClBroken: 0,
+                  isFake: true,
+                  reason:
+                    "Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body)",
+                  revokedGoldHits: [
+                    { id: "request_response_diff", points: 12 },
+                  ],
+                  penalty: -12,
+                  response: {
+                    responsesAnalyzed: 1,
+                    responsesFlagged: 1,
+                    totalHeaders: 2,
+                    responsesMissingDate: 1,
+                    responsesMissingServer: 1,
+                    responsesWithSuspiciousJsonBody: 1,
+                    // Zero incidentals — the counter line should still render.
+                    responsesMissingIncidentals: 0,
+                    isFake: true,
+                    reason:
+                      "Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body)",
+                    revokedGoldHits: [
+                      { id: "request_response_diff", points: 12 },
+                    ],
+                  },
+                },
+                rawAvriScore: 0,
+                legacyScore: 30,
+                blendedScore: 18,
+              },
+            },
+          },
+        ],
+      },
+      vulnrapOverridesApplied: [],
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+
+    // Title is the response-only variant; counters reflect the clean
+    // request side (zeroed).
+    expect(res.body).toContain(
+      "- **Fake raw HTTP response** (penalty -12): Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body) \u2014 requests 0, headers 0/0 good, placeholder 0, CRLF no, TE/CL conflicts 0 (broken 0)",
+    );
+    expect(res.body).not.toContain("- **Fake raw HTTP request**");
+    expect(res.body).not.toContain("- **Fake raw HTTP request + response**");
+
+    // Response Plausibility sub-section: singular "block" wording,
+    // per-marker counters, and response-class revoked gold signal id.
+    expect(res.body).toContain(
+      "  - **Response Plausibility** (1/1 response block flagged):",
+    );
+    expect(res.body).toContain(
+      "    - Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body)",
+    );
+    expect(res.body).toContain("    - Missing Date header: 1");
+    expect(res.body).toContain("    - Missing Server header: 1");
+    expect(res.body).toContain("    - Suspiciously clean JSON body: 1");
+    expect(res.body).toContain("    - Missing incidental headers: 0");
+    expect(res.body).toContain(
+      "    - Response gold signals revoked: request_response_diff (\u221212)",
+    );
+    // Parent OR-merged revoked-gold sub-bullet still emitted.
+    expect(res.body).toContain(
+      "  - Gold signals revoked: request_response_diff (\u221212)",
+    );
+  });
+
+  it("renders the FAKE_RAW_HTTP block with the combined request+response title when both sides are fabricated", async () => {
+    // Combined branch: dirty request side + rawHttp.response.isFake=true
+    // selects the "Fake raw HTTP request + response" title and renders the
+    // Response Plausibility sub-section alongside non-zero request-side
+    // counters in the same penalty bullet.
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "web client report body",
+      vulnrapEngineResults: {
+        avri: {
+          family: "WEB_CLIENT",
+          familyName: "Web client",
+          classification: {
+            confidence: "HIGH",
+            reason: "matched member CWE-79",
+            evidence: ["CWE-79"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 22,
+            verdict: "RED",
+            confidence: "MEDIUM",
+            signalBreakdown: {
+              avri: {
+                family: "WEB_CLIENT",
+                familyName: "Web client",
+                baseScore: 18,
+                goldHitCount: 0,
+                goldTotalCount: 5,
+                goldHits: [],
+                goldMisses: [],
+                absencePenalty: 0,
+                absencePenalties: [],
+                contradictions: [],
+                contradictionPenalty: 0,
+                rawHttp: {
+                  requestsAnalyzed: 2,
+                  totalHeaders: 8,
+                  placeholderHeaders: 5,
+                  crlfPresent: true,
+                  teClConflicts: 0,
+                  teClBroken: 0,
+                  isFake: true,
+                  reason:
+                    "Both raw HTTP request and response look fabricated",
+                  revokedGoldHits: [
+                    { id: "raw_http_request_with_headers", points: 14 },
+                    { id: "request_response_diff", points: 12 },
+                  ],
+                  penalty: -18,
+                  response: {
+                    responsesAnalyzed: 2,
+                    responsesFlagged: 2,
+                    totalHeaders: 4,
+                    responsesMissingDate: 2,
+                    responsesMissingServer: 2,
+                    responsesWithSuspiciousJsonBody: 2,
+                    responsesMissingIncidentals: 0,
+                    isFake: true,
+                    reason:
+                      "Raw HTTP response is fabricated (missing Date+Server, suspiciously clean JSON body)",
+                    revokedGoldHits: [
+                      { id: "request_response_diff", points: 12 },
+                    ],
+                  },
+                },
+                rawAvriScore: 0,
+                legacyScore: 30,
+                blendedScore: 22,
+              },
+            },
+          },
+        ],
+      },
+      vulnrapOverridesApplied: [],
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+
+    // Title is the combined variant; counters reflect the dirty request
+    // side (3/8 headers good = 8 - 5).
+    expect(res.body).toContain(
+      "- **Fake raw HTTP request + response** (penalty -18): Both raw HTTP request and response look fabricated \u2014 requests 2, headers 3/8 good, placeholder 5, CRLF yes, TE/CL conflicts 0 (broken 0)",
+    );
+    expect(res.body).not.toContain("- **Fake raw HTTP request** (penalty");
+    expect(res.body).not.toContain("- **Fake raw HTTP response** (penalty");
+
+    // Response Plausibility sub-section: plural "blocks" wording.
+    expect(res.body).toContain(
+      "  - **Response Plausibility** (2/2 response blocks flagged):",
+    );
+    expect(res.body).toContain(
+      "    - Raw HTTP response is fabricated (missing Date+Server, suspiciously clean JSON body)",
+    );
+    expect(res.body).toContain("    - Missing Date header: 2");
+    expect(res.body).toContain("    - Missing Server header: 2");
+    expect(res.body).toContain("    - Suspiciously clean JSON body: 2");
+    expect(res.body).toContain("    - Missing incidental headers: 0");
+    expect(res.body).toContain(
+      "    - Response gold signals revoked: request_response_diff (\u221212)",
+    );
+
+    // Parent OR-merged revoked-gold sub-bullet preserves request+response
+    // ids in their original order.
+    expect(res.body).toContain(
+      "  - Gold signals revoked: raw_http_request_with_headers (\u221214), request_response_diff (\u221212)",
+    );
+  });
+
   it("omits the AVRI Family Rubric section entirely for legacy reports with no AVRI data", async () => {
     // Legacy report shape: no avri composite block, no Technical Substance
     // engine entry with a signalBreakdown.avri sub-block.
