@@ -4858,7 +4858,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
 
   // Task #361 — preview-panel counterpart to `dropPhraseFromReinstateBatchConfirm`.
   // On confirm the panel routes through `handleReinstateBatchSubset` when this
-  // set is non-empty (the /reinstate-batch route has no allow-list parameter).
+  // set is non-empty, which (post-Task #360) collapses the partial reinstate
+  // into a single /reinstate-batch round-trip via the `phrases` allow-list.
   const dropPhraseFromReinstatePreview = (phrase: string) => {
     setReinstatePreview((prev) => {
       if (!prev) return prev;
@@ -4869,14 +4870,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     });
   };
 
-  // Task #254 — partial-batch reinstate. Issues per-phrase /reinstate calls
-  // for an explicit allow-list (the rows the reviewer left checked in the
-  // batch reinstate confirm dialog). The single-round-trip /reinstate-batch
-  // route currently has no allow-list parameter, so dropping any row forces
-  // us off the batch path; tracking per-phrase outcomes (success / not-found
-  // / auth-failed / error) lets us surface a partial-success toast instead of
-  // silently masking failures behind a "batch ok" message. The dropped
-  // phrases stay on the removal-history list as removed, exactly as before.
+  // Task #254 — partial-batch reinstate. Task #360 collapsed this back
+  // into a single round-trip via the /reinstate-batch `phrases` allow-
+  // list, so the dropped rows stay on the removal-history list as
+  // removed and we no longer pay one HTTP per remaining phrase.
   const handleReinstateBatchSubset = async (
     removedAtIso: string,
     phrases: string[],
@@ -4886,64 +4883,38 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     const key = `reinstate-batch:${removedAtIso}`;
     setBusy(key);
     try {
-      let reinstated = 0;
-      let notFound = 0;
-      let authFailed = 0;
-      let errored = 0;
-      let authFailedSticky = false;
-      const reviewerName = reviewer.trim() || undefined;
-      for (const phrase of phrases) {
-        if (authFailedSticky) {
-          authFailed += 1;
-          continue;
-        }
-        try {
-          await reinstateHandwavyPhrase({
-            phrase,
-            removedAt: removedAtIso,
-            reviewer: reviewerName,
-          });
-          reinstated += 1;
-        } catch (err) {
-          const status = (err as { status?: number } | null)?.status;
-          if (status === 401 || status === 403) {
-            authFailedSticky = true;
-            authFailed += 1;
-          } else if (status === 404) {
-            notFound += 1;
-          } else {
-            errored += 1;
-          }
-        }
-      }
+      const resp = await reinstateHandwavyPhrasesBatch({
+        removedAt: removedAtIso,
+        reviewer: reviewer.trim() || undefined,
+        phrases,
+      });
+      const reinstatedCount =
+        typeof resp.reinstatedCount === "number" ? resp.reinstatedCount : 0;
+      const skipped = typeof resp.skipped === "number" ? resp.skipped : 0;
+      const noun = reinstatedCount === 1 ? "phrase" : "phrases";
+      const skipNote =
+        skipped > 0
+          ? ` (${skipped} already active, already reinstated, or no longer in this batch)`
+          : "";
       // Task #177 — close any open dry-run preview for this batch once the
       // real call has fired so the panel doesn't linger with stale data.
       setReinstatePreview((prev) =>
         prev && prev.removedAtIso === removedAtIso ? null : prev,
       );
-      const failures = notFound + authFailed + errored;
-      const noun = reinstated === 1 ? "phrase" : "phrases";
-      if (failures === 0) {
-        toast({
-          title: reinstated > 0 ? "Subset reinstated" : "Nothing to reinstate",
-          description:
-            reinstated > 0
-              ? `${reinstated} of ${phrases.length} ${noun} from this batch are back on the active list. The phrases you dropped stay on the removal-history list.`
-              : "Every phrase in the subset was already accounted for.",
-        });
-      } else {
-        const parts: string[] = [];
-        if (reinstated > 0) parts.push(`${reinstated} reinstated`);
-        if (notFound > 0) parts.push(`${notFound} not-found`);
-        if (authFailed > 0) parts.push(`${authFailed} auth-failed`);
-        if (errored > 0) parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
-        toast({
-          title: reinstated > 0 ? "Partial reinstate" : "Reinstate failed",
-          description: parts.join(" · "),
-          variant: reinstated === 0 ? "destructive" : undefined,
-        });
-      }
+      toast({
+        title: reinstatedCount > 0 ? "Subset reinstated" : "Nothing to reinstate",
+        description:
+          reinstatedCount > 0
+            ? `${reinstatedCount} of ${phrases.length} ${noun} from this batch are back on the active list. The phrases you dropped stay on the removal-history list${skipNote}.`
+            : `Every phrase in the subset was already accounted for${skipNote}.`,
+      });
       refresh();
+    } catch (err) {
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to reinstate batch.";
+        toast({ title: "Subset reinstate failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -9949,10 +9920,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   originalPhraseCount,
                 } = reinstateBatchConfirm;
                 setReinstateBatchConfirm(null);
-                // Task #254 — when nothing was dropped we keep using the
-                // single-round-trip /reinstate-batch route. As soon as the
-                // reviewer has trimmed the list we switch to per-phrase
-                // /reinstate calls so the dropped rows are NOT reinstated.
+                // Task #254 + #360 — both the full and partial paths
+                // ride the single-round-trip /reinstate-batch route.
+                // Partial subsets pass the kept rows through the new
+                // optional `phrases` allow-list; dropped rows stay on
+                // the removal-history list as removed.
                 if (phrasesToReinstate.length === originalPhraseCount) {
                   void handleReinstateBatch(removedAtIso, batchSize);
                 } else {

@@ -721,6 +721,18 @@ export interface ReinstateBatchOptions extends ReinstatePhraseOptions {
    * nothing is written back to disk and `CACHED_*` are left untouched.
    */
   dryRun?: boolean;
+  /**
+   * Optional allow-list of inner phrases to reinstate from the matched
+   * batch. When `undefined`, the function processes every not-yet-reinstated
+   * inner phrase as before (legacy behaviour). When PROVIDED — including
+   * an empty array — only inner phrases whose normalized value appears in
+   * the list are considered for reinstate; inner phrases NOT on the list
+   * are omitted from `results` entirely (they stay on the removal-history
+   * log as removed). An empty array is therefore a no-op: nothing is
+   * reinstated. Allow-list entries that don't match any inner phrase of
+   * the batch are reported as `not-in-batch` skip results.
+   */
+  phrases?: string[];
 }
 
 /** Maximum number of edit-history entries kept on a single marker. */
@@ -882,7 +894,7 @@ export function reinstateHandwavyPhrase(
 export interface ReinstateBatchEntryResult {
   phrase: string;
   reinstated: boolean;
-  reason?: "already-reinstated" | "already-active";
+  reason?: "already-reinstated" | "already-active" | "not-in-batch";
 }
 
 export type ReinstateBatchResult =
@@ -928,6 +940,25 @@ export function reinstateHandwavyPhrasesBatch(
   const reviewer = trimOrUndefined(options.reviewer, 200);
   const at = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
 
+  // Optional allow-list of inner phrases. Normalize each entry the same
+  // way the active list is normalized (lowercase + collapsed whitespace)
+  // and de-dupe so the caller's input order doesn't change the outcome.
+  // `undefined` -> legacy "process every inner phrase". A PROVIDED array
+  // (even empty, or one that normalizes to empty) is a true allow-list:
+  // only matching inner phrases are considered, everything else is
+  // omitted, and an empty allow-list reinstates nothing.
+  const rawAllowList = Array.isArray(options.phrases) ? options.phrases : null;
+  const allowList = rawAllowList
+    ? new Set(
+        rawAllowList
+          .filter((p): p is string => typeof p === "string")
+          .map((p) => normalizePhrase(p))
+          .filter((p) => p.length > 0),
+      )
+    : null;
+  const useAllowList = allowList !== null;
+  const matchedAllowList = useAllowList ? new Set<string>() : null;
+
   const nextMarkers = current.slice();
   const activePhrases = new Set(current.map((m) => m.phrase));
   const nextInnerPhrases = entry.phrases.map((p) => ({ ...p }));
@@ -936,6 +967,10 @@ export function reinstateHandwavyPhrasesBatch(
 
   for (let i = 0; i < nextInnerPhrases.length; i++) {
     const inner = nextInnerPhrases[i];
+    if (useAllowList) {
+      if (!allowList!.has(inner.phrase)) continue;
+      matchedAllowList!.add(inner.phrase);
+    }
     if (inner.reinstated) {
       results.push({ phrase: inner.phrase, reinstated: false, reason: "already-reinstated" });
       continue;
@@ -959,6 +994,16 @@ export function reinstateHandwavyPhrasesBatch(
     nextInnerPhrases[i] = updatedInner;
     results.push({ phrase: inner.phrase, reinstated: true });
     reinstatedCount += 1;
+  }
+
+  // Surface allow-list entries that didn't match any inner phrase as
+  // `not-in-batch` skip results so callers can spot typos / stale lists.
+  if (useAllowList) {
+    for (const requested of allowList!) {
+      if (!matchedAllowList!.has(requested)) {
+        results.push({ phrase: requested, reinstated: false, reason: "not-in-batch" });
+      }
+    }
   }
 
   const updatedEntry: HandwavyHistoryEntry = {

@@ -8820,9 +8820,15 @@ export const ReinstateHandwavyPhrasesBatchBody = zod
       .describe(
         "When true, return a per-phrase reinstate preview without mutating the active list or removal-history log.",
       ),
+    phrases: zod
+      .array(zod.string())
+      .optional()
+      .describe(
+        "Task #360 — optional allow-list of inner phrases to reinstate\nfrom the matched batch (normalized: lowercase + collapsed\nwhitespace). When omitted, every not-yet-reinstated inner\nphrase is processed (legacy behaviour). When present, only\ninner phrases whose normalized value appears in this list\nare considered; the rest stay on the removal-history list as\nremoved. An empty array is therefore a no-op. Allow-list\nvalues that don't match any inner phrase of the batch are\nreported as `not-in-batch` in the per-phrase results.\n",
+      ),
   })
   .describe(
-    "Task #144 — body for POST \/feedback\/calibration\/handwavy-phrases\/reinstate-batch.\nThe batch history entry is matched by `removedAt`; every inner phrase\nthat has not already been reinstated and is not currently active is\nre-added in one round-trip.\n\nTask #159 — when `dryRun: true` the server returns\n`HandwavyPhraseReinstateBatchDryRunResponse` with the same per-phrase\noutcome shape, and does NOT mutate the active marker list, the\nremoval-history log, or the cache. Both the mutating and dry-run\npaths return HTTP 200; callers discriminate on the `dryRun` flag\nin the response body.\n",
+    "Task #144 — body for POST \/feedback\/calibration\/handwavy-phrases\/reinstate-batch.\nThe batch history entry is matched by `removedAt`; every inner phrase\nthat has not already been reinstated and is not currently active is\nre-added in one round-trip.\n\nTask #159 — when `dryRun: true` the server returns\n`HandwavyPhraseReinstateBatchDryRunResponse` with the same per-phrase\noutcome shape, and does NOT mutate the active marker list, the\nremoval-history log, or the cache. Both the mutating and dry-run\npaths return HTTP 200; callers discriminate on the `dryRun` flag\nin the response body.\n\nTask #360 — when `phrases` is provided the server only considers\ninner phrases of the matched batch whose phrase appears in the\nallow-list (normalized: lowercase + collapsed whitespace). Inner\nphrases NOT in the list are omitted from `results` entirely and\nstay on the removal-history list as removed. A PROVIDED list —\nincluding `[]` — is treated as an explicit allow-list, so an\nempty array reinstates nothing. Allow-list values that don't\nmatch any inner phrase of the batch are reported as\n`not-in-batch` skip results.\n",
   );
 
 export const ReinstateHandwavyPhrasesBatchResponse = zod.union([
@@ -8858,9 +8864,11 @@ export const ReinstateHandwavyPhrasesBatchResponse = zod.union([
             phrase: zod.string(),
             reinstated: zod.boolean(),
             reason: zod
-              .enum(["already-reinstated", "already-active"])
+              .enum(["already-reinstated", "already-active", "not-in-batch"])
               .optional()
-              .describe("Present only when `reinstated` is false."),
+              .describe(
+                "Present only when `reinstated` is false. `not-in-batch` is only\nreturned by Task #360 allow-list calls when a caller-supplied\nphrase is not part of the matched batch.\n",
+              ),
           })
           .describe(
             "Task #144 — outcome of attempting to reinstate one inner phrase as\npart of a \/reinstate-batch round-trip.\n",
@@ -9358,9 +9366,11 @@ export const ReinstateHandwavyPhrasesBatchResponse = zod.union([
             phrase: zod.string(),
             reinstated: zod.boolean(),
             reason: zod
-              .enum(["already-reinstated", "already-active"])
+              .enum(["already-reinstated", "already-active", "not-in-batch"])
               .optional()
-              .describe("Present only when `reinstated` is false."),
+              .describe(
+                "Present only when `reinstated` is false. `not-in-batch` is only\nreturned by Task #360 allow-list calls when a caller-supplied\nphrase is not part of the matched batch.\n",
+              ),
           })
           .describe(
             "Task #144 — outcome of attempting to reinstate one inner phrase as\npart of a \/reinstate-batch round-trip.\n",

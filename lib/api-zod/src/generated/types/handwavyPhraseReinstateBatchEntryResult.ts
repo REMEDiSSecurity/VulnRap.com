@@ -15,6 +15,9 @@ part of a /reinstate-batch round-trip.
 export interface HandwavyPhraseReinstateBatchEntryResult {
   phrase: string;
   reinstated: boolean;
-  /** Present only when `reinstated` is false. */
+  /** Present only when `reinstated` is false. `not-in-batch` is only
+returned by Task #360 allow-list calls when a caller-supplied
+phrase is not part of the matched batch.
+ */
   reason?: HandwavyPhraseReinstateBatchEntryResultReason;
 }

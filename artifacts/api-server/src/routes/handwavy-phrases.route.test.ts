@@ -2202,6 +2202,155 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       expect(r.status).toBe(404);
       expect(r.body.reason).toBe("history-not-found");
     });
+
+    // Optional `phrases` allow-list (Task #360) collapses partial-batch
+    // reinstates back into a single round-trip. A PROVIDED list — even
+    // `[]` — is treated as an explicit allow-list, so an empty array is a
+    // no-op rather than reinstating the whole batch.
+    it("POST /reinstate-batch with phrases allow-list reinstates only the subset and omits dropped inner rows", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb360 a", category: "absence" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb360 b", category: "hedging" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb360 c", category: "buzzword" });
+      const removed = await request<{
+        historyEntry: { removedAt: string };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["rb360 a", "rb360 b", "rb360 c"],
+        reviewer: "alice@team.com",
+      });
+      const removedAt = removed.body.historyEntry.removedAt;
+
+      const r = await request<{
+        reinstatedCount: number;
+        skipped: number;
+        results: Array<{ phrase: string; reinstated: boolean; reason?: string }>;
+        historyEntry: { reinstated?: boolean };
+        phrases: Marker[];
+      }>("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
+        removedAt,
+        // Reviewer dropped `rb360 b` from the confirm panel.
+        phrases: ["rb360 a", "rb360 c"],
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.reinstatedCount).toBe(2);
+      expect(r.body.skipped).toBe(0);
+      const phrases = r.body.results.map((x) => x.phrase).sort();
+      expect(phrases).toEqual(["rb360 a", "rb360 c"]);
+      expect(r.body.results.every((x) => x.reinstated)).toBe(true);
+      // The dropped inner row stays removed; aggregate flag stays false.
+      const active = r.body.phrases.map((m) => m.phrase);
+      expect(active).toContain("rb360 a");
+      expect(active).toContain("rb360 c");
+      expect(active).not.toContain("rb360 b");
+      expect(r.body.historyEntry.reinstated).not.toBe(true);
+    });
+
+    it("POST /reinstate-batch with an empty phrases allow-list is a no-op (does not reinstate the whole batch)", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb360 empty a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb360 empty b" });
+      const removed = await request<{
+        historyEntry: { removedAt: string };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["rb360 empty a", "rb360 empty b"],
+      });
+      const r = await request<{
+        reinstatedCount: number;
+        skipped: number;
+        results: Array<{ phrase: string; reinstated: boolean }>;
+        phrases: Marker[];
+      }>("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
+        removedAt: removed.body.historyEntry.removedAt,
+        phrases: [],
+      });
+      expect(r.status).toBe(200);
+      // An explicit empty allow-list reinstates nothing — neither inner
+      // phrase is re-added to the active list.
+      expect(r.body.reinstatedCount).toBe(0);
+      expect(r.body.skipped).toBe(0);
+      expect(r.body.results).toEqual([]);
+      const active = r.body.phrases.map((m) => m.phrase);
+      expect(active).not.toContain("rb360 empty a");
+      expect(active).not.toContain("rb360 empty b");
+    });
+
+    it("POST /reinstate-batch with phrases allow-list reports unknown entries as not-in-batch", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb360 unk a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb360 unk b" });
+      const removed = await request<{
+        historyEntry: { removedAt: string };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["rb360 unk a", "rb360 unk b"],
+      });
+      const r = await request<{
+        reinstatedCount: number;
+        skipped: number;
+        results: Array<{ phrase: string; reinstated: boolean; reason?: string }>;
+      }>("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
+        removedAt: removed.body.historyEntry.removedAt,
+        // `rb360 unk c` was never part of this batch (typo / stale list).
+        // `rb360 unk b` is dropped from the allow-list and so should
+        // disappear from the per-phrase results entirely.
+        phrases: ["rb360 unk a", "rb360 unk c"],
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.reinstatedCount).toBe(1);
+      expect(r.body.skipped).toBe(1);
+      const byPhrase = new Map(r.body.results.map((x) => [x.phrase, x]));
+      expect(byPhrase.get("rb360 unk a")?.reinstated).toBe(true);
+      expect(byPhrase.get("rb360 unk c")?.reason).toBe("not-in-batch");
+      expect(byPhrase.has("rb360 unk b")).toBe(false);
+    });
+
+    it("POST /reinstate-batch with phrases allow-list works under dryRun:true without mutating state", async () => {
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb360 dry a" });
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: "rb360 dry b" });
+      const removed = await request<{
+        historyEntry: { removedAt: string };
+      }>("DELETE", "/feedback/calibration/handwavy-phrases", {
+        phrases: ["rb360 dry a", "rb360 dry b"],
+      });
+      const removedAt = removed.body.historyEntry.removedAt;
+
+      const dry = await request<{
+        dryRun: boolean;
+        batch: boolean;
+        reinstatedCount: number;
+        results: Array<{ phrase: string; reinstated: boolean; reason?: string }>;
+      }>("POST", "/feedback/calibration/handwavy-phrases/reinstate-batch", {
+        removedAt,
+        dryRun: true,
+        phrases: ["rb360 dry a"],
+      });
+      expect(dry.status).toBe(200);
+      expect(dry.body.dryRun).toBe(true);
+      expect(dry.body.reinstatedCount).toBe(1);
+      expect(dry.body.results.map((x) => x.phrase)).toEqual(["rb360 dry a"]);
+      // Active list unchanged.
+      const list = await request<{ phrases: Marker[] }>(
+        "GET",
+        "/feedback/calibration/handwavy-phrases",
+      );
+      const active = list.body.phrases.map((m) => m.phrase);
+      expect(active).not.toContain("rb360 dry a");
+      expect(active).not.toContain("rb360 dry b");
+    });
+
+    it("POST /reinstate-batch rejects non-array phrases with 400", async () => {
+      const r = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate-batch",
+        { removedAt: "2099-01-01T00:00:00.000Z", phrases: "rb360 bogus" },
+      );
+      expect(r.status).toBe(400);
+    });
+
+    it("POST /reinstate-batch rejects phrases array with non-string members with 400", async () => {
+      const r = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate-batch",
+        { removedAt: "2099-01-01T00:00:00.000Z", phrases: ["ok", 5] },
+      );
+      expect(r.status).toBe(400);
+    });
   });
 
   // Task #160 — slim picker-friendly summary of recent batch removal entries.

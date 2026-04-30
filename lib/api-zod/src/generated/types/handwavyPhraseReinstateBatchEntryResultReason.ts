@@ -7,7 +7,10 @@
  */
 
 /**
- * Present only when `reinstated` is false.
+ * Present only when `reinstated` is false. `not-in-batch` is only
+returned by Task #360 allow-list calls when a caller-supplied
+phrase is not part of the matched batch.
+
  */
 export type HandwavyPhraseReinstateBatchEntryResultReason =
   (typeof HandwavyPhraseReinstateBatchEntryResultReason)[keyof typeof HandwavyPhraseReinstateBatchEntryResultReason];
@@ -15,4 +18,5 @@ export type HandwavyPhraseReinstateBatchEntryResultReason =
 export const HandwavyPhraseReinstateBatchEntryResultReason = {
   "already-reinstated": "already-reinstated",
   "already-active": "already-active",
+  "not-in-batch": "not-in-batch",
 } as const;

@@ -1229,6 +1229,186 @@ describe("handwavy-phrases loader", () => {
       expect(getHandwavyPhraseHistory()).toEqual(beforeHistory);
     });
 
+    // Optional `phrases` allow-list (Task #360). Lets the client collapse
+    // a partial batch reinstate into a single round-trip. A PROVIDED list
+    // — including `[]` — is an explicit allow-list, so an empty array
+    // reinstates nothing. Allow-list entries that don't match an inner
+    // phrase surface as `not-in-batch` skip results.
+    it("phrases allow-list reinstates only the matching subset and omits dropped rows from results", () => {
+      addHandwavyPhrase("subset alpha", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("subset bravo", "hedging", { now: "2026-04-20T08:01:00.000Z" });
+      addHandwavyPhrase("subset charlie", "buzzword", { now: "2026-04-20T08:02:00.000Z" });
+      removeHandwavyPhrasesBatch(
+        ["subset alpha", "subset bravo", "subset charlie"],
+        { reviewer: "alice@team.com", now: "2026-04-22T13:00:00.000Z" },
+      );
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        reviewer: "carol@team.com",
+        now: "2026-04-22T15:00:00.000Z",
+        // Only two of the three inner phrases — `subset bravo` was the
+        // row the reviewer dropped from the confirm panel.
+        phrases: ["subset alpha", "subset charlie"],
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.reinstated).toBe(2);
+      expect(result.skipped).toBe(0);
+      // Per-phrase results should ONLY include the two allow-listed rows;
+      // the dropped `subset bravo` is silently omitted from `results`.
+      expect(result.results.map((r) => r.phrase).sort()).toEqual([
+        "subset alpha",
+        "subset charlie",
+      ]);
+      expect(result.results.every((r) => r.reinstated)).toBe(true);
+      // Active list got the two allow-listed phrases back; the dropped one
+      // stays on the removal-history list.
+      const live = getHandwavyPhrases().map((m) => m.phrase);
+      expect(live).toContain("subset alpha");
+      expect(live).toContain("subset charlie");
+      expect(live).not.toContain("subset bravo");
+      // Aggregate `reinstated` flag must stay false because one inner row
+      // is still unreinstated.
+      const finalRow = getHandwavyPhraseHistory().find(
+        (h) => h.removedAt === "2026-04-22T13:00:00.000Z",
+      );
+      expect(finalRow?.reinstated).not.toBe(true);
+      const innerBravo = finalRow?.phrases?.find((p) => p.phrase === "subset bravo");
+      expect(innerBravo?.reinstated).not.toBe(true);
+      const innerAlpha = finalRow?.phrases?.find((p) => p.phrase === "subset alpha");
+      expect(innerAlpha?.reinstated).toBe(true);
+    });
+
+    it("phrases allow-list still honors per-row skip reasons (already-reinstated / already-active)", () => {
+      addHandwavyPhrase("subset skip one", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("subset skip two", "absence", { now: "2026-04-20T08:01:00.000Z" });
+      addHandwavyPhrase("subset skip three", "absence", { now: "2026-04-20T08:02:00.000Z" });
+      removeHandwavyPhrasesBatch(
+        ["subset skip one", "subset skip two", "subset skip three"],
+        { now: "2026-04-22T13:00:00.000Z" },
+      );
+      // Reinstate one ahead of time; manually re-add another.
+      reinstateHandwavyPhrase("subset skip one", "2026-04-22T13:00:00.000Z", {
+        now: "2026-04-22T13:30:00.000Z",
+      });
+      addHandwavyPhrase("subset skip two", "absence", { now: "2026-04-22T13:45:00.000Z" });
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        // Reviewer left every row checked; the partial state happened
+        // between preview and confirm.
+        phrases: ["subset skip one", "subset skip two", "subset skip three"],
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.reinstated).toBe(1);
+      expect(result.skipped).toBe(2);
+      const byPhrase = new Map(result.results.map((r) => [r.phrase, r]));
+      expect(byPhrase.get("subset skip one")?.reason).toBe("already-reinstated");
+      expect(byPhrase.get("subset skip two")?.reason).toBe("already-active");
+      expect(byPhrase.get("subset skip three")?.reinstated).toBe(true);
+    });
+
+    it("phrases allow-list reports unknown entries as not-in-batch and omits dropped inner rows", () => {
+      addHandwavyPhrase("inbatch alpha", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("inbatch bravo", "hedging", { now: "2026-04-20T08:01:00.000Z" });
+      removeHandwavyPhrasesBatch(["inbatch alpha", "inbatch bravo"], {
+        now: "2026-04-22T13:00:00.000Z",
+      });
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        // `unknown phrase` is not part of this batch; `inbatch alpha`
+        // is. The dropped inner row `inbatch bravo` must be omitted.
+        phrases: ["inbatch alpha", "unknown phrase"],
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.reinstated).toBe(1);
+      // `unknown phrase` shows up as a not-in-batch skip result so the
+      // caller can render the typo / stale entry; `inbatch bravo` is
+      // omitted from results entirely.
+      const byPhrase = new Map(result.results.map((r) => [r.phrase, r]));
+      expect(byPhrase.get("inbatch alpha")?.reinstated).toBe(true);
+      expect(byPhrase.get("unknown phrase")?.reason).toBe("not-in-batch");
+      expect(byPhrase.has("inbatch bravo")).toBe(false);
+      expect(result.skipped).toBe(1);
+    });
+
+    it("phrases allow-list normalizes input (whitespace + casing) before matching", () => {
+      addHandwavyPhrase("normalize alpha", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("normalize bravo", "absence", { now: "2026-04-20T08:01:00.000Z" });
+      removeHandwavyPhrasesBatch(["normalize alpha", "normalize bravo"], {
+        now: "2026-04-22T13:00:00.000Z",
+      });
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        phrases: ["  Normalize   ALPHA  "],
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.reinstated).toBe(1);
+      expect(result.results.map((r) => r.phrase)).toEqual(["normalize alpha"]);
+    });
+
+    it("phrases allow-list with an empty array is a no-op (does not reinstate the whole batch)", () => {
+      addHandwavyPhrase("empty allowlist a", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("empty allowlist b", "absence", { now: "2026-04-20T08:01:00.000Z" });
+      removeHandwavyPhrasesBatch(["empty allowlist a", "empty allowlist b"], {
+        now: "2026-04-22T13:00:00.000Z",
+      });
+      const beforeActive = getHandwavyPhrases().map((m) => m.phrase);
+      const beforeHistory = JSON.parse(JSON.stringify(getHandwavyPhraseHistory()));
+
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        phrases: [],
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // An explicit empty allow-list reinstates nothing — neither inner
+      // phrase comes back to the active list.
+      expect(result.reinstated).toBe(0);
+      expect(result.skipped).toBe(0);
+      expect(result.results).toEqual([]);
+      // Active list and history are unchanged on disk.
+      expect(getHandwavyPhrases().map((m) => m.phrase)).toEqual(beforeActive);
+      expect(getHandwavyPhraseHistory()).toEqual(beforeHistory);
+    });
+
+    it("phrases allow-list of only blank/whitespace strings is also a no-op", () => {
+      addHandwavyPhrase("blank allowlist a", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("blank allowlist b", "absence", { now: "2026-04-20T08:01:00.000Z" });
+      removeHandwavyPhrasesBatch(["blank allowlist a", "blank allowlist b"], {
+        now: "2026-04-22T13:00:00.000Z",
+      });
+      const beforeActive = getHandwavyPhrases().map((m) => m.phrase);
+
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        phrases: ["   ", ""],
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.reinstated).toBe(0);
+      expect(result.results).toEqual([]);
+      expect(getHandwavyPhrases().map((m) => m.phrase)).toEqual(beforeActive);
+    });
+
+    it("phrases allow-list is honored under dryRun without mutating active list or history", () => {
+      addHandwavyPhrase("dry subset alpha", "absence", { now: "2026-04-20T08:00:00.000Z" });
+      addHandwavyPhrase("dry subset bravo", "absence", { now: "2026-04-20T08:01:00.000Z" });
+      removeHandwavyPhrasesBatch(["dry subset alpha", "dry subset bravo"], {
+        now: "2026-04-22T13:00:00.000Z",
+      });
+      const beforeActive = getHandwavyPhrases().map((m) => m.phrase);
+      const beforeHistory = JSON.parse(JSON.stringify(getHandwavyPhraseHistory()));
+
+      const result = reinstateHandwavyPhrasesBatch("2026-04-22T13:00:00.000Z", {
+        dryRun: true,
+        phrases: ["dry subset alpha"],
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.reinstated).toBe(1);
+      expect(result.results.map((r) => r.phrase)).toEqual(["dry subset alpha"]);
+      // Active list and history are unchanged.
+      expect(getHandwavyPhrases().map((m) => m.phrase)).toEqual(beforeActive);
+      expect(getHandwavyPhraseHistory()).toEqual(beforeHistory);
+    });
+
     it("dryRun: true is a clean no-op when every inner phrase is already reinstated/active", () => {
       addHandwavyPhrase("dryrun noop one", "absence", { now: "2026-04-20T08:00:00.000Z" });
       addHandwavyPhrase("dryrun noop two", "absence", { now: "2026-04-20T08:01:00.000Z" });

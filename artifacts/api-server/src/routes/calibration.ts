@@ -1461,10 +1461,11 @@ router.post(
   requireCalibrationAuth,
   (req, res) => {
     try {
-      const { removedAt, reviewer, dryRun } = (req.body ?? {}) as {
+      const { removedAt, reviewer, dryRun, phrases } = (req.body ?? {}) as {
         removedAt?: unknown;
         reviewer?: unknown;
         dryRun?: unknown;
+        phrases?: unknown;
       };
       if (typeof removedAt !== "string" || removedAt.trim().length === 0) {
         res.status(400).json({
@@ -1480,10 +1481,20 @@ router.post(
         res.status(400).json({ error: "dryRun must be a boolean when provided." });
         return;
       }
+      if (
+        phrases !== undefined &&
+        (!Array.isArray(phrases) || phrases.some((p) => typeof p !== "string"))
+      ) {
+        res.status(400).json({
+          error: "phrases must be an array of strings when provided.",
+        });
+        return;
+      }
       const isDryRun = dryRun === true;
       const result = reinstateHandwavyPhrasesBatch(removedAt, {
         reviewer: typeof reviewer === "string" ? reviewer : undefined,
         dryRun: isDryRun,
+        phrases: Array.isArray(phrases) ? (phrases as string[]) : undefined,
       });
       if (!result.ok) {
         if (result.reason === "history-not-found") {

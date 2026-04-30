@@ -2499,6 +2499,16 @@ removal-history log, or the cache. Both the mutating and dry-run
 paths return HTTP 200; callers discriminate on the `dryRun` flag
 in the response body.
 
+Task #360 — when `phrases` is provided the server only considers
+inner phrases of the matched batch whose phrase appears in the
+allow-list (normalized: lowercase + collapsed whitespace). Inner
+phrases NOT in the list are omitted from `results` entirely and
+stay on the removal-history list as removed. A PROVIDED list —
+including `[]` — is treated as an explicit allow-list, so an
+empty array reinstates nothing. Allow-list values that don't
+match any inner phrase of the batch are reported as
+`not-in-batch` skip results.
+
  */
 export interface HandwavyPhraseReinstateBatchBody {
   /** ISO 8601 timestamp of the matching batch removal entry's `removedAt` field. */
@@ -2507,10 +2517,24 @@ export interface HandwavyPhraseReinstateBatchBody {
   reviewer?: string;
   /** When true, return a per-phrase reinstate preview without mutating the active list or removal-history log. */
   dryRun?: boolean;
+  /** Task #360 — optional allow-list of inner phrases to reinstate
+from the matched batch (normalized: lowercase + collapsed
+whitespace). When omitted, every not-yet-reinstated inner
+phrase is processed (legacy behaviour). When present, only
+inner phrases whose normalized value appears in this list
+are considered; the rest stay on the removal-history list as
+removed. An empty array is therefore a no-op. Allow-list
+values that don't match any inner phrase of the batch are
+reported as `not-in-batch` in the per-phrase results.
+ */
+  phrases?: string[];
 }
 
 /**
- * Present only when `reinstated` is false.
+ * Present only when `reinstated` is false. `not-in-batch` is only
+returned by Task #360 allow-list calls when a caller-supplied
+phrase is not part of the matched batch.
+
  */
 export type HandwavyPhraseReinstateBatchEntryResultReason =
   (typeof HandwavyPhraseReinstateBatchEntryResultReason)[keyof typeof HandwavyPhraseReinstateBatchEntryResultReason];
@@ -2518,6 +2542,7 @@ export type HandwavyPhraseReinstateBatchEntryResultReason =
 export const HandwavyPhraseReinstateBatchEntryResultReason = {
   "already-reinstated": "already-reinstated",
   "already-active": "already-active",
+  "not-in-batch": "not-in-batch",
 } as const;
 
 /**
@@ -2528,7 +2553,10 @@ part of a /reinstate-batch round-trip.
 export interface HandwavyPhraseReinstateBatchEntryResult {
   phrase: string;
   reinstated: boolean;
-  /** Present only when `reinstated` is false. */
+  /** Present only when `reinstated` is false. `not-in-batch` is only
+returned by Task #360 allow-list calls when a caller-supplied
+phrase is not part of the matched batch.
+ */
   reason?: HandwavyPhraseReinstateBatchEntryResultReason;
 }
 
