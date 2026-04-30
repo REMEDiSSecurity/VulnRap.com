@@ -11,6 +11,7 @@ import {
   useGetCalibrationAuthStatus, getGetCalibrationAuthStatusQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
   useListHandwavyPhraseRemovalBatches, getListHandwavyPhraseRemovalBatchesQueryKey,
+  getHandwavyPhraseRemovalBatch,
   addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, reinstateHandwavyPhrasesBatch,
   editHandwavyPhrase, undoHandwavyPhrase, undoHandwavyPhrasesBatch,
   revertHandwavyPhraseEdit,
@@ -22,6 +23,7 @@ import {
   type HandwavyPhraseBatchRemoveDryRunImpact,
   type HandwavyPhraseBatchRemoveResultEntry,
   type HandwavyPhraseRemovalBatchSummary,
+  type HandwavyPhraseRemovalBatchDetail,
   type HandwavyPhraseReinstateBatchDryRunResponse,
   type HandwavyPhraseReinstateBatchEntryResult,
   type HandwavyPhraseSingleRemoveDryRunResponse,
@@ -2190,6 +2192,31 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       count: number;
     } | null
   >(null);
+  // Picker preview-and-confirm dialog state. `null` = closed; `status`
+  // discriminates loading / ready / error.
+  const [pickerBatchPreview, setPickerBatchPreview] = useState<
+    | {
+        removedAtIso: string;
+        removedBy?: string;
+        phraseCount: number;
+        status: "loading";
+      }
+    | {
+        removedAtIso: string;
+        removedBy?: string;
+        phraseCount: number;
+        status: "ready";
+        detail: HandwavyPhraseRemovalBatchDetail;
+      }
+    | {
+        removedAtIso: string;
+        removedBy?: string;
+        phraseCount: number;
+        status: "error";
+        errorMessage: string;
+      }
+    | null
+  >(null);
   // Task #134 + Task #154 — bulk-remove state. `selected` is the set of
   // currently-checked phrases (keyed by the normalized `phrase` string
   // the server stores). Bulk removal goes through the side-by-side
@@ -3817,6 +3844,41 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to reinstate batch.";
       toast({ title: "Batch reinstate failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Open the picker preview dialog: fetches the full per-phrase detail
+  // before the reviewer commits to the reinstate.
+  const handleOpenPickerBatchPreview = async (
+    removedAtIso: string,
+    removedBy: string | undefined,
+    phraseCount: number,
+  ) => {
+    if (bailOnCooldown("Reinstate preview")) return;
+    const key = `picker-preview:${removedAtIso}`;
+    setBusy(key);
+    setPickerBatchPreview({ removedAtIso, removedBy, phraseCount, status: "loading" });
+    try {
+      const detail = await getHandwavyPhraseRemovalBatch(removedAtIso);
+      setPickerBatchPreview({
+        removedAtIso,
+        removedBy: detail.removedBy ?? removedBy,
+        phraseCount: detail.phraseCount,
+        status: "ready",
+        detail,
+      });
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to load batch preview.";
+      setPickerBatchPreview({
+        removedAtIso,
+        removedBy,
+        phraseCount,
+        status: "error",
+        errorMessage: msg,
+      });
     } finally {
       setBusy(null);
     }
@@ -6469,6 +6531,9 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                 {removalBatches.map((b) => {
                   const removedAtIso = String(b.removedAt);
                   const batchKey = `reinstate-batch:${removedAtIso}`;
+                  // Separate busy key for the preview-detail fetch so the
+                  // row spinner is independent of the reinstate mutation.
+                  const previewKey = `picker-preview:${removedAtIso}`;
                   const phraseCount = b.phraseCount ?? 0;
                   const samples = Array.isArray(b.samplePhrases) ? b.samplePhrases : [];
                   const hiddenSampleCount = Math.max(0, phraseCount - samples.length);
@@ -6538,15 +6603,29 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                             variant="ghost"
                             size="sm"
                             className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                            disabled={busy === batchKey || !mutationsAllowed}
+                            disabled={
+                              busy === batchKey ||
+                              busy === previewKey ||
+                              !mutationsAllowed
+                            }
                             title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                            onClick={() => handleReinstateBatch(removedAtIso, phraseCount)}
+                            onClick={() =>
+                              handleOpenPickerBatchPreview(
+                                removedAtIso,
+                                b.removedBy,
+                                phraseCount,
+                              )
+                            }
                             data-testid="handwavy-removal-batches-reinstate"
                             data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                            aria-label={`Reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`}
+                            aria-label={`Preview and reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`}
                           >
                             <RotateCcw className="w-3 h-3 mr-1" />
-                            {busy === batchKey ? "Reinstating…" : "Reinstate this batch"}
+                            {busy === batchKey
+                              ? "Reinstating…"
+                              : busy === previewKey
+                                ? "Loading preview…"
+                                : "Reinstate this batch"}
                           </Button>
                         )}
                       </div>
@@ -7652,6 +7731,184 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                     phrasesToReinstate,
                   );
                 }
+              }
+            }}
+          >
+            Reinstate batch
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Picker preview-and-confirm dialog: shows every phrase in the
+        batch (from the detail endpoint) before firing the reinstate. */}
+    <AlertDialog
+      open={pickerBatchPreview !== null}
+      onOpenChange={(open) => {
+        if (!open) setPickerBatchPreview(null);
+      }}
+    >
+      <AlertDialogContent
+        data-testid="handwavy-removal-batches-preview-confirm"
+        data-batch-removed-at={pickerBatchPreview?.removedAtIso ?? ""}
+        data-status={pickerBatchPreview?.status ?? "closed"}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {(() => {
+              if (!pickerBatchPreview) return "Reinstate this batch?";
+              if (pickerBatchPreview.status === "loading")
+                return "Loading batch contents…";
+              if (pickerBatchPreview.status === "error")
+                return "Couldn’t load batch contents";
+              const count = pickerBatchPreview.detail.phraseCount;
+              return `Reinstate this batch of ${count} phrase${count === 1 ? "" : "s"}?`;
+            })()}
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              {pickerBatchPreview?.status === "loading" && (
+                <div
+                  className="text-foreground/80"
+                  data-testid="handwavy-removal-batches-preview-loading"
+                >
+                  Fetching every phrase in this batch so you can review the
+                  full list before confirming…
+                </div>
+              )}
+              {pickerBatchPreview?.status === "error" && (
+                <div
+                  className="text-destructive"
+                  data-testid="handwavy-removal-batches-preview-error"
+                >
+                  {pickerBatchPreview.errorMessage}
+                </div>
+              )}
+              {pickerBatchPreview?.status === "ready" && (
+                <>
+                  <div>
+                    Restore the{" "}
+                    <strong
+                      data-testid="handwavy-removal-batches-preview-remaining"
+                    >
+                      {Math.max(
+                        0,
+                        pickerBatchPreview.detail.phraseCount -
+                          pickerBatchPreview.detail.reinstatedCount,
+                      )}
+                    </strong>{" "}
+                    not-yet-reinstated phrase
+                    {pickerBatchPreview.detail.phraseCount -
+                      pickerBatchPreview.detail.reinstatedCount ===
+                    1
+                      ? ""
+                      : "s"}{" "}
+                    from the batch removal of{" "}
+                    <strong>{pickerBatchPreview.detail.phraseCount}</strong>{" "}
+                    by{" "}
+                    <span className="text-foreground/80">
+                      {pickerBatchPreview.removedBy ||
+                        pickerBatchPreview.detail.removedBy ||
+                        "anonymous"}
+                    </span>{" "}
+                    to the active list. New triages will start flagging them
+                    again immediately.
+                  </div>
+                  {pickerBatchPreview.detail.reinstatedCount > 0 && (
+                    <div
+                      className="text-[11px] text-amber-300"
+                      data-testid="handwavy-removal-batches-preview-already-note"
+                    >
+                      <strong>
+                        {pickerBatchPreview.detail.reinstatedCount}
+                      </strong>{" "}
+                      of {pickerBatchPreview.detail.phraseCount} phrase
+                      {pickerBatchPreview.detail.phraseCount === 1 ? "" : "s"}{" "}
+                      in this batch {""}
+                      {pickerBatchPreview.detail.reinstatedCount === 1
+                        ? "has"
+                        : "have"}{" "}
+                      already been reinstated and will be skipped.
+                    </div>
+                  )}
+                  <ul
+                    className="list-none pl-0 space-y-1 max-h-56 overflow-y-auto border border-border/30 rounded-md p-2"
+                    data-testid="handwavy-removal-batches-preview-list"
+                  >
+                    {pickerBatchPreview.detail.phrases.map((p: { phrase: string; category?: string; reinstated?: boolean }, idx: number) => (
+                      <li
+                        key={`${p.phrase}-${idx}`}
+                        className="flex items-start gap-2 text-[11px]"
+                        data-testid="handwavy-removal-batches-preview-row"
+                        data-phrase={p.phrase}
+                        data-already-reinstated={
+                          p.reinstated === true ? "true" : "false"
+                        }
+                      >
+                        <span className="font-mono text-foreground/80 break-all flex-1">
+                          “{p.phrase}”
+                        </span>
+                        {typeof p.category === "string" && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] capitalize shrink-0"
+                          >
+                            {p.category}
+                          </Badge>
+                        )}
+                        {p.reinstated === true ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-emerald-500/40 text-emerald-300 shrink-0"
+                            data-testid="handwavy-removal-batches-preview-row-already"
+                          >
+                            Already reinstated
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-sky-500/40 text-sky-300 shrink-0"
+                            data-testid="handwavy-removal-batches-preview-row-pending"
+                          >
+                            Will reinstate
+                          </Badge>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="text-xs italic">
+                    The original batch removal entry stays in the history;
+                    each reinstate is recorded as a new audit entry. Cancel
+                    leaves the batch untouched.
+                  </div>
+                </>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            data-testid="handwavy-removal-batches-preview-cancel"
+          >
+            Cancel — don’t reinstate
+          </AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="handwavy-removal-batches-preview-confirm-confirm"
+            disabled={
+              !mutationsAllowed ||
+              pickerBatchPreview?.status !== "ready" ||
+              (pickerBatchPreview.status === "ready" &&
+                pickerBatchPreview.detail.phraseCount -
+                  pickerBatchPreview.detail.reinstatedCount ===
+                  0)
+            }
+            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+            onClick={() => {
+              if (pickerBatchPreview?.status === "ready") {
+                const { removedAtIso, detail } = pickerBatchPreview;
+                setPickerBatchPreview(null);
+                void handleReinstateBatch(removedAtIso, detail.phraseCount);
               }
             }}
           >

@@ -803,6 +803,57 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /feedback/calibration/handwavy-phrases/removal-batches/{removedAt}:
+    get:
+      operationId: getHandwavyPhraseRemovalBatch
+      tags: [feedback]
+      summary: Fetch the FULL inner phrase list for a single batch removal entry
+      description: |
+        Task #176 — Sibling detail endpoint for the picker list above. Returns
+        every inner phrase from one batch removal entry (not just the
+        5-phrase sample the list endpoint surfaces) plus the per-phrase
+        audit metadata (category, original adder, per-phrase reinstated
+        flag). The reinstate-batch CLI calls this to render a "preview"
+        step between the picker / `--removed-at` flag and the final
+        confirmation prompt; Task #244 wires the same endpoint into the
+        web reviewer's picker so reviewers see every phrase before
+        confirming.
+
+        Single-phrase removal entries return 404 with `reason: "not-a-batch"`
+        — they are not reinstatable through /reinstate-batch and the caller
+        should fall back to /reinstate.
+      parameters:
+        - in: path
+          name: removedAt
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: ISO 8601 timestamp of the parent batch removal entry. Must be URL-encoded by the caller.
+      responses:
+        "200":
+          description: Full inner phrase list with per-phrase audit metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhraseRemovalBatchDetail"
+        "400":
+          description: Missing or empty removedAt path parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: |
+            No removal-history entry matches the supplied removedAt
+            (`reason: "history-not-found"`) or the matched entry is a
+            single-phrase removal that's not addressable through this
+            endpoint (`reason: "not-a-batch"`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhraseRemovalBatchDetailError"
+
   /feedback/calibration/handwavy-phrases/undo:
     post:
       operationId: undoHandwavyPhrase
@@ -3603,6 +3654,62 @@ components:
           items:
             $ref: "#/components/schemas/HandwavyPhraseRemovalBatchSummary"
       required: [limit, totalBatches, batches]
+
+    HandwavyPhraseRemovalBatchDetail:
+      type: object
+      description: |
+        Task #176 — Detail response for one batch removal entry. Echoes the
+        FULL inner phrase list with per-phrase audit metadata so the
+        reinstate-batch CLI (and the Task #244 web reviewer picker) can
+        render every phrase the action would touch — not just the
+        5-phrase sample the list endpoint returns. `reinstatedCount`
+        / `reinstated` together let callers spot a partial- or
+        already-fully-reinstated batch before re-firing the action.
+      properties:
+        removedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of the parent batch removal entry (echoes the path parameter).
+        removedBy:
+          type: string
+          description: Reviewer name or email recorded on the batch removal. Omitted if the original removal didn't supply one.
+        reinstated:
+          type: boolean
+          description: Aggregate flag — true once every inner phrase from this batch has been reinstated.
+        reinstatedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp the batch was fully reinstated, when `reinstated` is true.
+        reinstatedBy:
+          type: string
+          description: Reviewer name or email recorded on the batch-level reinstate, when `reinstated` is true.
+        phraseCount:
+          type: integer
+          description: Total number of phrases in this batch.
+        reinstatedCount:
+          type: integer
+          description: Number of inner phrases that have already been reinstated (per-phrase or via a prior batch reinstate).
+        phrases:
+          type: array
+          description: Full inner phrase list with per-phrase audit metadata.
+          items:
+            $ref: "#/components/schemas/HandwavyBatchHistoryPhrase"
+      required: [removedAt, reinstated, phraseCount, reinstatedCount, phrases]
+
+    HandwavyPhraseRemovalBatchDetailError:
+      type: object
+      description: |
+        Task #176 — 404 response shape for the batch detail endpoint.
+        `reason` discriminates between "no matching removal-history entry"
+        and "matched a single-phrase removal" so callers can format a
+        targeted hint (e.g. the CLI suggests /reinstate for the latter).
+      properties:
+        error:
+          type: string
+        reason:
+          type: string
+          enum: [history-not-found, not-a-batch]
+      required: [error, reason]
 
     HandwavyPhrasesList:
       type: object

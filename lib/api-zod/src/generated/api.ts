@@ -6814,6 +6814,141 @@ export const ListHandwavyPhraseRemovalBatchesResponse = zod
   );
 
 /**
+ * Task #176 — Sibling detail endpoint for the picker list above. Returns
+every inner phrase from one batch removal entry (not just the
+5-phrase sample the list endpoint surfaces) plus the per-phrase
+audit metadata (category, original adder, per-phrase reinstated
+flag). The reinstate-batch CLI calls this to render a "preview"
+step between the picker / `--removed-at` flag and the final
+confirmation prompt; Task #244 wires the same endpoint into the
+web reviewer's picker so reviewers see every phrase before
+confirming.
+
+Single-phrase removal entries return 404 with `reason: "not-a-batch"`
+— they are not reinstatable through /reinstate-batch and the caller
+should fall back to /reinstate.
+
+ * @summary Fetch the FULL inner phrase list for a single batch removal entry
+ */
+export const GetHandwavyPhraseRemovalBatchParams = zod.object({
+  removedAt: zod
+    .date()
+    .describe(
+      "ISO 8601 timestamp of the parent batch removal entry. Must be URL-encoded by the caller.",
+    ),
+});
+
+export const GetHandwavyPhraseRemovalBatchResponse = zod
+  .object({
+    removedAt: zod.coerce
+      .date()
+      .describe(
+        "ISO 8601 timestamp of the parent batch removal entry (echoes the path parameter).",
+      ),
+    removedBy: zod
+      .string()
+      .optional()
+      .describe(
+        "Reviewer name or email recorded on the batch removal. Omitted if the original removal didn't supply one.",
+      ),
+    reinstated: zod
+      .boolean()
+      .describe(
+        "Aggregate flag — true once every inner phrase from this batch has been reinstated.",
+      ),
+    reinstatedAt: zod.coerce
+      .date()
+      .optional()
+      .describe(
+        "ISO 8601 timestamp the batch was fully reinstated, when `reinstated` is true.",
+      ),
+    reinstatedBy: zod
+      .string()
+      .optional()
+      .describe(
+        "Reviewer name or email recorded on the batch-level reinstate, when `reinstated` is true.",
+      ),
+    phraseCount: zod
+      .number()
+      .describe("Total number of phrases in this batch."),
+    reinstatedCount: zod
+      .number()
+      .describe(
+        "Number of inner phrases that have already been reinstated (per-phrase or via a prior batch reinstate).",
+      ),
+    phrases: zod
+      .array(
+        zod
+          .object({
+            phrase: zod.string(),
+            category: zod
+              .enum(["absence", "hedging", "buzzword"])
+              .describe(
+                "Theme bucket used by the diagnostics panel to group matched phrases.",
+              ),
+            addedBy: zod.string().optional(),
+            addedAt: zod.coerce.date().optional(),
+            rationale: zod.string().optional(),
+            edits: zod
+              .array(
+                zod
+                  .object({
+                    editedBy: zod
+                      .string()
+                      .optional()
+                      .describe(
+                        "Reviewer name or email that performed the edit. Absent when no reviewer was supplied.",
+                      ),
+                    editedAt: zod.coerce
+                      .date()
+                      .describe("ISO 8601 timestamp of the edit."),
+                    category: zod
+                      .object({
+                        from: zod
+                          .enum(["absence", "hedging", "buzzword"])
+                          .describe(
+                            "Theme bucket used by the diagnostics panel to group matched phrases.",
+                          ),
+                        to: zod
+                          .enum(["absence", "hedging", "buzzword"])
+                          .describe(
+                            "Theme bucket used by the diagnostics panel to group matched phrases.",
+                          ),
+                      })
+                      .optional(),
+                    rationale: zod
+                      .object({
+                        from: zod.string().optional(),
+                        to: zod.string().optional(),
+                      })
+                      .optional()
+                      .describe(
+                        "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
+                      ),
+                  })
+                  .describe(
+                    "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                  ),
+              )
+              .optional()
+              .describe(
+                "Preserved on remove so reinstating still shows the edit history.",
+              ),
+            reinstated: zod.boolean().optional(),
+            reinstatedBy: zod.string().optional(),
+            reinstatedAt: zod.coerce.date().optional(),
+          })
+          .describe(
+            "Task #135 — one element of a batch-removal history entry's `phrases`\narray. Mirrors the audit metadata that a single-removal entry carries\nat its top level. Per-phrase `reinstated\*` fields track partial\nreinstates so a reviewer can pull individual phrases back out of a\nbatch removal.\n",
+          ),
+      )
+      .describe("Full inner phrase list with per-phrase audit metadata."),
+  })
+  .describe(
+    "Task #176 — Detail response for one batch removal entry. Echoes the\nFULL inner phrase list with per-phrase audit metadata so the\nreinstate-batch CLI (and the Task #244 web reviewer picker) can\nrender every phrase the action would touch — not just the\n5-phrase sample the list endpoint returns. `reinstatedCount`\n\/ `reinstated` together let callers spot a partial- or\nalready-fully-reinstated batch before re-firing the action.\n",
+  );
+
+/**
  * Task #130 — mirror of /reinstate. A reviewer who just added a phrase
 can press Undo within a short server-side window (default 5 minutes)
 and the marker is removed. The resulting history row is tagged

@@ -71,7 +71,23 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       await expect(btn).toBeEnabled();
       await expect(row.getByTestId("handwavy-removal-batches-reinstated")).toHaveCount(0);
 
+      // The picker now opens a preview-and-confirm dialog before firing.
       await btn.click();
+      const previewDialog = page.getByTestId(
+        "handwavy-removal-batches-preview-confirm",
+      );
+      await expect(previewDialog).toBeVisible({ timeout: 5_000 });
+      const previewList = previewDialog.getByTestId(
+        "handwavy-removal-batches-preview-list",
+      );
+      await expect(previewList).toBeVisible();
+      for (const p of phrases) {
+        await expect(previewList).toContainText(p);
+      }
+      await previewDialog
+        .getByTestId("handwavy-removal-batches-preview-confirm-confirm")
+        .click();
+      await expect(previewDialog).toHaveCount(0, { timeout: 5_000 });
 
       // After the round-trip the row swaps to the "Already reinstated" badge
       // and the button itself is gone.

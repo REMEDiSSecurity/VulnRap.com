@@ -46,6 +46,8 @@ import type {
   HandwavyPhraseReinstateBatchDryRunResponse,
   HandwavyPhraseReinstateBatchResponse,
   HandwavyPhraseReinstateBody,
+  HandwavyPhraseRemovalBatchDetail,
+  HandwavyPhraseRemovalBatchDetailError,
   HandwavyPhraseRemovalBatchesList,
   HandwavyPhraseRevertEditBody,
   HandwavyPhraseSingleRemoveDryRunResponse,
@@ -2350,6 +2352,120 @@ export function useListHandwavyPhraseRemovalBatches<
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListHandwavyPhraseRemovalBatchesQueryOptions(
     params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #176 — Sibling detail endpoint for the picker list above. Returns
+every inner phrase from one batch removal entry (not just the
+5-phrase sample the list endpoint surfaces) plus the per-phrase
+audit metadata (category, original adder, per-phrase reinstated
+flag). The reinstate-batch CLI calls this to render a "preview"
+step between the picker / `--removed-at` flag and the final
+confirmation prompt; Task #244 wires the same endpoint into the
+web reviewer's picker so reviewers see every phrase before
+confirming.
+
+Single-phrase removal entries return 404 with `reason: "not-a-batch"`
+— they are not reinstatable through /reinstate-batch and the caller
+should fall back to /reinstate.
+
+ * @summary Fetch the FULL inner phrase list for a single batch removal entry
+ */
+export const getGetHandwavyPhraseRemovalBatchUrl = (removedAt: string) => {
+  return `/api/feedback/calibration/handwavy-phrases/removal-batches/${removedAt}`;
+};
+
+export const getHandwavyPhraseRemovalBatch = async (
+  removedAt: string,
+  options?: RequestInit,
+): Promise<HandwavyPhraseRemovalBatchDetail> => {
+  return customFetch<HandwavyPhraseRemovalBatchDetail>(
+    getGetHandwavyPhraseRemovalBatchUrl(removedAt),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetHandwavyPhraseRemovalBatchQueryKey = (removedAt: string) => {
+  return [
+    `/api/feedback/calibration/handwavy-phrases/removal-batches/${removedAt}`,
+  ] as const;
+};
+
+export const getGetHandwavyPhraseRemovalBatchQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHandwavyPhraseRemovalBatch>>,
+  TError = ErrorType<ErrorResponse | HandwavyPhraseRemovalBatchDetailError>,
+>(
+  removedAt: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHandwavyPhraseRemovalBatch>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetHandwavyPhraseRemovalBatchQueryKey(removedAt);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHandwavyPhraseRemovalBatch>>
+  > = ({ signal }) =>
+    getHandwavyPhraseRemovalBatch(removedAt, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!removedAt,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHandwavyPhraseRemovalBatch>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHandwavyPhraseRemovalBatchQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHandwavyPhraseRemovalBatch>>
+>;
+export type GetHandwavyPhraseRemovalBatchQueryError = ErrorType<
+  ErrorResponse | HandwavyPhraseRemovalBatchDetailError
+>;
+
+/**
+ * @summary Fetch the FULL inner phrase list for a single batch removal entry
+ */
+
+export function useGetHandwavyPhraseRemovalBatch<
+  TData = Awaited<ReturnType<typeof getHandwavyPhraseRemovalBatch>>,
+  TError = ErrorType<ErrorResponse | HandwavyPhraseRemovalBatchDetailError>,
+>(
+  removedAt: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHandwavyPhraseRemovalBatch>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHandwavyPhraseRemovalBatchQueryOptions(
+    removedAt,
     options,
   );
 

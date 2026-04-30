@@ -4,6 +4,7 @@ import {
   batchRemove,
   cleanup,
   newApiContext,
+  reinstate,
   uniquePhrases,
 } from "./helpers/handwavy";
 
@@ -202,6 +203,120 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await expect(header).not.toContainText(`of ${phrases.length} reinstated`);
       await expect(group.getByTestId("handwavy-reinstate-batch")).toHaveCount(0);
 
+      for (const p of phrases) {
+        await expect(
+          page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),
+        ).toHaveCount(1, { timeout: 15_000 });
+      }
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Picker preview dialog (>5-phrase batch with one phrase already reinstated).
+  test("picker 'Reinstate this batch' opens a preview dialog listing every phrase and per-phrase 'already reinstated' flags after a partial reinstate", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    // 8 > the 5-phrase picker sample cap.
+    const phrases = uniquePhrases(8, "task244 picker");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, REVIEWER_OPTS);
+      const batch = await batchRemove(apiCtx, phrases, REVIEWER_OPTS);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      const reinstatedPhrase = phrases[0];
+      await reinstate(apiCtx, reinstatedPhrase, removedAt, REVIEWER_OPTS);
+
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const pickerRow = page.locator(
+        `[data-testid="handwavy-removal-batches-row"][data-batch-removed-at="${removedAt}"]`,
+      );
+      await expect(pickerRow).toHaveCount(1, { timeout: 15_000 });
+
+      // Picker samples are capped at 5; the dialog must close that gap.
+      const samples = pickerRow.getByTestId("handwavy-removal-batches-samples");
+      await expect(samples).toBeVisible();
+      const samplesText = (await samples.innerText()) ?? "";
+      const phrasesPresentInPickerRow = phrases.filter((p) =>
+        samplesText.includes(p),
+      );
+      expect(phrasesPresentInPickerRow.length).toBeLessThan(phrases.length);
+
+      const pickerBtn = pickerRow.getByTestId("handwavy-removal-batches-reinstate");
+      await expect(pickerBtn).toBeVisible();
+      await expect(pickerBtn).toBeEnabled();
+      await pickerBtn.click();
+
+      const previewDialog = page.getByTestId(
+        "handwavy-removal-batches-preview-confirm",
+      );
+      await expect(previewDialog).toBeVisible({ timeout: 10_000 });
+      await expect(previewDialog).toHaveAttribute("data-status", "ready", {
+        timeout: 10_000,
+      });
+
+      const previewList = previewDialog.getByTestId(
+        "handwavy-removal-batches-preview-list",
+      );
+      await expect(previewList).toBeVisible();
+      for (const p of phrases) {
+        await expect(previewList).toContainText(p);
+      }
+
+      const reinstatedRow = previewList.locator(
+        `[data-testid="handwavy-removal-batches-preview-row"][data-already-reinstated="true"]`,
+      );
+      await expect(reinstatedRow).toHaveCount(1);
+      await expect(reinstatedRow).toContainText(reinstatedPhrase);
+      await expect(
+        reinstatedRow.getByTestId("handwavy-removal-batches-preview-row-already"),
+      ).toBeVisible();
+
+      const pendingRows = previewList.locator(
+        `[data-testid="handwavy-removal-batches-preview-row"][data-already-reinstated="false"]`,
+      );
+      await expect(pendingRows).toHaveCount(phrases.length - 1);
+
+      await expect(
+        previewDialog.getByTestId("handwavy-removal-batches-preview-already-note"),
+      ).toBeVisible();
+      await expect(
+        previewDialog.getByTestId("handwavy-removal-batches-preview-remaining"),
+      ).toHaveText(String(phrases.length - 1));
+
+      // Cancel must NOT fire the mutation.
+      await previewDialog
+        .getByTestId("handwavy-removal-batches-preview-cancel")
+        .click();
+      await expect(previewDialog).toHaveCount(0, { timeout: 5_000 });
+      await expect(
+        pickerRow.getByTestId("handwavy-removal-batches-reinstated"),
+      ).toHaveCount(0);
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrases[1] }),
+      ).toHaveCount(0);
+
+      // Re-open and confirm.
+      await pickerBtn.click();
+      const previewDialog2 = page.getByTestId(
+        "handwavy-removal-batches-preview-confirm",
+      );
+      await expect(previewDialog2).toBeVisible({ timeout: 10_000 });
+      await expect(previewDialog2).toHaveAttribute("data-status", "ready", {
+        timeout: 10_000,
+      });
+      await previewDialog2
+        .getByTestId("handwavy-removal-batches-preview-confirm-confirm")
+        .click();
+      await expect(previewDialog2).toHaveCount(0, { timeout: 5_000 });
+
+      await expect(
+        pickerRow.getByTestId("handwavy-removal-batches-reinstated"),
+      ).toBeVisible({ timeout: 15_000 });
       for (const p of phrases) {
         await expect(
           page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),

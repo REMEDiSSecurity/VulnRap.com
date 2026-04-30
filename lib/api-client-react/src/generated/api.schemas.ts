@@ -1862,6 +1862,55 @@ export interface HandwavyPhraseRemovalBatchesList {
   batches: HandwavyPhraseRemovalBatchSummary[];
 }
 
+/**
+ * Task #176 — Detail response for one batch removal entry. Echoes the
+FULL inner phrase list with per-phrase audit metadata so the
+reinstate-batch CLI (and the Task #244 web reviewer picker) can
+render every phrase the action would touch — not just the
+5-phrase sample the list endpoint returns. `reinstatedCount`
+/ `reinstated` together let callers spot a partial- or
+already-fully-reinstated batch before re-firing the action.
+
+ */
+export interface HandwavyPhraseRemovalBatchDetail {
+  /** ISO 8601 timestamp of the parent batch removal entry (echoes the path parameter). */
+  removedAt: string;
+  /** Reviewer name or email recorded on the batch removal. Omitted if the original removal didn't supply one. */
+  removedBy?: string;
+  /** Aggregate flag — true once every inner phrase from this batch has been reinstated. */
+  reinstated: boolean;
+  /** ISO 8601 timestamp the batch was fully reinstated, when `reinstated` is true. */
+  reinstatedAt?: string;
+  /** Reviewer name or email recorded on the batch-level reinstate, when `reinstated` is true. */
+  reinstatedBy?: string;
+  /** Total number of phrases in this batch. */
+  phraseCount: number;
+  /** Number of inner phrases that have already been reinstated (per-phrase or via a prior batch reinstate). */
+  reinstatedCount: number;
+  /** Full inner phrase list with per-phrase audit metadata. */
+  phrases: HandwavyBatchHistoryPhrase[];
+}
+
+export type HandwavyPhraseRemovalBatchDetailErrorReason =
+  (typeof HandwavyPhraseRemovalBatchDetailErrorReason)[keyof typeof HandwavyPhraseRemovalBatchDetailErrorReason];
+
+export const HandwavyPhraseRemovalBatchDetailErrorReason = {
+  "history-not-found": "history-not-found",
+  "not-a-batch": "not-a-batch",
+} as const;
+
+/**
+ * Task #176 — 404 response shape for the batch detail endpoint.
+`reason` discriminates between "no matching removal-history entry"
+and "matched a single-phrase removal" so callers can format a
+targeted hint (e.g. the CLI suggests /reinstate for the latter).
+
+ */
+export interface HandwavyPhraseRemovalBatchDetailError {
+  error: string;
+  reason: HandwavyPhraseRemovalBatchDetailErrorReason;
+}
+
 export interface HandwavyPhrasesList {
   phrases: HandwavyMarker[];
   total: number;
