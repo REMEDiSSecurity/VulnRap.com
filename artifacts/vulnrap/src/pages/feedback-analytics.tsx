@@ -13,6 +13,7 @@ import {
   type AvriDriftSchedulerStatus,
   type AvriDriftRearmAuditEntry,
   useGetCalibrationAuthStatus, getGetCalibrationAuthStatusQueryKey,
+  useGetReportFeed, getGetReportFeedQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
   useListHandwavyPhraseRemovalBatches, getListHandwavyPhraseRemovalBatchesQueryKey,
   getHandwavyPhraseRemovalBatch,
@@ -12135,12 +12136,64 @@ const DATASET_SAMPLE_TRIAGE_COLOR: Record<string, string> = {
   AUTO_CLOSE: "text-muted-foreground bg-muted/30 border-border/40",
 };
 
+// Task #371 — minimal shape we need from a report-feed entry to resolve a
+// dataset sample id to a `/verify/<id>` route. Kept narrow (rather than
+// importing the full ReportFeed type) so the helper stays unit-testable
+// without dragging in the generated client just to construct a fixture.
+export interface SampleReportLinkCandidate {
+  id: number;
+  reportCode: string;
+}
+
+/**
+ * Task #371 — given a snapshot of recent live-feed reports, return a resolver
+ * that maps a dataset sample id to a `/verify/<numericId>` path when (and only
+ * when) the sample id can be matched against a live report. We match the
+ * sample id (a string from the curated dataset) against either the live
+ * report's stringified numeric id or its public reportCode so we cover both
+ * cases where the curated dataset happens to share VulnRap-side identifiers.
+ *
+ * Returns `null` for ids that aren't in the snapshot — the caller should fall
+ * back to plain text rather than render a broken link, per the task's
+ * "if the report id can't be resolved to a route … fall back to plain text"
+ * acceptance criterion.
+ *
+ * Exported (alongside DatasetCohortSampleTable's other helpers) so the
+ * matching contract can be pinned by unit tests without rendering the table.
+ */
+export function buildSampleReportLinkResolver(
+  reports: readonly SampleReportLinkCandidate[] | null | undefined,
+): (sampleId: string) => string | null {
+  if (!reports || reports.length === 0) {
+    return () => null;
+  }
+  // Single index keyed by both stringified numeric id and reportCode points
+  // back to the numeric id, since `/verify/:id` is parsed as an integer.
+  const byKey = new Map<string, number>();
+  for (const r of reports) {
+    if (typeof r.id !== "number" || !Number.isInteger(r.id) || r.id <= 0) continue;
+    byKey.set(String(r.id), r.id);
+    if (typeof r.reportCode === "string" && r.reportCode.length > 0) {
+      byKey.set(r.reportCode, r.id);
+    }
+  }
+  return (sampleId: string) => {
+    if (!sampleId) return null;
+    const numericId = byKey.get(sampleId);
+    return numericId == null ? null : `/verify/${numericId}`;
+  };
+}
+
 function DatasetCohortSampleTable({
   cohort,
   samples,
+  resolveReportPath,
 }: {
   cohort: DatasetCohort;
   samples: DatasetSampleRow[];
+  // Task #371 — optional so existing callers (tests, future surfaces) keep
+  // the previous plain-text behaviour without having to wire up a resolver.
+  resolveReportPath?: (sampleId: string) => string | null;
 }) {
   const cohortSamples = samples.filter(s => s.tier === cohort.tier);
   const sorted = sortDatasetSamplesByDistanceFromMean(cohortSamples, cohort.compositeMean);
@@ -12188,10 +12241,26 @@ function DatasetCohortSampleTable({
                 : `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)}`;
               const triageColor = DATASET_SAMPLE_TRIAGE_COLOR[s.triage]
                 ?? "text-muted-foreground bg-muted/20 border-border/40";
+              // Task #371 — when the sample id resolves to a live-feed
+              // report, render it as a link to the report detail view so
+              // reviewers can jump straight from "T1 outlier with composite
+              // 18" into the report. Otherwise stay on plain text rather
+              // than render a broken link.
+              const reportPath = resolveReportPath ? resolveReportPath(s.id) : null;
               return (
                 <tr key={s.id} className="border-t border-border/30">
-                  <td className="px-3 py-1 font-mono text-foreground/90 max-w-[16rem] truncate" title={s.id}>
-                    {s.id}
+                  <td className="px-3 py-1 font-mono max-w-[16rem] truncate" title={s.id}>
+                    {reportPath ? (
+                      <Link
+                        to={reportPath}
+                        data-testid={`dataset-cohort-sample-link-${s.id}`}
+                        className="text-primary hover:underline focus-visible:underline focus-visible:outline-none"
+                      >
+                        {s.id}
+                      </Link>
+                    ) : (
+                      <span className="text-foreground/90">{s.id}</span>
+                    )}
                   </td>
                   <td className="px-2 py-1 text-right text-foreground">{s.composite.toFixed(1)}</td>
                   <td className={cn(
@@ -12259,6 +12328,27 @@ function DatasetCohortMeansSection() {
     refetchInterval: 300_000,
     retry: false,
   });
+
+  // Task #371 — pull the most recent live-feed reports so the per-cohort
+  // sample table can resolve a sample id to a `/verify/<id>` link when (and
+  // only when) the curated dataset id matches a real report in the feed.
+  // We pull the maximum page (50) — covers the common "outlier I want to
+  // open" case without paging the whole table; sample ids that aren't on
+  // the first page just stay as plain text per the task contract.
+  const { data: feedData } = useGetReportFeed(
+    { limit: 50 },
+    {
+      query: {
+        queryKey: getGetReportFeedQueryKey({ limit: 50 }),
+        staleTime: 60_000,
+        retry: false,
+      },
+    },
+  );
+  const resolveReportPath = useMemo(
+    () => buildSampleReportLinkResolver(feedData?.reports),
+    [feedData?.reports],
+  );
 
   // Task #255 — track which cohort tiles are expanded so reviewers can
   // drill into the underlying dataset reports behind each cohort mean.
@@ -12639,7 +12729,11 @@ function DatasetCohortMeansSection() {
           .filter(c => expandedTiers.has(c.tier))
           .map(c => (
             <div key={c.tier} id={`dataset-cohort-samples-${c.tier}`}>
-              <DatasetCohortSampleTable cohort={c} samples={ds.samples} />
+              <DatasetCohortSampleTable
+                cohort={c}
+                samples={ds.samples}
+                resolveReportPath={resolveReportPath}
+              />
             </div>
           ))}
         <div className="text-[10px] text-muted-foreground/70 font-mono break-all">

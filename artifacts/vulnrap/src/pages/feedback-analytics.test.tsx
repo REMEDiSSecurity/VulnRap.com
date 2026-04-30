@@ -21,6 +21,8 @@ import {
   readStoredCohortDeltaWarnThreshold,
   sortDatasetSamplesByDistanceFromMean,
   type DatasetSampleRow,
+  buildSampleReportLinkResolver,
+  type SampleReportLinkCandidate,
   isValidDriftLookback,
   parseDriftLookback,
   readStoredDriftLookback,
@@ -1258,6 +1260,57 @@ describe("sortDatasetSamplesByDistanceFromMean (Task #255 — surface cohort out
   it("handles an empty input without throwing", () => {
     expect(sortDatasetSamplesByDistanceFromMean([], 75)).toEqual([]);
     expect(sortDatasetSamplesByDistanceFromMean([], null)).toEqual([]);
+  });
+});
+
+describe("buildSampleReportLinkResolver (Task #371 — link sample ids to /verify/<id> when they're in the live feed)", () => {
+  const make = (id: number, reportCode: string): SampleReportLinkCandidate => ({ id, reportCode });
+
+  it("resolves a sample id matching a live report's stringified numeric id to /verify/<id>", () => {
+    const resolve = buildSampleReportLinkResolver([make(42, "VR-002A"), make(7, "VR-0007")]);
+    expect(resolve("42")).toBe("/verify/42");
+    expect(resolve("7")).toBe("/verify/7");
+  });
+
+  it("resolves a sample id matching a live report's reportCode to that report's /verify/<id>", () => {
+    // Curated dataset ids occasionally land as the public report code rather
+    // than the raw numeric id; both should hop to the same detail route.
+    const resolve = buildSampleReportLinkResolver([make(42, "VR-002A")]);
+    expect(resolve("VR-002A")).toBe("/verify/42");
+  });
+
+  it("returns null for sample ids that aren't in the snapshot so the caller can fall back to plain text", () => {
+    const resolve = buildSampleReportLinkResolver([make(42, "VR-002A")]);
+    expect(resolve("999")).toBeNull();
+    expect(resolve("VR-FFFF")).toBeNull();
+    expect(resolve("curated-h1-12345")).toBeNull();
+  });
+
+  it("returns null when the snapshot is empty, undefined, or null so the column stays plain text without a feed", () => {
+    expect(buildSampleReportLinkResolver([])("42")).toBeNull();
+    expect(buildSampleReportLinkResolver(undefined)("42")).toBeNull();
+    expect(buildSampleReportLinkResolver(null)("42")).toBeNull();
+  });
+
+  it("returns null for an empty-string sample id rather than producing /verify/", () => {
+    // Defensive: an empty id from a malformed sample row must not generate a
+    // link to the bare /verify/ route, which would render the not-found page.
+    const resolve = buildSampleReportLinkResolver([make(42, "VR-002A")]);
+    expect(resolve("")).toBeNull();
+  });
+
+  it("ignores feed entries with non-positive or non-integer ids so they can't seed a broken link", () => {
+    const resolve = buildSampleReportLinkResolver([
+      { id: 0, reportCode: "VR-0000" } as SampleReportLinkCandidate,
+      { id: -1, reportCode: "VR-NEG" } as SampleReportLinkCandidate,
+      { id: 1.5, reportCode: "VR-FRAC" } as SampleReportLinkCandidate,
+      make(99, "VR-0063"),
+    ]);
+    expect(resolve("0")).toBeNull();
+    expect(resolve("VR-0000")).toBeNull();
+    expect(resolve("VR-NEG")).toBeNull();
+    expect(resolve("VR-FRAC")).toBeNull();
+    expect(resolve("99")).toBe("/verify/99");
   });
 });
 
