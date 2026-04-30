@@ -11643,8 +11643,17 @@ function NotifiedFlagsPanel({
   const [noteDrafts, setNoteDrafts] = useState<Map<string, string>>(
     () => new Map(),
   );
+  // Snapshot of selected keys captured when the confirm dialog opens
+  // so the action can't drift if the reviewer ticks/unticks more
+  // entries while the dialog is open.
+  const [bulkConfirm, setBulkConfirm] = useState<{ keys: string[] } | null>(
+    null,
+  );
   // Mirror the server-side cap on POST .../notifications/rearm.
   const BULK_REARM_CAP = 200;
+  // Above this count the bulk action routes through a confirm dialog,
+  // mirroring the handwavy-reinstate-batch-confirm blast-radius guard.
+  const BULK_REARM_CONFIRM_THRESHOLD = 20;
 
   // The list endpoint uses requireCalibrationAuthStrict, which 401s
   // unconditionally unless CALIBRATION_TOKEN is set on the server AND
@@ -11913,7 +11922,12 @@ function NotifiedFlagsPanel({
     }
   };
 
-  const handleBulkRearm = async () => {
+  // Open the confirm dialog for big batches; fire immediately for
+  // small ones. The cooldown / over-cap / busy guards run here so the
+  // dialog never opens for a click that the action would refuse
+  // anyway. handleBulkRearm itself keeps the same guards as defense in
+  // depth in case state shifts between opening and confirming.
+  const requestBulkRearm = () => {
     if (liveSelectedKeys.length === 0 || bulkBusy || overCap) return;
     if (cooldownActive) {
       toast({
@@ -11923,7 +11937,27 @@ function NotifiedFlagsPanel({
       });
       return;
     }
-    const keys = [...liveSelectedKeys];
+    if (liveSelectedKeys.length > BULK_REARM_CONFIRM_THRESHOLD) {
+      setBulkConfirm({ keys: [...liveSelectedKeys] });
+      return;
+    }
+    void handleBulkRearm([...liveSelectedKeys]);
+  };
+
+  const handleBulkRearm = async (keys: string[]) => {
+    // Compare against the snapshot (`keys.length`) instead of the
+    // live `overCap`: if the selection changes while the confirm
+    // dialog is open the snapshot is what we're actually about to
+    // POST, so it's the right thing to validate against the cap.
+    if (keys.length === 0 || bulkBusy || keys.length > BULK_REARM_CAP) return;
+    if (cooldownActive) {
+      toast({
+        title: "Cooldown active",
+        description: `Bulk re-arm disabled — wait ${Math.max(1, cooldownSecondsRemaining)}s for the wrong-token throttle to clear.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setBulkBusy(true);
     try {
       const resp = await rearmAvriDriftNotifications({ keys });
@@ -11979,7 +12013,10 @@ function NotifiedFlagsPanel({
     }
   };
 
+  const bulkConfirmCount = bulkConfirm?.keys.length ?? 0;
+
   return (
+    <>
     <div className="space-y-2">
       {selectedCount > 0 && (
         <div
@@ -12023,7 +12060,7 @@ function NotifiedFlagsPanel({
                 !authState.mutationsAllowed ||
                 cooldownActive
               }
-              onClick={handleBulkRearm}
+              onClick={requestBulkRearm}
               data-cooldown-active={cooldownActive ? "true" : "false"}
               title={
                 cooldownActive
@@ -12273,6 +12310,61 @@ function NotifiedFlagsPanel({
         })}
       </ul>
     </div>
+    {/* Confirm before re-arming a large batch — opened by
+        requestBulkRearm when the selection exceeds
+        BULK_REARM_CONFIRM_THRESHOLD. Cancel sends nothing; only the
+        explicit "Re-arm N flags" button POSTs. */}
+    <AlertDialog
+      open={bulkConfirm !== null}
+      onOpenChange={(open) => {
+        if (!open) setBulkConfirm(null);
+      }}
+    >
+      <AlertDialogContent data-testid="notified-flags-bulk-rearm-confirm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {bulkConfirm
+              ? `Re-arm ${bulkConfirmCount} drift flag${bulkConfirmCount === 1 ? "" : "s"}?`
+              : "Re-arm selected drift flags?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              <div>
+                Re-arming <strong>{bulkConfirmCount}</strong> previously-notified
+                drift flag{bulkConfirmCount === 1 ? "" : "s"} clears their
+                dedup entries so they{" "}
+                <strong>
+                  fire again on the next dispatch run
+                </strong>
+                . Each re-arm is recorded in the audit log.
+              </div>
+              <div className="text-xs italic">
+                Cancel leaves the selection untouched and sends nothing.
+              </div>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="notified-flags-bulk-rearm-confirm-cancel">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="notified-flags-bulk-rearm-confirm-confirm"
+            disabled={bulkBusy || !authState.mutationsAllowed || cooldownActive}
+            onClick={() => {
+              if (!bulkConfirm) return;
+              const keys = bulkConfirm.keys;
+              setBulkConfirm(null);
+              void handleBulkRearm(keys);
+            }}
+          >
+            <RotateCcw className="w-3 h-3 mr-1" />
+            Re-arm {bulkConfirmCount} flag{bulkConfirmCount === 1 ? "" : "s"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

@@ -302,6 +302,136 @@ test.describe("Notified flags panel — bulk re-arm", () => {
     await expect(bulkBar).toHaveCount(0);
   });
 
+  test("bulk re-arm above the 20-flag threshold prompts a confirm dialog", async ({
+    page,
+  }) => {
+    // 21 = one above BULK_REARM_CONFIRM_THRESHOLD in NotifiedFlagsPanel,
+    // so the click must route through the confirm dialog.
+    const bigSeed: SeedRecord[] = Array.from({ length: 21 }, (_, i) => ({
+      key: `bulk-rearm-confirm-spec-2026-04-20|GAP_BELOW_45|${i}`,
+      weekStart: "2026-04-20",
+      kind: "GAP_BELOW_45" as const,
+      detail: `T1/T3 gap collapsed entry #${i + 1}`,
+      notifiedAt: `2026-04-22T10:${String(i).padStart(2, "0")}:00.000Z`,
+    }));
+    seedDedupState(bigSeed);
+
+    const rearmRequests: Array<{ keys: string[] }> = [];
+    page.on("request", (req) => {
+      if (
+        req.method() === "POST" &&
+        req.url().includes(
+          "/api/feedback/calibration/avri-drift/notifications/rearm",
+        )
+      ) {
+        const body = req.postDataJSON?.();
+        if (body && Array.isArray(body.keys)) {
+          rearmRequests.push({ keys: body.keys as string[] });
+        }
+      }
+    });
+
+    await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+    // Wait for the panel to render the seeded rows.
+    await expect(
+      page.getByTestId(`notified-flag-checkbox-${bigSeed[0]!.key}`),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Tick all 21 entries.
+    for (const r of bigSeed) {
+      await page.getByTestId(`notified-flag-checkbox-${r.key}`).check();
+    }
+
+    const bulkRearm = page.getByTestId("notified-flags-bulk-rearm");
+    await expect(bulkRearm).toHaveText(/Re-arm selected \(21\)/);
+
+    // Click — should open the confirm dialog rather than POSTing.
+    await bulkRearm.click();
+
+    const confirmDialog = page.getByTestId("notified-flags-bulk-rearm-confirm");
+    await expect(confirmDialog).toBeVisible();
+    await expect(confirmDialog).toContainText(/21/);
+    expect(rearmRequests).toHaveLength(0);
+
+    // Cancel must dismiss without sending the POST and leave selection intact.
+    await page
+      .getByTestId("notified-flags-bulk-rearm-confirm-cancel")
+      .click();
+    await expect(confirmDialog).toBeHidden();
+    expect(rearmRequests).toHaveLength(0);
+    await expect(bulkRearm).toHaveText(/Re-arm selected \(21\)/);
+
+    // Reopen the dialog and confirm — exactly one POST with all 21 keys.
+    await bulkRearm.click();
+    await expect(confirmDialog).toBeVisible();
+    await page
+      .getByTestId("notified-flags-bulk-rearm-confirm-confirm")
+      .click();
+
+    await expect.poll(() => rearmRequests.length).toBe(1);
+    expect(rearmRequests[0]!.keys.sort()).toEqual(
+      bigSeed.map((r) => r.key).sort(),
+    );
+
+    await expect(
+      page.getByText(/Re-armed 21 drift flags/, { exact: false }).first(),
+    ).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("bulk re-arm at or below the 20-flag threshold fires immediately without a dialog", async ({
+    page,
+  }) => {
+    // Exactly at BULK_REARM_CONFIRM_THRESHOLD — the dialog must NOT
+    // open and the POST should fire immediately, matching the
+    // original one-click UX.
+    const smallSeed: SeedRecord[] = Array.from({ length: 20 }, (_, i) => ({
+      key: `bulk-rearm-no-confirm-spec-2026-04-20|GAP_BELOW_45|${i}`,
+      weekStart: "2026-04-20",
+      kind: "GAP_BELOW_45" as const,
+      detail: `T1/T3 gap collapsed entry #${i + 1}`,
+      notifiedAt: `2026-04-22T10:${String(i).padStart(2, "0")}:00.000Z`,
+    }));
+    seedDedupState(smallSeed);
+
+    const rearmRequests: Array<{ keys: string[] }> = [];
+    page.on("request", (req) => {
+      if (
+        req.method() === "POST" &&
+        req.url().includes(
+          "/api/feedback/calibration/avri-drift/notifications/rearm",
+        )
+      ) {
+        const body = req.postDataJSON?.();
+        if (body && Array.isArray(body.keys)) {
+          rearmRequests.push({ keys: body.keys as string[] });
+        }
+      }
+    });
+
+    await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+    await expect(
+      page.getByTestId(`notified-flag-checkbox-${smallSeed[0]!.key}`),
+    ).toBeVisible({ timeout: 15_000 });
+
+    for (const r of smallSeed) {
+      await page.getByTestId(`notified-flag-checkbox-${r.key}`).check();
+    }
+
+    const bulkRearm = page.getByTestId("notified-flags-bulk-rearm");
+    await expect(bulkRearm).toHaveText(/Re-arm selected \(20\)/);
+
+    await bulkRearm.click();
+
+    // No confirm dialog at the threshold — POST goes through immediately.
+    await expect(
+      page.getByTestId("notified-flags-bulk-rearm-confirm"),
+    ).toHaveCount(0);
+    await expect.poll(() => rearmRequests.length).toBe(1);
+    expect(rearmRequests[0]!.keys).toHaveLength(20);
+  });
+
   test("toast surfaces partial-success counts when some selected keys are already gone", async ({
     page,
   }) => {
