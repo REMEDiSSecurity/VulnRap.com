@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Task #182 + Task #251 -- Run the vulnrap Playwright e2e suite against the
-# PRODUCTION builds of @workspace/vulnrap and @workspace/api-server.
+# Task #182 + Task #250 + Task #251 -- Run the vulnrap Playwright e2e suite
+# against the PRODUCTION builds of @workspace/vulnrap and @workspace/api-server.
 #
 # This wraps `pnpm --filter @workspace/vulnrap run test:e2e` so it can be
 # wired into a registered validation step (and any future CI workflow).
@@ -25,18 +25,48 @@ set -euo pipefail
 # (E2E_CALIBRATION_TOKEN=...) propagates to both the webServer env
 # block and the spec-side request contexts.
 #
-# Escape hatches:
-#   E2E_RUN_ALL_SPECS=1   force the full suite (skip the change-aware
-#                         filter). Use this for nightly runs or when
-#                         debugging the selector itself.
-#   E2E_DIFF_BASE=<ref>   override the git ref the selector compares
-#                         against (defaults to origin/main, then main).
+# Task #250 — Build cache reuse.
+# The Playwright `webServer` blocks chain `node scripts/build-if-stale.mjs`
+# in front of `start`/`serve`, so the vite + esbuild builds are reused when
+# `artifacts/api-server/dist/index.mjs` and
+# `artifacts/vulnrap/dist/public/index.html` are newer than every watched
+# source dir/file (each artifact's own src/ + build configs + every
+# `@workspace/*` dep declared in its package.json, resolved to
+# `lib/<short-name>/src`). On a cold container both builds run; on a warm
+# back-to-back run both are skipped and the e2e step starts the servers
+# in well under a second of build-cache overhead.
+#
+# Critical: the cache check MUST run with the same build-time env
+# Playwright uses for the webServer (notably `VITE_CALIBRATION_TOKEN`,
+# `BASE_PATH`, and `PUBLIC_URL`, which Vite inlines into the bundle).
+# To avoid that env having to be duplicated in this script, we deliberately
+# do NOT pre-warm the cache here — Playwright's webServer commands handle
+# both the freshness check and (if needed) the build under the right env.
+#
+# Escape hatches (Task #250 + Task #251):
+#   E2E_SKIP_PROD_BUILD=1   trust the existing dist/ (no freshness check;
+#                           use when CI built it in a separate stage).
+#   E2E_FORCE_PROD_BUILD=1  always rebuild (escape hatch when the mtime
+#                           heuristic ever looks suspect).
+#   E2E_RUN_ALL_SPECS=1     force the full suite (skip the change-aware
+#                           filter). Use this for nightly runs or when
+#                           debugging the selector itself.
+#   E2E_DIFF_BASE=<ref>     override the git ref the selector compares
+#                           against (defaults to origin/main, then main).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SELECTOR="${SCRIPT_DIR}/vulnrap-e2e-select-specs.mjs"
 
 echo "[vulnrap-e2e-check] Running the vulnrap Playwright e2e suite against the PRODUCTION builds of vulnrap and api-server..."
 echo "[vulnrap-e2e-check] (vite preview + bundled dist/index.mjs, not the dev servers)"
+
+if [ "${E2E_SKIP_PROD_BUILD:-0}" = "1" ]; then
+  echo "[vulnrap-e2e-check] E2E_SKIP_PROD_BUILD=1 — trusting existing dist/ (no rebuild)"
+elif [ "${E2E_FORCE_PROD_BUILD:-0}" = "1" ]; then
+  echo "[vulnrap-e2e-check] E2E_FORCE_PROD_BUILD=1 — rebuilding both bundles"
+else
+  echo "[vulnrap-e2e-check] Build cache: rebuilding only stale targets (override with E2E_FORCE_PROD_BUILD=1 or E2E_SKIP_PROD_BUILD=1)"
+fi
 
 CHROMIUM_PATH="${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-${REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE:-}}"
 if [ -z "${CHROMIUM_PATH}" ] || [ ! -x "${CHROMIUM_PATH}" ]; then
