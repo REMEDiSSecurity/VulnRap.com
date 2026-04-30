@@ -1,11 +1,14 @@
 import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 
-// Task #237 — End-to-end coverage for the post-Trash Undo banner that
-// rolls back a single per-row removal in one click. Symmetric to the
-// per-batch "Undo this batch" affordance from Task #142, but anchored to
-// a single phrase + history-row identifier so the reviewer doesn't have
-// to scroll into the removal-history panel for one mistaken click.
+// Task #237 / #332 — E2E coverage for the post-Trash Undo stack. Each
+// successful per-row Trash pushes onto a bounded stack so the reviewer
+// can roll back ANY of their recent per-row clicks (not just the
+// latest) in one click. The third test below was flipped from the
+// pre-#332 "second Trash replaces the banner" assertion to the new
+// "second Trash stacks alongside the first"; the fourth covers undoing
+// the OLDER stacked entry while leaving the newer one intact — the
+// gap the original Task #237 banner couldn't close.
 
 const API_PORT = Number(process.env.E2E_API_PORT || 8080);
 const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
@@ -141,7 +144,7 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
     }
   });
 
-  test("A second per-row Trash replaces the banner so it always points at the most-recent removal", async ({
+  test("A second per-row Trash STACKS alongside the first so both stay one-click reversible (Task #332)", async ({
     page,
   }) => {
     const apiCtx = await request.newContext({ baseURL: API_BASE });
@@ -156,19 +159,84 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
       await trashRow(page, first);
-      const banner = page.getByTestId("handwavy-single-undo");
-      await expect(banner).toBeVisible({ timeout: 15_000 });
-      await expect(banner).toHaveAttribute("data-phrase", first);
+      const stack = page.getByTestId("handwavy-single-undo-stack");
+      await expect(stack).toBeVisible({ timeout: 15_000 });
+      await expect(stack).toHaveAttribute("data-count", "1");
 
+      // Pre-#332 the second Trash REPLACED the banner; with the stack
+      // model both entries persist until each is undone or dismissed.
       await trashRow(page, second);
-      // Same banner element, but now anchored to the SECOND removal so
-      // clicking Undo would roll back the most-recent click — the older
-      // one stays in the removal-history panel as before.
-      await expect(banner).toBeVisible();
-      await expect(banner).toHaveAttribute("data-phrase", second);
+      await expect(stack).toHaveAttribute("data-count", "2", { timeout: 15_000 });
+
+      // Each phrase has its own row + Undo button keyed by `removedAt`
+      // so the reviewer can't roll back the wrong removal.
+      const firstEntry = stack
+        .locator('[data-testid="handwavy-single-undo"]')
+        .filter({ hasText: first });
+      const secondEntry = stack
+        .locator('[data-testid="handwavy-single-undo"]')
+        .filter({ hasText: second });
+      await expect(firstEntry).toHaveCount(1);
+      await expect(secondEntry).toHaveCount(1);
+      await expect(firstEntry).toHaveAttribute("data-phrase", first);
+      await expect(secondEntry).toHaveAttribute("data-phrase", second);
     } finally {
       await cleanup(apiCtx, first);
       await cleanup(apiCtx, second);
+      await apiCtx.dispose();
+    }
+  });
+
+  test("Undoing the OLDER stacked entry rolls back that specific Trash and leaves the newer entry intact (Task #332)", async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const older = uniquePhrase("older");
+    const newer = uniquePhrase("newer");
+
+    try {
+      await addPhrase(apiCtx, older);
+      await addPhrase(apiCtx, newer);
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      await trashRow(page, older);
+      await trashRow(page, newer);
+
+      const stack = page.getByTestId("handwavy-single-undo-stack");
+      await expect(stack).toHaveAttribute("data-count", "2", { timeout: 15_000 });
+
+      // Click Undo on the OLDER entry — the gap pre-#332 forced the
+      // reviewer into the removal-history panel for.
+      const olderEntry = stack
+        .locator('[data-testid="handwavy-single-undo"]')
+        .filter({ hasText: older });
+      await olderEntry.getByTestId("handwavy-single-undo-button").click();
+
+      // The older entry disappears once its reinstate completes...
+      await expect(olderEntry).toHaveCount(0, { timeout: 15_000 });
+      // ...and the older phrase is back on the active list.
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: older }),
+      ).toHaveCount(1, { timeout: 15_000 });
+
+      // The newer entry stays — undoing the older click must NOT
+      // wipe the rest of the stack.
+      const newerEntry = stack
+        .locator('[data-testid="handwavy-single-undo"]')
+        .filter({ hasText: newer });
+      await expect(newerEntry).toHaveCount(1);
+      await expect(newerEntry).toHaveAttribute("data-phrase", newer);
+      await expect(stack).toHaveAttribute("data-count", "1");
+
+      // The newer phrase is still removed (its Undo was not clicked).
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: newer }),
+      ).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, older);
+      await cleanup(apiCtx, newer);
       await apiCtx.dispose();
     }
   });
