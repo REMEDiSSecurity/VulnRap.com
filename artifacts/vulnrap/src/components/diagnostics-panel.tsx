@@ -369,6 +369,7 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
                     </div>
                   </section>
                   <EvidenceStrengthSection engines={data.engines.engines} />
+                  <GoldSignalBonusSection engines={data.engines.engines} />
                 </>
               )}
 
@@ -1297,6 +1298,82 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
   );
 }
 
+// Mirrors `signalBreakdown.goldSignalBonus` from
+// `artifacts/api-server/src/lib/engines/engines.ts`. Section is hidden when
+// no categories fired (bonus=0 / empty signals).
+type GoldSignalBonusBlock = {
+  bonus?: number;
+  rawSum?: number;
+  cap?: number;
+  signals?: Array<{ id: string; weight: number }>;
+};
+
+function readGoldSignalBonus(engines: EngineResult[]): GoldSignalBonusBlock | null {
+  const e2 = engines.find((e) => /Technical Substance/i.test(e.engine));
+  const sb = (e2?.signalBreakdown ?? {}) as Record<string, unknown>;
+  const gb = sb.goldSignalBonus as GoldSignalBonusBlock | undefined;
+  if (!gb) return null;
+  const signals = Array.isArray(gb.signals) ? gb.signals : [];
+  const bonus = gb.bonus ?? 0;
+  // Gracefully omit when no bonus was applied (no categories fired).
+  if (signals.length === 0 || bonus <= 0) return null;
+  return gb;
+}
+
+function GoldSignalBonusSection({ engines }: { engines: EngineResult[] }) {
+  const gb = readGoldSignalBonus(engines);
+  if (!gb) return null;
+  const bonus = gb.bonus ?? 0;
+  const rawSum = gb.rawSum ?? bonus;
+  const cap = gb.cap ?? bonus;
+  const capped = rawSum > cap;
+  const signals = gb.signals ?? [];
+  return (
+    <>
+      <Separator className="bg-border/30" />
+      <section className="space-y-2" data-testid="gold-signal-bonus-section">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+          Strong-Evidence Bonus (Gold Categories)
+        </div>
+        <div className="flex flex-wrap items-baseline gap-3 text-[11px] font-mono">
+          <span>
+            applied: <span className="font-bold text-green-400/90">+{bonus}</span>
+          </span>
+          {capped ? (
+            <span className="text-orange-400/90">
+              raw +{rawSum} capped at +{cap}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              raw +{rawSum} (under cap +{cap})
+            </span>
+          )}
+          <span className="text-muted-foreground">
+            {signals.length} categor{signals.length === 1 ? "y" : "ies"} fired
+          </span>
+        </div>
+        <ul className="space-y-0.5">
+          {signals.map((s) => (
+            <li
+              key={s.id}
+              className="text-[11px] font-mono text-green-400/90 flex items-baseline gap-1"
+            >
+              <span>+{s.weight}</span>
+              <span className="text-foreground/80">{s.id}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Strong-evidence categories (real crash traces, raw HTTP, payload
+          classes, etc.) each contribute a small per-category bonus to Engine
+          2&apos;s substance score; the sum is capped so a single report with
+          several payload classes can&apos;t dominate.
+        </p>
+      </section>
+    </>
+  );
+}
+
 export function buildMarkdownSummary(data: DiagnosticsResponse): string {
   const lines: string[] = [];
   lines.push(`# VulnRap Diagnostics — Report ${data.reportId}`);
@@ -1399,6 +1476,28 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     verificationSources?: { verified?: number; total?: number; referenced?: number; fallback?: number };
     activeVerification?: { mode?: VerificationModeUI; familyName?: string | null; skipReason?: string | null };
   };
+
+  // Mirror the panel's Strong-Evidence Bonus section in the markdown export
+  // so triage threads stay self-contained.
+  const goldBonus = readGoldSignalBonus(engines);
+  if (goldBonus) {
+    const bonus = goldBonus.bonus ?? 0;
+    const rawSum = goldBonus.rawSum ?? bonus;
+    const cap = goldBonus.cap ?? bonus;
+    const signals = goldBonus.signals ?? [];
+    const capNote = rawSum > cap
+      ? `raw +${rawSum} capped at +${cap}`
+      : `raw +${rawSum} (under cap +${cap})`;
+    lines.push("## Strong-Evidence Bonus (Gold Categories)");
+    lines.push(
+      `- Applied: **+${bonus}** — ${capNote}; ${signals.length} categor${signals.length === 1 ? "y" : "ies"} fired`,
+    );
+    for (const s of signals) {
+      lines.push(`  - +${s.weight} \`${s.id}\``);
+    }
+    lines.push("");
+  }
+
   const verifySources = verifyBreakdown.verificationSources;
   const activeVerif = verifyBreakdown.activeVerification;
   if (verifySources || activeVerif?.mode) {

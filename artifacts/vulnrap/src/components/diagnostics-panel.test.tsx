@@ -1393,6 +1393,154 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(md).not.toContain("**LOW**");
   });
 
+  it("renders the Strong-Evidence Bonus section with each fired category, weight, and capped vs raw totals", async () => {
+    const withGoldBonus: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 78,
+            verdict: "GREEN" as const,
+            confidence: "HIGH" as const,
+            signalBreakdown: {
+              goldSignalBonus: {
+                bonus: 12,
+                rawSum: 14,
+                cap: 12,
+                signals: [
+                  { id: "real_crash_trace", weight: 5 },
+                  { id: "sql_injection_payload", weight: 5 },
+                  { id: "auth_token", weight: 3 },
+                  { id: "code_diff", weight: 3 },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    };
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify(withGoldBonus),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Strong-Evidence Bonus/i)).toBeInTheDocument();
+    });
+
+    const section = screen.getByTestId("gold-signal-bonus-section");
+    // Applied bonus
+    expect(within(section).getByText(/applied:/i)).toBeInTheDocument();
+    expect(within(section).getByText("+12")).toBeInTheDocument();
+    // Capped vs raw — raw 14 capped at 12
+    expect(within(section).getByText(/raw \+14 capped at \+12/i)).toBeInTheDocument();
+    // Number of categories that fired
+    expect(within(section).getByText(/4 categories fired/i)).toBeInTheDocument();
+    // Each category id and weight
+    expect(within(section).getByText("real_crash_trace")).toBeInTheDocument();
+    expect(within(section).getByText("sql_injection_payload")).toBeInTheDocument();
+    expect(within(section).getByText("auth_token")).toBeInTheDocument();
+    expect(within(section).getByText("code_diff")).toBeInTheDocument();
+
+    // Markdown export carries the same data so triage threads stay self-contained.
+    const md = buildMarkdownSummary(withGoldBonus);
+    expect(md).toContain("## Strong-Evidence Bonus (Gold Categories)");
+    expect(md).toContain("**+12**");
+    expect(md).toContain("raw +14 capped at +12");
+    expect(md).toContain("`real_crash_trace`");
+    expect(md).toContain("`sql_injection_payload`");
+  });
+
+  it("renders the Strong-Evidence Bonus with an under-cap raw total when no cap was hit", async () => {
+    const underCap: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 65,
+            verdict: "GREEN" as const,
+            confidence: "MEDIUM" as const,
+            signalBreakdown: {
+              goldSignalBonus: {
+                bonus: 5,
+                rawSum: 5,
+                cap: 12,
+                signals: [{ id: "real_crash_trace", weight: 5 }],
+              },
+            },
+          },
+        ],
+      },
+    };
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify(underCap),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Strong-Evidence Bonus/i)).toBeInTheDocument();
+    });
+
+    const section = screen.getByTestId("gold-signal-bonus-section");
+    // "+5" appears twice: once as the applied bonus, once as the per-signal weight.
+    expect(within(section).getAllByText("+5")).toHaveLength(2);
+    expect(within(section).getByText(/raw \+5 \(under cap \+12\)/i)).toBeInTheDocument();
+    expect(within(section).getByText(/1 category fired/i)).toBeInTheDocument();
+    expect(within(section).getByText("real_crash_trace")).toBeInTheDocument();
+  });
+
+  it("omits the Strong-Evidence Bonus section when no categories fired", async () => {
+    // Engine still emits a zero-bonus / empty-signals block when nothing
+    // fires; the panel and markdown export must hide the section entirely.
+    const noBonus: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 40,
+            verdict: "YELLOW" as const,
+            confidence: "MEDIUM" as const,
+            signalBreakdown: {
+              goldSignalBonus: { bonus: 0, rawSum: 0, cap: 12, signals: [] },
+            },
+          },
+        ],
+      },
+    };
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify(noBonus),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Per-Engine Scores/i)).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/Strong-Evidence Bonus/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("gold-signal-bonus-section")).not.toBeInTheDocument();
+
+    const md = buildMarkdownSummary(noBonus);
+    expect(md).not.toContain("Strong-Evidence Bonus");
+  });
+
   it("surfaces an error message when the diagnostics endpoint fails", async () => {
     fetchSpy.mockImplementationOnce(async () => new Response("boom", { status: 500 }));
     const user = userEvent.setup();
