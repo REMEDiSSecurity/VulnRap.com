@@ -933,6 +933,117 @@ describe("findProsePlaceholderPayloadRanges", () => {
     ).toBe(0);
   });
 
+  it("flags double-quote-fenced <slot> after a payload-context word", () => {
+    // Slop dodge: wrap the slot in bare double-quotes instead of
+    // backticks. Symmetric to the bare-angle form but with `"` fences;
+    // the slop-vocab guard mirrors the bare-angle form, so only slots
+    // whose inner text is in BODY_PLACEHOLDER_KEYWORDS qualify.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the payload "<inject>" was sent against the endpoint',
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'we send "<sql payload here>" to /search',
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'exec "<command here>" to confirm RCE',
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'run "<shell command here>" on the host',
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag double-quote-fenced <slot> when the slot is a neutral identifier", () => {
+    // Same slop-vocab guard as the bare-angle form: a neutral
+    // server-supplied identifier wrapped in quotes ("the payload
+    // \"<unknown>\" was rejected") is legitimate prose and must not
+    // be flagged. Only slop vocabulary inside the slot qualifies.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the payload "<unknown>" was rejected',
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the command "<foo>" was not recognised',
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'we send "<ack>" as part of the handshake',
+      ).length,
+    ).toBe(0);
+  });
+
+  it("flags square-bracket-fenced [<slot>] after a payload-context word", () => {
+    // Slop dodge: wrap the slot in bare square brackets instead of
+    // backticks. Symmetric to the double-quote form with `[`/`]`
+    // fences; the slop-vocab guard mirrors the bare-angle form.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload [<inject>] was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send [<sql payload here>] to /search",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "exec [<command here>] to confirm RCE",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "run [<shell command here>] on the host",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag square-bracket-fenced [<slot>] when the slot is a neutral identifier", () => {
+    // Same slop-vocab guard as the bare-angle and double-quote forms:
+    // bare square brackets around a neutral identifier ("the payload
+    // [<unknown>] was rejected") read as a server-supplied placeholder
+    // and must not be flagged.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload [<unknown>] was rejected",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the command [<foo>] was not recognised",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send [<ack>] as part of the handshake",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("does not flag fenced <slot> without a payload-context word", () => {
+    // Same rule as the bare-angle form: the fence character (quote or
+    // bracket) is not enough on its own — the slot must be preceded
+    // by a payload/inject/exec/run/command/send word to count.
+    expect(
+      findProsePlaceholderPayloadRanges('the value "<inject>" was rejected')
+        .length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("the field [<sql payload here>] failed")
+        .length,
+    ).toBe(0);
+  });
+
   it("does not flag bare-angle <slot> without a payload-context word", () => {
     // The verb/noun list is what makes the slot a payload mention.
     // Without one of those words in front, the bare angle bracket is

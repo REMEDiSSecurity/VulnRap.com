@@ -371,6 +371,34 @@ const PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE =
 const PROSE_PAYLOAD_PLACEHOLDER_BARE_RE =
   /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)\s+(<[^>\n`]{1,80}>)/gi;
 
+// Same gesture, but the slot is wrapped in bare double-quotes instead
+// of backticks: "the payload \"<inject>\" was sent" / "we exec
+// \"<command here>\" against the host". Symmetric to the bare-angle
+// dodge above with a different fence character — slop authors reach
+// for double-quotes when they want the slot to read as a literal
+// string without using markdown's inline-code fence. The verb/noun
+// vocabulary mirrors the inline-code form (send/sent/run/exec join
+// payload/inject/command/etc).
+//
+// Without the slop-vocab guard this would happily false-positive on
+// neutral prose like "the payload \"<unknown>\" was rejected" where a
+// server-supplied identifier is being quoted, so the bare-quote form
+// is filtered down in `findProsePlaceholderPayloadRanges`: only slots
+// whose inner text is in the slop-payload vocabulary
+// (BODY_PLACEHOLDER_KEYWORDS) qualify — same rule as the bare-angle
+// form.
+const PROSE_PAYLOAD_PLACEHOLDER_DQUOTE_RE =
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)\s+"(<[^>\n"]{1,80}>)"/gi;
+
+// Same gesture, but the slot is wrapped in bare square brackets:
+// "the payload [<inject>] was sent" / "run [<command here>] on the
+// host". Same fence-substitution dodge as the double-quote form —
+// the brackets stand in for the markdown inline-code fence. Same
+// verb/noun vocabulary and same slop-vocab guard so neutral prose
+// like "the payload [<unknown>] was rejected" stays safe.
+const PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE =
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)\s+\[(<[^>\n\]]{1,80}>)\]/gi;
+
 // Same gesture, but with the payload-context word AFTER the inline-code
 // `<...>` slot. Slop authors dodge both the colon-form and the
 // word-then-slot inline form above by flipping the order: "`<inject>`
@@ -397,16 +425,18 @@ const PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE =
 
 /** Find prose snippets shaped like "Payload: `<sql payload here>`",
  * "the payload `<inject>` was sent", the no-backticks dodge "the
- * payload <inject> was sent", or the post-slot dodge "`<inject>` is
- * the payload" whose `<...>` slot is itself a placeholder.
+ * payload <inject> was sent", the alternate-fence dodges "the payload
+ * \"<inject>\" was sent" / "the payload [<inject>] was sent", or the
+ * post-slot dodge "`<inject>` is the payload" whose `<...>` slot is
+ * itself a placeholder.
  *
  * The colon, inline-code, and post-slot forms all accept either slop
  * vocabulary or any bare short identifier in the slot (the surrounding
  * `Payload:` label, backtick fence, or copula clause is itself enough
- * of a payload-context tell). The bare-angle form (no colon, no
- * backticks) is stricter and only fires when the slot's inner text is
- * slop vocabulary, so neutral prose like "the payload <unknown> was
- * rejected" is left alone.
+ * of a payload-context tell). The bare-angle, double-quote, and
+ * square-bracket forms are stricter and only fire when the slot's
+ * inner text is slop vocabulary, so neutral prose like "the payload
+ * \"<unknown>\" was rejected" is left alone.
  *
  * Returns the byte ranges of the full match so the caller can strip
  * them before re-testing payload-class gold signals. */
@@ -418,6 +448,8 @@ export function findProsePlaceholderPayloadRanges(
     { re: PROSE_PAYLOAD_PLACEHOLDER_RE, requireSlopVocab: false },
     { re: PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE, requireSlopVocab: false },
     { re: PROSE_PAYLOAD_PLACEHOLDER_BARE_RE, requireSlopVocab: true },
+    { re: PROSE_PAYLOAD_PLACEHOLDER_DQUOTE_RE, requireSlopVocab: true },
+    { re: PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE, requireSlopVocab: true },
     { re: PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE, requireSlopVocab: false },
   ];
   for (const { re, requireSlopVocab } of cases) {
@@ -434,13 +466,14 @@ export function findProsePlaceholderPayloadRanges(
       if (!looksPlaceholder) continue;
       const start = m.index;
       const end = m.index + m[0].length;
-      // Dedupe against any range already added (the four regexes are
+      // Dedupe against any range already added (the six regexes are
       // disjoint by design — one requires `[:=]`, one requires word +
       // whitespace + backtick, one requires word + whitespace + bare
-      // angle bracket, and the post-slot one requires backtick + slot
-      // + copula after — but a future edit could broaden any of them,
-      // so we still skip overlapping ranges to keep the byte-strip
-      // pass idempotent).
+      // angle bracket, two require word + whitespace + a `"`/`[` fence
+      // around the slot, and the post-slot one requires backtick +
+      // slot + copula after — but a future edit could broaden any of
+      // them, so we still skip overlapping ranges to keep the
+      // byte-strip pass idempotent).
       const overlaps = ranges.some(
         (r) => start < r.end && end > r.start,
       );
