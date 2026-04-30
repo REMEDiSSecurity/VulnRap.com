@@ -2677,6 +2677,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         phraseCount: number;
         status: "error";
         errorMessage: string;
+        // Task #343 — populated when the 404 body carries a known
+        // HandwavyPhraseRemovalBatchDetailErrorReason ("history-not-found"
+        // or "not-a-batch") so the dialog can render a targeted hint AND
+        // decide whether retrying is even worth offering.
+        errorReason?: string;
       }
     | null
   >(null);
@@ -4780,6 +4785,17 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         detail,
       });
     } catch (err) {
+      // Task #343 — surface the HandwavyPhraseRemovalBatchDetailError
+      // `reason` from the 404 body so the dialog can render a targeted
+      // hint instead of just dumping the raw fetch message. Falls back
+      // to the underlying error message for transport errors / 5xx /
+      // any future status that doesn't carry a known reason.
+      const reason =
+        err instanceof ApiError &&
+        err.data &&
+        typeof (err.data as { reason?: unknown }).reason === "string"
+          ? ((err.data as { reason: string }).reason)
+          : undefined;
       const msg =
         err instanceof Error ? err.message : "Failed to load batch preview.";
       setPickerBatchPreview({
@@ -4788,6 +4804,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         phraseCount,
         status: "error",
         errorMessage: msg,
+        errorReason: reason,
       });
     } finally {
       setBusy(null);
@@ -9511,14 +9528,45 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   full list before confirming…
                 </div>
               )}
-              {pickerBatchPreview?.status === "error" && (
-                <div
-                  className="text-destructive"
-                  data-testid="handwavy-removal-batches-preview-error"
-                >
-                  {pickerBatchPreview.errorMessage}
-                </div>
-              )}
+              {pickerBatchPreview?.status === "error" && (() => {
+                // Task #343 — map the HandwavyPhraseRemovalBatchDetailError
+                // `reason` to a reviewer-facing hint that explains whether
+                // a retry is likely to help. Unknown / missing reasons
+                // fall back to the raw transport error.
+                const reason = pickerBatchPreview.errorReason;
+                const friendly =
+                  reason === "history-not-found"
+                    ? "This batch removal entry no longer exists in the history (it may have been pruned). Reload the analytics page to refresh the picker, or pick a different batch."
+                    : reason === "not-a-batch"
+                      ? "This entry is a single-phrase removal, not a batch — reinstate it from the per-phrase Removal history panel instead."
+                      : pickerBatchPreview.errorMessage;
+                return (
+                  <div
+                    className="space-y-2"
+                    data-testid="handwavy-removal-batches-preview-error"
+                    data-error-reason={reason ?? ""}
+                  >
+                    <div className="text-destructive">{friendly}</div>
+                    <div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        data-testid="handwavy-removal-batches-preview-retry"
+                        onClick={() => {
+                          void handleOpenPickerBatchPreview(
+                            pickerBatchPreview.removedAtIso,
+                            pickerBatchPreview.removedBy,
+                            pickerBatchPreview.phraseCount,
+                          );
+                        }}
+                      >
+                        Try again
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })()}
               {pickerBatchPreview?.status === "ready" && (
                 <>
                   <div>
@@ -9755,11 +9803,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             const reason = describeHandwavyDisabledReason({
               mutationsAllowed,
               extraReason:
-                pickerBatchPreview?.status !== "ready"
-                  ? "Waiting for the batch preview to finish loading."
-                  : nothingToDo
-                    ? "Every phrase in this batch has already been reinstated."
-                    : null,
+                pickerBatchPreview?.status === "error"
+                  ? "Batch preview failed to load — retry or cancel."
+                  : pickerBatchPreview?.status !== "ready"
+                    ? "Waiting for the batch preview to finish loading."
+                    : nothingToDo
+                      ? "Every phrase in this batch has already been reinstated."
+                      : null,
             });
             const hintId = reason
               ? "handwavy-removal-batches-preview-confirm-confirm-disabled-hint-id"
