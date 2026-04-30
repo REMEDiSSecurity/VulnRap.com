@@ -17,6 +17,7 @@ import {
   parseDriftLookback,
   readStoredDriftLookback,
   AVRI_DRIFT_LOOKBACK_STORAGE_KEY,
+  describeHandwavyDisabledReason,
 } from "./feedback-analytics";
 import type {
   HandwavyEditEntry,
@@ -752,3 +753,118 @@ describe("AVRI drift lookback persistence helpers (Task #270 — lock the parser
     });
   });
 });
+
+describe("describeHandwavyDisabledReason (Task #337 — visible disabled-reason caption)", () => {
+  it("returns the missing-token hint first when mutations are blocked", () => {
+    expect(
+      describeHandwavyDisabledReason({
+        mutationsAllowed: false,
+        cooldownActive: true,
+        cooldownSecondsRemaining: 5,
+        rowEditingActive: true,
+        bulkBusy: true,
+        inFlight: true,
+        extraReason: "ignored",
+      }),
+    ).toBe(
+      "Reviewer token is missing or invalid — see the warning banner above the calibration card.",
+    );
+  });
+
+  it("surfaces an active calibration cooldown ahead of row/bulk/in-flight reasons", () => {
+    const out = describeHandwavyDisabledReason({
+      mutationsAllowed: true,
+      cooldownActive: true,
+      cooldownSecondsRemaining: 7,
+      rowEditingActive: true,
+      bulkBusy: true,
+      inFlight: true,
+      extraReason: "ignored",
+    });
+    expect(out).toBe(
+      "Calibration cooldown active for 7s — wait for the wrong-token throttle to clear.",
+    );
+  });
+
+  it("clamps the displayed cooldown seconds to a minimum of 1", () => {
+    const out = describeHandwavyDisabledReason({
+      mutationsAllowed: true,
+      cooldownActive: true,
+      cooldownSecondsRemaining: 0,
+    });
+    expect(out).toBe(
+      "Calibration cooldown active for 1s — wait for the wrong-token throttle to clear.",
+    );
+  });
+
+  it("falls through to the row-editing reason when no higher-priority gate is active", () => {
+    expect(
+      describeHandwavyDisabledReason({
+        mutationsAllowed: true,
+        rowEditingActive: true,
+        bulkBusy: true,
+        inFlight: true,
+        extraReason: "ignored",
+      }),
+    ).toBe("Another row is being edited — save or cancel that edit first.");
+  });
+
+  it("reports a bulk-removal preview/in-flight when only bulkBusy is set", () => {
+    expect(
+      describeHandwavyDisabledReason({
+        mutationsAllowed: true,
+        bulkBusy: true,
+        inFlight: true,
+        extraReason: "ignored",
+      }),
+    ).toBe(
+      "A bulk removal preview is open or in flight — finish or cancel it first.",
+    );
+  });
+
+  it("uses the inFlight branch with a custom label when provided", () => {
+    expect(
+      describeHandwavyDisabledReason({
+        mutationsAllowed: true,
+        inFlight: true,
+        inFlightLabel: "Removing this phrase — wait for it to finish.",
+        extraReason: "ignored",
+      }),
+    ).toBe("Removing this phrase — wait for it to finish.");
+  });
+
+  it("falls back to a generic in-flight wording when no custom label is provided", () => {
+    expect(
+      describeHandwavyDisabledReason({
+        mutationsAllowed: true,
+        inFlight: true,
+      }),
+    ).toBe("Another action is in progress — wait for it to finish.");
+  });
+
+  it("returns the call-site extraReason when no other gate matches", () => {
+    expect(
+      describeHandwavyDisabledReason({
+        mutationsAllowed: true,
+        extraReason: "Tick the acknowledgment checkbox above to continue.",
+      }),
+    ).toBe("Tick the acknowledgment checkbox above to continue.");
+  });
+
+  it("returns null when nothing is disabling the control", () => {
+    expect(
+      describeHandwavyDisabledReason({ mutationsAllowed: true }),
+    ).toBeNull();
+    expect(
+      describeHandwavyDisabledReason({
+        mutationsAllowed: true,
+        cooldownActive: false,
+        rowEditingActive: false,
+        bulkBusy: false,
+        inFlight: false,
+        extraReason: null,
+      }),
+    ).toBeNull();
+  });
+});
+

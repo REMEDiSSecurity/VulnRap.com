@@ -438,6 +438,78 @@ interface CalibrationAuthState {
 const MUTATIONS_BLOCKED_TITLE =
   "Calibration mutations are blocked: the reviewer token is missing or invalid (see the warning banner above the calibration card).";
 
+// Task #337 — touch/AT-friendly counterpart to the hover-only Task #214
+// title. Rendered as a visible inline caption + aria-describedby beneath
+// every disabled mutating control in the panel.
+const MUTATIONS_BLOCKED_HINT =
+  "Reviewer token is missing or invalid — see the warning banner above the calibration card.";
+
+// Task #337 — derives the visible reason a disabled mutating control
+// should display, or null when it is enabled. Order is intentional: the
+// most "global" reasons win so a token gate is shown ahead of any
+// transient row-level reason. Exported so feedback-analytics.test.tsx can
+// exercise every branch in isolation.
+export function describeHandwavyDisabledReason(opts: {
+  mutationsAllowed: boolean;
+  cooldownActive?: boolean;
+  cooldownSecondsRemaining?: number;
+  rowEditingActive?: boolean;
+  bulkBusy?: boolean;
+  inFlight?: boolean;
+  inFlightLabel?: string;
+  extraReason?: string | null;
+}): string | null {
+  if (!opts.mutationsAllowed) return MUTATIONS_BLOCKED_HINT;
+  if (opts.cooldownActive) {
+    const s = Math.max(1, opts.cooldownSecondsRemaining ?? 0);
+    return `Calibration cooldown active for ${s}s — wait for the wrong-token throttle to clear.`;
+  }
+  if (opts.rowEditingActive) {
+    return "Another row is being edited — save or cancel that edit first.";
+  }
+  if (opts.bulkBusy) {
+    return "A bulk removal preview is open or in flight — finish or cancel it first.";
+  }
+  if (opts.inFlight) {
+    return opts.inFlightLabel ?? "Another action is in progress — wait for it to finish.";
+  }
+  if (opts.extraReason) return opts.extraReason;
+  return null;
+}
+
+// Task #337 — visual primitive that renders the disabled-reason caption.
+// Renders nothing when reason is null. The rendered <div id={id}> is what
+// the call site's aria-describedby points at.
+function HandwavyDisabledHint({
+  id,
+  reason,
+  testId,
+}: {
+  id: string | undefined;
+  reason: string | null;
+  testId?: string;
+}) {
+  if (!reason || !id) return null;
+  return (
+    <div
+      id={id}
+      className="flex items-start gap-1 text-[10px] text-muted-foreground/80 pl-0.5"
+      data-testid={testId ?? "handwavy-disabled-hint"}
+    >
+      <Info className="w-3 h-3 mt-0.5 shrink-0" aria-hidden="true" />
+      <span>{reason}</span>
+    </div>
+  );
+}
+
+// Task #337 — slugify a phrase or ISO timestamp into a value safe to embed
+// in an aria-describedby IDREF (no whitespace, no punctuation).
+function slugifyForHintId(value: string, fallback: string): string {
+  return (
+    value.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || fallback
+  );
+}
+
 // Task #297 — once the dedicated CalibrationTokenRejectedBanner is on
 // screen for a calibration mutation 401, the generic destructive toasts
 // each handler used to fire ("Failed to add phrase.", "Reinstate failed.",
@@ -5419,26 +5491,64 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               <option value="hedging">Generic hedging</option>
               <option value="buzzword">Buzzword soup</option>
             </select>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={
-                busy === "preview" ||
-                busy === "confirm" ||
-                preview !== null ||
-                draft.trim().length < 3 ||
-                cooldown.active ||
-                !mutationsAllowed
-              }
-              title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-              data-testid="handwavy-add"
-              data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              {cooldown.active
-                ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
-                : busy === "preview" ? "Checking corpus…" : "Preview impact"}
-            </Button>
+            {(() => {
+              const addReason = describeHandwavyDisabledReason({
+                mutationsAllowed,
+                cooldownActive: cooldown.active,
+                cooldownSecondsRemaining: cooldown.secondsRemaining,
+                inFlight:
+                  busy === "preview" ||
+                  busy === "confirm" ||
+                  preview !== null,
+                inFlightLabel:
+                  busy === "preview"
+                    ? "Checking the corpus — wait for the preview to load."
+                    : busy === "confirm"
+                      ? "Adding the previewed phrase — wait for it to finish."
+                      : "Finish or back out of the open add preview first.",
+                extraReason:
+                  draft.trim().length < 3
+                    ? "Type a phrase of at least 3 characters first."
+                    : null,
+              });
+              const addHintId = addReason
+                ? "handwavy-add-disabled-hint-id"
+                : undefined;
+              return (
+                <>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={
+                      busy === "preview" ||
+                      busy === "confirm" ||
+                      preview !== null ||
+                      draft.trim().length < 3 ||
+                      cooldown.active ||
+                      !mutationsAllowed
+                    }
+                    title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                    data-testid="handwavy-add"
+                    data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                    aria-describedby={addHintId}
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    {cooldown.active
+                      ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                      : busy === "preview" ? "Checking corpus…" : "Preview impact"}
+                  </Button>
+                  {addHintId && (
+                    <div className="basis-full">
+                      <HandwavyDisabledHint
+                        id={addHintId}
+                        reason={addReason}
+                        testId="handwavy-add-disabled-hint"
+                      />
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
           <textarea
             value={draftRationale}
@@ -5771,23 +5881,50 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               >
                 Back out
               </Button>
-              <Button
-                size="sm"
-                variant={hasWarning ? "destructive" : "default"}
-                onClick={handleConfirmPreview}
-                disabled={busy === "confirm" || cooldown.active || !mutationsAllowed}
-                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                data-testid="handwavy-preview-confirm"
-                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-              >
-                {cooldown.active
-                  ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
-                  : busy === "confirm"
-                  ? "Adding…"
-                  : hasWarning
-                  ? "Add anyway"
-                  : "Confirm add"}
-              </Button>
+              {(() => {
+                const previewConfirmReason = describeHandwavyDisabledReason({
+                  mutationsAllowed,
+                  cooldownActive: cooldown.active,
+                  cooldownSecondsRemaining: cooldown.secondsRemaining,
+                  inFlight: busy === "confirm",
+                  inFlightLabel:
+                    "Adding the previewed phrase — wait for it to finish.",
+                });
+                const previewConfirmHintId = previewConfirmReason
+                  ? "handwavy-preview-confirm-disabled-hint-id"
+                  : undefined;
+                return (
+                  <>
+                    <Button
+                      size="sm"
+                      variant={hasWarning ? "destructive" : "default"}
+                      onClick={handleConfirmPreview}
+                      disabled={busy === "confirm" || cooldown.active || !mutationsAllowed}
+                      title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                      data-testid="handwavy-preview-confirm"
+                      data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                      aria-describedby={previewConfirmHintId}
+                    >
+                      {cooldown.active
+                        ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                        : busy === "confirm"
+                        ? "Adding…"
+                        : hasWarning
+                        ? "Add anyway"
+                        : "Confirm add"}
+                    </Button>
+                    {previewConfirmHintId && (
+                      <div className="basis-full">
+                        <HandwavyDisabledHint
+                          id={previewConfirmHintId}
+                          reason={previewConfirmReason}
+                          testId="handwavy-preview-confirm-disabled-hint"
+                        />
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
           );
@@ -6107,25 +6244,58 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               >
                 Back out
               </Button>
-              <Button
-                size="sm"
-                variant={requiresAck ? "destructive" : "default"}
-                onClick={confirmBulkRemoveFromPreview}
-                disabled={removalDisabled || !mutationsAllowed}
-                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                data-testid="handwavy-bulk-preview-confirm"
-                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-              >
-                {cooldown.active
-                  ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
-                  : busy === "bulk-remove"
-                  ? "Removing…"
-                  : wouldRemove === 0
-                    ? "Nothing to remove"
-                    : requiresAck
-                      ? `Remove ${wouldRemove} anyway`
-                      : `Remove ${wouldRemove} phrase${wouldRemove === 1 ? "" : "s"}`}
-              </Button>
+              {(() => {
+                const bulkPreviewConfirmReason = describeHandwavyDisabledReason({
+                  mutationsAllowed,
+                  cooldownActive: cooldown.active,
+                  cooldownSecondsRemaining: cooldown.secondsRemaining,
+                  inFlight: busy === "bulk-remove",
+                  inFlightLabel:
+                    "Bulk removal is in progress — wait for it to finish.",
+                  extraReason:
+                    wouldRemove === 0
+                      ? "Nothing left to remove in this preview."
+                      : requiresAck && !bulkPreview.acknowledged
+                        ? "Tick the acknowledgment checkbox above to confirm losing the listed detections."
+                        : null,
+                });
+                const bulkPreviewConfirmHintId = bulkPreviewConfirmReason
+                  ? "handwavy-bulk-preview-confirm-disabled-hint-id"
+                  : undefined;
+                return (
+                  <>
+                    <Button
+                      size="sm"
+                      variant={requiresAck ? "destructive" : "default"}
+                      onClick={confirmBulkRemoveFromPreview}
+                      disabled={removalDisabled || !mutationsAllowed}
+                      title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                      data-testid="handwavy-bulk-preview-confirm"
+                      data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                      aria-describedby={bulkPreviewConfirmHintId}
+                    >
+                      {cooldown.active
+                        ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                        : busy === "bulk-remove"
+                        ? "Removing…"
+                        : wouldRemove === 0
+                          ? "Nothing to remove"
+                          : requiresAck
+                            ? `Remove ${wouldRemove} anyway`
+                            : `Remove ${wouldRemove} phrase${wouldRemove === 1 ? "" : "s"}`}
+                    </Button>
+                    {bulkPreviewConfirmHintId && (
+                      <div className="basis-full">
+                        <HandwavyDisabledHint
+                          id={bulkPreviewConfirmHintId}
+                          reason={bulkPreviewConfirmReason}
+                          testId="handwavy-bulk-preview-confirm-disabled-hint"
+                        />
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
           );
@@ -6184,21 +6354,50 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               >
                 Back out
               </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={confirmRemoveAnyway}
-                disabled={
-                  busy === `rm:${removeConfirm.phrase}` ||
-                  busy === `rm-preview:${removeConfirm.phrase}` ||
-                  !mutationsAllowed
-                }
-                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                data-testid="handwavy-remove-confirm-go"
-                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-              >
-                Remove anyway
-              </Button>
+              {(() => {
+                const removeConfirmReason = describeHandwavyDisabledReason({
+                  mutationsAllowed,
+                  inFlight:
+                    busy === `rm:${removeConfirm.phrase}` ||
+                    busy === `rm-preview:${removeConfirm.phrase}`,
+                  inFlightLabel:
+                    busy === `rm:${removeConfirm.phrase}`
+                      ? "Removing this phrase — wait for it to finish."
+                      : "Loading the removal preview — wait for it to finish.",
+                });
+                const removeConfirmHintId = removeConfirmReason
+                  ? "handwavy-remove-confirm-go-disabled-hint-id"
+                  : undefined;
+                return (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={confirmRemoveAnyway}
+                      disabled={
+                        busy === `rm:${removeConfirm.phrase}` ||
+                        busy === `rm-preview:${removeConfirm.phrase}` ||
+                        !mutationsAllowed
+                      }
+                      title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                      data-testid="handwavy-remove-confirm-go"
+                      data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                      aria-describedby={removeConfirmHintId}
+                    >
+                      Remove anyway
+                    </Button>
+                    {removeConfirmHintId && (
+                      <div className="basis-full">
+                        <HandwavyDisabledHint
+                          id={removeConfirmHintId}
+                          reason={removeConfirmReason}
+                          testId="handwavy-remove-confirm-go-disabled-hint"
+                        />
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -6356,17 +6555,46 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 >
                   Back out
                 </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={confirmRemoveFromPreview}
-                  disabled={inFlight || (requireAck && !acknowledged) || !mutationsAllowed}
-                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                  data-testid="handwavy-remove-preview-confirm"
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                >
-                  Remove anyway
-                </Button>
+                {(() => {
+                  const removePreviewReason = describeHandwavyDisabledReason({
+                    mutationsAllowed,
+                    inFlight,
+                    inFlightLabel:
+                      "Removing this phrase — wait for it to finish.",
+                    extraReason:
+                      requireAck && !acknowledged
+                        ? "Tick the acknowledgment checkbox above to confirm losing the listed detections."
+                        : null,
+                  });
+                  const removePreviewHintId = removePreviewReason
+                    ? "handwavy-remove-preview-confirm-disabled-hint-id"
+                    : undefined;
+                  return (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={confirmRemoveFromPreview}
+                        disabled={inFlight || (requireAck && !acknowledged) || !mutationsAllowed}
+                        title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                        data-testid="handwavy-remove-preview-confirm"
+                        data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                        aria-describedby={removePreviewHintId}
+                      >
+                        Remove anyway
+                      </Button>
+                      {removePreviewHintId && (
+                        <div className="basis-full">
+                          <HandwavyDisabledHint
+                            id={removePreviewHintId}
+                            reason={removePreviewReason}
+                            testId="handwavy-remove-preview-confirm-disabled-hint"
+                          />
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           );
@@ -6402,21 +6630,51 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   <span className="font-mono text-foreground/80 break-all flex-1 min-w-[8rem]">
                     {entry.phrase}
                   </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={() => handleUndoSingleRemove(entry)}
-                    disabled={undoBusy || !mutationsAllowed}
-                    title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                    data-testid="handwavy-single-undo-button"
-                    aria-label={`Undo removal of phrase ${entry.phrase}`}
-                    data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                  >
-                    <Undo2 className="w-3 h-3 mr-1" />
-                    {undoBusy ? "Undoing…" : "Undo"}
-                  </Button>
+                  {(() => {
+                    // Task #337 — visible reason caption + aria-describedby
+                    // for this specific banner's Undo button. Hint id is
+                    // suffixed with the entry's removedAt so each banner in
+                    // the Task #332 stack carries an unambiguous, stable
+                    // identifier even when several banners render at once.
+                    const singleUndoReason = describeHandwavyDisabledReason({
+                      mutationsAllowed,
+                      inFlight: undoBusy,
+                      inFlightLabel:
+                        "Undoing this single removal — wait for it to finish.",
+                    });
+                    const singleUndoHintId = singleUndoReason
+                      ? `handwavy-single-undo-disabled-hint-id-${entry.removedAt}`
+                      : undefined;
+                    return (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() => handleUndoSingleRemove(entry)}
+                          disabled={undoBusy || !mutationsAllowed}
+                          title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                          data-testid="handwavy-single-undo-button"
+                          aria-label={`Undo removal of phrase ${entry.phrase}`}
+                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                          aria-describedby={singleUndoHintId}
+                        >
+                          <Undo2 className="w-3 h-3 mr-1" />
+                          {undoBusy ? "Undoing…" : "Undo"}
+                        </Button>
+                        {singleUndoHintId && (
+                          <div className="basis-full">
+                            <HandwavyDisabledHint
+                              id={singleUndoHintId}
+                              reason={singleUndoReason}
+                              testId="handwavy-single-undo-disabled-hint"
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   <button
                     type="button"
                     className="text-[10px] text-muted-foreground hover:text-foreground underline"
@@ -6559,17 +6817,46 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 >
                   Back out
                 </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={confirmEditFromPreview}
-                  disabled={inFlight || (requireAck && !acknowledged) || !mutationsAllowed}
-                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                  data-testid="handwavy-edit-preview-confirm"
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                >
-                  Rename anyway
-                </Button>
+                {(() => {
+                  const editPreviewReason = describeHandwavyDisabledReason({
+                    mutationsAllowed,
+                    inFlight,
+                    inFlightLabel:
+                      "Saving the rename — wait for it to finish.",
+                    extraReason:
+                      requireAck && !acknowledged
+                        ? "Tick the acknowledgment checkbox above to confirm losing the listed detections."
+                        : null,
+                  });
+                  const editPreviewHintId = editPreviewReason
+                    ? "handwavy-edit-preview-confirm-disabled-hint-id"
+                    : undefined;
+                  return (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={confirmEditFromPreview}
+                        disabled={inFlight || (requireAck && !acknowledged) || !mutationsAllowed}
+                        title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                        data-testid="handwavy-edit-preview-confirm"
+                        data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                        aria-describedby={editPreviewHintId}
+                      >
+                        Rename anyway
+                      </Button>
+                      {editPreviewHintId && (
+                        <div className="basis-full">
+                          <HandwavyDisabledHint
+                            id={editPreviewHintId}
+                            reason={editPreviewReason}
+                            testId="handwavy-edit-preview-confirm-disabled-hint"
+                          />
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           );
@@ -6623,6 +6910,41 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           const retryHint = retried
             ? `Retried ${retried.count} ${retried.count === 1 ? "row" : "rows"} from the previous ${retried.parentKind === "remove" ? "remove" : "undo"} batch.`
             : null;
+          // Task #337 — visible reason captions for the bulk-results
+          // banner action buttons. We compute per-button so a reviewer
+          // sees only the hint that matches the button they tried to
+          // press, and we render them on a sibling row beneath the
+          // action row (rather than wedging a `basis-full` between the
+          // buttons themselves) so the existing flex layout doesn't get
+          // visually fractured.
+          const retryFailedReason = showRetryBtn
+            ? describeHandwavyDisabledReason({
+                mutationsAllowed,
+                cooldownActive: cooldown.active,
+                cooldownSecondsRemaining: cooldown.secondsRemaining,
+                inFlight: retryBusy,
+                inFlightLabel:
+                  bulkResults.kind === "remove"
+                    ? "Bulk removal is in progress — wait for it to finish."
+                    : "Bulk undo is in progress — wait for it to finish.",
+              })
+            : null;
+          const retryFailedHintId = retryFailedReason
+            ? "handwavy-bulk-retry-failed-disabled-hint-id"
+            : undefined;
+          const bulkUndoReason = showUndoBtn
+            ? describeHandwavyDisabledReason({
+                mutationsAllowed,
+                cooldownActive: cooldown.active,
+                cooldownSecondsRemaining: cooldown.secondsRemaining,
+                inFlight: undoBusy,
+                inFlightLabel:
+                  "Bulk undo is in progress — wait for it to finish.",
+              })
+            : null;
+          const bulkUndoHintId = bulkUndoReason
+            ? "handwavy-bulk-undo-disabled-hint-id"
+            : undefined;
           return (
           <div
             className="rounded-md border border-border/40 bg-background/40 p-3 space-y-2 text-xs"
@@ -6654,6 +6976,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   data-testid="handwavy-bulk-retry-failed"
                   data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                   data-cooldown-active={cooldown.active ? "true" : "false"}
+                  aria-describedby={retryFailedHintId}
                 >
                   <RotateCcw className="w-3 h-3 mr-1" />
                   {cooldown.active
@@ -6686,6 +7009,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                   data-testid="handwavy-bulk-undo"
                   data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                  aria-describedby={bulkUndoHintId}
                 >
                   <Undo2 className="w-3 h-3 mr-1" />
                   {undoBusy
@@ -6713,6 +7037,29 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 data-retried-count={retried?.count}
               >
                 {retryHint}
+              </div>
+            )}
+            {/* Task #337 — visible reason captions for the disabled
+                "Retry failed" / "Undo this batch" controls above. Sit
+                on a sibling row beneath the action row so the existing
+                flex layout isn't fractured by basis-full wrappers
+                between the buttons themselves. */}
+            {(retryFailedHintId || bulkUndoHintId) && (
+              <div className="flex flex-col gap-1">
+                {retryFailedHintId && (
+                  <HandwavyDisabledHint
+                    id={retryFailedHintId}
+                    reason={retryFailedReason}
+                    testId="handwavy-bulk-retry-failed-disabled-hint"
+                  />
+                )}
+                {bulkUndoHintId && (
+                  <HandwavyDisabledHint
+                    id={bulkUndoHintId}
+                    reason={bulkUndoReason}
+                    testId="handwavy-bulk-undo-disabled-hint"
+                  />
+                )}
               </div>
             )}
             <ul className="space-y-0.5">
@@ -6766,6 +7113,47 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 window before opening the preview. The state is shared
                 with the add-time input above so changes here propagate
                 to both flows. */}
+            {(() => {
+              // Task #337 — derive the visible reason captions for the
+              // toolbar's "Undo last N adds" and "Remove selected"
+              // buttons. Wrapped in an IIFE so the hint id/reason
+              // locals are in scope for both the buttons (which carry
+              // `aria-describedby`) and the sibling hint row rendered
+              // beneath the buttons. The "Select at least one phrase
+              // first" extraReason is the only branch unique to the
+              // bulk-remove control — every other branch is the same
+              // shape as the rest of the panel uses.
+              const undoAllReason =
+                undoCandidates.size >= 2
+                  ? describeHandwavyDisabledReason({
+                      mutationsAllowed,
+                      inFlight: busy === "undo-batch",
+                      inFlightLabel:
+                        "Undoing the last batch — wait for it to finish.",
+                    })
+                  : null;
+              const undoAllHintId = undoAllReason
+                ? "handwavy-undo-all-disabled-hint-id"
+                : undefined;
+              const bulkRemoveExtra =
+                selectedInList.length === 0
+                  ? "Select at least one phrase first."
+                  : null;
+              const bulkRemoveReason = describeHandwavyDisabledReason({
+                mutationsAllowed,
+                bulkBusy: bulkPreview !== null,
+                inFlight:
+                  busy === "bulk-remove" || busy === "bulk-preview",
+                inFlightLabel:
+                  busy === "bulk-remove"
+                    ? "Bulk removal is in progress — wait for it to finish."
+                    : "Loading the bulk removal preview — wait for it to finish.",
+                extraReason: bulkRemoveExtra,
+              });
+              const bulkRemoveHintId = bulkRemoveReason
+                ? "handwavy-bulk-remove-disabled-hint-id"
+                : undefined;
+              return (
             <div
               className="sticky top-0 z-10 bg-background/95 backdrop-blur px-3 py-2 border-b border-border/30 text-xs"
               data-testid="handwavy-bulk-toolbar"
@@ -6855,6 +7243,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     }}
                     data-testid="handwavy-undo-all"
                     data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                    aria-describedby={undoAllHintId}
                     title={
                       !mutationsAllowed
                         ? MUTATIONS_BLOCKED_TITLE
@@ -6887,6 +7276,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   onClick={handlePreviewBulkRemove}
                   data-testid="handwavy-bulk-remove"
                   data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                  aria-describedby={bulkRemoveHintId}
                   title={
                     !mutationsAllowed
                       ? MUTATIONS_BLOCKED_TITLE
@@ -6899,6 +7289,29 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     : `Remove selected${selectedInList.length > 0 ? ` (${selectedInList.length})` : ""}`}
                 </Button>
               </div>
+              {/* Task #337 — visible reason captions for the disabled
+                  "Undo last N adds" / "Remove selected" controls
+                  above. Sit on a sibling row beneath the action row so
+                  the existing flex layout isn't fractured by basis-full
+                  wrappers between the buttons themselves. */}
+              {(undoAllHintId || bulkRemoveHintId) && (
+                <div className="flex flex-col gap-1 mt-1">
+                  {undoAllHintId && (
+                    <HandwavyDisabledHint
+                      id={undoAllHintId}
+                      reason={undoAllReason}
+                      testId="handwavy-undo-all-disabled-hint"
+                    />
+                  )}
+                  {bulkRemoveHintId && (
+                    <HandwavyDisabledHint
+                      id={bulkRemoveHintId}
+                      reason={bulkRemoveReason}
+                      testId="handwavy-bulk-remove-disabled-hint"
+                    />
+                  )}
+                </div>
+              )}
               {/* Task #229 — production scan-window control for the bulk
                   removal preview. Mirrors the add-time control above and
                   shares the same `productionScanLimitInput` state so
@@ -6949,6 +7362,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 )}
               </div>
             </div>
+              );
+            })()}
             <div className="divide-y divide-border/20">
             {displayPhrases.map((m) => {
               const addedAt = formatAuditTimestamp(m.addedAt);
@@ -7003,6 +7418,32 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               // selector to scroll into view (the row's React key already
               // uses the phrase string but isn't queryable from the DOM).
               const isHighlighted = highlightedPhrase === m.phrase;
+              // Task #337 — visible reason caption beneath the per-row
+              // Edit / Trash buttons. The buttons share identical disable
+              // conditions, so they share one caption + hintId pair (each
+              // button's aria-describedby points at it). We only compute
+              // the reason when the row is in its non-edit branch — when
+              // this row is being edited the rendered Save/Cancel pair
+              // has its own context and the per-row Edit/Trash buttons
+              // aren't on screen. The phrase slug keeps the id collision-
+              // free across rows in the same panel render.
+              const editTrashDisabledReason = !isEditing
+                ? describeHandwavyDisabledReason({
+                    mutationsAllowed,
+                    rowEditingActive: editing !== null,
+                    bulkBusy,
+                    inFlight:
+                      busy === `rm:${m.phrase}` ||
+                      busy === `rm-preview:${m.phrase}`,
+                    inFlightLabel:
+                      busy === `rm:${m.phrase}`
+                        ? "Removing this phrase — wait for it to finish."
+                        : "Loading the removal preview for this phrase — wait for it to finish.",
+                  })
+                : null;
+              const editTrashHintId = editTrashDisabledReason
+                ? `handwavy-row-disabled-${slugifyForHintId(m.phrase, "phrase")}`
+                : undefined;
               return (
                 <div
                   key={m.phrase}
@@ -7134,19 +7575,44 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     )}
                     {isEditing ? (
                       <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-emerald-300 hover:text-emerald-200"
-                          disabled={busy === `edit:${m.phrase}` || !mutationsAllowed}
-                          title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                          onClick={handleSaveEdit}
-                          data-testid="handwavy-edit-save"
-                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                          aria-label={`Save edit for ${m.phrase}`}
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                        </Button>
+                        {(() => {
+                          const editSaveReason = describeHandwavyDisabledReason({
+                            mutationsAllowed,
+                            inFlight: busy === `edit:${m.phrase}`,
+                            inFlightLabel:
+                              "Saving the rename — wait for it to finish.",
+                          });
+                          const editSaveHintId = editSaveReason
+                            ? `handwavy-edit-save-disabled-hint-id-${slugifyForHintId(m.phrase, "phrase")}`
+                            : undefined;
+                          return (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-emerald-300 hover:text-emerald-200"
+                                disabled={busy === `edit:${m.phrase}` || !mutationsAllowed}
+                                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                                onClick={handleSaveEdit}
+                                data-testid="handwavy-edit-save"
+                                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                                aria-label={`Save edit for ${m.phrase}`}
+                                aria-describedby={editSaveHintId}
+                              >
+                                <Save className="w-3.5 h-3.5" />
+                              </Button>
+                              {editSaveHintId && (
+                                <div className="basis-full">
+                                  <HandwavyDisabledHint
+                                    id={editSaveHintId}
+                                    reason={editSaveReason}
+                                    testId="handwavy-edit-save-disabled-hint"
+                                  />
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -7210,6 +7676,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           data-testid="handwavy-edit"
                           data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                           aria-label={`Edit phrase ${m.phrase}`}
+                          aria-describedby={editTrashHintId}
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
@@ -7229,12 +7696,26 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           data-testid="handwavy-remove"
                           data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                           aria-label={`Remove phrase ${m.phrase}`}
+                          aria-describedby={editTrashHintId}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </>
                     )}
                   </div>
+                  {/* Task #337 — visible explanation when the per-row
+                      Edit/Trash buttons are disabled. Sibling of the
+                      buttons row (above the audit-info row) so it
+                      renders directly beneath the affordances it
+                      describes. Stays out of the DOM entirely when both
+                      buttons are enabled. */}
+                  {editTrashHintId && (
+                    <HandwavyDisabledHint
+                      id={editTrashHintId}
+                      reason={editTrashDisabledReason}
+                      testId="handwavy-row-disabled-hint"
+                    />
+                  )}
                   <div
                     className="text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5"
                     data-testid="handwavy-audit"
@@ -7502,34 +7983,72 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                             Already reinstated
                           </Badge>
                         ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                            disabled={
-                              busy === batchKey ||
-                              busy === previewKey ||
-                              !mutationsAllowed
-                            }
-                            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                            onClick={() =>
-                              handleOpenPickerBatchPreview(
-                                removedAtIso,
-                                b.removedBy,
-                                phraseCount,
-                              )
-                            }
-                            data-testid="handwavy-removal-batches-reinstate"
-                            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                            aria-label={`Preview and reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`}
-                          >
-                            <RotateCcw className="w-3 h-3 mr-1" />
-                            {busy === batchKey
-                              ? "Reinstating…"
-                              : busy === previewKey
-                                ? "Loading preview…"
-                                : "Reinstate this batch"}
-                          </Button>
+                          (() => {
+                            // Task #337 — visible reason caption beneath
+                            // the picker's "Reinstate this batch" button
+                            // (the entry-point counterpart to the in-
+                            // history Preview reinstate / Reinstate all
+                            // pair handled above). Same disable surface,
+                            // so the same describeHandwavyDisabledReason
+                            // shape applies.
+                            const pickerReinstateReason = describeHandwavyDisabledReason({
+                              mutationsAllowed,
+                              inFlight:
+                                busy === batchKey || busy === previewKey,
+                              inFlightLabel:
+                                busy === batchKey
+                                  ? "Reinstating this batch — wait for it to finish."
+                                  : "Loading the batch reinstate preview — wait for it to finish.",
+                            });
+                            const pickerReinstateHintId = pickerReinstateReason
+                              ? `handwavy-picker-reinstate-disabled-${slugifyForHintId(
+                                  removedAtIso,
+                                  "batch",
+                                )}`
+                              : undefined;
+                            return (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                                  disabled={
+                                    busy === batchKey ||
+                                    busy === previewKey ||
+                                    !mutationsAllowed
+                                  }
+                                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                                  onClick={() =>
+                                    handleOpenPickerBatchPreview(
+                                      removedAtIso,
+                                      b.removedBy,
+                                      phraseCount,
+                                    )
+                                  }
+                                  data-testid="handwavy-removal-batches-reinstate"
+                                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                                  aria-label={`Preview and reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`}
+                                  aria-describedby={pickerReinstateHintId}
+                                >
+                                  <RotateCcw className="w-3 h-3 mr-1" />
+                                  {busy === batchKey
+                                    ? "Reinstating…"
+                                    : busy === previewKey
+                                      ? "Loading preview…"
+                                      : "Reinstate this batch"}
+                                </Button>
+                                {pickerReinstateHintId && (
+                                  <div className="basis-full">
+                                    <HandwavyDisabledHint
+                                      id={pickerReinstateHintId}
+                                      reason={pickerReinstateReason}
+                                      testId="handwavy-picker-reinstate-disabled-hint"
+                                    />
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()
                         )}
                       </div>
                       {isConflictExpanded && conflict && (
@@ -7761,20 +8280,51 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                               Already active
                             </Badge>
                           ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                              disabled={busy === reinstateKey || !mutationsAllowed}
-                              title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                              onClick={() => setReinstateConfirm(h)}
-                              data-testid="handwavy-reinstate"
-                              data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                              aria-label={`Reinstate phrase ${h.phrase}`}
-                            >
-                              <RotateCcw className="w-3 h-3 mr-1" />
-                              {busy === reinstateKey ? "Reinstating…" : "Reinstate"}
-                            </Button>
+                            (() => {
+                              // Task #337 — visible reason caption beneath
+                              // a disabled per-history-row Reinstate button.
+                              // Inline IIFE keeps the local hint id/reason
+                              // in scope without disturbing the surrounding
+                              // ternary structure.
+                              const reinstateReason = describeHandwavyDisabledReason({
+                                mutationsAllowed,
+                                inFlight: busy === reinstateKey,
+                                inFlightLabel:
+                                  "Reinstating this phrase — wait for it to finish.",
+                              });
+                              const reinstateHintId = reinstateReason
+                                ? `handwavy-reinstate-disabled-${slugifyForHintId(
+                                    `${h.phrase}-${removedAtKey}`,
+                                    "reinstate",
+                                  )}`
+                                : undefined;
+                              return (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                                    disabled={busy === reinstateKey || !mutationsAllowed}
+                                    title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                                    onClick={() => setReinstateConfirm(h)}
+                                    data-testid="handwavy-reinstate"
+                                    data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                                    aria-label={`Reinstate phrase ${h.phrase}`}
+                                    aria-describedby={reinstateHintId}
+                                  >
+                                    <RotateCcw className="w-3 h-3 mr-1" />
+                                    {busy === reinstateKey ? "Reinstating…" : "Reinstate"}
+                                  </Button>
+                                  {reinstateHintId && (
+                                    <HandwavyDisabledHint
+                                      id={reinstateHintId}
+                                      reason={reinstateReason}
+                                      testId="handwavy-reinstate-disabled-hint"
+                                    />
+                                  )}
+                                </>
+                              );
+                            })()
                           )}
                         </div>
                         <div>
@@ -7926,7 +8476,34 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                             Nothing to reinstate
                           </Badge>
                         ) : (
-                          <>
+                          (() => {
+                            // Task #337 — both batch reinstate buttons
+                            // (Preview reinstate / Reinstate all N) share
+                            // the same disable conditions (either request
+                            // in flight, or mutations blocked), so they
+                            // share one hintId and one visible caption
+                            // rendered on its own row at the end of this
+                            // flex-wrap cluster (basis-full forces a new
+                            // line). IIFE keeps the hint id/reason locals
+                            // scoped to this ternary branch without
+                            // hoisting them up into the outer renderRow.
+                            const batchReinstateReason = describeHandwavyDisabledReason({
+                              mutationsAllowed,
+                              inFlight:
+                                busy === batchKey || busy === previewKey,
+                              inFlightLabel:
+                                busy === batchKey
+                                  ? "Reinstating this batch — wait for it to finish."
+                                  : "Loading the batch reinstate preview — wait for it to finish.",
+                            });
+                            const batchReinstateHintId = batchReinstateReason
+                              ? `handwavy-batch-reinstate-disabled-${slugifyForHintId(
+                                  group.removedAtIso,
+                                  "batch",
+                                )}`
+                              : undefined;
+                            return (
+                              <>
                             {/* Task #177 — dry-run preview affordance next
                                 to "Reinstate all". Calls /reinstate-batch
                                 with `dryRun: true` so the reviewer can see
@@ -7946,6 +8523,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                               data-testid="handwavy-reinstate-batch-preview"
                               data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                               aria-label={`Preview reinstate of ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
+                              aria-describedby={batchReinstateHintId}
                             >
                               <Info className="w-3 h-3 mr-1" />
                               {busy === previewKey
@@ -7959,6 +8537,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                               disabled={busy === batchKey || busy === previewKey || !mutationsAllowed}
                               title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                               data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                              aria-describedby={batchReinstateHintId}
                               onClick={() => {
                                 // Task #180 — gate the direct "Reinstate all"
                                 // click behind a confirmation dialog
@@ -7997,8 +8576,18 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                 ? "Reinstating…"
                                 : `Reinstate all ${remainingCount}`}
                             </Button>
-                          </>
-
+                            {batchReinstateHintId && (
+                              <div className="basis-full">
+                                <HandwavyDisabledHint
+                                  id={batchReinstateHintId}
+                                  reason={batchReinstateReason}
+                                  testId="handwavy-batch-reinstate-disabled-hint"
+                                />
+                              </div>
+                            )}
+                              </>
+                            );
+                          })()
                         )}
                       </div>
                       {previewForGroup && (() => {
@@ -8182,31 +8771,65 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                               >
                                 Cancel
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                                disabled={
-                                  confirming || wouldReinstateCount === 0 || !mutationsAllowed
-                                }
-                                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                                onClick={() =>
-                                  handleReinstateBatch(
-                                    group.removedAtIso,
-                                    group.batchSize,
-                                  )
-                                }
-                                data-testid="handwavy-reinstate-batch-preview-confirm"
-                                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                                aria-label={`Confirm reinstate of ${wouldReinstateCount} ${noun} from this batch`}
-                              >
-                                <RotateCcw className="w-3 h-3 mr-1" />
-                                {confirming
-                                  ? "Reinstating…"
-                                  : wouldReinstateCount > 0
-                                    ? `Confirm reinstate (${wouldReinstateCount})`
-                                    : "Nothing to reinstate"}
-                              </Button>
+                              {(() => {
+                                const reinstateBatchPrevReason =
+                                  describeHandwavyDisabledReason({
+                                    mutationsAllowed,
+                                    inFlight: confirming,
+                                    inFlightLabel:
+                                      "Reinstating this batch — wait for it to finish.",
+                                    extraReason:
+                                      wouldReinstateCount === 0
+                                        ? "No phrases in this batch are still removed."
+                                        : null,
+                                  });
+                                const reinstateBatchPrevHintId =
+                                  reinstateBatchPrevReason
+                                    ? `handwavy-reinstate-batch-preview-confirm-disabled-hint-id-${slugifyForHintId(
+                                        group.removedAtIso,
+                                        "batch",
+                                      )}`
+                                    : undefined;
+                                return (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                                      disabled={
+                                        confirming || wouldReinstateCount === 0 || !mutationsAllowed
+                                      }
+                                      title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                                      onClick={() =>
+                                        handleReinstateBatch(
+                                          group.removedAtIso,
+                                          group.batchSize,
+                                        )
+                                      }
+                                      data-testid="handwavy-reinstate-batch-preview-confirm"
+                                      data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                                      aria-label={`Confirm reinstate of ${wouldReinstateCount} ${noun} from this batch`}
+                                      aria-describedby={reinstateBatchPrevHintId}
+                                    >
+                                      <RotateCcw className="w-3 h-3 mr-1" />
+                                      {confirming
+                                        ? "Reinstating…"
+                                        : wouldReinstateCount > 0
+                                          ? `Confirm reinstate (${wouldReinstateCount})`
+                                          : "Nothing to reinstate"}
+                                    </Button>
+                                    {reinstateBatchPrevHintId && (
+                                      <div className="basis-full">
+                                        <HandwavyDisabledHint
+                                          id={reinstateBatchPrevHintId}
+                                          reason={reinstateBatchPrevReason}
+                                          testId="handwavy-reinstate-batch-preview-confirm-disabled-hint"
+                                        />
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
                         );
@@ -8321,26 +8944,46 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel data-testid="handwavy-revert-confirm-cancel">
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            data-testid="handwavy-revert-confirm-confirm"
-            disabled={!mutationsAllowed}
-            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-            onClick={() => {
-              if (revertConfirm) {
-                const { phrase, entry } = revertConfirm;
-                setRevertConfirm(null);
-                void handleRevertEdit(phrase, entry);
-              }
-            }}
-          >
-            Revert edit
-          </AlertDialogAction>
-        </AlertDialogFooter>
+        {(() => {
+          const reason = describeHandwavyDisabledReason({ mutationsAllowed });
+          const hintId = reason
+            ? "handwavy-revert-confirm-confirm-disabled-hint-id"
+            : undefined;
+          return (
+            <>
+              {reason && (
+                <div className="px-6 pb-2">
+                  <HandwavyDisabledHint
+                    id={hintId}
+                    reason={reason}
+                    testId="handwavy-revert-confirm-confirm-disabled-hint"
+                  />
+                </div>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="handwavy-revert-confirm-cancel">
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  data-testid="handwavy-revert-confirm-confirm"
+                  disabled={!mutationsAllowed}
+                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                  aria-describedby={hintId}
+                  onClick={() => {
+                    if (revertConfirm) {
+                      const { phrase, entry } = revertConfirm;
+                      setRevertConfirm(null);
+                      void handleRevertEdit(phrase, entry);
+                    }
+                  }}
+                >
+                  Revert edit
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          );
+        })()}
       </AlertDialogContent>
     </AlertDialog>
 
@@ -8398,26 +9041,46 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel data-testid="handwavy-reinstate-confirm-cancel">
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            data-testid="handwavy-reinstate-confirm-confirm"
-            disabled={!mutationsAllowed}
-            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-            onClick={() => {
-              if (reinstateConfirm) {
-                const entry = reinstateConfirm;
-                setReinstateConfirm(null);
-                void handleReinstate(entry);
-              }
-            }}
-          >
-            Reinstate phrase
-          </AlertDialogAction>
-        </AlertDialogFooter>
+        {(() => {
+          const reason = describeHandwavyDisabledReason({ mutationsAllowed });
+          const hintId = reason
+            ? "handwavy-reinstate-confirm-confirm-disabled-hint-id"
+            : undefined;
+          return (
+            <>
+              {reason && (
+                <div className="px-6 pb-2">
+                  <HandwavyDisabledHint
+                    id={hintId}
+                    reason={reason}
+                    testId="handwavy-reinstate-confirm-confirm-disabled-hint"
+                  />
+                </div>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="handwavy-reinstate-confirm-cancel">
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  data-testid="handwavy-reinstate-confirm-confirm"
+                  disabled={!mutationsAllowed}
+                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                  aria-describedby={hintId}
+                  onClick={() => {
+                    if (reinstateConfirm) {
+                      const entry = reinstateConfirm;
+                      setReinstateConfirm(null);
+                      void handleReinstate(entry);
+                    }
+                  }}
+                >
+                  Reinstate phrase
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          );
+        })()}
       </AlertDialogContent>
     </AlertDialog>
 
@@ -8480,26 +9143,46 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel data-testid="handwavy-undo-all-confirm-cancel">
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            data-testid="handwavy-undo-all-confirm-confirm"
-            disabled={!mutationsAllowed}
-            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-            onClick={() => {
-              if (undoAllConfirm) {
-                const { entries } = undoAllConfirm;
-                setUndoAllConfirm(null);
-                void handleUndoAllAdds(entries);
-              }
-            }}
-          >
-            Undo adds
-          </AlertDialogAction>
-        </AlertDialogFooter>
+        {(() => {
+          const reason = describeHandwavyDisabledReason({ mutationsAllowed });
+          const hintId = reason
+            ? "handwavy-undo-all-confirm-confirm-disabled-hint-id"
+            : undefined;
+          return (
+            <>
+              {reason && (
+                <div className="px-6 pb-2">
+                  <HandwavyDisabledHint
+                    id={hintId}
+                    reason={reason}
+                    testId="handwavy-undo-all-confirm-confirm-disabled-hint"
+                  />
+                </div>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="handwavy-undo-all-confirm-cancel">
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  data-testid="handwavy-undo-all-confirm-confirm"
+                  disabled={!mutationsAllowed}
+                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                  aria-describedby={hintId}
+                  onClick={() => {
+                    if (undoAllConfirm) {
+                      const { entries } = undoAllConfirm;
+                      setUndoAllConfirm(null);
+                      void handleUndoAllAdds(entries);
+                    }
+                  }}
+                >
+                  Undo adds
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          );
+        })()}
       </AlertDialogContent>
     </AlertDialog>
 
@@ -8619,19 +9302,43 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel data-testid="handwavy-reinstate-batch-confirm-cancel">
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            data-testid="handwavy-reinstate-batch-confirm-confirm"
-            disabled={
-              !mutationsAllowed ||
+        {(() => {
+          const reason = describeHandwavyDisabledReason({
+            mutationsAllowed,
+            extraReason:
               !reinstateBatchConfirm ||
               reinstateBatchConfirm.phrasesToReinstate.length === 0
-            }
-            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                ? "No phrases in this batch are still removed."
+                : null,
+          });
+          const hintId = reason
+            ? "handwavy-reinstate-batch-confirm-confirm-disabled-hint-id"
+            : undefined;
+          return (
+            <>
+              {reason && (
+                <div className="px-6 pb-2">
+                  <HandwavyDisabledHint
+                    id={hintId}
+                    reason={reason}
+                    testId="handwavy-reinstate-batch-confirm-confirm-disabled-hint"
+                  />
+                </div>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="handwavy-reinstate-batch-confirm-cancel">
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  data-testid="handwavy-reinstate-batch-confirm-confirm"
+                  disabled={
+                    !mutationsAllowed ||
+                    !reinstateBatchConfirm ||
+                    reinstateBatchConfirm.phrasesToReinstate.length === 0
+                  }
+                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                  aria-describedby={hintId}
             onClick={() => {
               if (reinstateBatchConfirm) {
                 const {
@@ -8659,6 +9366,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             Reinstate batch
           </AlertDialogAction>
         </AlertDialogFooter>
+            </>
+          );
+        })()}
       </AlertDialogContent>
     </AlertDialog>
 
@@ -8815,6 +9525,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             Cancel — don’t reinstate
           </AlertDialogCancel>
           {(() => {
+            // HEAD (Task #257?) — partial-reinstate aware label + title:
+            //   Renders "Nothing left to reinstate" / "Reinstate N
+            //   remaining phrases" when the batch is partially or fully
+            //   reinstated, and disables on nothingToDo.
+            // Task #337 — visible reason caption + aria-describedby for
+            //   the action when it is disabled (not ready / nothing to
+            //   do / mutations blocked).
             const ready = pickerBatchPreview?.status === "ready"
               ? pickerBatchPreview
               : null;
@@ -8839,26 +9556,50 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               : nothingToDo
                 ? "Every phrase in this batch has already been reinstated — there's nothing left to do."
                 : undefined;
+            const reason = describeHandwavyDisabledReason({
+              mutationsAllowed,
+              extraReason:
+                pickerBatchPreview?.status !== "ready"
+                  ? "Waiting for the batch preview to finish loading."
+                  : nothingToDo
+                    ? "Every phrase in this batch has already been reinstated."
+                    : null,
+            });
+            const hintId = reason
+              ? "handwavy-removal-batches-preview-confirm-confirm-disabled-hint-id"
+              : undefined;
             return (
-              <AlertDialogAction
-                data-testid="handwavy-removal-batches-preview-confirm-confirm"
-                disabled={
-                  !mutationsAllowed ||
-                  pickerBatchPreview?.status !== "ready" ||
-                  nothingToDo
-                }
-                title={title}
-                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                onClick={() => {
-                  if (pickerBatchPreview?.status === "ready") {
-                    const { removedAtIso, detail } = pickerBatchPreview;
-                    setPickerBatchPreview(null);
-                    void handleReinstateBatch(removedAtIso, detail.phraseCount);
+              <>
+                {reason && (
+                  <div className="basis-full px-1 pt-1">
+                    <HandwavyDisabledHint
+                      id={hintId}
+                      reason={reason}
+                      testId="handwavy-removal-batches-preview-confirm-confirm-disabled-hint"
+                    />
+                  </div>
+                )}
+                <AlertDialogAction
+                  data-testid="handwavy-removal-batches-preview-confirm-confirm"
+                  disabled={
+                    !mutationsAllowed ||
+                    pickerBatchPreview?.status !== "ready" ||
+                    nothingToDo
                   }
-                }}
-              >
-                {label}
-              </AlertDialogAction>
+                  title={title}
+                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                  aria-describedby={hintId}
+                  onClick={() => {
+                    if (pickerBatchPreview?.status === "ready") {
+                      const { removedAtIso, detail } = pickerBatchPreview;
+                      setPickerBatchPreview(null);
+                      void handleReinstateBatch(removedAtIso, detail.phraseCount);
+                    }
+                  }}
+                >
+                  {label}
+                </AlertDialogAction>
+              </>
             );
           })()}
         </AlertDialogFooter>
