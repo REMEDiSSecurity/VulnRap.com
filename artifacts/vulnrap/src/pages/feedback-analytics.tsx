@@ -2238,6 +2238,38 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     }
     return result;
   }, [removalBatches, history, phrases]);
+
+  // Task #243 — let reviewers expand a "Recent batch removals" row to see
+  // every phrase in that batch, not just the 5-sample preview the
+  // /removal-batches summary endpoint returns. The full per-batch phrase
+  // list is already on the wire via useGetHandwavyPhrases (batch-shape
+  // history entries have a `phrases` array keyed by `removedAt`), so we
+  // just index by removedAt and the toggle reveals the whole list inline
+  // without a new endpoint.
+  const phrasesByBatchRemovedAt = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const h of history) {
+      if (!Array.isArray(h.phrases) || h.phrases.length === 0) continue;
+      const key = String(h.removedAt ?? "");
+      if (!key) continue;
+      map.set(
+        key,
+        h.phrases.map((inner) => inner.phrase),
+      );
+    }
+    return map;
+  }, [history]);
+  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
+  const toggleBatchExpanded = (removedAtIso: string) => {
+    setExpandedBatches((prev) => {
+      const next = new Set(prev);
+      if (next.has(removedAtIso)) next.delete(removedAtIso);
+      else next.add(removedAtIso);
+      return next;
+    });
+  };
   const [draftCategory, setDraftCategory] = useState<"absence" | "hedging" | "buzzword">("absence");
   // Task #129 — pre-preview overlap hint. Recompute every render against the
   // current draft + active phrase list so the reviewer sees the warning the
@@ -5583,6 +5615,22 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   // newer history entry than this batch's removedAt; the
                   // memo also skips already-reinstated whole batches.
                   const conflict = removalBatchConflicts.get(removedAtIso);
+                  // Task #243 — full per-batch phrase list comes from the
+                  // existing handwavy-phrases history payload (no new
+                  // endpoint). The product rule is "show the toggle when
+                  // the batch has more than the 5-sample preview", and we
+                  // additionally require the full list to actually be
+                  // cached locally and to add new rows over the samples
+                  // (otherwise expanding would just re-show the same
+                  // phrases — happens briefly if the history payload
+                  // hasn't loaded yet, or if the summary ever returns
+                  // <=5 samples for a small batch).
+                  const fullPhrases = phrasesByBatchRemovedAt.get(removedAtIso);
+                  const expandable =
+                    phraseCount > 5 &&
+                    Array.isArray(fullPhrases) &&
+                    fullPhrases.length > samples.length;
+                  const isExpanded = expandable && expandedBatches.has(removedAtIso);
                   return (
                     <div
                       key={removedAtIso}
@@ -5590,6 +5638,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                       data-testid="handwavy-removal-batches-row"
                       data-batch-removed-at={removedAtIso}
                       data-batch-conflict-count={conflict ? conflict.conflictCount : 0}
+                      data-batch-expanded={isExpanded ? "true" : "false"}
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-foreground/80 flex-1 min-w-0">
@@ -5638,22 +5687,51 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                           </Button>
                         )}
                       </div>
-                      {samples.length > 0 && (
+                      {isExpanded && fullPhrases ? (
                         <ul
                           className="pl-4 list-disc text-foreground/70 space-y-0.5 marker:text-muted-foreground/40"
-                          data-testid="handwavy-removal-batches-samples"
+                          data-testid="handwavy-removal-batches-full"
                         >
-                          {samples.map((p, i) => (
-                            <li key={`${removedAtIso}-sample-${i}`} className="font-mono break-all">
+                          {fullPhrases.map((p, i) => (
+                            <li key={`${removedAtIso}-full-${i}`} className="font-mono break-all">
                               {p}
                             </li>
                           ))}
-                          {hiddenSampleCount > 0 && (
-                            <li className="list-none italic text-muted-foreground/70 not-italic-break">
-                              + {hiddenSampleCount} more
-                            </li>
-                          )}
                         </ul>
+                      ) : (
+                        samples.length > 0 && (
+                          <ul
+                            className="pl-4 list-disc text-foreground/70 space-y-0.5 marker:text-muted-foreground/40"
+                            data-testid="handwavy-removal-batches-samples"
+                          >
+                            {samples.map((p, i) => (
+                              <li key={`${removedAtIso}-sample-${i}`} className="font-mono break-all">
+                                {p}
+                              </li>
+                            ))}
+                            {hiddenSampleCount > 0 && (
+                              <li className="list-none italic text-muted-foreground/70 not-italic-break">
+                                + {hiddenSampleCount} more
+                              </li>
+                            )}
+                          </ul>
+                        )
+                      )}
+                      {expandable && (
+                        <button
+                          type="button"
+                          onClick={() => toggleBatchExpanded(removedAtIso)}
+                          className="text-[11px] text-muted-foreground hover:text-foreground/80 underline-offset-2 hover:underline"
+                          data-testid="handwavy-removal-batches-toggle"
+                          aria-expanded={isExpanded}
+                          aria-label={
+                            isExpanded
+                              ? `Hide full phrase list for batch removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
+                              : `Show all ${phraseCount} phrases in batch removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
+                          }
+                        >
+                          {isExpanded ? "Hide" : `Show all (${phraseCount})`}
+                        </button>
                       )}
                     </div>
                   );

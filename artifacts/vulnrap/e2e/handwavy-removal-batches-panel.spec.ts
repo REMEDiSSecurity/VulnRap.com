@@ -140,6 +140,86 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     }
   });
 
+  // Task #243 — when a batch is bigger than the 5-sample preview the
+  // /removal-batches summary returns, the row should grow a "Show all" /
+  // "Hide" toggle that reveals every phrase inline (sourced from the
+  // existing handwavy-phrases history payload, no new endpoint).
+  test("expands a >5-phrase row to reveal every phrase, then collapses again", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(7);
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p);
+      const batch = await batchRemove(apiCtx, phrases);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      const row = await openPanelAndFindBatch(page, removedAt);
+
+      // Collapsed state: still the truncated samples list with a "+N more"
+      // hint, plus a toggle button. The samples list should not yet
+      // contain the 6th/7th phrases.
+      await expect(row).toHaveAttribute("data-batch-expanded", "false");
+      const samples = row.getByTestId("handwavy-removal-batches-samples");
+      await expect(samples).toBeVisible();
+      await expect(samples).toContainText("+ 2 more");
+      await expect(samples).toContainText(phrases[0]);
+      await expect(samples).not.toContainText(phrases[5]);
+      await expect(samples).not.toContainText(phrases[6]);
+      await expect(row.getByTestId("handwavy-removal-batches-full")).toHaveCount(0);
+
+      const toggle = row.getByTestId("handwavy-removal-batches-toggle");
+      await expect(toggle).toBeVisible();
+      await expect(toggle).toHaveText(/Show all \(7\)/);
+
+      // Expand: every phrase should now render and the truncated list +
+      // "+N more" hint should disappear.
+      await toggle.click();
+      await expect(row).toHaveAttribute("data-batch-expanded", "true");
+      const full = row.getByTestId("handwavy-removal-batches-full");
+      await expect(full).toBeVisible();
+      for (const p of phrases) {
+        await expect(full).toContainText(p);
+      }
+      await expect(row.getByTestId("handwavy-removal-batches-samples")).toHaveCount(0);
+      await expect(toggle).toHaveText(/Hide/);
+
+      // Collapse again — back to the samples preview.
+      await toggle.click();
+      await expect(row).toHaveAttribute("data-batch-expanded", "false");
+      await expect(row.getByTestId("handwavy-removal-batches-samples")).toBeVisible();
+      await expect(row.getByTestId("handwavy-removal-batches-full")).toHaveCount(0);
+      await expect(toggle).toHaveText(/Show all \(7\)/);
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #243 — small batches (<= 5 phrases, fully covered by the sample
+  // preview) should NOT grow a "Show all" toggle; expanding would just
+  // re-render the same list.
+  test("does not render a toggle for batches that fit in the 5-sample preview", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3);
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p);
+      const batch = await batchRemove(apiCtx, phrases);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      const row = await openPanelAndFindBatch(page, removedAt);
+      await expect(row.getByTestId("handwavy-removal-batches-samples")).toBeVisible();
+      await expect(row.getByTestId("handwavy-removal-batches-toggle")).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
+
   test("rows for already-reinstated batches show the badge and no reinstate button", async ({
     page,
   }) => {
