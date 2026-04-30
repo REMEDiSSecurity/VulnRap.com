@@ -2747,9 +2747,12 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // response for the batch the reviewer is currently inspecting; `null` =
   // no preview open. Confirming from the panel runs the real (non-dry-run)
   // call and clears this state.
+  // `droppedPhrases` (Task #361) tracks rows the reviewer dropped via the
+  // per-row × control before confirming; re-previewing resets it to empty.
   const [reinstatePreview, setReinstatePreview] = useState<{
     removedAtIso: string;
     data: HandwavyPhraseReinstateBatchDryRunResponse;
+    droppedPhrases: Set<string>;
   } | null>(null);
   // Task #180 — the per-row Reinstate button got a confirm dialog in Task #153
   // but the "Reinstate all N" button on a batch removal entry was still firing
@@ -4826,6 +4829,19 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     });
   };
 
+  // Task #361 — preview-panel counterpart to `dropPhraseFromReinstateBatchConfirm`.
+  // On confirm the panel routes through `handleReinstateBatchSubset` when this
+  // set is non-empty (the /reinstate-batch route has no allow-list parameter).
+  const dropPhraseFromReinstatePreview = (phrase: string) => {
+    setReinstatePreview((prev) => {
+      if (!prev) return prev;
+      if (prev.droppedPhrases.has(phrase)) return prev;
+      const next = new Set(prev.droppedPhrases);
+      next.add(phrase);
+      return { ...prev, droppedPhrases: next };
+    });
+  };
+
   // Task #254 — partial-batch reinstate. Issues per-phrase /reinstate calls
   // for an explicit allow-list (the rows the reviewer left checked in the
   // batch reinstate confirm dialog). The single-round-trip /reinstate-batch
@@ -5031,6 +5047,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       setReinstatePreview({
         removedAtIso,
         data: resp as HandwavyPhraseReinstateBatchDryRunResponse,
+        droppedPhrases: new Set(),
       });
     } catch (err) {
       const msg =
@@ -8969,16 +8986,34 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                       </div>
                       {previewForGroup && (() => {
                         const data = previewForGroup.data;
-                        const wouldReinstateCount =
+                        const droppedPhrases = previewForGroup.droppedPhrases;
+                        const wouldReinstateCountRaw =
                           typeof data.reinstatedCount === "number"
                             ? data.reinstatedCount
                             : 0;
-                        const skippedCount =
+                        const skippedCountRaw =
                           typeof data.skipped === "number" ? data.skipped : 0;
-                        const projectedTotal =
+                        const projectedTotalRaw =
                           typeof data.total === "number" ? data.total : null;
                         const results: HandwavyPhraseReinstateBatchEntryResult[] =
                           Array.isArray(data.results) ? data.results : [];
+                        // Task #361 — only count drops against rows the
+                        // dry-run actually would have reinstated; this keeps
+                        // the adjusted counts non-negative if the snapshot
+                        // is stale.
+                        const droppedWouldReinstate = results.filter(
+                          (r) => r.reinstated && droppedPhrases.has(r.phrase),
+                        );
+                        const droppedCount = droppedWouldReinstate.length;
+                        const wouldReinstateCount = Math.max(
+                          0,
+                          wouldReinstateCountRaw - droppedCount,
+                        );
+                        const skippedCount = skippedCountRaw + droppedCount;
+                        const projectedTotal =
+                          projectedTotalRaw != null
+                            ? Math.max(0, projectedTotalRaw - droppedCount)
+                            : null;
                         const noun =
                           wouldReinstateCount === 1 ? "phrase" : "phrases";
                         const confirming = busy === batchKey;
@@ -9053,8 +9088,18 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                       <span className="text-foreground/90">
                                         {skippedCount}
                                       </span>{" "}
-                                      skipped (already reinstated or already
-                                      active)
+                                      skipped (
+                                      {skippedCountRaw > 0 &&
+                                        "already reinstated or already active"}
+                                      {skippedCountRaw > 0 &&
+                                        droppedCount > 0 &&
+                                        "; "}
+                                      {droppedCount > 0 && (
+                                        <>
+                                          {droppedCount} dropped by reviewer
+                                        </>
+                                      )}
+                                      )
                                     </>
                                   )}
                                   .{" "}
@@ -9076,7 +9121,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                               data-testid="handwavy-reinstate-batch-preview-results"
                             >
                               {results.map((r, idx) => {
-                                const cfg = r.reinstated
+                                const isDropped =
+                                  r.reinstated && droppedPhrases.has(r.phrase);
+                                const cfg = isDropped
+                                  ? {
+                                      label: "dropped",
+                                      color: "text-muted-foreground",
+                                      icon: <XIcon className="w-3 h-3" />,
+                                    }
+                                  : r.reinstated
                                   ? {
                                       label: "would reinstate",
                                       color: "text-emerald-400",
@@ -9105,10 +9158,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                     className="flex items-start gap-2 text-[11px]"
                                     data-testid="handwavy-reinstate-batch-preview-row"
                                     data-outcome={
-                                      r.reinstated
-                                        ? "would-reinstate"
-                                        : r.reason ?? "unknown"
+                                      isDropped
+                                        ? "dropped"
+                                        : r.reinstated
+                                          ? "would-reinstate"
+                                          : r.reason ?? "unknown"
                                     }
+                                    data-phrase={r.phrase}
                                   >
                                     <span
                                       className={cn(
@@ -9121,13 +9177,49 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                         {cfg.label}
                                       </span>
                                     </span>
-                                    <span className="font-mono text-foreground/80 break-all flex-1">
+                                    <span
+                                      className={cn(
+                                        "font-mono break-all flex-1",
+                                        isDropped
+                                          ? "text-muted-foreground line-through"
+                                          : "text-foreground/80",
+                                      )}
+                                    >
                                       {r.phrase}
                                     </span>
+                                    {r.reinstated && !isDropped && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          dropPhraseFromReinstatePreview(
+                                            r.phrase,
+                                          )
+                                        }
+                                        disabled={confirming}
+                                        className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-foreground/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        data-testid="handwavy-reinstate-preview-result-drop"
+                                        data-phrase={r.phrase}
+                                        aria-label={`Skip "${r.phrase}" — leave it on the removal-history list`}
+                                        title="Skip this phrase — leave it removed"
+                                      >
+                                        <XIcon className="w-3 h-3" />
+                                      </button>
+                                    )}
                                   </li>
                                 );
                               })}
                             </ul>
+                            {droppedCount > 0 && (
+                              <div
+                                className="text-[11px] text-amber-200 italic"
+                                data-testid="handwavy-reinstate-batch-preview-dropped-note"
+                              >
+                                {droppedCount} phrase
+                                {droppedCount === 1 ? "" : "s"} will stay on
+                                the removal-history list. Confirm reinstates
+                                only the rows still marked “would reinstate.”
+                              </div>
+                            )}
                             {previewDrifted && (
                               <div
                                 className="text-[11px] text-amber-200 italic flex items-start gap-1"
@@ -9213,12 +9305,30 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                         confirming || wouldReinstateCount === 0 || !mutationsAllowed
                                       }
                                       title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                                      onClick={() =>
-                                        handleReinstateBatch(
-                                          group.removedAtIso,
-                                          group.batchSize,
-                                        )
-                                      }
+                                      onClick={() => {
+                                        // Task #361 — fall back to per-phrase
+                                        // /reinstate (subset path) once the
+                                        // reviewer has dropped any row, since
+                                        // /reinstate-batch has no allow-list.
+                                        if (droppedCount === 0) {
+                                          void handleReinstateBatch(
+                                            group.removedAtIso,
+                                            group.batchSize,
+                                          );
+                                        } else {
+                                          const allowList = results
+                                            .filter(
+                                              (r) =>
+                                                r.reinstated &&
+                                                !droppedPhrases.has(r.phrase),
+                                            )
+                                            .map((r) => r.phrase);
+                                          void handleReinstateBatchSubset(
+                                            group.removedAtIso,
+                                            allowList,
+                                          );
+                                        }
+                                      }}
                                       data-testid="handwavy-reinstate-batch-preview-confirm"
                                       data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
                                       aria-label={`Confirm reinstate of ${wouldReinstateCount} ${noun} from this batch`}
