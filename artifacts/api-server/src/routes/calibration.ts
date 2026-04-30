@@ -1678,36 +1678,6 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
     }
     const effectiveProductionLimit = productionLimitParse.limit;
 
-    // Task #229 — optional reviewer override for the production-scan window
-    // on the bulk DELETE dry-run, mirroring the add path (Task #125). The
-    // field is only consumed on the bulk dry-run path (the only place the
-    // production scan currently runs for removals), but we run the
-    // validator at the TOP of the handler — before the single-vs-batch
-    // branch — so:
-    //   1. A malformed value is rejected on EVERY DELETE (single or bulk,
-    //      dry-run or real), guaranteeing bad input cannot slip past the
-    //      validator into a state-mutating call.
-    //   2. The single-phrase path accepts a well-formed value but does
-    //      not consume it; its dry-run still uses the legacy 2000-row
-    //      default. Wiring the single-phrase preview through this knob
-    //      is tracked as a follow-up task.
-    let effectiveBulkProductionLimit = PRODUCTION_PREVIEW_LIMIT;
-    if (productionScanLimit !== undefined) {
-      const v = Number(productionScanLimit);
-      if (
-        !Number.isFinite(v) ||
-        !Number.isInteger(v) ||
-        v < PRODUCTION_PREVIEW_LIMIT_MIN ||
-        v > PRODUCTION_PREVIEW_LIMIT_MAX
-      ) {
-        res.status(400).json({
-          error: `productionScanLimit must be an integer between ${PRODUCTION_PREVIEW_LIMIT_MIN} and ${PRODUCTION_PREVIEW_LIMIT_MAX}.`,
-        });
-        return;
-      }
-      effectiveBulkProductionLimit = v;
-    }
-
     // Batch path — `{phrases: string[]}`. Mutually exclusive with `phrase`.
     if (phrases !== undefined) {
       if (phrase !== undefined) {
