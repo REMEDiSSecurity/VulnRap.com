@@ -4471,7 +4471,22 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     controller: AbortController | null;
   }>({ timer: null, controller: null });
 
-  const cancelBulkPreviewRefetch = () => {
+  // Task #375 — between the per-row drop click and the debounced re-fetch
+  // landing, the impact section was silently stale-by-one-drop. This flag
+  // drives a small "refreshing impact…" inline hint above the impact grid
+  // so reviewers see the live re-scoring instead of staring at last-tick
+  // numbers. Set true at the top of `scheduleBulkPreviewRefetch` (before
+  // the 250ms debounce fires, so the indicator appears immediately on the
+  // drop click) and cleared in the response/abort `.finally` block, or by
+  // any code path that fully cancels the chain (panel close, confirm,
+  // unmount).
+  const [bulkPreviewRefreshing, setBulkPreviewRefreshing] = useState(false);
+
+  // `keepIndicator` is set when the cancel is part of a chained re-schedule
+  // (a second drop arriving before the first refetch lands) — clearing
+  // the indicator there would briefly hide it between the two refetches
+  // and make the panel feel more jumpy, not less.
+  const cancelBulkPreviewRefetch = (keepIndicator = false) => {
     const cur = bulkPreviewRefetchRef.current;
     if (cur.timer) {
       clearTimeout(cur.timer);
@@ -4480,6 +4495,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     if (cur.controller) {
       cur.controller.abort();
       cur.controller = null;
+    }
+    if (!keepIndicator) {
+      setBulkPreviewRefreshing(false);
     }
   };
 
@@ -4493,7 +4511,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // an at-risk phrase (today drops only shrink the list, but the explicit
   // reset documents intent).
   const scheduleBulkPreviewRefetch = (phrases: string[]) => {
-    cancelBulkPreviewRefetch();
+    // Task #375 — keep the "refreshing impact…" indicator visible across
+    // chained drops; only the final response/abort/cancel should hide it.
+    cancelBulkPreviewRefetch(true);
+    setBulkPreviewRefreshing(true);
     const limitOverride =
       effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
         ? { productionScanLimit: effectiveProductionScanLimit }
@@ -4550,6 +4571,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         .finally(() => {
           if (bulkPreviewRefetchRef.current.controller === controller) {
             bulkPreviewRefetchRef.current.controller = null;
+            // Task #375 — only the most recent in-flight refetch clears
+            // the indicator, so a stale aborted response can't hide an
+            // indicator that a freshly chained refetch needs to keep up.
+            setBulkPreviewRefreshing(false);
           }
         });
     }, 250);
@@ -4598,22 +4623,24 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       next.delete(phrase);
       return next;
     });
-    let scheduledForRefetch: string[] | null = null;
-    setBulkPreview((prev) => {
-      if (!prev) return prev;
-      const remaining = prev.requestedPhrases.filter((p) => p !== phrase);
-      if (remaining.length === 0) return null;
-      if (remaining.length === prev.requestedPhrases.length) return prev;
-      scheduledForRefetch = remaining;
-      return { ...prev, requestedPhrases: remaining };
-    });
-    if (scheduledForRefetch) {
-      scheduleBulkPreviewRefetch(scheduledForRefetch);
-    } else {
-      // Either nothing changed, or the panel just closed — make sure no
-      // stale refetch is left in flight either way.
+    // Decide what to do based on the latest committed `bulkPreview`
+    // value (closure) instead of mutating a sentinel inside the
+    // `setBulkPreview` updater — React 18 does not guarantee the
+    // updater runs synchronously during dispatch, so the post-dispatch
+    // `if (sentinel)` check could observe the pre-update value and
+    // silently skip scheduling the dry-run refetch (Task #258 / Task
+    // #375). Reading from the closure keeps the decision deterministic
+    // and lines up with the optimistic update we hand React next.
+    if (!bulkPreview) return;
+    if (!bulkPreview.requestedPhrases.includes(phrase)) return;
+    const remaining = bulkPreview.requestedPhrases.filter((p) => p !== phrase);
+    if (remaining.length === 0) {
+      setBulkPreview(null);
       cancelBulkPreviewRefetch();
+      return;
     }
+    setBulkPreview({ ...bulkPreview, requestedPhrases: remaining });
+    scheduleBulkPreviewRefetch(remaining);
   };
 
   // Task #154 — confirm the destructive removal straight from the preview
@@ -6358,6 +6385,24 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   {highThrashCount === 1 ? "has" : "have"} been removed and reinstated{" "}
                   {HIGH_THRASH_MIN}+ times — flagged below.
                 </span>
+              </div>
+            )}
+            {/* Task #375 — between the per-row drop click and the
+                debounced re-fetch landing, the impact figures below are
+                stale-by-one-drop. Surface a small inline hint so the
+                live re-scoring is visible and a reviewer who confirms
+                in that window knows newer numbers are inbound (the
+                confirm itself still commits the surviving list — only
+                the visual feedback is new). */}
+            {bulkPreviewRefreshing && (
+              <div
+                className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+                data-testid="handwavy-bulk-preview-refreshing"
+                role="status"
+                aria-live="polite"
+              >
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>refreshing impact…</span>
               </div>
             )}
             <div

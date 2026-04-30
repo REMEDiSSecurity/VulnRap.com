@@ -1135,4 +1135,149 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       await apiCtx.dispose();
     }
   });
+
+  // Task #375 — between the per-row drop click and the debounced re-fetch
+  // landing (debounce + network round-trip), the corpus / production
+  // `validDetectionsLost` figures rendered above are stale-by-one-drop
+  // and the reviewer has no signal that newer numbers are inbound. A
+  // small "refreshing impact…" hint above the impact grid makes the
+  // live re-scoring visible. This spec gates the indicator's appearance
+  // on a drop and its removal on the re-fetch landing — the indicator
+  // MUST appear in the window after the drop and MUST disappear once
+  // the new dry-run response is applied.
+  test("Per-row drop surfaces a 'refreshing impact…' indicator until the debounced dry-run lands", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const id = randomUUID().replace(/-/g, "").slice(0, 12);
+    const a = `task375 a ${id}`;
+    const b = `task375 b ${id}`;
+    const phrases = [a, b];
+
+    try {
+      await addPhrase(apiCtx, a, { reviewer: REVIEWER });
+      await addPhrase(apiCtx, b, { reviewer: REVIEWER });
+
+      // Mock the dry-run DELETE so we can:
+      //   1. Return synthetically clean impact figures (no real corpus
+      //      detections lost), so the panel is in its "happy path" state
+      //      and the indicator is the only thing the assertions key off.
+      //   2. Hold the post-drop dry-run response open long enough that the
+      //      indicator is observable in the post-drop window. The initial
+      //      ("Remove selected") response returns immediately so the
+      //      panel reaches a settled rendered state before the drop.
+      // Gating by `requested.length === 1` (the surviving single phrase)
+      // is more robust than counting calls — even if the panel ends up
+      // making more than one initial dry-run call, only the post-drop
+      // refetch carries exactly one phrase.
+      const dryRunBodies: Array<{ phrases: string[] }> = [];
+      let releaseDropResponse: (() => void) | null = null;
+      const dropResponseGate = new Promise<void>((resolve) => {
+        releaseDropResponse = resolve;
+      });
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrases?: string[] }
+            | undefined;
+          if (!body?.dryRun) {
+            await route.fallback();
+            return;
+          }
+          const requested = body.phrases ?? [];
+          dryRunBodies.push({ phrases: [...requested] });
+          if (requested.length === 1) {
+            await dropResponseGate;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              dryRun: true,
+              wouldRemove: requested.length,
+              notFound: 0,
+              duplicateInBatch: 0,
+              total: 99,
+              projectedTotal: 99 - requested.length,
+              results: requested.map((raw: string) => ({
+                raw,
+                phrase: raw,
+                removed: true,
+              })),
+              dryRunImpact: {
+                corpus: {
+                  total: 0,
+                  validDetectionsLost: 0,
+                  falsePositivesDropped: 0,
+                  byTier: {
+                    t1Legit: 0,
+                    t2Borderline: 0,
+                    t3Slop: 0,
+                    t4Hallucinated: 0,
+                  },
+                  sampleMatches: [],
+                  warning: null,
+                  corpusSize: 47,
+                },
+                production: null,
+                productionError:
+                  "Production scan unavailable in this synthetic fixture",
+              },
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, phrases);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // The settled (post-initial-preview) panel does NOT show the
+      // refreshing indicator — it only fires off a per-row drop.
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-refreshing"),
+      ).toHaveCount(0);
+
+      // Drop one row. The debounced re-fetch is now scheduled and the
+      // indicator MUST appear immediately (we set it before the 250ms
+      // debounce fires so the reviewer has a signal as soon as they
+      // click).
+      await panel
+        .getByTestId("handwavy-bulk-preview-results-details")
+        .locator("summary")
+        .click();
+      await panel
+        .locator(
+          `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${a}"]`,
+        )
+        .click();
+
+      const refreshing = panel.getByTestId("handwavy-bulk-preview-refreshing");
+      await expect(refreshing).toBeVisible({ timeout: 2_000 });
+      await expect(refreshing).toContainText("refreshing impact");
+
+      // Release the held drop response. Once the dry-run lands the
+      // indicator MUST disappear.
+      releaseDropResponse?.();
+      await expect(refreshing).toHaveCount(0, { timeout: 5_000 });
+
+      // Sanity check: the drop dry-run did fire (i.e. the indicator
+      // was tied to a real refetch round-trip, not a UI-only flash).
+      const dropBodies = dryRunBodies.filter((b) => b.phrases.length === 1);
+      expect(dropBodies.length).toBeGreaterThanOrEqual(1);
+      expect(dropBodies[dropBodies.length - 1].phrases).toEqual([b]);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
 });
