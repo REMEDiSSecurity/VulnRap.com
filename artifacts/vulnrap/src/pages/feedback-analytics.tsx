@@ -12295,7 +12295,7 @@ function DatasetCohortSampleTable({
   );
 }
 
-function DatasetCohortMeansSection() {
+export function DatasetCohortMeansSection() {
   const { data, isLoading, isError } = useQuery<TestRunResponse>({
     queryKey: ["test-run-archetypes"],
     queryFn: async () => {
