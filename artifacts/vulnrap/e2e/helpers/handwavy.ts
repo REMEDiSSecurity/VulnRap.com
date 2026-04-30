@@ -36,6 +36,10 @@ import { randomUUID } from "node:crypto";
 //     finally blocks; tolerates not-found.
 //   - uniquePhrase(prefix, suffix?): randomUUID-backed phrase generator so
 //     reruns don't collide with leftover data.
+//   - injectCalibrationTokenIntoPage(page): mirrors what main.tsx does so
+//     in-page strict-auth GET/POST/DELETE calls carry the calibration token
+//     in dev modes where the Vite bundle wasn't built with
+//     VITE_CALIBRATION_TOKEN baked in.
 
 const API_PORT = Number(process.env.E2E_API_PORT || 8080);
 const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
@@ -73,6 +77,13 @@ export interface AddPhraseOptions extends ReviewerOptions {
    * phrase whose 5-minute undo window is ~25s from elapsing.
    */
   addedAt?: string;
+  /**
+   * Optional rationale string forwarded to the POST body. The
+   * Reinstate-confirm spec asserts the rationale shows up in the
+   * AlertDialog summary, so it needs to seed a non-empty value here;
+   * other specs just leave the field unset.
+   */
+  rationale?: string;
 }
 
 export interface SingleRemovalResponse {
@@ -135,6 +146,7 @@ export async function addPhrase(
   // process (the Playwright config sets it for the e2e webserver).
   const data: Record<string, unknown> = { phrase, category, reviewer };
   if (opts.addedAt) data.addedAt = opts.addedAt;
+  if (opts.rationale !== undefined) data.rationale = opts.rationale;
   const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
     data,
   });
@@ -296,4 +308,32 @@ export async function cleanup(
       data: { phrases: list, reviewer },
     })
     .catch(() => undefined);
+}
+
+/**
+ * Mirror what `artifacts/vulnrap/src/main.tsx` does so the page itself
+ * carries the calibration token on its in-app fetches. The vulnrap web
+ * app reads `import.meta.env.VITE_CALIBRATION_TOKEN` once at startup
+ * and passes it to `setCalibrationToken`, so in CI the bundled token
+ * is what authenticates page-side GETs (active phrase list, removal-
+ * history panel, etc.).
+ *
+ * This helper stashes `CALIBRATION_TOKEN` on `window.__VULNRAP_CALIBRATION_TOKEN__`
+ * via `addInitScript`. It's a forward-compatible hook for non-bundled
+ * dev modes where `VITE_CALIBRATION_TOKEN` may not be baked in: each
+ * spec used to inline its own copy of this exact same script, and we
+ * keep that contract here so the helper drop-in matches them. Note
+ * that the production client does not currently read this global —
+ * if you're relying on it, prefer wiring the token via the Playwright
+ * config's `extraHTTPHeaders` / `VITE_CALIBRATION_TOKEN` instead.
+ *
+ * Safe to call even when CALIBRATION_TOKEN is empty — it becomes a
+ * no-op and the page falls back to whatever the bundle baked in.
+ */
+export async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
+  if (!CALIBRATION_TOKEN) return;
+  await page.addInitScript((token) => {
+    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
+      .__VULNRAP_CALIBRATION_TOKEN__ = token;
+  }, CALIBRATION_TOKEN);
 }

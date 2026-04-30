@@ -1,5 +1,11 @@
-import { test, expect, request, type APIRequestContext } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import {
+  addPhrase,
+  cleanup,
+  newApiContext,
+  removeSingle,
+} from "./helpers/handwavy";
 
 // Task #153 — End-to-end coverage for the per-row "Reinstate" confirmation
 // dialog on the FLAT hand-wavy phrase removal-history list. Reinstating
@@ -10,24 +16,20 @@ import { randomUUID } from "node:crypto";
 // leave the entry untouched, and Confirm must perform the reinstate and
 // show the existing toast.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-// Task #163 — calibration mutation + read endpoints both require a token
-// when CALIBRATION_TOKEN is configured on the API server. We pull it from
-// the same env var the dev/prod deploys use, so this spec stays consistent
-// regardless of whether the surrounding workflow has the gate enabled.
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN || process.env.CALIBRATION_TOKEN || "";
-const AUTH_HEADERS: Record<string, string> = CALIBRATION_TOKEN
-  ? { "X-Calibration-Token": CALIBRATION_TOKEN }
-  : {};
+const REVIEWER = "e2e-task153";
 
+// Spec-local convenience type: the shared `addPhrase` helper takes phrase
+// + opts (incl. rationale), but every assertion in this file checks the
+// rationale text against the seeded value, so we bundle phrase + its
+// rationale into a single object that flows through seed + assertion.
+// Kept local because no other handwavy spec needs to round-trip the
+// rationale string this way.
 interface AddedPhrase {
   phrase: string;
   rationale: string;
 }
 
-function uniquePhrase(): AddedPhrase {
+function uniqueAddedPhrase(): AddedPhrase {
   const id = randomUUID().replace(/-/g, "").slice(0, 12);
   return {
     phrase: `task153 reinstate ${id} phrase`,
@@ -35,54 +37,21 @@ function uniquePhrase(): AddedPhrase {
   };
 }
 
-async function addPhrase(api: APIRequestContext, p: AddedPhrase): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    headers: AUTH_HEADERS,
-    data: {
-      phrase: p.phrase,
-      category: "hedging",
-      rationale: p.rationale,
-      reviewer: "e2e-task153",
-    },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${p.phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function removePhrase(api: APIRequestContext, p: AddedPhrase): Promise<void> {
-  const res = await api.delete("/api/feedback/calibration/handwavy-phrases", {
-    headers: AUTH_HEADERS,
-    data: { phrases: [p.phrase], reviewer: "e2e-task153" },
-  });
-  expect(
-    res.ok(),
-    `DELETE handwavy-phrases failed for "${p.phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function cleanup(api: APIRequestContext, p: AddedPhrase): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      headers: AUTH_HEADERS,
-      data: { phrases: [p.phrase], reviewer: "e2e-task153-cleanup" },
-    })
-    .catch(() => undefined);
-}
-
 test.describe("FLAT hand-wavy phrase panel — Reinstate confirmation dialog", () => {
   test("clicking 'Reinstate' opens a confirmation dialog summarizing the phrase, category, and rationale; Cancel leaves the entry untouched", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const seeded = uniquePhrase();
+    const apiCtx = await newApiContext();
+    const seeded = uniqueAddedPhrase();
 
     try {
       // Seed: add then remove the phrase so it shows up on the removal
       // history list with a non-empty rationale and a Reinstate button.
-      await addPhrase(apiCtx, seeded);
-      await removePhrase(apiCtx, seeded);
+      await addPhrase(apiCtx, seeded.phrase, {
+        reviewer: REVIEWER,
+        rationale: seeded.rationale,
+      });
+      await removeSingle(apiCtx, seeded.phrase, { reviewer: REVIEWER });
 
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
@@ -132,7 +101,7 @@ test.describe("FLAT hand-wavy phrase panel — Reinstate confirmation dialog", (
         "Cancel must NOT re-enable the phrase on the active list",
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, seeded);
+      await cleanup(apiCtx, seeded.phrase, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -140,12 +109,15 @@ test.describe("FLAT hand-wavy phrase panel — Reinstate confirmation dialog", (
   test("confirming the dialog performs the reinstate, swaps the row badge, and the phrase reappears on the active list", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const seeded = uniquePhrase();
+    const apiCtx = await newApiContext();
+    const seeded = uniqueAddedPhrase();
 
     try {
-      await addPhrase(apiCtx, seeded);
-      await removePhrase(apiCtx, seeded);
+      await addPhrase(apiCtx, seeded.phrase, {
+        reviewer: REVIEWER,
+        rationale: seeded.rationale,
+      });
+      await removeSingle(apiCtx, seeded.phrase, { reviewer: REVIEWER });
 
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
@@ -179,7 +151,7 @@ test.describe("FLAT hand-wavy phrase panel — Reinstate confirmation dialog", (
         page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: seeded.phrase }),
       ).toHaveCount(1, { timeout: 15_000 });
     } finally {
-      await cleanup(apiCtx, seeded);
+      await cleanup(apiCtx, seeded.phrase, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });

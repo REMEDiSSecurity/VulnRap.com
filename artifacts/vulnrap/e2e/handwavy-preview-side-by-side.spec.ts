@@ -1,11 +1,10 @@
-import {
-  test,
-  expect,
-  request,
-  type APIRequestContext,
-  type Page,
-} from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import {
+  cleanup,
+  injectCalibrationTokenIntoPage,
+  newApiContext,
+} from "./helpers/handwavy";
 
 // Task #126 — End-to-end coverage for the side-by-side single-add preview
 // in the calibration UI. Mirrors the bulk-removal preview spec
@@ -24,48 +23,7 @@ import { randomUUID } from "node:crypto";
 //      A regression that only watched the curated block would let a
 //      catastrophic-against-production phrase look like a clean add.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN ||
-  process.env.CALIBRATION_TOKEN ||
-  process.env.VITE_CALIBRATION_TOKEN ||
-  "e2e-calibration-token";
-
-function authHeaders(): Record<string, string> {
-  return { "X-Calibration-Token": CALIBRATION_TOKEN };
-}
-
-function newApiContext(): Promise<APIRequestContext> {
-  return request.newContext({
-    baseURL: API_BASE,
-    extraHTTPHeaders: authHeaders(),
-  });
-}
-
-// Mirrors the safety net used in the bulk-preview spec: in dev modes where
-// the Vite bundle was built without `VITE_CALIBRATION_TOKEN`, the page's
-// own mutation calls would 401. We don't actually rely on this for the
-// add-preview path (we drive the form through the UI which always uses
-// the bundled token), but keep parity so the spec works in any dev mode.
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
-}
-
-async function cleanupPhrase(
-  api: APIRequestContext,
-  phrase: string,
-): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      data: { phrase, reviewer: "e2e-task126-cleanup" },
-    })
-    .catch(() => undefined);
-}
+const REVIEWER = "e2e-task126";
 
 test.describe("Side-by-side dry-run preview panel (Task #126)", () => {
   test("Both curated AND production match blocks render when the API returns a populated production payload", async ({
@@ -132,8 +90,9 @@ test.describe("Side-by-side dry-run preview panel (Task #126)", () => {
       await expect(panel).toHaveCount(0);
     } finally {
       // Belt-and-braces in case anything slipped through (e.g. the
-      // confirm fired due to a flaky test). Cleanup is idempotent.
-      await cleanupPhrase(api, phrase);
+      // confirm fired due to a flaky test). cleanup() swallows the
+      // not-found 404 the dryRun-only path produces.
+      await cleanup(api, phrase, { reviewer: `${REVIEWER}-cleanup` });
       await api.dispose();
     }
   });
@@ -272,7 +231,7 @@ test.describe("Side-by-side dry-run preview panel (Task #126)", () => {
       await panel.getByTestId("handwavy-preview-cancel").click();
       await expect(panel).toHaveCount(0);
     } finally {
-      await cleanupPhrase(api, phrase);
+      await cleanup(api, phrase, { reviewer: `${REVIEWER}-cleanup` });
       await api.dispose();
     }
   });
@@ -395,7 +354,7 @@ test.describe("Side-by-side dry-run preview panel (Task #126)", () => {
       // Belt-and-braces: the intercept means no real POST hits the
       // server, but cleanup is idempotent and matches the pattern
       // used by the other specs in this file.
-      await cleanupPhrase(api, phrase);
+      await cleanup(api, phrase, { reviewer: `${REVIEWER}-cleanup` });
       await api.dispose();
     }
   });

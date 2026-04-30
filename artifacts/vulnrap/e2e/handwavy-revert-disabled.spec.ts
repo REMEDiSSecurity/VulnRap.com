@@ -1,5 +1,9 @@
-import { test, expect, request, type APIRequestContext } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { test, expect } from "@playwright/test";
+import {
+  cleanup,
+  newApiContext,
+  uniquePhrase,
+} from "./helpers/handwavy";
 
 // Task #148 — End-to-end coverage for the per-edit Revert button's disabled
 // state on the per-phrase edit-history panel. Task #132 introduced the
@@ -14,38 +18,21 @@ import { randomUUID } from "node:crypto";
 // edit-history panel has multiple rows in known states, then asserts the
 // per-row disabled / enabled state via the data-noop attribute that the
 // renderer stamps on every Revert button.
+//
+// Seeding is done with a raw POST + two PATCHes against the route, NOT via
+// the shared `addPhrase` / `removeSingle` helpers: this spec specifically
+// needs the PATCH path (no other handwavy spec exercises edit history),
+// and folding a category-edit helper into helpers/handwavy.ts for a
+// single caller would just be dead code in every other spec.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
-
-function newApiContext() {
-  return request.newContext({
-    baseURL: API_BASE,
-    extraHTTPHeaders: { "X-Calibration-Token": CALIBRATION_TOKEN },
-  });
-}
-
-function uniquePhrase(): string {
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return `task148 revert-disabled ${id}`;
-}
-
-async function cleanup(api: APIRequestContext, phrase: string): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      data: { phrases: [phrase], reviewer: "e2e-task148-cleanup" },
-    })
-    .catch(() => undefined);
-}
+const REVIEWER_PREFIX = "e2e-task148";
 
 test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (Task #148)", () => {
   test("disables Revert on a history row whose 'from' values already match the live marker, and leaves Revert enabled on rows that would actually change something", async ({
     page,
   }) => {
     const apiCtx = await newApiContext();
-    const phrase = uniquePhrase();
+    const phrase = uniquePhrase("task148 revert-disabled");
 
     try {
       // Seed: add the phrase, then edit it twice through the API so we land
@@ -56,7 +43,7 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
         data: {
           phrase,
           category: "absence",
-          reviewer: "e2e-task148-seed",
+          reviewer: `${REVIEWER_PREFIX}-seed`,
           rationale: "seed rationale",
         },
       });
@@ -69,7 +56,7 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
           data: {
             phrase,
             category: "hedging",
-            reviewer: "e2e-task148-edit1",
+            reviewer: `${REVIEWER_PREFIX}-edit1`,
           },
         },
       );
@@ -83,7 +70,7 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
           data: {
             phrase,
             category: "absence",
-            reviewer: "e2e-task148-edit2",
+            reviewer: `${REVIEWER_PREFIX}-edit2`,
           },
         },
       );
@@ -169,7 +156,7 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
       await expect(enabledRow.getByTestId("handwavy-revert-noop-hint")).toHaveCount(0);
       await expect(newestRevert).not.toHaveAttribute("aria-describedby", /.+/);
     } finally {
-      await cleanup(apiCtx, phrase);
+      await cleanup(apiCtx, phrase, { reviewer: `${REVIEWER_PREFIX}-cleanup` });
       await apiCtx.dispose();
     }
   });

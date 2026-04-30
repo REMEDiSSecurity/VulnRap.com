@@ -1,5 +1,11 @@
-import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { test, expect, type Page } from "@playwright/test";
+import {
+  addPhrase,
+  cleanup,
+  injectCalibrationTokenIntoPage,
+  newApiContext,
+  uniquePhrases,
+} from "./helpers/handwavy";
 
 // Task #142 — End-to-end coverage for the "Undo this batch" action that
 // lives on the bulk-removal results banner. The reviewer ticks a few rows,
@@ -8,56 +14,13 @@ import { randomUUID } from "node:crypto";
 // existing single-phrase reinstate endpoint. Per-phrase reinstate outcomes
 // render in the same banner shape as the removals.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
+const REVIEWER = "e2e-task142";
 
-function uniquePhrases(count: number, label = "synthetic"): string[] {
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return Array.from(
-    { length: count },
-    (_, i) => `task142 undo ${id} ${label} ${i + 1}`,
-  );
-}
-
-function authHeaders(): Record<string, string> {
-  return CALIBRATION_TOKEN
-    ? { "X-Calibration-Token": CALIBRATION_TOKEN }
-    : {};
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    headers: authHeaders(),
-    data: { phrase, category: "hedging", reviewer: "e2e-task142" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      headers: authHeaders(),
-      data: { phrases, reviewer: "e2e-task142-cleanup" },
-    })
-    .catch(() => undefined);
-}
-
-// Mirror handwavy-bulk-preview.spec.ts: the calibration token has to be
-// available to the page itself so the strict-auth GETs that hydrate the
-// active list don't 401 in CI.
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
-}
-
+// UI-flow helper kept local: this drives the FULL "tick rows → open
+// preview → confirm" pipeline so the post-confirm bulk-results banner is
+// already on screen when the test body starts asserting against it. The
+// bulk-preview spec has its own variant that stops at the OPEN PREVIEW
+// step so it can poke at the panel itself — different end states.
 async function selectAndRemoveBatch(
   page: Page,
   phrases: string[],
@@ -82,11 +45,11 @@ test.describe("Bulk-removal Undo this batch (Task #142)", () => {
   test("Undo button reinstates every removed phrase and reports per-phrase outcomes in the same banner", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(3, "happy");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3, "task142 undo happy");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -142,17 +105,17 @@ test.describe("Bulk-removal Undo this batch (Task #142)", () => {
         ).toHaveCount(1, { timeout: 15_000 });
       }
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
 
   test("Undo button is hidden when no row reports REMOVED", async ({ page }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrases(1, "auth-failed-only")[0];
+    const apiCtx = await newApiContext();
+    const [phrase] = uniquePhrases(1, "task142 undo auth-failed-only");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
@@ -202,7 +165,7 @@ test.describe("Bulk-removal Undo this batch (Task #142)", () => {
       ).toHaveCount(0);
       await expect(banner.getByTestId("handwavy-bulk-undo")).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });

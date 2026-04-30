@@ -1,5 +1,12 @@
-import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import {
+  addPhrase,
+  cleanup,
+  injectCalibrationTokenIntoPage,
+  newApiContext,
+  uniquePhrases,
+} from "./helpers/handwavy";
 
 // Task #154 — End-to-end coverage for the side-by-side bulk-removal preview
 // in the calibration UI. Confirms that the "Remove selected" button drives
@@ -11,64 +18,11 @@ import { randomUUID } from "node:crypto";
 // covered with synthetic phrases that no fixture or production report
 // matches, so the confirm button is enabled without any acknowledgment.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN = process.env.CALIBRATION_TOKEN || process.env.VITE_CALIBRATION_TOKEN || "";
+const REVIEWER = "e2e-task154";
 
-function uniquePhrases(count: number, label = "synthetic"): string[] {
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  // Including "task154" + a UUID makes it almost impossible for these to
-  // accidentally match a fixture or production report — that gives us a
-  // deterministic "no real detections lost" preview.
-  return Array.from(
-    { length: count },
-    (_, i) => `task154 preview ${id} ${label} ${i + 1}`,
-  );
-}
-
-function authHeaders(): Record<string, string> {
-  return CALIBRATION_TOKEN
-    ? { "X-Calibration-Token": CALIBRATION_TOKEN }
-    : {};
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    headers: authHeaders(),
-    data: { phrase, category: "hedging", reviewer: "e2e-task154" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      headers: authHeaders(),
-      data: { phrases, reviewer: "e2e-task154-cleanup" },
-    })
-    .catch(() => undefined);
-}
-
-// The vulnrap web app reads `import.meta.env.VITE_CALIBRATION_TOKEN` once at
-// startup and passes it to `setCalibrationToken`. When running e2e against a
-// dev server that wasn't started with that env var, every authenticated
-// request from the page would 401. This helper mirrors what main.tsx does
-// so the active phrase list (a strict-auth GET) can render in tests.
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  // setCalibrationToken stores the value in module-scope state inside
-  // @workspace/api-client-react/custom-fetch. We mirror the storage path
-  // by stashing the token on globalThis under the same conventional key
-  // and exposing a tiny init script that re-applies it on each call.
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
-}
-
+// UI-flow helper kept local: it threads checkbox-tick + "Remove selected"
+// click in the order this spec needs (the bulk-undo spec has its own
+// variant that ALSO confirms the panel — different end states).
 async function selectRowsAndOpenPreview(
   page: Page,
   phrases: string[],
@@ -87,11 +41,11 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
   test("Preview shows wouldRemove summary + per-phrase outcomes; confirm runs the real DELETEs (no real detections lost → no acknowledgment required)", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const realPhrases = uniquePhrases(3, "real");
+    const apiCtx = await newApiContext();
+    const realPhrases = uniquePhrases(3, "task154 preview real");
 
     try {
-      for (const p of realPhrases) await addPhrase(apiCtx, p);
+      for (const p of realPhrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -144,7 +98,7 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
         ).toHaveCount(0, { timeout: 15_000 });
       }
     } finally {
-      await cleanup(apiCtx, realPhrases);
+      await cleanup(apiCtx, realPhrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -152,11 +106,11 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
   test("'Back out' on the preview panel cancels without mutating the active list", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(2, "backout");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task154 preview backout");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -172,7 +126,7 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
         ).toHaveCount(1);
       }
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -180,11 +134,11 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
   test("Acknowledgment checkbox gates the destructive confirm when valid detections would be lost", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(2, "ack");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task154 preview ack");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       // Intercept the dryRun DELETE to inject a synthetic "valid
       // detections lost" response. This lets us verify the UI gating
@@ -283,7 +237,7 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       await expect(ack).toBeChecked();
       await expect(confirmBtn).toBeEnabled();
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -291,12 +245,12 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
   test("Preview surfaces notFound and duplicate-in-batch outcomes for phantom + repeated entries", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const realPhrases = uniquePhrases(1, "real");
+    const apiCtx = await newApiContext();
+    const realPhrases = uniquePhrases(1, "task154 preview real-only");
     const phantomPhrase = `task154 phantom ${randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
     try {
-      for (const p of realPhrases) await addPhrase(apiCtx, p);
+      for (const p of realPhrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -317,7 +271,6 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       const dryRes = await apiCtx.delete(
         "/api/feedback/calibration/handwavy-phrases",
         {
-          headers: authHeaders(),
           data: {
             phrases: [
               realPhrases[0],
@@ -325,7 +278,7 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
               phantomPhrase, // duplicate in the batch
             ],
             dryRun: true,
-            reviewer: "e2e-task154",
+            reviewer: REVIEWER,
           },
         },
       );
@@ -372,7 +325,9 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
         ),
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, [...realPhrases, phantomPhrase]);
+      await cleanup(apiCtx, [...realPhrases, phantomPhrase], {
+        reviewer: `${REVIEWER}-cleanup`,
+      });
       await apiCtx.dispose();
     }
   });
@@ -387,11 +342,11 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
   test("Per-row drop button removes a single phrase from the pending batch and updates the live counts", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(3, "drop");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3, "task154 preview drop");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -469,7 +424,7 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
         ).toHaveCount(1);
       }
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
@@ -480,11 +435,11 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
   test("Dropping the last phrase closes the bulk-remove preview (same as Back out)", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(2, "droplast");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task154 preview droplast");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -515,7 +470,7 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
         ).toHaveCount(1);
       }
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
