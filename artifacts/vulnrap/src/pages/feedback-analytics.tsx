@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey,
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
@@ -62,7 +62,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams, type NavigateFunction } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -2230,6 +2230,46 @@ export function renderHandwavyEditEntries({
         </li>
       );
     });
+}
+
+// Task #222 / #310 — discriminated union for the navigate-away guard's
+// "pending navigation" state. Task #222 covered <Link>-based clicks
+// (`kind: "link"`) and the Back/Forward buttons (`kind: "popstate"`) by
+// intercepting the browser-level events. Task #310 adds the third leg —
+// imperative `navigate(...)` calls fired from a button onClick — by
+// snapshotting the original `useNavigate` arguments verbatim so the
+// guard can replay them after the reviewer confirms "Leave anyway".
+type HandwavyPendingNavigation =
+  | { kind: "link"; href: string }
+  | { kind: "popstate" }
+  | { kind: "imperative"; args: unknown[] };
+
+// Task #310 — wrapper around `useNavigate` that re-routes any imperative
+// in-app navigation through the same Task #222 confirm dialog as the
+// `<Link>` capture-phase interceptor and the popstate sentinel. The
+// document-level click listener can only see <a>-rendered Links; a
+// button whose onClick calls `navigate("/somewhere")` would otherwise
+// silently take the reviewer off the FLAT panel mid-Undo. The hook
+// reads the same refs the rest of the guard uses (so a reviewer-driven
+// undo flow that flips `suppressNavGuardRef` is honored) and snapshots
+// the original arguments verbatim so list state, `replace: true`,
+// numeric deltas, etc. all survive the round-trip through the dialog.
+function useGuardedNavigate(opts: {
+  hasActiveUndoRef: React.MutableRefObject<boolean>;
+  suppressNavGuardRef: React.MutableRefObject<boolean>;
+  setPendingNavigation: (p: HandwavyPendingNavigation) => void;
+}): NavigateFunction {
+  const navigate = useNavigate();
+  const { hasActiveUndoRef, suppressNavGuardRef, setPendingNavigation } = opts;
+  return useCallback(
+    ((...args: unknown[]) => {
+      if (suppressNavGuardRef.current || !hasActiveUndoRef.current) {
+        return (navigate as (...a: unknown[]) => void | Promise<void>)(...args);
+      }
+      setPendingNavigation({ kind: "imperative", args });
+    }) as NavigateFunction,
+    [navigate, hasActiveUndoRef, suppressNavGuardRef, setPendingNavigation],
+  );
 }
 
 export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean }) {
@@ -4495,9 +4535,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // capture-phase click interceptor for in-app <Link> clicks, and a
   // popstate sentinel for back/forward.
   const [pendingNavigation, setPendingNavigation] = useState<
-    | { kind: "link"; href: string }
-    | { kind: "popstate" }
-    | null
+    HandwavyPendingNavigation | null
   >(null);
   // Refs shadow the latest values so the long-lived listeners don't have
   // to re-bind on every state tick (the 1Hz countdown re-renders this
@@ -4508,6 +4546,20 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   useEffect(() => {
     hasActiveUndoRef.current = hasActiveUndo;
   }, [hasActiveUndo]);
+  // Task #310 — imperative `navigate(...)` calls from button onClicks
+  // would otherwise sail past the capture-phase <Link> interceptor and
+  // the popstate sentinel below. `useGuardedNavigate` snapshots the
+  // original args into a `kind: "imperative"` pending entry so the
+  // confirm dialog (and `proceedPendingNavigation` after "Leave anyway")
+  // re-route them through the same audit-friendly flow as link clicks.
+  // Declared AFTER `hasActiveUndoRef` so the hook captures the same ref
+  // the rest of the guard reads — otherwise it would close over an
+  // undefined slot during the very first render.
+  const guardedNavigate = useGuardedNavigate({
+    hasActiveUndoRef,
+    suppressNavGuardRef,
+    setPendingNavigation,
+  });
   // Tab close / hard refresh — modern browsers ignore custom messages
   // and just show their own "Leave site?" dialog, but setting
   // returnValue is what makes the dialog appear at all.
@@ -4626,6 +4678,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     setPendingNavigation(null);
     if (target.kind === "link") {
       navigate(target.href);
+    } else if (target.kind === "imperative") {
+      // Task #310 — replay the reviewer's original `navigate(...)` call
+      // verbatim so list state, `replace: true`, numeric deltas, etc.
+      // reach react-router unchanged. We deliberately use the raw
+      // `navigate` from `useNavigate()` (not `guardedNavigate`) here so
+      // the bypass actually fires — `suppressNavGuardRef` is also set
+      // above as belt-and-braces in case the consumer re-routes through
+      // the guarded wrapper later.
+      (navigate as (...a: unknown[]) => void | Promise<void>)(...target.args);
     } else {
       // Pop the re-pushed sentinel AND the entry the reviewer's
       // original Back press was aimed at, so a single click of
@@ -4973,6 +5034,23 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           <div className="flex items-center gap-2">
             <CalibrationAuthBadge state={authState} />
             <Badge variant="secondary" className="text-[10px]">{phrases.length} active</Badge>
+            {/* Task #310 — small "back to home" affordance that programmatically
+                navigates via `guardedNavigate`. Routed through the Task #222
+                navigate-away guard so a misclick mid-Undo prompts the same
+                confirm dialog as a real <Link> click; without the wrapper this
+                button's onClick would silently take the reviewer off the FLAT
+                panel and turn any subsequent removal into a manual-removal
+                history entry instead of "added then undone". */}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-[11px]"
+              onClick={() => guardedNavigate("/")}
+              data-testid="handwavy-back-home"
+            >
+              Done
+            </Button>
           </div>
         </div>
         <CardDescription>

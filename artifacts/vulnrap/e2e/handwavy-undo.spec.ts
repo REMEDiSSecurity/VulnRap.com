@@ -404,6 +404,97 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
     }
   });
 
+  // Task #310 — extends Task #222's link-click coverage to imperative
+  // in-app navigation triggered from a button onClick. The Task #222
+  // capture-phase document click listener only sees <a>-rendered
+  // react-router Links; a button whose onClick calls
+  // `navigate("/somewhere")` directly would slip past it and silently
+  // unmount the FLAT panel mid-Undo, turning any later removal into a
+  // manual-removal audit entry instead of "added then undone". The
+  // useGuardedNavigate wrapper added in this task re-routes those
+  // imperative calls through the SAME confirm dialog so the reviewer
+  // sees the phrase + remaining time and can choose to stay. This
+  // spec drives the "Done" button next to the panel header (the only
+  // button on the page wired to `guardedNavigate`) — a real <Link>
+  // would already be covered by the Task #222 logo-click test above.
+  test("clicking an in-page button that programmatically navigates while an undo window is active pops the same confirm dialog and 'Stay' keeps the reviewer on the panel", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task310 navguard", "imperative");
+
+    try {
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const reviewer = page.getByTestId("handwavy-reviewer");
+      await expect(reviewer).toBeVisible({ timeout: 15_000 });
+      await reviewer.fill("e2e-task310");
+
+      await addPhraseViaUi(page, phrase);
+
+      // Sanity: the row must carry an Undo button so we know the guard
+      // has something to protect — same shape as the Task #222 spec.
+      const newRow = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
+
+      // The "Done" button next to the panel header is the imperative-
+      // navigation surface this task is meant to cover. Its onClick
+      // calls `guardedNavigate("/")` — without the wrapper that would
+      // silently unmount the panel; with it, the same Task #222
+      // confirm dialog must appear naming the phrase + remaining time.
+      const backHome = page.getByTestId("handwavy-back-home");
+      await expect(backHome).toBeVisible();
+      await backHome.click();
+
+      const dialog = page.getByTestId("handwavy-undo-leave-confirm");
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+      await expect(
+        dialog.getByTestId("handwavy-undo-leave-confirm-phrase"),
+      ).toContainText(phrase);
+      // Remaining-time copy uses the same "Xm YYs" form as the row-
+      // level Undo countdown (formatUndoRemaining); the dialog is
+      // meant to reinforce that countdown, not invent a new format.
+      const remainingText = await dialog
+        .getByTestId("handwavy-undo-leave-confirm-remaining")
+        .textContent();
+      expect(remainingText ?? "").toMatch(/^\d+m \d{2}s$/);
+
+      // "Stay on this page" must dismiss the dialog WITHOUT navigating.
+      // Under the pre-#310 build the imperative navigate would already
+      // have fired before the dialog opened, so the URL pathname check
+      // below would fail (we'd be on "/" with no /feedback-analytics
+      // history entry to recover). With the wrapper the dialog is the
+      // only side-effect of the click and the reviewer stays put.
+      await dialog.getByTestId("handwavy-undo-leave-confirm-cancel").click();
+      await expect(dialog).not.toBeVisible();
+      expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+      ).toHaveCount(1);
+      await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
+
+      // Re-clicking the Done button must re-arm the dialog — the guard
+      // isn't a one-shot, it stays active for as long as a candidate
+      // is inside its window.
+      await backHome.click();
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+      // "Leave anyway" must replay the original `navigate("/")` call.
+      // We assert via the URL pathname rather than a selector on "/"
+      // because the home page is lazy-loaded.
+      await dialog.getByTestId("handwavy-undo-leave-confirm-confirm").click();
+      await expect(dialog).not.toBeVisible();
+      await expect
+        .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
+        .toBe("/");
+    } finally {
+      await cleanup(apiCtx, phrase, { reviewer: "e2e-task310-cleanup" });
+      await apiCtx.dispose();
+    }
+  });
+
   // Task #222 — suppression contract. Clicking the row-level Undo
   // button must NOT pop the navigate-away dialog: the reviewer is the
   // one initiating the rollback, and the panel's instant refresh +
