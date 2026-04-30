@@ -52,6 +52,33 @@ function fingerprintFlags(flags: AvriDriftFlag[]): string {
     .join("\n");
 }
 
+// Task #269 — surface "when did the most recent flag fire" so reviewers can
+// tell at a glance whether the banner is stale (already triaged last week)
+// or fresh (fired today and still needs attention).
+//
+// weekStart is an ISO calendar date ("YYYY-MM-DD") emitted by the drift
+// report. `new Date("YYYY-MM-DD")` is parsed as UTC midnight per spec, so
+// the day delta is computed against "now" in UTC-aligned 24h chunks. We
+// floor non-negative deltas; a weekStart equal to today (or in the future,
+// e.g. clock skew on the user's machine) collapses to "today".
+function latestWeekStartFrom(flags: AvriDriftFlag[]): string | null {
+  if (flags.length === 0) return null;
+  let latest = flags[0].weekStart;
+  for (const f of flags) {
+    if (f.weekStart > latest) latest = f.weekStart;
+  }
+  return latest;
+}
+
+function relativeWeekStart(weekStart: string, now: number = Date.now()): string {
+  const then = new Date(weekStart).getTime();
+  if (Number.isNaN(then)) return "";
+  const days = Math.floor((now - then) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return "today";
+  if (days === 1) return "1d ago";
+  return `${days}d ago`;
+}
+
 function readDismissedFingerprint(): string | null {
   try {
     return localStorage.getItem(DISMISSED_KEY);
@@ -88,6 +115,7 @@ export function DriftFlagsBanner() {
 
   const flags = data?.flags ?? [];
   const fingerprint = useMemo(() => fingerprintFlags(flags), [flags]);
+  const latestWeekStart = useMemo(() => latestWeekStartFrom(flags), [flags]);
 
   if (!isReviewer) return null;
   if (flags.length === 0) return null;
@@ -118,6 +146,11 @@ export function DriftFlagsBanner() {
           be collapsing or a family weight may have shifted — check the
           calibration dashboard before triaging.
         </div>
+        {latestWeekStart && (
+          <div data-testid="drift-banner-latest" className="text-amber-300/80">
+            Latest week: {latestWeekStart} ({relativeWeekStart(latestWeekStart)})
+          </div>
+        )}
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           <Link
             to="/feedback-analytics"

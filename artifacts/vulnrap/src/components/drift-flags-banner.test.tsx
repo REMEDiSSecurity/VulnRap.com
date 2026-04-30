@@ -139,6 +139,75 @@ describe("DriftFlagsBanner", () => {
     expect(screen.queryByTestId("drift-flags-banner")).not.toBeInTheDocument();
   });
 
+  it("shows the latest flag's weekStart with a relative-time hint", async () => {
+    setCalibrationToken("reviewer-token");
+    // Freeze "now" so the relative-time math is deterministic. The latest
+    // weekStart in REPORT_PLUS_NEWER below is 2026-04-27 (UTC midnight).
+    // 2026-04-30T12:00:00Z − 2026-04-27T00:00:00Z = 3.5 days → floor = 3d.
+    // Only fake `Date` so react-query's setTimeout-based scheduling still
+    // resolves and `findByTestId` doesn't deadlock.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-30T12:00:00.000Z"));
+    try {
+      const REPORT_PLUS_NEWER = {
+        ...REPORT_WITH_FLAGS,
+        flags: [
+          ...REPORT_WITH_FLAGS.flags,
+          {
+            weekStart: "2026-04-27",
+            kind: "GAP_BELOW_45" as const,
+            detail: "T1−T3 composite gap 41.0 < 45pt threshold (T1 n=3 mean=66, T3 n=4 mean=25).",
+          },
+        ],
+      };
+      fetchSpy.mockImplementation(async () => new Response(JSON.stringify(REPORT_PLUS_NEWER), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+
+      renderBanner();
+
+      const latest = await screen.findByTestId("drift-banner-latest");
+      // Picks the most recent weekStart, not the first one in the array.
+      expect(latest.textContent).toMatch(/2026-04-27/);
+      expect(latest.textContent).toMatch(/3d ago/);
+      // Make sure the older weekStart (2026-04-20) isn't what we displayed.
+      expect(latest.textContent).not.toMatch(/2026-04-20/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to 'today' when only one week is present and it matches now", async () => {
+    setCalibrationToken("reviewer-token");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-20T08:00:00.000Z"));
+    try {
+      const SINGLE_WEEK_TODAY = {
+        ...REPORT_NO_FLAGS,
+        flags: [
+          {
+            weekStart: "2026-04-20",
+            kind: "GAP_BELOW_45" as const,
+            detail: "T1−T3 composite gap 38.4 < 45pt threshold (T1 n=4 mean=70, T3 n=5 mean=31.6).",
+          },
+        ],
+      };
+      fetchSpy.mockImplementation(async () => new Response(JSON.stringify(SINGLE_WEEK_TODAY), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+
+      renderBanner();
+
+      const latest = await screen.findByTestId("drift-banner-latest");
+      expect(latest.textContent).toMatch(/2026-04-20/);
+      expect(latest.textContent).toMatch(/today/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("re-arms the banner when a new flag appears (fingerprint changes)", async () => {
     setCalibrationToken("reviewer-token");
     fetchSpy.mockImplementation(async () => new Response(JSON.stringify(REPORT_WITH_FLAGS), {
