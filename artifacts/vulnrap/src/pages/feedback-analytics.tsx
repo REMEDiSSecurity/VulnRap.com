@@ -1281,12 +1281,24 @@ export function computeHandwavyActiveListVersion(
 // `useRef`) and not persisted across reloads — a reloaded page has no idea
 // what corpus version the cached preview was scored against, so we'd
 // rather pay one fresh scan than ever surface a stale impact number.
+export type SingleRemoveDryRunPreviewCacheEntry<T> = {
+  response: T;
+  // Task #349 — wall-clock at write time, surfaced via getEntry so the
+  // per-row Trash preview can render "served from cache, scanned Ns ago".
+  scannedAt: number;
+};
+
 export type SingleRemoveDryRunPreviewCache<T> = {
   get(
     phrase: string,
     productionScanLimit: number,
     version: string,
   ): T | undefined;
+  getEntry(
+    phrase: string,
+    productionScanLimit: number,
+    version: string,
+  ): SingleRemoveDryRunPreviewCacheEntry<T> | undefined;
   set(
     phrase: string,
     productionScanLimit: number,
@@ -1297,16 +1309,21 @@ export type SingleRemoveDryRunPreviewCache<T> = {
   size(): number;
 };
 
-export function createSingleRemoveDryRunPreviewCache<
-  T,
->(): SingleRemoveDryRunPreviewCache<T> {
+export function createSingleRemoveDryRunPreviewCache<T>(
+  // `now` is injectable so unit tests can pin `scannedAt` deterministically.
+  options: { now?: () => number } = {},
+): SingleRemoveDryRunPreviewCache<T> {
+  const now = options.now ?? (() => Date.now());
   // The two cache-key components (productionScanLimit, phrase) are joined
   // with a NUL byte so a phrase whose text happens to start with digits
   // can't collide with a different phrase fetched at a different scan
   // limit. The same NUL guard is used in `computeHandwavyActiveListVersion`.
   const cacheKey = (phrase: string, productionScanLimit: number): string =>
     `${productionScanLimit}\u0001${phrase}`;
-  const store = new Map<string, { version: string; response: T }>();
+  const store = new Map<
+    string,
+    { version: string; response: T; scannedAt: number }
+  >();
   return {
     get(phrase, productionScanLimit, version) {
       const entry = store.get(cacheKey(phrase, productionScanLimit));
@@ -1314,8 +1331,18 @@ export function createSingleRemoveDryRunPreviewCache<
       if (entry.version !== version) return undefined;
       return entry.response;
     },
+    getEntry(phrase, productionScanLimit, version) {
+      const entry = store.get(cacheKey(phrase, productionScanLimit));
+      if (!entry) return undefined;
+      if (entry.version !== version) return undefined;
+      return { response: entry.response, scannedAt: entry.scannedAt };
+    },
     set(phrase, productionScanLimit, version, response) {
-      store.set(cacheKey(phrase, productionScanLimit), { version, response });
+      store.set(cacheKey(phrase, productionScanLimit), {
+        version,
+        response,
+        scannedAt: now(),
+      });
     },
     invalidate() {
       store.clear();
@@ -1323,6 +1350,44 @@ export function createSingleRemoveDryRunPreviewCache<
     size() {
       return store.size;
     },
+  };
+}
+
+// Task #349 — epoch-ms variant of `formatRelativeAgo` for the per-row
+// Trash preview's "served from cache" badge. Sub-5s diffs collapse to
+// "just now" so a back-to-back re-Trash doesn't flicker "0s" → "1s".
+// Negative diffs (clock skew) also collapse to "just now".
+export function formatRemovePreviewScannedAgo(
+  scannedAt: number,
+  now: number = Date.now(),
+): string {
+  const diffMs = Math.max(0, now - scannedAt);
+  const sec = Math.round(diffMs / 1000);
+  if (sec < 5) return "just now";
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  return `${day}d ago`;
+}
+
+export type RemovePreviewSource = "fresh" | "cached";
+
+// Pure helper so the unit test can pin the badge's fresh-vs-cached
+// branching without rendering the whole page.
+export function describeRemovePreviewSource(
+  source: RemovePreviewSource,
+  scannedAt: number,
+  now: number = Date.now(),
+): { label: string; tone: "fresh" | "cached" } {
+  if (source === "fresh") {
+    return { label: "Fresh scan", tone: "fresh" };
+  }
+  return {
+    label: `Reused scan · ${formatRemovePreviewScannedAgo(scannedAt, now)}`,
+    tone: "cached",
   };
 }
 
@@ -2794,7 +2859,22 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     phrase: string;
     data: HandwavyPhraseSingleRemoveDryRunResponse;
     acknowledged: boolean;
+    // Task #349 — fresh fetch vs. cache-hit for the per-row Trash
+    // preview's "Fresh scan" / "Reused scan · Ns ago" badge.
+    source: RemovePreviewSource;
+    scannedAt: number;
   } | null>(null);
+  // Task #349 — 1Hz tick to keep the cached badge's "Ns ago" label
+  // current while the panel is open. Only runs when the panel is
+  // showing a cached preview; fresh previews have a static label.
+  const [removePreviewNow, setRemovePreviewNow] = useState<number>(() => Date.now());
+  const cachedPreviewOpen = removePreview?.source === "cached";
+  useEffect(() => {
+    if (!cachedPreviewOpen) return;
+    setRemovePreviewNow(Date.now());
+    const id = setInterval(() => setRemovePreviewNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [cachedPreviewOpen]);
   // Task #114 — corpus-impact preview state. After the reviewer presses
   // "Add phrase" we first issue a dry-run POST and surface the GREEN/YELLOW
   // false-positive count. The actual add only persists after the reviewer
@@ -3824,12 +3904,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     // any add / remove / reinstate / edit evicts it). This avoids a full
     // corpus + production-archive re-scan for the very common Trash →
     // Back-out → Trash flow.
-    const cached = removeDryRunCacheRef.current.get(
+    // Task #349 — read the entry (not just the response) so the
+    // preview can surface a cache-vs-fresh badge with the write-time
+    // `scannedAt`.
+    const cachedEntry = removeDryRunCacheRef.current.getEntry(
       phrase,
       effectiveProductionScanLimit,
       handwavyActiveListVersion,
     );
-    if (cached) {
+    if (cachedEntry) {
+      const cached = cachedEntry.response;
       const cachedCorpusLost = cached.dryRunImpact.corpus.validDetectionsLost;
       const cachedProductionLost =
         cached.dryRunImpact.production?.validDetectionsLost ?? 0;
@@ -3841,7 +3925,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         await handleRemove(phrase);
         return;
       }
-      setRemovePreview({ phrase, data: cached, acknowledged: false });
+      setRemovePreview({
+        phrase,
+        data: cached,
+        acknowledged: false,
+        source: "cached",
+        scannedAt: cachedEntry.scannedAt,
+      });
       return;
     }
     setBusy(`rm-preview:${phrase}`);
@@ -3893,6 +3983,14 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         handwavyActiveListVersion,
         single,
       );
+      // Task #349 — re-read the cache's stored `scannedAt` so the
+      // panel and any subsequent cache hit share the same anchor.
+      const freshScannedAt =
+        removeDryRunCacheRef.current.getEntry(
+          phrase,
+          effectiveProductionScanLimit,
+          handwavyActiveListVersion,
+        )?.scannedAt ?? Date.now();
       const corpusLost = single.dryRunImpact.corpus.validDetectionsLost;
       const productionLost = single.dryRunImpact.production?.validDetectionsLost ?? 0;
       const totalValidLost = corpusLost + productionLost;
@@ -3903,7 +4001,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         await handleRemove(phrase);
         return;
       }
-      setRemovePreview({ phrase, data: single, acknowledged: false });
+      setRemovePreview({
+        phrase,
+        data: single,
+        acknowledged: false,
+        source: "fresh",
+        scannedAt: freshScannedAt,
+      });
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
@@ -6541,7 +6645,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             removals never reach this panel — they are fired in one
             click from `requestRemoveWithImpactPreview`. */}
         {removePreview && (() => {
-          const { phrase, data, acknowledged } = removePreview;
+          const { phrase, data, acknowledged, source, scannedAt } = removePreview;
           const corpus = data.dryRunImpact.corpus;
           const production = data.dryRunImpact.production ?? null;
           const productionError = data.dryRunImpact.productionError;
@@ -6552,6 +6656,12 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           const requireAck = totalValidLost > 0;
           const inFlight =
             busy === `rm:${phrase}` || busy === `rm-preview:${phrase}`;
+          // Task #349 — fresh-vs-cached badge for the preview header.
+          const sourceBadge = describeRemovePreviewSource(
+            source,
+            scannedAt,
+            removePreviewNow,
+          );
           return (
             <div
               className="rounded-md border border-red-500/40 bg-red-500/5 p-3 space-y-3 text-xs"
@@ -6560,8 +6670,29 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               <div className="flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
                 <div className="flex-1">
-                  <div className="font-semibold text-foreground">
-                    Remove "{phrase}"?
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-semibold text-foreground">
+                      Remove "{phrase}"?
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[9px] uppercase tracking-wide whitespace-nowrap shrink-0",
+                        sourceBadge.tone === "fresh"
+                          ? "border-emerald-500/40 text-emerald-200"
+                          : "border-amber-500/40 text-amber-200",
+                      )}
+                      data-testid="handwavy-remove-preview-source"
+                      data-source={source}
+                      data-scanned-at={scannedAt}
+                      title={
+                        source === "fresh"
+                          ? "These impact numbers came from a fresh corpus + production-archive scan."
+                          : `Served from cache, scanned ${formatRemovePreviewScannedAgo(scannedAt, removePreviewNow)}. Adding, removing, reinstating, or editing any phrase invalidates the cache so the next Trash click re-scans.`
+                      }
+                    >
+                      {sourceBadge.label}
+                    </Badge>
                   </div>
                   <div
                     className="text-[10px] text-muted-foreground mt-0.5"

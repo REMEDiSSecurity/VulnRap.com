@@ -8,6 +8,8 @@ import {
   renderHandwavyEditEntries,
   computeHandwavyActiveListVersion,
   createSingleRemoveDryRunPreviewCache,
+  describeRemovePreviewSource,
+  formatRemovePreviewScannedAgo,
   summarizeDatasetHistory,
   computeCohortFixtureDelta,
   FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
@@ -411,6 +413,91 @@ describe("createSingleRemoveDryRunPreviewCache (Task #246 — cache hit + invali
     expect(cache.size()).toBe(1);
     expect(cache.get("alpha", 50, VERSION_A)).toBeUndefined();
     expect(cache.get("alpha", 50, VERSION_B)?.phrase).toBe("alpha-v2");
+  });
+
+  it("getEntry returns the response paired with the write-time scannedAt", () => {
+    let clock = 1_700_000_000_000;
+    const cache = createSingleRemoveDryRunPreviewCache<StubResp>({
+      now: () => clock,
+    });
+    const response = stubFor("alpha");
+    cache.set("alpha", 50, VERSION_A, response);
+    const entry = cache.getEntry("alpha", 50, VERSION_A);
+    expect(entry?.response).toBe(response);
+    expect(entry?.scannedAt).toBe(1_700_000_000_000);
+    // A later set against the same key advances the stored timestamp.
+    clock = 1_700_000_005_000;
+    cache.set("alpha", 50, VERSION_A, response);
+    expect(cache.getEntry("alpha", 50, VERSION_A)?.scannedAt).toBe(
+      1_700_000_005_000,
+    );
+  });
+
+  it("getEntry honors the same version + missing-key invalidation as get", () => {
+    const cache = createSingleRemoveDryRunPreviewCache<StubResp>({
+      now: () => 1_700_000_000_000,
+    });
+    cache.set("alpha", 50, VERSION_A, stubFor("alpha"));
+    expect(cache.getEntry("alpha", 50, VERSION_B)).toBeUndefined();
+    expect(cache.getEntry("bravo", 50, VERSION_A)).toBeUndefined();
+    cache.invalidate();
+    expect(cache.getEntry("alpha", 50, VERSION_A)).toBeUndefined();
+  });
+});
+
+describe("describeRemovePreviewSource (Task #349 — fresh vs. cached badge branching)", () => {
+  const FAKE_NOW = 1_700_000_000_000;
+
+  it("renders 'Fresh scan' (and ignores the scan timestamp) on the fresh branch", () => {
+    const result = describeRemovePreviewSource(
+      "fresh",
+      FAKE_NOW - 30_000,
+      FAKE_NOW,
+    );
+    expect(result.label).toBe("Fresh scan");
+    expect(result.tone).toBe("fresh");
+  });
+
+  it("renders 'Reused scan · Ns ago' on the cached branch", () => {
+    const result = describeRemovePreviewSource(
+      "cached",
+      FAKE_NOW - 14_000,
+      FAKE_NOW,
+    );
+    expect(result.label).toBe("Reused scan · 14s ago");
+    expect(result.tone).toBe("cached");
+  });
+
+  it("escalates the cached badge through s → m → h as the scan ages", () => {
+    expect(
+      describeRemovePreviewSource("cached", FAKE_NOW - 90_000, FAKE_NOW).label,
+    ).toBe("Reused scan · 2m ago");
+    expect(
+      describeRemovePreviewSource("cached", FAKE_NOW - 3_600_000, FAKE_NOW)
+        .label,
+    ).toBe("Reused scan · 1h ago");
+  });
+
+  it("collapses sub-5s diffs to 'just now' so a back-to-back re-Trash doesn't flicker", () => {
+    expect(
+      describeRemovePreviewSource("cached", FAKE_NOW - 100, FAKE_NOW).label,
+    ).toBe("Reused scan · just now");
+    expect(
+      formatRemovePreviewScannedAgo(FAKE_NOW - 4_000, FAKE_NOW),
+    ).toBe("just now");
+    // Boundary: 5s crosses over to integer-seconds.
+    expect(
+      formatRemovePreviewScannedAgo(FAKE_NOW - 5_000, FAKE_NOW),
+    ).toBe("5s ago");
+  });
+
+  it("collapses negative diffs (clock skew) to 'just now' instead of '-3s ago'", () => {
+    const result = describeRemovePreviewSource(
+      "cached",
+      FAKE_NOW + 3_000,
+      FAKE_NOW,
+    );
+    expect(result.label).toBe("Reused scan · just now");
   });
 });
 
