@@ -226,6 +226,82 @@ test.describe("Notified flags panel — bulk re-arm", () => {
     ).toBeVisible();
   });
 
+  test("master checkbox ticks every visible row, shows indeterminate, and feeds the bulk bar", async ({
+    page,
+  }) => {
+    await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+    const masterCheckbox = page.getByTestId("notified-flags-select-all");
+    const selectAllRow = page.getByTestId("notified-flags-select-all-row");
+    const bulkBar = page.getByTestId("notified-flags-bulk-bar");
+    const bulkRearm = page.getByTestId("notified-flags-bulk-rearm");
+    const checkboxes = SEEDED_RECORDS.map((r) =>
+      page.getByTestId(`notified-flag-checkbox-${r.key}`),
+    );
+
+    await expect(masterCheckbox).toBeVisible({ timeout: 15_000 });
+    for (const cb of checkboxes) {
+      await expect(cb).toBeVisible();
+      await expect(cb).not.toBeChecked();
+    }
+    await expect(masterCheckbox).not.toBeChecked();
+    // Empty state — no rows selected, so indeterminate is false.
+    expect(
+      await masterCheckbox.evaluate(
+        (el) => (el as HTMLInputElement).indeterminate,
+      ),
+    ).toBe(false);
+    await expect(selectAllRow).toContainText(
+      `Select all ${SEEDED_RECORDS.length} notified flags`,
+    );
+    await expect(bulkBar).toHaveCount(0);
+
+    // Tick a single row → master checkbox should flip to indeterminate.
+    await checkboxes[0]!.check();
+    await expect(masterCheckbox).not.toBeChecked();
+    expect(
+      await masterCheckbox.evaluate(
+        (el) => (el as HTMLInputElement).indeterminate,
+      ),
+    ).toBe(true);
+    await expect(masterCheckbox).toHaveAttribute("aria-checked", "mixed");
+    await expect(bulkBar).toContainText("1 selected");
+    await expect(bulkRearm).toHaveText(/Re-arm selected \(1\)/);
+
+    // Click the master checkbox → ticks every visible row, count + button update.
+    await masterCheckbox.click();
+    await expect(masterCheckbox).toBeChecked();
+    expect(
+      await masterCheckbox.evaluate(
+        (el) => (el as HTMLInputElement).indeterminate,
+      ),
+    ).toBe(false);
+    await expect(masterCheckbox).toHaveAttribute("aria-checked", "true");
+    for (const cb of checkboxes) {
+      await expect(cb).toBeChecked();
+    }
+    await expect(bulkBar).toContainText(`${SEEDED_RECORDS.length} selected`);
+    await expect(bulkRearm).toHaveText(
+      new RegExp(`Re-arm selected \\(${SEEDED_RECORDS.length}\\)`),
+    );
+    await expect(selectAllRow).toContainText(
+      `${SEEDED_RECORDS.length} of ${SEEDED_RECORDS.length} selected`,
+    );
+
+    // Click again → clears the selection, bulk bar disappears.
+    await masterCheckbox.click();
+    await expect(masterCheckbox).not.toBeChecked();
+    expect(
+      await masterCheckbox.evaluate(
+        (el) => (el as HTMLInputElement).indeterminate,
+      ),
+    ).toBe(false);
+    for (const cb of checkboxes) {
+      await expect(cb).not.toBeChecked();
+    }
+    await expect(bulkBar).toHaveCount(0);
+  });
+
   test("toast surfaces partial-success counts when some selected keys are already gone", async ({
     page,
   }) => {

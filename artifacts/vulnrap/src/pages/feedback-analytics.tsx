@@ -11722,6 +11722,13 @@ function NotifiedFlagsPanel({
   }
   const selectedCount = liveSelectedKeys.length;
   const overCap = selectedCount > BULK_REARM_CAP;
+  // Master-checkbox state, mirroring the hand-wavy phrase audit
+  // panel's "select all" pattern: checked when every visible row is
+  // ticked, indeterminate when only some are. `sorted.length === 0`
+  // is impossible here (the empty branch returned earlier) but the
+  // guard keeps `allSelected` honest if that ever changes.
+  const allSelected = sorted.length > 0 && selectedCount === sorted.length;
+  const someSelected = selectedCount > 0 && !allSelected;
 
   const toggleSelected = (key: string) => {
     setSelectedKeys((prev) => {
@@ -11736,6 +11743,14 @@ function NotifiedFlagsPanel({
   };
 
   const clearSelection = () => setSelectedKeys(new Set());
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedKeys(new Set());
+    } else {
+      setSelectedKeys(new Set(sorted.map((r) => r.key)));
+    }
+  };
 
   const handleRearm = async (record: AvriDriftNotificationRecord) => {
     const key = record.key;
@@ -11948,6 +11963,41 @@ function NotifiedFlagsPanel({
           </div>
         </div>
       )}
+      {/* Task #406 — master checkbox above the list. Mirrors the
+          select-all affordance in the hand-wavy phrase audit panel so
+          reviewers working through a long backlog (e.g. after a
+          webhook outage) can tick every visible row in one click. The
+          indeterminate state is set imperatively via a ref because
+          HTML doesn't expose `indeterminate` as a JSX attribute. */}
+      <div
+        className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground"
+        data-testid="notified-flags-select-all-row"
+      >
+        <input
+          type="checkbox"
+          className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+          checked={allSelected}
+          ref={(el) => {
+            if (el) el.indeterminate = someSelected;
+          }}
+          onChange={toggleSelectAll}
+          disabled={bulkBusy || busyKey !== null}
+          aria-label={
+            allSelected
+              ? "Deselect all notified flags"
+              : "Select all notified flags"
+          }
+          aria-checked={
+            someSelected ? "mixed" : allSelected ? "true" : "false"
+          }
+          data-testid="notified-flags-select-all"
+        />
+        <span>
+          {selectedCount > 0
+            ? `${selectedCount} of ${sorted.length} selected`
+            : `Select all ${sorted.length} notified flag${sorted.length === 1 ? "" : "s"}`}
+        </span>
+      </div>
       <ul className="space-y-1.5">
         {sorted.map((record) => {
           const isBusy = busyKey === record.key;
