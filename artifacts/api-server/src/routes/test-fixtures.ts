@@ -55,6 +55,28 @@ type TriageAction =
   | "PRIORITIZE"
   | "STANDARD_TRIAGE";
 
+// Task #383 — machine-readable hint identifying which engine the project
+// relies on to condemn a given T4 fixture. The hallucination detector only
+// targets fabricated *evidence* (round addresses, magic PIDs, repeated
+// stack frames, impossible HTTP shapes, …); other fabrication shapes are
+// caught by sibling engines:
+//   - "HallucinationDetector": fabricated-evidence signals accumulate
+//     enough weight to trip HALLUCINATION_FABRICATED_EVIDENCE.
+//   - "CWECoherenceChecker": claimed CWE doesn't match the described
+//     vulnerability (e.g. CWE-79 XSS writeup that's actually SQL-injection),
+//     caught by Engine 3's TYPE_SWAP/coherence indicators.
+//   - "PlagiarismHeuristic": a paraphrased/plagiarized public writeup
+//     (e.g. NVD-style rediscovery of a known CVE); the hallucination
+//     detector does not attempt plagiarism detection.
+// The hint is asserted against reality in
+// `hallucination-detector-cohort.test.ts` (Task #383), so a fixture tagged
+// "HallucinationDetector" that no longer accumulates moderate-tier weight
+// will fail loudly instead of drifting silently.
+type CondemningEngine =
+  | "HallucinationDetector"
+  | "CWECoherenceChecker"
+  | "PlagiarismHeuristic";
+
 interface Fixture {
   id: string;
   tier: Tier;
@@ -68,6 +90,12 @@ interface Fixture {
   // /api/test/run so calibration can monitor each archetype's regression
   // headroom (current score vs. distance to LIKELY-INVALID ceiling).
   archetype?: string;
+  // Task #383 — for T4 fixtures, the engine the project relies on to
+  // condemn this fabrication shape. Required on every T4 fixture (asserted
+  // by `hallucination-detector-cohort.test.ts`) so a maintainer can tell
+  // which detector each fixture is meant to exercise without rerunning the
+  // whole pipeline. Not meaningful on T1/T2/T3.
+  condemnedBy?: CondemningEngine;
 }
 
 // =============================================================================
@@ -1908,6 +1936,7 @@ const T4: Fixture[] = [
   {
     id: "T4-01-fake-cve-fake-fn",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     text: `# RCE in nodejs/node via fabricated_function()
 
 The helper fabricated_function in nodejs allows remote code execution
@@ -1928,6 +1957,7 @@ Severity: Critical. Severity: Critical.`,
   {
     id: "T4-02-round-addresses",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     text: `# Heap overflow in libcurl via memcpy at fixed addresses
 
 I have identified a heap overflow in github.com/curl/curl. The bug occurs
@@ -1950,6 +1980,12 @@ Affects all curl versions newer than 7.50.0.`,
   {
     id: "T4-03-plagiarized-nvd",
     tier: "T4_HALLUCINATED",
+    // Plagiarized NVD-style writeup of a real public CVE. The hallucination
+    // detector targets fabricated *evidence* (round addresses, magic PIDs,
+    // repeated stack frames…), not plagiarism, so this fixture intentionally
+    // accumulates near-zero hallucination weight; the project relies on
+    // the plagiarism heuristic to condemn it.
+    condemnedBy: "PlagiarismHeuristic",
     text: `# CVE-2024-3094 — XZ Utils Backdoor (independent rediscovery)
 
 I have independently discovered a malicious code insertion in the upstream
@@ -1971,6 +2007,7 @@ withheld pending responsible disclosure.`,
   {
     id: "T4-04-fake-asan-no-summary",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     text: `# Heap-buffer-overflow in libfoo (CVE-2025-99999)
 
 The helper parse_packet in libfoo crashes when called with a malformed
@@ -1990,6 +2027,12 @@ request once embargo lifts.`,
   {
     id: "T4-05-fake-cwe-mismatch",
     tier: "T4_HALLUCINATED",
+    // CWE-79 (XSS) writeup that actually describes a SQL-injection bypass.
+    // The mismatch between the claimed CWE and the described vulnerability
+    // is the condemning signal here, caught by Engine 3's TYPE_SWAP /
+    // coherence indicators — not by the hallucination detector. This
+    // fixture intentionally accumulates near-zero hallucination weight.
+    condemnedBy: "CWECoherenceChecker",
     text: `# Cross-site scripting (CWE-79) bypasses authentication via SQL
 
 The /api/auth/login endpoint is vulnerable to a Cross-site scripting
@@ -2014,6 +2057,7 @@ Reference: github.com/example-org/totally-fake-repo-that-does-not-exist`,
   {
     id: "T4-06-fake-stacktrace-repeat",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     text: `# Use-after-free in nginx mod_http_v3 (CVE-2026-00001)
 
 Confirmed crash with the following stack trace from gdb:
@@ -2038,6 +2082,7 @@ exploit.py (private).`,
   {
     id: "T4-07-fake-pid-fake-fn",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     text: `# Critical: heap corruption in lodash 4.17.21 _.merge
 
 The function \`_.merge\` in lodash 4.17.21 contains a heap corruption bug
@@ -2060,6 +2105,7 @@ CVSS: 10.0 (Critical). Severity: High.`,
   {
     id: "T4-08-fake-cve-id",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     text: `# CVE-2099-12345: Authentication bypass in express 4.18.2
 
 I have discovered an authentication bypass affecting express 4.18.2
@@ -2081,6 +2127,7 @@ oversized Cookie headers before parsing.`,
   {
     id: "T4-09-ai-tool-curl-uaf",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     text: `# Use-after-free in libcurl detected by automated analysis
 
 While running an automated AI-assisted code review against
@@ -2112,6 +2159,7 @@ CVSS: 9.8.`,
   {
     id: "T4-12-fake-prologue-offsets",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     // Trips Task #303 `implausible_function_offset` (≥2 frames with offsets
     // in the prologue, +0x1 / +0x2). Also fires `round_function_offsets`
     // (+0x100 / +0x200 / +0x300) AND `frame_numbering_gaps` (jump from #2
@@ -2148,6 +2196,7 @@ Working PoC in exploit.py (not attached). Severity: Critical. CVSS: 10.0.`,
   {
     id: "T4-13-fake-thread-id-out-of-range",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     // Trips Task #303 `implausible_thread_id` (PID 99999999 > Linux max,
     // T99999 > 1024). Also fires `round_function_offsets` (+0x100 / +0x200
     // / +0x300) AND `frame_numbering_gaps` (jump from #1 to #3) so the
@@ -2180,6 +2229,7 @@ Severity: Critical. CVSS: 10.0.`,
   {
     id: "T4-14-fake-region-vs-access",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     // Trips Task #303 `region_size_vs_access_size` (READ of size 8 against
     // a 2-byte region for a heap-use-after-free). Also fires
     // `round_function_offsets` (+0x100 / +0x200 / +0x300) AND
@@ -2212,6 +2262,7 @@ Working PoC in exploit.py (not attached). Severity: Critical. CVSS: 10.0.`,
   {
     id: "T4-10-fake-openssl-regression",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     text: `# OpenSSL 3.2.999 regression — RSA padding oracle (independent finding)
 
 I have independently rediscovered a Bleichenbacher-style padding oracle
@@ -2242,6 +2293,7 @@ in constant time.`,
   {
     id: "T4-11-impossible-http-shape",
     tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
     text: `# Information disclosure via HEAD on /admin (LLM-assisted finding)
 
 A HEAD request to /admin returns the full admin panel HTML in the

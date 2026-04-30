@@ -37,7 +37,8 @@
 //          moderate-tier floor)
 //     Two T4 fixtures are intentionally excluded from the T4 floor because
 //     the *hallucination detector* is not the engine that condemns them
-//     (see HALLUCINATION_DETECTOR_NOT_APPLICABLE_T4 below). Their weights
+//     — that is now declared per-fixture by the `condemnedBy` hint on each
+//     T4 fixture in `routes/test-fixtures.ts` (Task #383). Their weights
 //     are still pinned by the snapshot in (2), so any drift is still
 //     caught — they just aren't required to clear the moderate floor.
 //   2. Per-fixture exact-weight + sorted-signal-type snapshot: a maintainer
@@ -45,6 +46,12 @@
 //      `pnpm --filter @workspace/api-server test -u` (or `pnpm test -u`
 //      from the api-server directory). Accidental drift in *either* the
 //      total weight OR the fired-signal mix fails CI.
+//
+// Task #383 also adds an explicit hint-vs-reality cross-check: every T4
+// fixture must declare a `condemnedBy` engine, and any fixture tagged
+// `HallucinationDetector` must accumulate at least the moderate-tier floor
+// of 12. That makes it impossible to silently move a fixture between
+// engines without updating both the hint and the matching test.
 
 import { describe, it, expect } from "vitest";
 import { detectHallucinationSignals } from "./hallucination-detector";
@@ -52,22 +59,6 @@ import { TEST_FIXTURE_COHORTS } from "../routes/test-fixtures";
 
 type Cohort = "T1" | "T2" | "T3" | "T4";
 const COHORTS: Cohort[] = ["T1", "T2", "T3", "T4"];
-
-// T4 fixtures the hallucination detector is NOT the arbiter for. These are
-// flagged T4 by other engines (plagiarism heuristics, CWE Coherence
-// Checker), so they legitimately accumulate near-zero hallucination weight
-// and must not be required to clear the moderate-tier floor:
-//   - T4-03-plagiarized-nvd: a plagiarized NVD-style writeup. The
-//     hallucination detector targets fabricated *evidence* (round
-//     addresses, magic PIDs, repeated stack frames, etc.); it does not
-//     attempt plagiarism detection.
-//   - T4-05-fake-cwe-mismatch: a CWE-79 (XSS) writeup that actually
-//     describes a SQL-injection bypass. This mismatch is caught by the
-//     CWE Coherence Checker engine, not by the hallucination detector.
-const HALLUCINATION_DETECTOR_NOT_APPLICABLE_T4 = new Set<string>([
-  "T4-03-plagiarized-nvd",
-  "T4-05-fake-cwe-mismatch",
-]);
 
 describe("Task #267: per-fixture hallucination detector totalWeight is pinned", () => {
   describe("tier-floor invariants (T1 < 12, T4 >= 12 where applicable)", () => {
@@ -78,7 +69,7 @@ describe("Task #267: per-fixture hallucination detector totalWeight is pinned", 
       });
     }
     for (const f of TEST_FIXTURE_COHORTS.T4) {
-      if (HALLUCINATION_DETECTOR_NOT_APPLICABLE_T4.has(f.id)) continue;
+      if (f.condemnedBy !== "HallucinationDetector") continue;
       it(`T4 fixture ${f.id} clears the moderate-tier floor`, () => {
         const r = detectHallucinationSignals(f.text);
         expect(r.totalWeight).toBeGreaterThanOrEqual(12);
@@ -110,4 +101,35 @@ describe("Task #267: per-fixture hallucination detector totalWeight is pinned", 
       });
     }
   });
+});
+
+// Task #383 — the `condemnedBy` hint on each T4 fixture is only useful if
+// it matches reality. These tests assert:
+//   1. Every T4 fixture declares a `condemnedBy`. Forgetting it on a new
+//      fabricated fixture would make it impossible to tell which detector
+//      the fixture is meant to exercise without rerunning the pipeline.
+//   2. Every T4 fixture tagged `HallucinationDetector` actually accumulates
+//      `totalWeight >= 12` (the moderate-tier hallucination floor) — i.e.
+//      the engine the hint nominates really is doing the condemning work.
+//
+// Sibling-engine fixtures (`PlagiarismHeuristic`, `CWECoherenceChecker`)
+// are intentionally NOT asserted to stay below the floor here: detector
+// signals can legitimately overlap (e.g. a future plagiarism fixture that
+// also happens to include a magic PID). Their actual hallucination
+// weights are still pinned by the snapshot above, so any drift is still
+// caught — it just isn't conflated with the hint-vs-reality check.
+describe("Task #383: T4 HallucinationDetector hint matches detector reality", () => {
+  for (const f of TEST_FIXTURE_COHORTS.T4) {
+    it(`T4 fixture ${f.id} declares which engine condemns it`, () => {
+      expect(f.condemnedBy, `T4 fixture ${f.id} is missing condemnedBy`).toBeDefined();
+    });
+  }
+
+  for (const f of TEST_FIXTURE_COHORTS.T4) {
+    if (f.condemnedBy !== "HallucinationDetector") continue;
+    it(`T4 fixture ${f.id} (condemnedBy=HallucinationDetector) trips the moderate-tier floor`, () => {
+      const r = detectHallucinationSignals(f.text);
+      expect(r.totalWeight).toBeGreaterThanOrEqual(12);
+    });
+  }
 });
