@@ -5233,21 +5233,30 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       });
       const undoneCount = typeof resp.undoneCount === "number" ? resp.undoneCount : 0;
       const skipped = typeof resp.skipped === "number" ? resp.skipped : 0;
+      const results = Array.isArray(resp.results) ? resp.results : [];
+      // Task #347 — split per-entry failures into window-expired (the
+      // expected slip between dialog confirm and server processing)
+      // vs. other reasons (drift) so the breakdown sentence can call
+      // out the dominant case while still surfacing real drift.
+      const failureResults = results.filter((r) => !!r && r.undone === false);
+      const windowExpiredCount = failureResults.filter(
+        (r) => r.reason === "window-expired",
+      ).length;
+      const otherFailureCount = failureResults.length - windowExpiredCount;
       const noun = undoneCount === 1 ? "add" : "adds";
-      const skipNote = skipped > 0 ? ` (${skipped} skipped — windows may have elapsed)` : "";
-      if (undoneCount > 0) {
-        toast({
-          title: `Undid ${undoneCount} ${noun}`,
-          description: `Each phrase has its own audit row marked "undone".${skipNote}`,
-        });
-      } else {
-        toast({
-          title: "Nothing to undo",
-          description:
-            "Every entry was skipped — the undo windows may have elapsed before the request landed. Use the regular Trash flow instead.",
-          variant: "destructive",
-        });
+      const skipDetail =
+        skipped === 0 || windowExpiredCount === skipped
+          ? `Skipped ${skipped} (no longer in window).`
+          : `Skipped ${skipped} (${windowExpiredCount} no longer in window, ${otherFailureCount} other).`;
+      const parts = [`Undid ${undoneCount} ${noun}.`, skipDetail];
+      if (failureResults.length > 0) {
+        parts.push("Check the removal history below for the per-phrase audit row.");
       }
+      toast({
+        title: undoneCount > 0 ? `Undid ${undoneCount} ${noun}` : "Nothing to undo",
+        description: parts.join(" "),
+        ...(undoneCount === 0 ? { variant: "destructive" as const } : {}),
+      });
       refresh();
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.

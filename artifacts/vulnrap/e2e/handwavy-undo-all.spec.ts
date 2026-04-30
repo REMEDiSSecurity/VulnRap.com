@@ -91,6 +91,14 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
 
       // The dialog closes and the rows disappear from the active list.
       await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+      // Task #347 — confirmation summary toast carries the undone +
+      // skipped breakdown. `.first()` because the toast viewport
+      // renders the text twice (visual + aria-live mirror).
+      await expect(
+        page
+          .getByText(`Undid ${phrases.length} adds. Skipped 0`, { exact: false })
+          .first(),
+      ).toBeVisible({ timeout: 15_000 });
       for (const p of phrases) {
         await expect(
           page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),
