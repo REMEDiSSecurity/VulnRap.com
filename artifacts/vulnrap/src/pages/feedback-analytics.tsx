@@ -11635,6 +11635,14 @@ function NotifiedFlagsPanel({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Per-row "Re-arm with note…" popover state. Only one popover is open at
+  // a time. Drafts are kept per key so closing/reopening preserves the
+  // typed text; both maps are pruned by the effect below when their row
+  // leaves the dedup list.
+  const [openNoteKey, setOpenNoteKey] = useState<string | null>(null);
+  const [noteDrafts, setNoteDrafts] = useState<Map<string, string>>(
+    () => new Map(),
+  );
   // Mirror the server-side cap on POST .../notifications/rearm.
   const BULK_REARM_CAP = 200;
 
@@ -11654,6 +11662,27 @@ function NotifiedFlagsPanel({
       retry: 1,
     },
   });
+
+  // Drop popover state for keys that have left the dedup list so we don't
+  // dangle a hidden form / draft string against an entry the reviewer can
+  // no longer see.
+  const notifiedRecords = data?.notified;
+  useEffect(() => {
+    if (!notifiedRecords) return;
+    const live = new Set(notifiedRecords.map((r) => r.key));
+    setOpenNoteKey((prev) => (prev !== null && !live.has(prev) ? null : prev));
+    setNoteDrafts((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const k of prev.keys()) {
+        if (!live.has(k)) {
+          next.delete(k);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [notifiedRecords]);
 
   if (!enabled) {
     let message: string;
@@ -11729,6 +11758,11 @@ function NotifiedFlagsPanel({
   // guard keeps `allSelected` honest if that ever changes.
   const allSelected = sorted.length > 0 && selectedCount === sorted.length;
   const someSelected = selectedCount > 0 && !allSelected;
+  // Mask a popover whose row left between the effect firing and this
+  // render (e.g. selectors derived from `data` resolve before the prune
+  // effect commits) so the form never paints against a stale key.
+  const liveOpenNoteKey =
+    openNoteKey !== null && knownKeys.has(openNoteKey) ? openNoteKey : null;
 
   const toggleSelected = (key: string) => {
     setSelectedKeys((prev) => {
@@ -11752,8 +11786,41 @@ function NotifiedFlagsPanel({
     }
   };
 
-  const handleRearm = async (record: AvriDriftNotificationRecord) => {
+  // The first open seeds the textarea with the shared rationale so the
+  // reviewer can tweak rather than retype; subsequent opens keep whatever
+  // was last typed.
+  const toggleNotePopover = (key: string) => {
+    setOpenNoteKey((prev) => (prev === key ? null : key));
+    setNoteDrafts((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Map(prev);
+      next.set(key, rationale);
+      return next;
+    });
+  };
+
+  const setNoteDraft = (key: string, value: string) => {
+    setNoteDrafts((prev) => {
+      const next = new Map(prev);
+      next.set(key, value);
+      return next;
+    });
+  };
+
+  const closeNotePopover = (key: string) => {
+    setOpenNoteKey((prev) => (prev === key ? null : prev));
+  };
+
+  // When `rationaleOverride` is supplied (per-row popover submit) the
+  // override text is sent instead of the shared rationale field; passing
+  // `undefined` preserves the existing shared-rationale behaviour used by
+  // the always-visible Re-arm button.
+  const handleRearm = async (
+    record: AvriDriftNotificationRecord,
+    rationaleOverride?: string,
+  ) => {
     const key = record.key;
+    const usingOverride = rationaleOverride !== undefined;
     // Task #296 — defense in depth against a stale render that lets the
     // click through after the cooldown landed: refuse to extend the
     // wrong-token bucket while it's already active. The button is also
@@ -11777,7 +11844,8 @@ function NotifiedFlagsPanel({
       } = { keys: [key] };
       const trimmedReviewer = reviewer.trim();
       if (trimmedReviewer.length > 0) body.reviewer = trimmedReviewer;
-      const trimmedRationale = rationale.trim();
+      const sourceRationale = usingOverride ? rationaleOverride : rationale;
+      const trimmedRationale = sourceRationale.trim();
       if (trimmedRationale.length > 0) body.rationale = trimmedRationale;
       const resp = await rearmAvriDriftNotifications(body);
       toast({
@@ -11803,9 +11871,20 @@ function NotifiedFlagsPanel({
       // "Recently re-armed" sibling panel without polling lag.
       queryClient.invalidateQueries({ queryKey: rearmHistoryQueryKey });
       await refetch();
-      // Clear the rationale after a successful re-arm so the next
-      // action starts from a blank slate.
-      onRationaleChange("");
+      // Per-row submits must not wipe the shared rationale (the reviewer
+      // may still want it for other rows / the bulk bar); only clear
+      // whichever input actually fed this submit.
+      if (usingOverride) {
+        setNoteDrafts((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Map(prev);
+          next.delete(key);
+          return next;
+        });
+        setOpenNoteKey((prev) => (prev === key ? null : prev));
+      } else {
+        onRationaleChange("");
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         toast({
@@ -11819,6 +11898,8 @@ function NotifiedFlagsPanel({
           next.delete(key);
           return next;
         });
+        // The popover/draft cleanup runs implicitly via the prune effect
+        // once refetch() drops this row from the list.
         queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
         queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
         queryClient.invalidateQueries({ queryKey: rearmHistoryQueryKey });
@@ -12012,68 +12093,181 @@ function NotifiedFlagsPanel({
             record.kind === "GAP_BELOW_45"
               ? "text-red-400 bg-red-400/10 border-red-400/30"
               : "text-orange-400 bg-orange-400/10 border-orange-400/30";
+          const isNoteOpen = liveOpenNoteKey === record.key;
+          const noteDraft = noteDrafts.get(record.key) ?? "";
+          const trimmedNoteDraft = noteDraft.trim();
+          const noteTextareaId = `notified-flag-note-${record.key}`;
           return (
             <li
               key={record.key}
-              className="flex items-start gap-2 text-xs p-2 rounded-md border border-border/40 bg-muted/[0.03]"
+              className="text-xs p-2 rounded-md border border-border/40 bg-muted/[0.03] space-y-2"
             >
-              <input
-                type="checkbox"
-                className="mt-0.5 h-3.5 w-3.5 cursor-pointer shrink-0"
-                checked={isSelected}
-                onChange={() => toggleSelected(record.key)}
-                disabled={bulkBusy || isBusy}
-                aria-label={`Select drift flag ${record.detail}`}
-                data-testid={`notified-flag-checkbox-${record.key}`}
-              />
-              <Badge
-                variant="outline"
-                className={cn("text-[10px] gap-1 font-mono shrink-0", kindColor)}
-              >
-                <AlertTriangle className="w-3 h-3" /> {kindLabel}
-              </Badge>
-              <div className="flex-1 min-w-0 space-y-0.5">
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono">
-                  <span>week {record.weekStart}</span>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span title={record.notifiedAt}>notified {notifiedAtLabel}</span>
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-3.5 w-3.5 cursor-pointer shrink-0"
+                  checked={isSelected}
+                  onChange={() => toggleSelected(record.key)}
+                  disabled={bulkBusy || isBusy}
+                  aria-label={`Select drift flag ${record.detail}`}
+                  data-testid={`notified-flag-checkbox-${record.key}`}
+                />
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px] gap-1 font-mono shrink-0", kindColor)}
+                >
+                  <AlertTriangle className="w-3 h-3" /> {kindLabel}
+                </Badge>
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono">
+                    <span>week {record.weekStart}</span>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span title={record.notifiedAt}>notified {notifiedAtLabel}</span>
+                  </div>
+                  <div className="text-foreground/80 leading-relaxed break-words">
+                    {record.detail}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
+                    key: {record.key}
+                  </div>
                 </div>
-                <div className="text-foreground/80 leading-relaxed break-words">
-                  {record.detail}
-                </div>
-                <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
-                  key: {record.key}
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-[11px] gap-1 shrink-0"
+                    disabled={
+                      isBusy ||
+                      bulkBusy ||
+                      !authState.mutationsAllowed ||
+                      cooldownActive
+                    }
+                    onClick={() => handleRearm(record)}
+                    data-testid="avri-drift-rearm-button"
+                    data-cooldown-active={cooldownActive ? "true" : "false"}
+                    title={
+                      cooldownActive
+                        ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
+                        : authState.mutationsAllowed
+                          ? "Remove this entry from the dedup state so the flag re-pages reviewers on the next dispatch run."
+                          : "A valid reviewer token is required to re-arm flags."
+                    }
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    {cooldownActive
+                      ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
+                      : isBusy
+                        ? "Re-arming…"
+                        : "Re-arm"}
+                  </Button>
+                  {/* Trigger stays available during the wrong-token cooldown
+                      so the reviewer can pre-stage a note while the bucket
+                      drains — the popover's submit button is disabled in
+                      lock-step with the always-visible Re-arm above. */}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-[11px] gap-1 shrink-0"
+                    disabled={
+                      isBusy ||
+                      bulkBusy ||
+                      !authState.mutationsAllowed
+                    }
+                    onClick={() => toggleNotePopover(record.key)}
+                    aria-expanded={isNoteOpen}
+                    aria-controls={isNoteOpen ? noteTextareaId : undefined}
+                    data-testid="avri-drift-rearm-note-toggle"
+                    title={
+                      authState.mutationsAllowed
+                        ? "Re-arm this entry with a one-off rationale, separate from the shared field above."
+                        : "A valid reviewer token is required to re-arm flags."
+                    }
+                  >
+                    <Pencil className="w-3 h-3" />
+                    {isNoteOpen ? "Cancel note" : "Re-arm with note…"}
+                  </Button>
                 </div>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-[11px] gap-1 shrink-0"
-                disabled={
-                  isBusy ||
-                  bulkBusy ||
-                  !authState.mutationsAllowed ||
-                  cooldownActive
-                }
-                onClick={() => handleRearm(record)}
-                data-testid="avri-drift-rearm-button"
-                data-cooldown-active={cooldownActive ? "true" : "false"}
-                title={
-                  cooldownActive
-                    ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
-                    : authState.mutationsAllowed
-                      ? "Remove this entry from the dedup state so the flag re-pages reviewers on the next dispatch run."
-                      : "A valid reviewer token is required to re-arm flags."
-                }
-              >
-                <RotateCcw className="w-3 h-3" />
-                {cooldownActive
-                  ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
-                  : isBusy
-                    ? "Re-arming…"
-                    : "Re-arm"}
-              </Button>
+              {isNoteOpen && (
+                <div
+                  className="ml-7 p-2 rounded-md border border-primary/30 bg-primary/[0.04] space-y-2"
+                  data-testid="avri-drift-rearm-note-popover"
+                >
+                  <label
+                    htmlFor={noteTextareaId}
+                    className="block text-[10px] uppercase tracking-wider text-muted-foreground"
+                  >
+                    One-off rationale for this row
+                    <span className="ml-1 text-muted-foreground/50 normal-case tracking-normal">
+                      (overrides the shared field for this re-arm only)
+                    </span>
+                  </label>
+                  <textarea
+                    id={noteTextareaId}
+                    value={noteDraft}
+                    onChange={(e) => setNoteDraft(record.key, e.target.value)}
+                    placeholder="Why is this flag being re-armed? (e.g. 'fix-by date passed, still seeing drift')"
+                    maxLength={500}
+                    rows={2}
+                    className="w-full px-2 py-1.5 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
+                    aria-label="One-off rationale for this re-arm"
+                    data-testid="avri-drift-rearm-note-textarea"
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className="text-[10px] text-muted-foreground/60 tabular-nums"
+                      data-testid="avri-drift-rearm-note-charcount"
+                    >
+                      {noteDraft.length}/500
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => closeNotePopover(record.key)}
+                        disabled={isBusy}
+                        data-testid="avri-drift-rearm-note-cancel"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="default"
+                        className="h-7 px-2.5 text-[11px] gap-1"
+                        disabled={
+                          isBusy ||
+                          bulkBusy ||
+                          !authState.mutationsAllowed ||
+                          cooldownActive ||
+                          trimmedNoteDraft.length === 0
+                        }
+                        onClick={() => handleRearm(record, noteDraft)}
+                        data-cooldown-active={cooldownActive ? "true" : "false"}
+                        data-testid="avri-drift-rearm-note-submit"
+                        title={
+                          cooldownActive
+                            ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
+                            : trimmedNoteDraft.length === 0
+                              ? "Type a rationale before re-arming with a note. Use the regular Re-arm button to send no rationale."
+                              : "Re-arm this entry with the note above. The shared rationale field is ignored for this submit."
+                        }
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        {cooldownActive
+                          ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
+                          : isBusy
+                            ? "Re-arming…"
+                            : "Re-arm with note"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </li>
           );
         })}
