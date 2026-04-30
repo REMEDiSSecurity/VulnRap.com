@@ -1448,12 +1448,21 @@ function BulkRemovalImpactBlock({
   subtitle,
   impact,
   emptyHint,
+  // Task #245 — the per-row Trash preview now renders the same
+  // `sampleMatches` array inline (grouped by tier, with linkified
+  // production report IDs) directly underneath this block. Passing
+  // `hideSampleMatchesDetails` from that caller suppresses the
+  // collapsed `<details>` list here so the IDs don't appear twice.
+  // Defaults to `false` so the batch-confirm flow (the original caller)
+  // keeps its existing affordance unchanged.
+  hideSampleMatchesDetails = false,
 }: {
   kind: "curated" | "production";
   title: string;
   subtitle: string;
   impact: HandwavyPhraseBatchRemoveDryRunImpact;
   emptyHint: string;
+  hideSampleMatchesDetails?: boolean;
 }) {
   const lost = impact.validDetectionsLost;
   const dropped = impact.falsePositivesDropped;
@@ -1519,7 +1528,7 @@ function BulkRemovalImpactBlock({
           negative
         />
       </div>
-      {impact.sampleMatches.length > 0 && (
+      {!hideSampleMatchesDetails && impact.sampleMatches.length > 0 && (
         <details className="text-[10px] text-muted-foreground">
           <summary className="cursor-pointer hover:text-foreground">
             Sample {sourceNoun}s that would lose their flag ({impact.sampleMatches.length})
@@ -1534,6 +1543,129 @@ function BulkRemovalImpactBlock({
           </ul>
         </details>
       )}
+    </div>
+  );
+}
+
+// Task #245 — inline rendering of the dry-run `sampleMatches` array on the
+// per-row Trash preview panel. The shared `BulkRemovalImpactBlock` above
+// only surfaces the per-tier counts and an aggregate warning string,
+// which forces a reviewer who sees "2 legitimate detections would be
+// lost" to leave the page and dig through the corpus to confirm what
+// would actually be un-flagged. This component renders the curated
+// fixture IDs and production report IDs directly inside the preview
+// panel, grouped by tier, with the production IDs linkified to the
+// `/verify/:id` report viewer route (opened in a new tab so the
+// reviewer doesn't lose the open Trash preview).
+const SAMPLE_MATCH_TIERS: Array<{
+  key: string;
+  label: string;
+  tone: "green" | "yellow" | "red";
+}> = [
+  { key: "T1_LEGIT", label: "T1 legit", tone: "green" },
+  { key: "T2_BORDERLINE", label: "T2 borderline", tone: "yellow" },
+  { key: "T3_SLOP", label: "T3 slop", tone: "red" },
+  { key: "T4_HALLUCINATED", label: "T4 hallucinated", tone: "red" },
+];
+
+// Server-side responses use the canonical `T1_LEGIT` form (see
+// `CorpusTier` in api-server/src/routes/calibration.ts), but a few
+// older / synthetic fixtures still emit the camelCase `t1Legit` form
+// the byTier counter uses. Normalize both shapes to a single key so
+// they group together in the rendered list rather than fragmenting
+// into two near-identical sections.
+function normalizeSampleMatchTier(t: string): string {
+  const k = t.replace(/_/g, "").toLowerCase();
+  if (k === "t1legit") return "T1_LEGIT";
+  if (k === "t2borderline") return "T2_BORDERLINE";
+  if (k === "t3slop") return "T3_SLOP";
+  if (k === "t4hallucinated") return "T4_HALLUCINATED";
+  return t;
+}
+
+function HandwavyRemovePreviewMatches({
+  kind,
+  title,
+  matches,
+}: {
+  kind: "curated" | "production";
+  title: string;
+  matches: Array<{ id: string; tier: string }>;
+}) {
+  // The BrowserRouter is mounted with `basename={import.meta.env.BASE_URL}`
+  // (see App.tsx), so production report links must be prefixed with the
+  // same base path or they'd 404 in deployed builds where the artifact
+  // is served from a sub-path (e.g. `/vulnrap`).
+  const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const grouped = new Map<string, Array<{ id: string }>>();
+  for (const m of matches) {
+    const key = normalizeSampleMatchTier(m.tier);
+    const bucket = grouped.get(key) ?? [];
+    bucket.push({ id: m.id });
+    grouped.set(key, bucket);
+  }
+  const orderedKeys = [
+    ...SAMPLE_MATCH_TIERS.map((t) => t.key).filter((t) => grouped.has(t)),
+    ...Array.from(grouped.keys())
+      .filter((k) => !SAMPLE_MATCH_TIERS.some((t) => t.key === k))
+      .sort(),
+  ];
+  if (orderedKeys.length === 0) return null;
+  return (
+    <div
+      className="rounded-md border border-foreground/10 bg-background/40 p-2.5 space-y-2 text-[11px]"
+      data-testid={`handwavy-remove-preview-matches-${kind}`}
+    >
+      <div className="font-semibold text-foreground text-xs">{title}</div>
+      {orderedKeys.map((tierKey) => {
+        const items = grouped.get(tierKey)!;
+        const meta = SAMPLE_MATCH_TIERS.find((t) => t.key === tierKey);
+        const toneClass =
+          meta?.tone === "red"
+            ? "border-red-500/40 text-red-200"
+            : meta?.tone === "yellow"
+              ? "border-amber-500/40 text-amber-200"
+              : meta?.tone === "green"
+                ? "border-emerald-500/40 text-emerald-200"
+                : "border-foreground/30 text-muted-foreground";
+        return (
+          <div
+            key={tierKey}
+            className="space-y-1"
+            data-testid={`handwavy-remove-preview-matches-${kind}-tier-${tierKey}`}
+          >
+            <Badge
+              variant="outline"
+              className={cn("text-[9px] uppercase tracking-wide", toneClass)}
+            >
+              {meta?.label ?? tierKey} — {items.length}
+            </Badge>
+            <ul className="ml-3 list-disc space-y-0.5 font-mono text-muted-foreground break-all">
+              {items.map((m) => (
+                <li key={m.id}>
+                  {kind === "production" ? (
+                    <a
+                      href={`${baseUrl}/verify/${encodeURIComponent(m.id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                      data-testid={`handwavy-remove-preview-matches-production-link-${m.id}`}
+                    >
+                      report #{m.id}
+                    </a>
+                  ) : (
+                    <span
+                      data-testid={`handwavy-remove-preview-matches-curated-id-${m.id}`}
+                    >
+                      {m.id}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -4738,6 +4870,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   subtitle={`${corpus.corpusSize} fixtures`}
                   impact={corpus}
                   emptyHint="No curated detections would be lost"
+                  hideSampleMatchesDetails
                 />
                 {production ? (
                   <BulkRemovalImpactBlock
@@ -4750,6 +4883,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                     }
                     impact={production}
                     emptyHint="No production detections would be lost"
+                    hideSampleMatchesDetails
                   />
                 ) : (
                   <div
@@ -4767,6 +4901,37 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   </div>
                 )}
               </div>
+              {/* Task #245 — render the per-tier `sampleMatches` inline so a
+                  reviewer can see the actual fixture / report identifiers
+                  the dry-run would un-flag without leaving the page.
+                  Production IDs link to the `/verify/:id` viewer in a new
+                  tab; curated IDs are plain (the curated benchmark has no
+                  per-fixture viewer route). The block stays out of the
+                  DOM entirely when the dry-run returned no samples on
+                  either side, so zero-impact previews keep their lean
+                  visual footprint. */}
+              {(corpus.sampleMatches.length > 0 ||
+                (production?.sampleMatches.length ?? 0) > 0) && (
+                <div
+                  className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                  data-testid="handwavy-remove-preview-matches"
+                >
+                  {corpus.sampleMatches.length > 0 && (
+                    <HandwavyRemovePreviewMatches
+                      kind="curated"
+                      title={`Curated fixtures that would lose their flag (${corpus.sampleMatches.length})`}
+                      matches={corpus.sampleMatches}
+                    />
+                  )}
+                  {production && production.sampleMatches.length > 0 && (
+                    <HandwavyRemovePreviewMatches
+                      kind="production"
+                      title={`Production reports that would lose their flag (${production.sampleMatches.length})`}
+                      matches={production.sampleMatches}
+                    />
+                  )}
+                </div>
+              )}
               {requireAck && (
                 <label
                   className="flex items-start gap-2 text-[11px] text-foreground/90 cursor-pointer select-none"
