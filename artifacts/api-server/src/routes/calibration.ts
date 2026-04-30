@@ -33,6 +33,11 @@ import {
   requireCalibrationAuthStrict,
   getCalibrationAuthStatus,
 } from "../middlewares/require-calibration-auth";
+import {
+  handwavyRemovalImpactCache,
+  computeHandwavyActiveListVersion,
+  type CachedRemovalImpactResponse,
+} from "../lib/handwavy-removal-impact-cache";
 
 // Task #114 — preview a candidate FLAT hand-wavy phrase against the curated
 // benchmark corpus (the T1–T4 fixture cohorts also used by /api/test/run) so
@@ -1350,6 +1355,9 @@ router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, as
       rationale: typeof rationale === "string" ? rationale : undefined,
       now,
     });
+    if (result.added) {
+      handwavyRemovalImpactCache.invalidate();
+    }
     res.status(result.added ? 201 : 200).json({
       added: result.added,
       phrase: result.phrase,
@@ -1424,6 +1432,7 @@ router.post(
         });
         return;
       }
+      handwavyRemovalImpactCache.invalidate();
       res.status(201).json({
         reinstated: true,
         phrase: result.phrase,
@@ -1520,6 +1529,7 @@ router.post(
         });
         return;
       }
+      handwavyRemovalImpactCache.invalidate();
       res.status(200).json({
         reinstated: true,
         batch: true,
@@ -1604,6 +1614,9 @@ router.patch("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (
       },
       { reviewer: typeof reviewer === "string" ? reviewer : undefined },
     );
+    if (result.edited) {
+      handwavyRemovalImpactCache.invalidate();
+    }
     res.status(200).json({
       edited: result.edited,
       phrase: result.phrase,
@@ -1687,6 +1700,7 @@ router.post(
         });
         return;
       }
+      handwavyRemovalImpactCache.invalidate();
       res.status(200).json({
         undone: true,
         phrase: result.phrase,
@@ -1771,6 +1785,9 @@ router.post(
       const result = undoHandwavyPhrasesBatch(normalized, {
         reviewer: typeof reviewer === "string" ? reviewer : undefined,
       });
+      if (result.undone > 0) {
+        handwavyRemovalImpactCache.invalidate();
+      }
       res.status(200).json({
         undone: true,
         batch: true,
@@ -1832,6 +1849,7 @@ router.post(
         });
         return;
       }
+      handwavyRemovalImpactCache.invalidate();
       res.status(200).json({
         reverted: true,
         edited: result.edited,
@@ -1991,6 +2009,9 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
         return;
       }
       const result = removeHandwavyPhrasesBatch(cleaned, { reviewer: reviewerStr });
+      if (result.removed > 0) {
+        handwavyRemovalImpactCache.invalidate();
+      }
       // Status code policy: 200 when at least one phrase was removed (even if
       // some were not-found), 404 only when nothing matched at all.
       const status = result.removed > 0 ? 200 : 404;
@@ -2021,6 +2042,22 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
     // per-phrase result and the impact computation are identical to the
     // batch path.
     if (dryRun === true) {
+      const phrasesNow = getHandwavyPhrases();
+      const activeListVersion = computeHandwavyActiveListVersion(phrasesNow);
+      const normalizedKeyPhrase = phrase.toLowerCase().replace(/\s+/g, " ").trim();
+      const cached = handwavyRemovalImpactCache.get(
+        normalizedKeyPhrase,
+        effectiveProductionLimit,
+        activeListVersion,
+      );
+      if (cached) {
+        res.status(200).json({
+          ...cached.response,
+          cacheHit: true,
+          cachedAt: cached.cachedAt,
+        });
+        return;
+      }
       const preview = previewRemoveHandwavyPhrasesBatch([phrase]);
       const removedNormalized = preview.results
         .filter((r) => r.removed)
@@ -2066,9 +2103,9 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
         }
       }
       const single = preview.results[0];
-      res.status(200).json({
-        dryRun: true,
-        batch: false,
+      const responseBody = {
+        dryRun: true as const,
+        batch: false as const,
         // Mirror the batch dry-run field names so the client can reuse the
         // same renderer; here `wouldRemove` is 0 or 1.
         wouldRemove: preview.wouldRemove,
@@ -2092,8 +2129,20 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
           // scanned, matching the add-phrase preview's behavior.
           productionLimit: effectiveProductionLimit,
         },
-        phrases: getHandwavyPhrases(),
-      });
+        phrases: phrasesNow,
+      };
+      // Don't cache transient production-scan failures — the next reviewer
+      // would otherwise see the same error instead of a fresh attempt.
+      if (productionError === null) {
+        const cacheable: CachedRemovalImpactResponse = responseBody;
+        handwavyRemovalImpactCache.set(
+          normalizedKeyPhrase,
+          effectiveProductionLimit,
+          activeListVersion,
+          cacheable,
+        );
+      }
+      res.status(200).json({ ...responseBody, cacheHit: false });
       return;
     }
 
@@ -2102,6 +2151,7 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
       res.status(404).json({ ...result, error: "Phrase not found." });
       return;
     }
+    handwavyRemovalImpactCache.invalidate();
     res.json({
       removed: result.removed,
       phrase: result.phrase,

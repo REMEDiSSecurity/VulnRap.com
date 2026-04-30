@@ -2467,4 +2467,292 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     // the canonical default markers.
     expect(true).toBe(true);
   });
+
+  // Server-side dry-run cache. These cases use phrases NOT on the active
+  // list so the production scan is skipped (no DB dependency); the active-
+  // phrase path is covered in `handwavy-phrases.cache-active.route.test.ts`.
+  describe("server-side dry-run cache", () => {
+    interface DryRunCacheBody {
+      dryRun: boolean;
+      cacheHit: boolean;
+      cachedAt?: string;
+      wouldRemove: number;
+      notFound: number;
+      phrase: string;
+      dryRunImpact: {
+        productionLimit: number;
+        productionError: string | null;
+        production: { total: number } | null;
+      };
+      phrases: Marker[];
+    }
+
+    beforeEach(async () => {
+      // Bounce the singleton cache via a throwaway add+delete so a fresh
+      // "first request" can't be served from another test's leftover entry.
+      const tag = `cache-bust-${Date.now()}-${Math.random()}`;
+      await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: tag });
+      await request("DELETE", "/feedback/calibration/handwavy-phrases", { phrase: tag });
+    });
+
+    it("first request is a cache miss; an identical second request hits the cache", async () => {
+      const first = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-a", dryRun: true },
+      );
+      expect(first.status).toBe(200);
+      expect(first.body.cacheHit).toBe(false);
+      expect(first.body.wouldRemove).toBe(0);
+      expect(first.body.dryRunImpact.productionLimit).toBe(2000);
+
+      const second = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-a", dryRun: true },
+      );
+      expect(second.status).toBe(200);
+      expect(second.body.cacheHit).toBe(true);
+      expect(typeof second.body.cachedAt).toBe("string");
+      expect(second.body.wouldRemove).toBe(first.body.wouldRemove);
+      expect(second.body.notFound).toBe(first.body.notFound);
+      expect(second.body.phrase).toBe(first.body.phrase);
+      expect(second.body.dryRunImpact.productionLimit).toBe(
+        first.body.dryRunImpact.productionLimit,
+      );
+    });
+
+    it("a different productionScanLimit misses even when the phrase is the same", async () => {
+      const a = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-b", dryRun: true, productionScanLimit: 500 },
+      );
+      expect(a.body.cacheHit).toBe(false);
+      const a2 = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-b", dryRun: true, productionScanLimit: 500 },
+      );
+      expect(a2.body.cacheHit).toBe(true);
+      const b = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-b", dryRun: true, productionScanLimit: 1000 },
+      );
+      expect(b.body.cacheHit).toBe(false);
+      expect(b.body.dryRunImpact.productionLimit).toBe(1000);
+    });
+
+    it("a different phrase misses even when the active list is unchanged", async () => {
+      const a = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-c", dryRun: true },
+      );
+      expect(a.body.cacheHit).toBe(false);
+      const b = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-d", dryRun: true },
+      );
+      expect(b.body.cacheHit).toBe(false);
+    });
+
+    it("phrase normalization keys cache lookups by the normalized form", async () => {
+      const messy = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "  Never   Registered Cache TEST e  ", dryRun: true },
+      );
+      expect(messy.body.cacheHit).toBe(false);
+      const tidy = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never registered cache test e", dryRun: true },
+      );
+      expect(tidy.body.cacheHit).toBe(true);
+    });
+
+    it("POST add invalidates every cached preview", async () => {
+      const seed = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-add", dryRun: true },
+      );
+      expect(seed.body.cacheHit).toBe(false);
+      const warm = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-add", dryRun: true },
+      );
+      expect(warm.body.cacheHit).toBe(true);
+      const post = await request<{ added: boolean }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "cache-invalidation-add" },
+      );
+      expect(post.status).toBe(201);
+      const afterAdd = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-add", dryRun: true },
+      );
+      expect(afterAdd.body.cacheHit).toBe(false);
+    });
+
+    it("DELETE (real removal) invalidates every cached preview", async () => {
+      const seed = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-del", dryRun: true },
+      );
+      expect(seed.body.cacheHit).toBe(false);
+      const warm = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-del", dryRun: true },
+      );
+      expect(warm.body.cacheHit).toBe(true);
+      const realDelete = await request<{ removed: boolean }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "seed phrase one" },
+      );
+      expect(realDelete.status).toBe(200);
+      const afterDelete = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-del", dryRun: true },
+      );
+      expect(afterDelete.body.cacheHit).toBe(false);
+    });
+
+    it("PATCH edit invalidates every cached preview", async () => {
+      const seed = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-edit", dryRun: true },
+      );
+      expect(seed.body.cacheHit).toBe(false);
+      const warm = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-edit", dryRun: true },
+      );
+      expect(warm.body.cacheHit).toBe(true);
+      const patch = await request<{ edited: boolean }>(
+        "PATCH",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "seed phrase two", category: "hedging" },
+      );
+      expect(patch.status).toBe(200);
+      const afterPatch = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-edit", dryRun: true },
+      );
+      expect(afterPatch.body.cacheHit).toBe(false);
+    });
+
+    it("POST reinstate invalidates every cached preview", async () => {
+      const removed = await request<{
+        removed: boolean;
+        historyEntry?: { phrase: string; removedAt: string };
+      }>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "seed phrase one" },
+      );
+      expect(removed.status).toBe(200);
+      const removedAt = removed.body.historyEntry?.removedAt;
+      expect(typeof removedAt).toBe("string");
+      const seed = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-reinstate", dryRun: true },
+      );
+      expect(seed.body.cacheHit).toBe(false);
+      const warm = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-reinstate", dryRun: true },
+      );
+      expect(warm.body.cacheHit).toBe(true);
+      const reinstate = await request<{ reinstated: boolean }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/reinstate",
+        { phrase: "seed phrase one", removedAt },
+      );
+      expect(reinstate.status).toBe(201);
+      const afterReinstate = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-reinstate", dryRun: true },
+      );
+      expect(afterReinstate.body.cacheHit).toBe(false);
+    });
+
+    it("POST undo invalidates every cached preview", async () => {
+      const post = await request<{
+        added: boolean;
+        marker: { addedAt?: string };
+      }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "cache-invalidation-undo" },
+      );
+      expect(post.status).toBe(201);
+      const addedAt = post.body.marker.addedAt;
+      expect(typeof addedAt).toBe("string");
+      const seed = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-undo", dryRun: true },
+      );
+      expect(seed.body.cacheHit).toBe(false);
+      const warm = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-undo", dryRun: true },
+      );
+      expect(warm.body.cacheHit).toBe(true);
+      const undo = await request<{ undone: boolean }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo",
+        { phrase: "cache-invalidation-undo", addedAt },
+      );
+      expect(undo.status).toBe(200);
+      const afterUndo = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "never-registered-cache-test-undo", dryRun: true },
+      );
+      expect(afterUndo.body.cacheHit).toBe(false);
+    });
+
+    it("returns the same response on repeated cache hits — the cache is read-only", async () => {
+      const phrase = "never-registered-cache-test-stable";
+      const first = await request<DryRunCacheBody>(
+        "DELETE",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase, dryRun: true },
+      );
+      expect(first.body.cacheHit).toBe(false);
+      const hits = await Promise.all(
+        Array.from({ length: 3 }, () =>
+          request<DryRunCacheBody>(
+            "DELETE",
+            "/feedback/calibration/handwavy-phrases",
+            { phrase, dryRun: true },
+          ),
+        ),
+      );
+      for (const h of hits) {
+        expect(h.body.cacheHit).toBe(true);
+        expect(h.body.cachedAt).toBe(hits[0].body.cachedAt);
+        expect(h.body.phrase).toBe(first.body.phrase);
+      }
+    });
+  });
 });
