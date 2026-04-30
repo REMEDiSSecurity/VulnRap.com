@@ -8,6 +8,7 @@ import {
   renderHandwavyEditEntries,
   computeHandwavyActiveListVersion,
   createSingleRemoveDryRunPreviewCache,
+  summarizeDatasetHistory,
 } from "./feedback-analytics";
 import type {
   HandwavyEditEntry,
@@ -401,5 +402,162 @@ describe("createSingleRemoveDryRunPreviewCache (Task #246 — cache hit + invali
     expect(cache.size()).toBe(1);
     expect(cache.get("alpha", 50, VERSION_A)).toBeUndefined();
     expect(cache.get("alpha", 50, VERSION_B)?.phrase).toBe("alpha-v2");
+  });
+});
+
+describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift sparklines)", () => {
+  it("flags an empty response so the dashboard can render the 'dataset not mounted' placeholder", () => {
+    expect(summarizeDatasetHistory(null).isEmpty).toBe(true);
+    expect(summarizeDatasetHistory(undefined).isEmpty).toBe(true);
+    expect(summarizeDatasetHistory({ totalSnapshots: 0, cohorts: [] }).isEmpty).toBe(true);
+    // totalSnapshots could be stale/missing — fall back to per-cohort length.
+    expect(
+      summarizeDatasetHistory({
+        totalSnapshots: 0,
+        cohorts: [{ tier: "T1_LEGIT", snapshots: [] }],
+      }).isEmpty,
+    ).toBe(true);
+  });
+
+  it("returns one tier series per known tier in T1 → T2 → T3 order even when the response is partial", () => {
+    // Only T1 + T3 present in the response — T2 should still be a placeholder
+    // entry so the rendered grid stays in a stable order.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 2,
+      cohorts: [
+        {
+          tier: "T3_SLOP",
+          snapshots: [
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T3_SLOP",
+              label: "ai_slop",
+              count: 25,
+              compositeMean: 28.4,
+              gap: 12.5,
+            },
+          ],
+        },
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 15.9,
+              gap: 12.5,
+            },
+          ],
+        },
+      ],
+    });
+    expect(summary.isEmpty).toBe(false);
+    expect(summary.tiers.map(t => t.tier)).toEqual(["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"]);
+    expect(summary.tiers[0]!.latest).toBe(15.9);
+    expect(summary.tiers[1]!.latest).toBeNull();
+    expect(summary.tiers[1]!.points).toEqual([]);
+    expect(summary.tiers[2]!.latest).toBe(28.4);
+  });
+
+  it("filters null and non-finite composite means out of the plottable points", () => {
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 3,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 0,
+              compositeMean: null,
+              gap: null,
+            },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 16.2,
+              gap: 11.0,
+            },
+            {
+              timestamp: "2026-04-24T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: Number.NaN,
+              gap: null,
+            },
+          ],
+        },
+      ],
+    });
+    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    // Snapshot count keeps all rows (so the chip says "3 pts") but only
+    // the one row with a finite mean is plotted.
+    expect(t1.snapshotCount).toBe(3);
+    expect(t1.points.map(p => p.value)).toEqual([16.2]);
+    expect(t1.latest).toBe(16.2);
+  });
+
+  it("dedupes the gap series across cohort rows so the gap sparkline shows one point per run", () => {
+    // The api-server repeats `gap` on every cohort row of a single run.
+    // Without deduping, a 2-run history would render 6 gap points (3 per
+    // run) instead of 2.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 6,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 16, gap: 10 },
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 17, gap: 11 },
+          ],
+        },
+        {
+          tier: "T2_BORDERLINE",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 22, gap: 10 },
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 21, gap: 11 },
+          ],
+        },
+        {
+          tier: "T3_SLOP",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 26, gap: 10 },
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 28, gap: 11 },
+          ],
+        },
+      ],
+    });
+    expect(summary.gapPoints.map(p => `${p.timestamp}:${p.value}`)).toEqual([
+      "2026-04-22T00:00:00.000Z:10",
+      "2026-04-23T00:00:00.000Z:11",
+    ]);
+    expect(summary.latestGap).toBe(11);
+  });
+
+  it("sorts the deduped gap series chronologically even when cohorts are received out of order", () => {
+    // Defensive: the API sorts cohorts alphabetically (T1, T2, T3) but if
+    // a future change ever returned snapshots in a different order, the
+    // gap sparkline still needs left-to-right time ordering.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 2,
+      cohorts: [
+        {
+          tier: "T3_SLOP",
+          snapshots: [
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 28, gap: 11 },
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 26, gap: 10 },
+          ],
+        },
+      ],
+    });
+    expect(summary.gapPoints.map(p => p.value)).toEqual([10, 11]);
+    expect(summary.latestGap).toBe(11);
   });
 });

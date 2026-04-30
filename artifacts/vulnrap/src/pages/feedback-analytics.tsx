@@ -8697,6 +8697,13 @@ function EmergingArchetypesSection() {
     if (data) {
       queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY });
+      // Task #263 — `/api/test/run` also appends to the dataset cohort
+      // history file, so invalidate that query on the same beat. Without
+      // this, the dataset cohort drift sparklines would stay stale until
+      // the next 5-minute refetch tick (and on a freshly-mounted runner
+      // could transiently flash the "dataset not mounted" placeholder
+      // even though the fresh /test/run did append a snapshot).
+      queryClient.invalidateQueries({ queryKey: DATASET_HISTORY_QUERY_KEY });
     }
   }, [dataUpdatedAt, data, queryClient]);
 
@@ -9177,6 +9184,276 @@ function DatasetCohortMeansSection() {
         <div className="text-[10px] text-muted-foreground/70 font-mono break-all">
           source: {ds.sourcePath}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Task #263 — render persisted curated-dataset cohort drift on the
+// calibration dashboard. Companion to DatasetCohortMeansSection above:
+// that one shows the *current* cohort means from /api/test/run, this
+// one shows their week-over-week trend by reading the persisted history
+// file via /api/test/dataset-history (added by task #187). One small
+// sparkline per tier (T1/T2/T3 composite mean over time) plus one for
+// the T1−T3 gap, so reviewers can see drift on the 25-per-label
+// real-report sample alongside the synthetic-fixture archetypes panel.
+//
+// When the endpoint returns an empty list — typically because the
+// curated dataset isn't mounted on this runner so /api/test/run never
+// produced any snapshots — we render a neutral placeholder rather than
+// an empty chart. The endpoint itself 404s in production so the panel
+// hides entirely there (mirroring DatasetCohortMeansSection's gating).
+export interface DatasetHistorySnapshot {
+  timestamp: string;
+  tier: string;
+  label: string;
+  count: number;
+  compositeMean: number | null;
+  gap: number | null;
+}
+
+interface DatasetHistoryCohort {
+  tier: string;
+  snapshots: DatasetHistorySnapshot[];
+}
+
+interface DatasetHistoryResponse {
+  totalSnapshots: number;
+  cohorts: DatasetHistoryCohort[];
+}
+
+export interface DatasetHistorySeriesPoint {
+  timestamp: string;
+  value: number;
+}
+
+export interface DatasetHistorySeries {
+  tier: string;
+  /** All snapshots in chronological order, including ones with null means. */
+  snapshotCount: number;
+  /** Plottable points (compositeMean filtered to non-null), chronological. */
+  points: DatasetHistorySeriesPoint[];
+  /** Latest non-null mean if any (the rightmost point). */
+  latest: number | null;
+}
+
+export interface DatasetHistorySummary {
+  /** True when the endpoint returned no snapshots at all (dataset not mounted). */
+  isEmpty: boolean;
+  /** Per-tier series ordered T1 → T2 → T3, only including tiers we expect. */
+  tiers: DatasetHistorySeries[];
+  /** Gap (T1−T3) series, plottable points only. */
+  gapPoints: DatasetHistorySeriesPoint[];
+  latestGap: number | null;
+}
+
+/**
+ * Reduce the /api/test/dataset-history response to the per-tier and gap
+ * series the dashboard renders. Pulled out as a pure helper so the
+ * empty-state handling and gap-deduplication logic can be unit-tested
+ * without mounting the React component.
+ *
+ * Each /api/test/run that found the dataset mounted appended one row
+ * per cohort, and the API's `gap` field is repeated on every cohort row
+ * of that run. We dedupe the gap series by `(timestamp, value)` so the
+ * gap sparkline doesn't get three coincident points per run.
+ */
+export function summarizeDatasetHistory(
+  response: DatasetHistoryResponse | null | undefined,
+): DatasetHistorySummary {
+  const cohorts = response?.cohorts ?? [];
+  const total = response?.totalSnapshots ?? cohorts.reduce((n, c) => n + c.snapshots.length, 0);
+
+  const cohortByTier = new Map(cohorts.map(c => [c.tier, c.snapshots] as const));
+  const tiers: DatasetHistorySeries[] = DATASET_COHORT_ORDER.map(tier => {
+    const snaps = cohortByTier.get(tier) ?? [];
+    const points: DatasetHistorySeriesPoint[] = [];
+    for (const s of snaps) {
+      if (s.compositeMean != null && Number.isFinite(s.compositeMean)) {
+        points.push({ timestamp: s.timestamp, value: s.compositeMean });
+      }
+    }
+    return {
+      tier,
+      snapshotCount: snaps.length,
+      points,
+      latest: points.length > 0 ? points[points.length - 1]!.value : null,
+    };
+  });
+
+  // Build a deduped gap series across all cohort snapshots. The same
+  // (timestamp, gap) tuple appears on every cohort row of a single run,
+  // so we keep only one per timestamp.
+  const seenTimestamps = new Set<string>();
+  const gapEntries: DatasetHistorySeriesPoint[] = [];
+  for (const c of cohorts) {
+    for (const s of c.snapshots) {
+      if (s.gap == null || !Number.isFinite(s.gap)) continue;
+      if (seenTimestamps.has(s.timestamp)) continue;
+      seenTimestamps.add(s.timestamp);
+      gapEntries.push({ timestamp: s.timestamp, value: s.gap });
+    }
+  }
+  gapEntries.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  return {
+    isEmpty: total === 0 || cohorts.every(c => c.snapshots.length === 0),
+    tiers,
+    gapPoints: gapEntries,
+    latestGap: gapEntries.length > 0 ? gapEntries[gapEntries.length - 1]!.value : null,
+  };
+}
+
+const DATASET_HISTORY_QUERY_KEY = ["test-dataset-history"] as const;
+
+/**
+ * Compact per-tier line sparkline. Y-axis spans the observed value
+ * range with a small pad so reviewers can see relative wobble even
+ * when the absolute values are bunched. Single-point series fall back
+ * to a small "1 snapshot" hint, matching HeadroomSparkline.
+ */
+function DatasetHistoryMeanSparkline({ points }: { points: DatasetHistorySeriesPoint[] }) {
+  if (points.length === 0) {
+    return <span className="text-[10px] text-muted-foreground/50 italic">no history</span>;
+  }
+  if (points.length === 1) {
+    return (
+      <span className="text-[10px] text-muted-foreground/50 italic">
+        1 snapshot · {points[0]!.value.toFixed(1)}
+      </span>
+    );
+  }
+  const W = 120;
+  const H = 32;
+  const PAD = 3;
+  const ys = points.map(p => p.value);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  // Pad the y-range slightly so a flat line still draws across the
+  // middle of the chart instead of being clipped to the bottom edge.
+  const span = Math.max(0.5, maxY - minY);
+  const yMin = minY - span * 0.1;
+  const yMax = maxY + span * 0.1;
+  const yRange = yMax - yMin;
+  const coords = points.map((p, i) => {
+    const x = PAD + (i / (points.length - 1)) * (W - 2 * PAD);
+    const py = PAD + (1 - (p.value - yMin) / yRange) * (H - 2 * PAD);
+    return `${x.toFixed(1)},${py.toFixed(1)}`;
+  });
+  const lastPt = points[points.length - 1]!;
+  const lastX = PAD + (W - 2 * PAD);
+  const lastY = PAD + (1 - (lastPt.value - yMin) / yRange) * (H - 2 * PAD);
+  const tooltip =
+    `${points.length} snapshots: ${ys[0]!.toFixed(1)} → ${lastPt.value.toFixed(1)}`
+    + ` (range ${minY.toFixed(1)}–${maxY.toFixed(1)})`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-8" role="img" aria-label={tooltip}>
+      <title>{tooltip}</title>
+      <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />
+      <polyline
+        fill="none"
+        stroke="#06b6d4"
+        strokeWidth={1.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={coords.join(" ")}
+      />
+      <circle cx={lastX} cy={lastY} r={1.8} fill="#06b6d4" />
+    </svg>
+  );
+}
+
+function DatasetCohortDriftSection() {
+  const { data, isLoading, isError } = useQuery<DatasetHistoryResponse>({
+    queryKey: DATASET_HISTORY_QUERY_KEY,
+    queryFn: async () => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/test/dataset-history`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 300_000,
+    retry: false,
+  });
+
+  if (isLoading) return <Skeleton className="h-40 rounded-xl" />;
+  // Endpoint is dev-only (404s in production) — hide the panel rather
+  // than surface a noisy error, mirroring DatasetCohortMeansSection.
+  if (isError || !data) return null;
+
+  const summary = summarizeDatasetHistory(data);
+
+  return (
+    <Card className="glass-card rounded-xl border-primary/10" data-testid="dataset-cohort-drift-section">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-primary" />
+          Curated Dataset Cohort Drift
+          {!summary.isEmpty && (
+            <Badge variant="secondary" className="text-[10px] tabular-nums">
+              {data.totalSnapshots} snapshot{data.totalSnapshots === 1 ? "" : "s"}
+            </Badge>
+          )}
+        </CardTitle>
+        <CardDescription>
+          Per-tier composite mean and the T1−T3 gap over time, drawn from the persisted history of
+          /api/test/run on the curated 25-per-label real-report cohort.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {summary.isEmpty ? (
+          <div
+            className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 text-[11px] text-muted-foreground"
+            data-testid="dataset-cohort-drift-empty"
+          >
+            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground/70" />
+            <span>Dataset not mounted on this runner — no cohort drift snapshots yet.</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {summary.tiers.map(series => (
+              <div
+                key={series.tier}
+                className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 space-y-1"
+                data-testid={`dataset-cohort-drift-tier-${series.tier}`}
+              >
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span className="font-mono">
+                    {DATASET_COHORT_TIER_LABELS[series.tier] ?? series.tier}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground/60">
+                    {series.snapshotCount} pt{series.snapshotCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-base font-semibold tabular-nums text-foreground">
+                    {series.latest != null ? series.latest.toFixed(1) : "—"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">latest mean</span>
+                </div>
+                <DatasetHistoryMeanSparkline points={series.points} />
+              </div>
+            ))}
+            <div
+              className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 space-y-1"
+              data-testid="dataset-cohort-drift-tier-gap"
+            >
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span className="font-mono">T1 − T3 gap</span>
+                <span className="tabular-nums text-muted-foreground/60">
+                  {summary.gapPoints.length} pt{summary.gapPoints.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-base font-semibold tabular-nums text-foreground">
+                  {summary.latestGap != null ? summary.latestGap.toFixed(1) : "—"}
+                </span>
+                <span className="text-[10px] text-muted-foreground">latest gap</span>
+              </div>
+              <DatasetHistoryMeanSparkline points={summary.gapPoints} />
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -9689,6 +9966,8 @@ export default function FeedbackAnalytics() {
       <EmergingArchetypesSection />
 
       <DatasetCohortMeansSection />
+
+      <DatasetCohortDriftSection />
 
       {dailyTrend.length > 0 && (
         <Card className="glass-card rounded-xl">
