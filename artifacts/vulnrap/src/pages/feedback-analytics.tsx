@@ -64,7 +64,7 @@ import {
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
   Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
-  KeyRound, ArrowLeftRight,
+  KeyRound, ArrowLeftRight, Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -7440,6 +7440,7 @@ type DatasetSamples =
   | {
       available: true;
       sourcePath: string;
+      sampleDateKey: string;
       sampleSizeRequestedPerLabel: number;
       sampleCount: number;
       cohorts: DatasetCohort[];
@@ -8541,6 +8542,15 @@ function DatasetCohortMeansSection() {
             <Layers className="w-4 h-4 text-primary" />
             Curated Dataset Cohort Means
             <Badge variant="secondary" className="text-[10px]">{ds.sampleCount} samples</Badge>
+            <Badge
+              variant="outline"
+              className="text-[10px] gap-1 tabular-nums font-mono text-muted-foreground border-border/40"
+              title={`Daily curated slice for ${ds.sampleDateKey} (UTC) — rotates every UTC day, so cohort means jumping between days can reflect a slice change rather than model drift.`}
+              data-testid="dataset-cohort-sample-date-key"
+            >
+              <Calendar className="w-3 h-3" />
+              slice {ds.sampleDateKey}
+            </Badge>
           </CardTitle>
           <Badge variant="outline" className={cn("text-[10px] gap-1 tabular-nums", gapColor)}>
             <Shield className="w-3 h-3" />
@@ -8549,9 +8559,10 @@ function DatasetCohortMeansSection() {
         </div>
         <CardDescription>
           Per-cohort composite means and the T1−T3 gap from up to {ds.sampleSizeRequestedPerLabel} sampled
-          real reports per label. Drawn live from the curated dataset on each run, so calibration drift
-          shows up on a much larger sample than the {data.archetypes?.reduce((n, a) => n + a.count, 0) ?? 0}-fixture
-          synthetic battery.
+          real reports per label, drawn from the {ds.sampleDateKey} UTC slice (rotates daily) so calibration
+          drift shows up on a much larger sample than the {data.archetypes?.reduce((n, a) => n + a.count, 0) ?? 0}-fixture
+          synthetic battery. A jump in legit-mean / slop-gap that lines up with a new slice key is usually a
+          rotation, not real drift.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

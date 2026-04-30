@@ -2313,9 +2313,9 @@ export function seededShuffle<T>(arr: readonly T[], rand: () => number): T[] {
 async function loadDatasetSamples(
   perLabel: number,
   dateKey: string = datasetSampleDateKey(),
-): Promise<{ sourcePath: string | null; samples: CuratedReport[] }> {
+): Promise<{ sourcePath: string | null; dateKey: string; samples: CuratedReport[] }> {
   const sourcePath = discoverDatasets().curatedV2;
-  if (!sourcePath) return { sourcePath: null, samples: [] };
+  if (!sourcePath) return { sourcePath: null, dateKey, samples: [] };
 
   // Reuse the post-shuffle slice if we already computed it for this day.
   if (
@@ -2324,7 +2324,7 @@ async function loadDatasetSamples(
     dailySampleCache.dateKey === dateKey &&
     dailySampleCache.perLabel === perLabel
   ) {
-    return { sourcePath, samples: dailySampleCache.samples };
+    return { sourcePath, dateKey, samples: dailySampleCache.samples };
   }
 
   // Group every curated report by its label exactly once per source path —
@@ -2350,7 +2350,7 @@ async function loadDatasetSamples(
   }
 
   dailySampleCache = { sourcePath, dateKey, perLabel, samples: collected };
-  return { sourcePath, samples: collected };
+  return { sourcePath, dateKey, samples: collected };
 }
 
 function analyzeDatasetSample(r: CuratedReport): DatasetSampleRow {
@@ -2732,6 +2732,7 @@ router.get("/test/run", async (req, res) => {
     | {
         available: true;
         sourcePath: string;
+        sampleDateKey: string;
         sampleSizeRequestedPerLabel: number;
         sampleCount: number;
         cohorts: DatasetCohortRow[];
@@ -2744,7 +2745,7 @@ router.get("/test/run", async (req, res) => {
       }
     | { available: false } = { available: false };
   try {
-    const { sourcePath: dsPath, samples: rawSamples } =
+    const { sourcePath: dsPath, dateKey: dsDateKey, samples: rawSamples } =
       await loadDatasetSamples(DATASET_SAMPLE_LIMIT_PER_LABEL);
     if (dsPath && rawSamples.length > 0) {
       const sampleRows = rawSamples.map(analyzeDatasetSample);
@@ -2758,6 +2759,7 @@ router.get("/test/run", async (req, res) => {
       datasetSamples = {
         available: true,
         sourcePath: dsPath,
+        sampleDateKey: dsDateKey,
         sampleSizeRequestedPerLabel: DATASET_SAMPLE_LIMIT_PER_LABEL,
         sampleCount: sampleRows.length,
         cohorts,

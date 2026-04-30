@@ -348,6 +348,7 @@ describe("GET /api/test/run — Task #47 dataset samples block", () => {
   interface DatasetSamplesPresent {
     available: true;
     sourcePath: string;
+    sampleDateKey: string;
     sampleSizeRequestedPerLabel: number;
     sampleCount: number;
     cohorts: DatasetCohort[];
@@ -375,6 +376,7 @@ describe("GET /api/test/run — Task #47 dataset samples block", () => {
     }
     // When mounted, the block must expose the cohort-level shape.
     expect(typeof ds.sourcePath).toBe("string");
+    expect(ds.sampleDateKey).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(ds.sampleSizeRequestedPerLabel).toBeGreaterThan(0);
     expect(ds.sampleCount).toBe(ds.samples.length);
     expect(ds.cohorts.map(c => c.tier).sort()).toEqual(
@@ -639,14 +641,33 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
       const before = await fetchJson<DatasetHistoryResponse>("/api/test/dataset-history");
       const baselineCount = before.totalSnapshots;
 
+      // Capture the expected UTC date key right before the request so the
+      // assertion isn't sensitive to a midnight boundary crossing during
+      // the run.
+      const expectedDateKey = new Date().toISOString().slice(0, 10);
       const runBody = await fetchJson<{
         datasetSamples:
           | { available: false }
-          | { available: true; cohorts: Array<{ tier: string }> };
+          | {
+              available: true;
+              sampleDateKey: string;
+              cohorts: Array<{ tier: string }>;
+            };
       }>("/api/test/run");
       // Sanity check: with the synthetic dataset wired up the run must
       // observe it as mounted, otherwise the persistence path is skipped.
       expect(runBody.datasetSamples.available).toBe(true);
+      if (runBody.datasetSamples.available) {
+        // The slice key must be the YYYY-MM-DD captured just above (or, if
+        // the request straddled a UTC midnight, the next day) so reviewers
+        // can correlate cohort drift with the daily slice rotation.
+        const tomorrowDateKey = new Date(Date.parse(expectedDateKey) + 86_400_000)
+          .toISOString()
+          .slice(0, 10);
+        expect([expectedDateKey, tomorrowDateKey]).toContain(
+          runBody.datasetSamples.sampleDateKey,
+        );
+      }
 
       const after = await fetchJson<DatasetHistoryResponse>("/api/test/dataset-history");
       // Three cohorts (T1/T2/T3) → three rows appended on this single run.
