@@ -12630,15 +12630,43 @@ const DATASET_HISTORY_QUERY_KEY = ["test-dataset-history"] as const;
  * range with a small pad so reviewers can see relative wobble even
  * when the absolute values are bunched. Single-point series fall back
  * to a small "1 snapshot" hint, matching HeadroomSparkline.
+ *
+ * Task #370 — when `targetLine` is provided (used by the T1−T3 gap
+ * sparkline to surface the calibration `gapTarget` from
+ * /api/test/run's datasetSamples), draw a dashed red reference line
+ * at that value and recolour any plotted points that fall below the
+ * threshold so reviewers can spot drift breaches without hovering
+ * for the tooltip. The target value is also folded into the y-range
+ * so the line is always visible even when every observed point sits
+ * comfortably above (or below) it.
  */
-function DatasetHistoryMeanSparkline({ points }: { points: DatasetHistorySeriesPoint[] }) {
+function DatasetHistoryMeanSparkline({
+  points,
+  targetLine,
+}: {
+  points: DatasetHistorySeriesPoint[];
+  targetLine?: { value: number };
+}) {
   if (points.length === 0) {
     return <span className="text-[10px] text-muted-foreground/50 italic">no history</span>;
   }
   if (points.length === 1) {
+    const onlyPt = points[0]!;
+    const flagged = targetLine != null && onlyPt.value < targetLine.value;
     return (
-      <span className="text-[10px] text-muted-foreground/50 italic">
-        1 snapshot · {points[0]!.value.toFixed(1)}
+      <span
+        className={cn(
+          "text-[10px] italic",
+          flagged ? "text-red-400" : "text-muted-foreground/50",
+        )}
+        data-testid={flagged ? "dataset-cohort-drift-gap-breach-text" : undefined}
+      >
+        1 snapshot · {onlyPt.value.toFixed(1)}
+        {targetLine != null && (
+          <span className="not-italic text-muted-foreground/50">
+            {" "}(target ≥{targetLine.value})
+          </span>
+        )}
       </span>
     );
   }
@@ -12646,8 +12674,13 @@ function DatasetHistoryMeanSparkline({ points }: { points: DatasetHistorySeriesP
   const H = 32;
   const PAD = 3;
   const ys = points.map(p => p.value);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
+  const dataMinY = Math.min(...ys);
+  const dataMaxY = Math.max(...ys);
+  // Task #370 — fold the target threshold into the visible range so
+  // the dashed reference line never slips out of the chart, even when
+  // every observed gap sits well above (or below) the calibration target.
+  const minY = targetLine != null ? Math.min(dataMinY, targetLine.value) : dataMinY;
+  const maxY = targetLine != null ? Math.max(dataMaxY, targetLine.value) : dataMaxY;
   // Pad the y-range slightly so a flat line still draws across the
   // middle of the chart instead of being clipped to the bottom edge.
   const span = Math.max(0.5, maxY - minY);
@@ -12655,14 +12688,12 @@ function DatasetHistoryMeanSparkline({ points }: { points: DatasetHistorySeriesP
   const yMax = maxY + span * 0.1;
   const yRange = yMax - yMin;
   const xAt = (i: number) => PAD + (i / (points.length - 1)) * (W - 2 * PAD);
-  const coords = points.map((p, i) => {
-    const x = xAt(i);
-    const py = PAD + (1 - (p.value - yMin) / yRange) * (H - 2 * PAD);
-    return `${x.toFixed(1)},${py.toFixed(1)}`;
-  });
+  const yAt = (v: number) => PAD + (1 - (v - yMin) / yRange) * (H - 2 * PAD);
+  const coords = points.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.value).toFixed(1)}`);
   const lastPt = points[points.length - 1]!;
   const lastX = xAt(points.length - 1);
-  const lastY = PAD + (1 - (lastPt.value - yMin) / yRange) * (H - 2 * PAD);
+  const lastY = yAt(lastPt.value);
+  const lastFlagged = targetLine != null && lastPt.value < targetLine.value;
 
   // Task #358 — for every adjacent pair whose slice key flipped, draw a
   // faint vertical tick midway between the two points so reviewers can
@@ -12678,16 +12709,48 @@ function DatasetHistoryMeanSparkline({ points }: { points: DatasetHistorySeriesP
     }
   }
 
+  // Task #370 — pre-compute the indices of points that fall below the
+  // calibration target so each gets a small red marker, making breaches
+  // legible at a glance even on a 32px-tall sparkline.
+  const breachIndices = targetLine != null
+    ? points
+        .map((p, i) => ({ p, i }))
+        .filter(({ p, i }) => p.value < targetLine.value && i !== points.length - 1)
+    : [];
+  const breachCount = targetLine != null
+    ? points.filter(p => p.value < targetLine.value).length
+    : 0;
+
   const tooltipBase =
     `${points.length} snapshots: ${ys[0]!.toFixed(1)} → ${lastPt.value.toFixed(1)}`
-    + ` (range ${minY.toFixed(1)}–${maxY.toFixed(1)})`;
-  const tooltip = rotationXs.length > 0
-    ? `${tooltipBase} · ${rotationXs.length} slice rotation${rotationXs.length === 1 ? "" : "s"}`
-    : tooltipBase;
+    + ` (range ${dataMinY.toFixed(1)}–${dataMaxY.toFixed(1)})`;
+  const tooltipParts = [tooltipBase];
+  if (rotationXs.length > 0) {
+    tooltipParts.push(`${rotationXs.length} slice rotation${rotationXs.length === 1 ? "" : "s"}`);
+  }
+  if (targetLine != null) {
+    tooltipParts.push(
+      `target ≥${targetLine.value}`
+        + (breachCount > 0 ? ` (${breachCount} below)` : ""),
+    );
+  }
+  const tooltip = tooltipParts.join(" · ");
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-8" role="img" aria-label={tooltip}>
       <title>{tooltip}</title>
       <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />
+      {targetLine != null && (
+        <line
+          x1={PAD}
+          y1={yAt(targetLine.value)}
+          x2={W - PAD}
+          y2={yAt(targetLine.value)}
+          stroke="#ef4444"
+          strokeWidth={0.6}
+          strokeDasharray="2 2"
+          data-testid="dataset-cohort-drift-gap-target-line"
+        />
+      )}
       {rotationXs.map((x, i) => (
         <line
           key={`rot-${i}`}
@@ -12709,7 +12772,23 @@ function DatasetHistoryMeanSparkline({ points }: { points: DatasetHistorySeriesP
         strokeLinejoin="round"
         points={coords.join(" ")}
       />
-      <circle cx={lastX} cy={lastY} r={1.8} fill="#06b6d4" />
+      {breachIndices.map(({ p, i }) => (
+        <circle
+          key={`breach-${i}`}
+          cx={xAt(i)}
+          cy={yAt(p.value)}
+          r={1.4}
+          fill="#ef4444"
+          data-testid="dataset-cohort-drift-gap-breach-point"
+        />
+      ))}
+      <circle
+        cx={lastX}
+        cy={lastY}
+        r={1.8}
+        fill={lastFlagged ? "#ef4444" : "#06b6d4"}
+        data-testid={lastFlagged ? "dataset-cohort-drift-gap-breach-point" : undefined}
+      />
     </svg>
   );
 }
@@ -12727,12 +12806,38 @@ function DatasetCohortDriftSection() {
     retry: false,
   });
 
+  // Task #370 — pull the calibration `gapTarget` from /api/test/run's
+  // datasetSamples so the T1−T3 gap sparkline below can draw a dashed
+  // reference line at the threshold and flag breach points in red.
+  // Reuses the same query key as DatasetCohortMeansSection so React
+  // Query dedupes the fetch and both panels see the same value. The
+  // target is intentionally optional: the endpoint is dev-only (404s
+  // in production) and may also report `available: false` when the
+  // curated dataset isn't mounted, in which case the panel still
+  // renders without the threshold overlay.
+  const { data: testRunData } = useQuery<TestRunResponse>({
+    queryKey: ["test-run-archetypes"],
+    queryFn: async () => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/test/run`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 300_000,
+    retry: false,
+  });
+  const gapTarget = testRunData?.datasetSamples?.available
+    ? testRunData.datasetSamples.gapTarget
+    : null;
+
   if (isLoading) return <Skeleton className="h-40 rounded-xl" />;
   // Endpoint is dev-only (404s in production) — hide the panel rather
   // than surface a noisy error, mirroring DatasetCohortMeansSection.
   if (isError || !data) return null;
 
   const summary = summarizeDatasetHistory(data);
+  const latestGapBelowTarget =
+    gapTarget != null && summary.latestGap != null && summary.latestGap < gapTarget;
 
   return (
     <Card className="glass-card rounded-xl border-primary/10" data-testid="dataset-cohort-drift-section">
@@ -12821,17 +12926,46 @@ function DatasetCohortDriftSection() {
             >
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span className="font-mono">T1 − T3 gap</span>
-                <span className="tabular-nums text-muted-foreground/60">
+                <span className="tabular-nums text-muted-foreground/60 flex items-center gap-1">
                   {summary.gapPoints.length} pt{summary.gapPoints.length === 1 ? "" : "s"}
+                  {/*
+                    Task #370 — chip the calibration target alongside the
+                    point count so reviewers know what the dashed line in
+                    the sparkline represents without hovering for the
+                    tooltip. Mirrors the "(target ≥{ds.gapTarget}pt)"
+                    badge from DatasetCohortMeansSection above.
+                  */}
+                  {gapTarget != null && (
+                    <span
+                      className="text-muted-foreground/60 font-mono normal-case"
+                      title={`Calibration target: T1−T3 gap should stay ≥ ${gapTarget}pt. Snapshots that fall below this threshold are highlighted in red on the sparkline.`}
+                      data-testid="dataset-cohort-drift-gap-target-chip"
+                    >
+                      · target ≥{gapTarget}
+                    </span>
+                  )}
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-base font-semibold tabular-nums text-foreground">
+                <span
+                  className={cn(
+                    "text-base font-semibold tabular-nums",
+                    latestGapBelowTarget ? "text-red-400" : "text-foreground",
+                  )}
+                  data-testid={
+                    latestGapBelowTarget
+                      ? "dataset-cohort-drift-latest-gap-breach"
+                      : undefined
+                  }
+                >
                   {summary.latestGap != null ? summary.latestGap.toFixed(1) : "—"}
                 </span>
                 <span className="text-[10px] text-muted-foreground">latest gap</span>
               </div>
-              <DatasetHistoryMeanSparkline points={summary.gapPoints} />
+              <DatasetHistoryMeanSparkline
+                points={summary.gapPoints}
+                targetLine={gapTarget != null ? { value: gapTarget } : undefined}
+              />
             </div>
           </div>
         )}
