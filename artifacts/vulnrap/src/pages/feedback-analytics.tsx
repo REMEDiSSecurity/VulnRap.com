@@ -8879,6 +8879,10 @@ function NotifiedFlagsPanel({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Mirror the server-side cap on POST .../notifications/rearm.
+  const BULK_REARM_CAP = 200;
 
   // The list endpoint uses requireCalibrationAuthStrict, which 401s
   // unconditionally unless CALIBRATION_TOKEN is set on the server AND
@@ -8955,6 +8959,30 @@ function NotifiedFlagsPanel({
     return 0;
   });
 
+  // Drop selected keys that have since left the list so the bulk count
+  // never references stale entries.
+  const knownKeys = new Set(sorted.map((r) => r.key));
+  const liveSelectedKeys: string[] = [];
+  for (const k of selectedKeys) {
+    if (knownKeys.has(k)) liveSelectedKeys.push(k);
+  }
+  const selectedCount = liveSelectedKeys.length;
+  const overCap = selectedCount > BULK_REARM_CAP;
+
+  const toggleSelected = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedKeys(new Set());
+
   const handleRearm = async (record: AvriDriftNotificationRecord) => {
     const key = record.key;
     setBusyKey(key);
@@ -8964,9 +8992,6 @@ function NotifiedFlagsPanel({
         title: "Drift flag re-armed",
         description: `"${record.detail}" will fire again on the next dispatch run.`,
       });
-      // Defensive: a 200 with rearmed===0 shouldn't happen for a single
-      // known key, but if the backend ever changes its mind we still
-      // surface the divergence rather than silently swallowing it.
       if (resp.rearmed === 0) {
         toast({
           title: "Nothing to re-arm",
@@ -8974,23 +8999,27 @@ function NotifiedFlagsPanel({
             "The dedup entry was already gone — refreshing the dashboard to catch up.",
         });
       }
-      // Refresh both the dedup state (to drop the row) and the drift
-      // report itself (so the flag re-appears in the active flag list
-      // immediately when the next /notify dispatch repopulates it).
+      setSelectedKeys((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
       queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
       queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
       await refetch();
     } catch (err) {
-      // The backend returns 404 when none of the requested keys matched
-      // (e.g. another reviewer already re-armed it, or the dedup file
-      // was pruned out-of-band). That's an expected business outcome
-      // for a stale row, not a hard failure — surface it as an info
-      // toast and refresh the panel so the row disappears.
       if (err instanceof ApiError && err.status === 404) {
         toast({
           title: "Already re-armed",
           description:
             "This entry was already gone from the dedup state — refreshing the list.",
+        });
+        setSelectedKeys((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
         });
         queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
         queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
@@ -9004,64 +9033,191 @@ function NotifiedFlagsPanel({
     }
   };
 
+  const handleBulkRearm = async () => {
+    if (liveSelectedKeys.length === 0 || bulkBusy || overCap) return;
+    const keys = [...liveSelectedKeys];
+    setBulkBusy(true);
+    try {
+      const resp = await rearmAvriDriftNotifications({ keys });
+      const rearmed = resp.rearmed ?? 0;
+      const notFound = (resp.notFound ?? []).length;
+      const parts: string[] = [];
+      parts.push(`${rearmed} re-armed`);
+      if (notFound > 0) parts.push(`${notFound} already gone`);
+      toast({
+        title:
+          rearmed > 0
+            ? `Re-armed ${rearmed} drift flag${rearmed === 1 ? "" : "s"}`
+            : "Nothing to re-arm",
+        description:
+          rearmed > 0
+            ? `${parts.join(", ")}. Re-armed flags will fire again on the next dispatch run.`
+            : "Every selected entry was already gone from the dedup state — refreshing the list.",
+      });
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        for (const k of keys) next.delete(k);
+        return next;
+      });
+      queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
+      queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
+      await refetch();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        toast({
+          title: "Nothing to re-arm",
+          description:
+            "Every selected entry was already gone from the dedup state — refreshing the list.",
+        });
+        setSelectedKeys((prev) => {
+          const next = new Set(prev);
+          for (const k of keys) next.delete(k);
+          return next;
+        });
+        queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
+        queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
+        await refetch();
+      } else {
+        const msg =
+          err instanceof Error ? err.message : "Failed to re-arm selected flags.";
+        toast({
+          title: "Bulk re-arm failed",
+          description: msg,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   return (
-    <ul className="space-y-1.5">
-      {sorted.map((record) => {
-        const isBusy = busyKey === record.key;
-        const notifiedAt = new Date(record.notifiedAt);
-        const notifiedAtLabel = Number.isFinite(notifiedAt.getTime())
-          ? notifiedAt.toISOString().replace("T", " ").slice(0, 16) + "Z"
-          : record.notifiedAt;
-        const kindLabel =
-          record.kind === "GAP_BELOW_45" ? "Gap < threshold" : "Family shift";
-        const kindColor =
-          record.kind === "GAP_BELOW_45"
-            ? "text-red-400 bg-red-400/10 border-red-400/30"
-            : "text-orange-400 bg-orange-400/10 border-orange-400/30";
-        return (
-          <li
-            key={record.key}
-            className="flex items-start gap-2 text-xs p-2 rounded-md border border-border/40 bg-muted/[0.03]"
-          >
-            <Badge
-              variant="outline"
-              className={cn("text-[10px] gap-1 font-mono shrink-0", kindColor)}
+    <div className="space-y-2">
+      {selectedCount > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-2 px-2.5 py-2 rounded-md border border-primary/40 bg-primary/[0.06] text-[11px]"
+          data-testid="notified-flags-bulk-bar"
+        >
+          <span className="text-foreground/80">
+            <span className="font-semibold tabular-nums">{selectedCount}</span>{" "}
+            selected
+          </span>
+          {overCap && (
+            <span
+              className="text-amber-400 flex items-center gap-1"
+              data-testid="notified-flags-bulk-over-cap"
             >
-              <AlertTriangle className="w-3 h-3" /> {kindLabel}
-            </Badge>
-            <div className="flex-1 min-w-0 space-y-0.5">
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono">
-                <span>week {record.weekStart}</span>
-                <span className="text-muted-foreground/40">·</span>
-                <span title={record.notifiedAt}>notified {notifiedAtLabel}</span>
-              </div>
-              <div className="text-foreground/80 leading-relaxed break-words">
-                {record.detail}
-              </div>
-              <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
-                key: {record.key}
-              </div>
-            </div>
+              <AlertTriangle className="w-3 h-3" />
+              Capped at {BULK_REARM_CAP} per request — untick some entries.
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-2">
             <Button
               type="button"
               size="sm"
-              variant="outline"
-              className="h-7 px-2 text-[11px] gap-1 shrink-0"
-              disabled={isBusy || !authState.mutationsAllowed}
-              onClick={() => handleRearm(record)}
+              variant="ghost"
+              className="h-7 px-2 text-[11px]"
+              onClick={clearSelection}
+              disabled={bulkBusy}
+              data-testid="notified-flags-bulk-clear"
+            >
+              Clear selection
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              className="h-7 px-2.5 text-[11px] gap-1"
+              disabled={
+                bulkBusy ||
+                busyKey !== null ||
+                overCap ||
+                !authState.mutationsAllowed
+              }
+              onClick={handleBulkRearm}
               title={
                 authState.mutationsAllowed
-                  ? "Remove this entry from the dedup state so the flag re-pages reviewers on the next dispatch run."
+                  ? "Re-arm every ticked entry in a single request."
                   : "A valid reviewer token is required to re-arm flags."
               }
+              data-testid="notified-flags-bulk-rearm"
             >
               <RotateCcw className="w-3 h-3" />
-              {isBusy ? "Re-arming…" : "Re-arm"}
+              {bulkBusy
+                ? "Re-arming…"
+                : `Re-arm selected (${selectedCount})`}
             </Button>
-          </li>
-        );
-      })}
-    </ul>
+          </div>
+        </div>
+      )}
+      <ul className="space-y-1.5">
+        {sorted.map((record) => {
+          const isBusy = busyKey === record.key;
+          const isSelected = selectedKeys.has(record.key);
+          const notifiedAt = new Date(record.notifiedAt);
+          const notifiedAtLabel = Number.isFinite(notifiedAt.getTime())
+            ? notifiedAt.toISOString().replace("T", " ").slice(0, 16) + "Z"
+            : record.notifiedAt;
+          const kindLabel =
+            record.kind === "GAP_BELOW_45" ? "Gap < threshold" : "Family shift";
+          const kindColor =
+            record.kind === "GAP_BELOW_45"
+              ? "text-red-400 bg-red-400/10 border-red-400/30"
+              : "text-orange-400 bg-orange-400/10 border-orange-400/30";
+          return (
+            <li
+              key={record.key}
+              className="flex items-start gap-2 text-xs p-2 rounded-md border border-border/40 bg-muted/[0.03]"
+            >
+              <input
+                type="checkbox"
+                className="mt-0.5 h-3.5 w-3.5 cursor-pointer shrink-0"
+                checked={isSelected}
+                onChange={() => toggleSelected(record.key)}
+                disabled={bulkBusy || isBusy}
+                aria-label={`Select drift flag ${record.detail}`}
+                data-testid={`notified-flag-checkbox-${record.key}`}
+              />
+              <Badge
+                variant="outline"
+                className={cn("text-[10px] gap-1 font-mono shrink-0", kindColor)}
+              >
+                <AlertTriangle className="w-3 h-3" /> {kindLabel}
+              </Badge>
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono">
+                  <span>week {record.weekStart}</span>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span title={record.notifiedAt}>notified {notifiedAtLabel}</span>
+                </div>
+                <div className="text-foreground/80 leading-relaxed break-words">
+                  {record.detail}
+                </div>
+                <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
+                  key: {record.key}
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[11px] gap-1 shrink-0"
+                disabled={isBusy || bulkBusy || !authState.mutationsAllowed}
+                onClick={() => handleRearm(record)}
+                title={
+                  authState.mutationsAllowed
+                    ? "Remove this entry from the dedup state so the flag re-pages reviewers on the next dispatch run."
+                    : "A valid reviewer token is required to re-arm flags."
+                }
+              >
+                <RotateCcw className="w-3 h-3" />
+                {isBusy ? "Re-arming…" : "Re-arm"}
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
