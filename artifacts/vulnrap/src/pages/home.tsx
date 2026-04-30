@@ -448,11 +448,11 @@ function SlopDetectionCard() {
                     <>
                       <div className="flex flex-wrap gap-1">
                         {(signal as { phrases: string[] }).phrases.map((phrase) => (
-                          <span key={phrase} className="text-[9px] bg-violet-500/10 text-violet-300 px-1.5 py-0.5 rounded font-mono">
+                          <span key={phrase} className="text-[10px] sm:text-[9px] bg-violet-500/10 text-violet-300 px-1.5 py-0.5 rounded font-mono">
                             {phrase}
                           </span>
                         ))}
-                        <span className="text-[9px] text-muted-foreground px-1.5 py-0.5">+18 more...</span>
+                        <span className="text-[10px] sm:text-[9px] text-muted-foreground px-1.5 py-0.5">+18 more...</span>
                       </div>
                       <p className="text-[10px] text-muted-foreground">{(signal as { scoring: string }).scoring}</p>
                     </>
@@ -463,7 +463,7 @@ function SlopDetectionCard() {
                         <div key={check.what} className="rounded-md bg-muted/30 px-2 py-1">
                           <div className="flex justify-between items-baseline gap-2">
                             <span className="text-[10px] font-medium text-foreground">{check.what}</span>
-                            <span className="text-[9px] text-orange-400/80 font-mono whitespace-nowrap">{check.points}</span>
+                            <span className="text-[10px] sm:text-[9px] text-orange-400/80 font-mono whitespace-nowrap">{check.points}</span>
                           </div>
                           <p className="text-[10px] sm:text-[9px] text-muted-foreground mt-0.5 leading-snug">{check.example}</p>
                         </div>
