@@ -108,4 +108,39 @@ describe("Sprint 9 v3 — Engine performance", () => {
     expect(trace.signalsSummary?.wordCount).toBeGreaterThan(0);
     expect(trace.correlationId).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
   });
+
+  // Task #298: AVRI traces must persist the rawAvriScore vs legacyScore split
+  // so the analysis_traces table can answer "how often does AVRI disagree with
+  // legacy substance, and by how much?" before the 50/50 blend at
+  // engine2-avri.ts:442 is re-tuned. The legacy path leaves avriBreakdown
+  // undefined.
+  it("AVRI trace persists rawAvriScore vs legacyScore breakdown", () => {
+    const { trace, composite } = analyzeWithEnginesTraced(TYPICAL_REPORT);
+    expect(trace.avriBreakdown).toBeDefined();
+    const b = trace.avriBreakdown!;
+    expect(typeof b.family).toBe("string");
+    expect(b.family.length).toBeGreaterThan(0);
+    expect(typeof b.rawAvriScore).toBe("number");
+    expect(typeof b.legacyScore).toBe("number");
+    expect(typeof b.blendedScore).toBe("number");
+    expect(b.rawAvriScore).toBeGreaterThanOrEqual(0);
+    expect(b.rawAvriScore).toBeLessThanOrEqual(100);
+    expect(b.legacyScore).toBeGreaterThanOrEqual(0);
+    expect(b.legacyScore).toBeLessThanOrEqual(100);
+    expect(b.blendedScore).toBeGreaterThanOrEqual(0);
+    expect(b.blendedScore).toBeLessThanOrEqual(100);
+    // The substance engine on the composite must agree with the persisted
+    // blended score — guards against a future engineResults shape change
+    // silently desyncing the trace breakdown from the actual scoring.
+    const substance = composite.engineResults.find(
+      (r) => r.engine === "Technical Substance Analyzer",
+    );
+    expect(substance).toBeDefined();
+    expect(substance!.score).toBe(b.blendedScore);
+  });
+
+  it("legacy (AVRI off) trace omits avriBreakdown", () => {
+    const { trace } = analyzeWithEnginesTraced(TYPICAL_REPORT, { forceAvri: false });
+    expect(trace.avriBreakdown).toBeUndefined();
+  });
 });

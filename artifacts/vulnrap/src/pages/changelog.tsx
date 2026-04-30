@@ -4,10 +4,39 @@ import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout, Link2 } from "lucide-react";
 import { useEffect } from "react";
 
-export const CURRENT_VERSION = "3.9.0";
-export const RELEASE_DATE = "2026-04-29";
+export const CURRENT_VERSION = "3.9.1";
+export const RELEASE_DATE = "2026-04-30";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.9.1",
+    date: "2026-04-30",
+    label: "Sprint 13B — AVRI trace breakdown (ratio change deferred)",
+    labelColor: "border-emerald-500 text-emerald-300",
+    sections: [
+      {
+        icon: <BarChart3 className="w-4 h-4 text-emerald-300" />,
+        title: "analysis_traces now persists rawAvriScore vs legacyScore on every AVRI-path trace",
+        type: "feature",
+        items: [
+          "PipelineTrace gains an optional avriBreakdown block ({ family, rawAvriScore, legacyScore, blendedScore }) populated from the substance engine's signalBreakdown.avri whenever the AVRI pipeline runs (VULNRAP_USE_AVRI=true / forceAvri:true). Legacy-path traces and historical rows leave the field undefined, so the change is backwards-compatible against the JSONB column and no SQL migration was required",
+          "Lets a future calibration query reconstruct the AVRI-vs-legacy disagreement distribution per family — slop cohort vs legit cohort, FLAT vs sqli/rce/csrf/xss — directly from the trace table without re-running scoring against historical reports",
+          "Two new performance.test.ts assertions guard the new shape: AVRI traces must populate avriBreakdown and the persisted blendedScore must match the substance engine's score on the composite; legacy traces must leave avriBreakdown undefined",
+        ],
+      },
+      {
+        icon: <ListChecks className="w-4 h-4 text-amber-400" />,
+        title: "AVRI/legacy 50/50 blend ratio change (task #298) deferred to ~v3.10.0",
+        type: "improvement",
+        items: [
+          "Sprint 13A's v3.9.0 release notes flagged that the AVRI/legacy substance blend (avriWeight = 0.5 inside runEngine2Avri) should be revisited \"two weeks (≈one sprint) after the v3.9.0 rollout … by then the analysis_traces table will hold a representative sample of AVRI-vs-legacy disagreements\"",
+          "v3.9.0 shipped 2026-04-29. As of today (2026-04-30) the production analysis_traces table holds 30 rows, all dated 2026-04-20 → 2026-04-25 — i.e. zero post-flip traces and zero rows with VULNRAP_USE_AVRI=true. The premise that motivates a ratio change does not hold yet, so avriWeight stays at 0.5 in this release",
+          "Even setting the date issue aside, the pre-v3.9.1 trace shape only stored composite.overallScore — there was no way to recover the AVRI-vs-legacy split per report. The trace extension above is the prerequisite that has to ship first; the ratio change is queued for the sprint after ~2 weeks of enriched traces accumulate",
+          "No fixture-battery numbers move in this release: benchmark.test.ts and e3-substance-gate.test.ts run against the same 0.5/0.5 blend and stay green (slop/legit gap unchanged at 31, ≥25 calibration target preserved)",
+        ],
+      },
+    ],
+  },
   {
     version: "3.9.0",
     date: "2026-04-29",

@@ -103,6 +103,31 @@ export function analyzeWithEnginesTraced(
       }),
     );
     const totalDurationMs = Date.now() - startedAt;
+    // Task #298: persist the AVRI substance breakdown (rawAvriScore vs
+    // legacyScore vs blendedScore) on every AVRI-path trace so a future
+    // calibration query can quantify AVRI-vs-legacy disagreement per family
+    // before we re-tune the `avriWeight` blend inside `runEngine2Avri`. The
+    // shape is populated from the substance engine's signalBreakdown.avri
+    // block, which engine2-avri.ts already builds for both the FLAT and
+    // family branches.
+    const substanceEngine = avriComposite.engineResults.find(
+      (r) => r.engine === "Technical Substance Analyzer",
+    );
+    const avriBlock = substanceEngine?.signalBreakdown?.avri as
+      | { family?: string; rawAvriScore?: number; legacyScore?: number; blendedScore?: number }
+      | undefined;
+    const avriBreakdown =
+      avriBlock &&
+      typeof avriBlock.rawAvriScore === "number" &&
+      typeof avriBlock.legacyScore === "number" &&
+      typeof avriBlock.blendedScore === "number"
+        ? {
+            family: avriBlock.family ?? avriComposite.avri.family,
+            rawAvriScore: avriBlock.rawAvriScore,
+            legacyScore: avriBlock.legacyScore,
+            blendedScore: avriBlock.blendedScore,
+          }
+        : undefined;
     const trace: PipelineTrace = {
       correlationId,
       reportId: opts.reportId ?? null,
@@ -131,6 +156,7 @@ export function analyzeWithEnginesTraced(
         `AVRI family=${avriComposite.avri.family} (${avriComposite.avri.classification.confidence})`,
         `AVRI gold-hit-count=${avriComposite.avri.goldHitCount}`,
       ],
+      ...(avriBreakdown ? { avriBreakdown } : {}),
     };
     logger.info(
       {
