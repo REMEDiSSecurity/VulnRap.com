@@ -15,6 +15,9 @@
 
 import { describe, it, expect } from "vitest";
 import { detectHallucinationSignals } from "./hallucination-detector";
+import { detectStructuralFabrication } from "./engines/avri/crash-trace";
+import { analyzeWithEnginesTraced } from "./engines";
+import { generateTriageRecommendation } from "./triage-recommendation";
 import { TEST_FIXTURE_COHORTS } from "../routes/test-fixtures";
 
 const findFixture = (id: string) => {
@@ -515,6 +518,103 @@ describe("Task #304: impossible_http_response signal", () => {
           "impossible_http_response",
         );
       });
+    }
+  });
+});
+
+describe("Task #303: bounds-based structural detectors", () => {
+  // Each fabricated fixture below trips its target bounds detector — pinning
+  // it so future tweaks to the regex / threshold can't quietly regress the
+  // detector. We assert at the per-detector level (not the aggregate signal,
+  // which requires ≥2 markers and is exercised separately).
+
+  const markerIdsFor = (id: string) =>
+    detectStructuralFabrication(findFixture(id).text).map((m) => m.id);
+
+  it("T4-12-fake-prologue-offsets trips implausible_function_offset", () => {
+    expect(markerIdsFor("T4-12-fake-prologue-offsets")).toContain(
+      "implausible_function_offset",
+    );
+  });
+
+  it("T4-13-fake-thread-id-out-of-range trips implausible_thread_id", () => {
+    expect(markerIdsFor("T4-13-fake-thread-id-out-of-range")).toContain(
+      "implausible_thread_id",
+    );
+  });
+
+  it("T4-14-fake-region-vs-access trips region_size_vs_access_size", () => {
+    expect(markerIdsFor("T4-14-fake-region-vs-access")).toContain(
+      "region_size_vs_access_size",
+    );
+  });
+
+  // Negative guards: the canonical legit fixtures must NOT trip any of the
+  // three new bounds detectors, even though they look at the same fields
+  // (function offsets, PIDs/threads, region sizes).
+  for (const id of [
+    "T1-01-uaf-libfoo",
+    "T1-AVRI-firefox-uaf",
+    "T1-AVRI-cve-2025-0725-curl",
+  ]) {
+    it(`${id} does NOT trip any new bounds detector`, () => {
+      const ids = markerIdsFor(id);
+      expect(ids).not.toContain("implausible_function_offset");
+      expect(ids).not.toContain("implausible_thread_id");
+      expect(ids).not.toContain("region_size_vs_access_size");
+    });
+  }
+
+  // Calibration regression — pin actual composite, Engine 2, and triage
+  // labels for the three new T4 fixtures to the declared `expectedComposite`
+  // / `expectedEngine2` / `expectedTriage` ranges. This guards against the
+  // earlier failure mode where the declared band [0, 35] silently drifted
+  // out of sync with the actual scoring engines (e.g. the legacy AVRI-off
+  // path returning 50+). We assert under BOTH AVRI on/off because the
+  // /api/test/run smoke endpoint exposes both modes via the cohort
+  // calibration block, and the fixture is only useful as a T4 anchor if it
+  // condemns the report under either mode.
+  describe("composite / Engine 2 / triage stays in declared T4 band", () => {
+    for (const id of [
+      "T4-12-fake-prologue-offsets",
+      "T4-13-fake-thread-id-out-of-range",
+      "T4-14-fake-region-vs-access",
+    ]) {
+      const f = findFixture(id);
+      for (const forceAvri of [true, false]) {
+        const mode = forceAvri ? "AVRI on" : "AVRI off";
+        it(`${id} (${mode}) — composite, Engine 2, triage all match declared expectations`, () => {
+          const traced = analyzeWithEnginesTraced(f.text, {
+            claimedCwes: f.claimedCwes,
+            forceAvri,
+          });
+          const composite = traced.composite.overallScore;
+          const e2 =
+            traced.composite.engineResults.find(
+              (e) => e.engine === "Technical Substance Analyzer",
+            )?.score ?? null;
+          // Mirror the smoke endpoint's per-fixture triage call (network
+          // verification skipped, slop = 100 - composite).
+          const slop = Math.max(0, 100 - composite);
+          const triage = generateTriageRecommendation(slop, 0.7, null, [], {
+            compositeScore: composite,
+            engine2Score: e2 ?? 50,
+            strongEvidenceCount: 0,
+            verificationRatio: 0,
+          });
+          // Composite must land inside the declared band.
+          expect(composite).toBeGreaterThanOrEqual(f.expectedComposite[0]);
+          expect(composite).toBeLessThanOrEqual(f.expectedComposite[1]);
+          // Engine 2 must also land in band when reported (some engines
+          // intentionally return null for inputs they can't score).
+          if (e2 != null) {
+            expect(e2).toBeGreaterThanOrEqual(f.expectedEngine2[0]);
+            expect(e2).toBeLessThanOrEqual(f.expectedEngine2[1]);
+          }
+          // Triage action must be one of the declared expectations.
+          expect(f.expectedTriage).toContain(triage.action);
+        });
+      }
     }
   });
 });

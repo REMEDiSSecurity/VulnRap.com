@@ -256,6 +256,119 @@ allocated by thread T0; region size: 4096`;
   });
 });
 
+// --- Task #303: bounds-based structural detectors ---------------------------
+
+describe("detectStructuralFabrication — Task #303 bounds detectors", () => {
+  it("flags ≥2 in-prologue function offsets (implausible_function_offset)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0x6020abcd thread T0
+    #0 0x4001000 in handle_request+0x1 src/server.c:412
+    #1 0x4001100 in worker_loop+0x2 src/worker.c:88
+    #2 0x4001200 in dispatch+0x3 src/dispatch.c:42`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("implausible_function_offset");
+  });
+
+  it("flags ≥2 huge function offsets (implies ≥1 MiB function)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+    #0 0x4001000 in handle_request+0x100200 src/server.c:412
+    #1 0x4001100 in worker_loop+0x4abf1a src/worker.c:88
+    #2 0x4001200 in dispatch+0x123abc src/dispatch.c:42`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("implausible_function_offset");
+  });
+
+  it("does NOT flag binary-relative offsets like (curl+0x4abf1a)", () => {
+    // Binary offsets in parentheses can legitimately run multi-megabyte
+    // (the binary's `.text` section is huge); the bounds check only looks
+    // at function offsets that come right after `in <symbol>`.
+    const trace = `==54321==ERROR: AddressSanitizer: heap-buffer-overflow
+WRITE of size 4294934527 at 0x611000009f80 thread T0
+    #0 0x4abf1a in __asan_memcpy (curl+0x4abf1a)
+    #1 0x55c1aa in inflate_stream lib/content_encoding.c:297
+    #2 0x55b0ee in Curl_unencode_gzip_write lib/content_encoding.c:412`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("implausible_function_offset");
+  });
+
+  it("does NOT flag a single tiny offset (one is allowed)", () => {
+    // Only `+0x1` is implausible; `+0x40` is well inside realistic bounds.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+    #0 0x4001000 in handle_request+0x1 src/server.c:412
+    #1 0x4001100 in worker_loop+0x40 src/worker.c:88`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("implausible_function_offset");
+  });
+
+  it("flags PID 0 in ==N== header (implausible_thread_id)", () => {
+    const trace = `==0==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0x6020abcd thread T0
+    #0 0x4001000 in foo src/foo.c:1`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("implausible_thread_id");
+  });
+
+  it("flags PID > Linux max (4_194_304)", () => {
+    const trace = `==9999999==ERROR: AddressSanitizer: heap-use-after-free
+    #0 0x4001000 in foo src/foo.c:1`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("implausible_thread_id");
+  });
+
+  it("flags thread T<n> with n > 1024", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0x6020abcd thread T99999
+    #0 0x4001000 in foo src/foo.c:1`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("implausible_thread_id");
+  });
+
+  it("does NOT flag realistic PID + T0 / T1 / T3", () => {
+    const trace = `==31415==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0x6190001a3c80 thread T0
+    #0 0x7f9b22c1f3d1 in foo src/foo.c:1
+Previous read of size 8 at 0x7b0400000040 by thread T3:`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("implausible_thread_id");
+  });
+
+  it("flags region size = 0 (region_size_vs_access_size)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0x6020abcd thread T0
+    #0 0x4001000 in foo src/foo.c:1
+0x6020abcd is located 0 bytes inside of region size: 0`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("region_size_vs_access_size");
+  });
+
+  it("flags access size > region size for a use-after-free", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0x6020abcd thread T0
+    #0 0x4001000 in foo src/foo.c:1
+allocated by thread T0; region size: 4`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("region_size_vs_access_size");
+  });
+
+  it("does NOT flag access > region for a heap-buffer-overflow (that's the bug)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-buffer-overflow
+WRITE of size 16 at 0x6020abcd thread T0
+    #0 0x4001000 in foo src/foo.c:1
+allocated by thread T0; region size: 8`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("region_size_vs_access_size");
+  });
+
+  it("does NOT flag access ≤ region for a use-after-free (legit)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0x602000000010 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+0x602000000010 is located 0 bytes inside of 8-byte region [0x602000000010,0x602000000018)`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("region_size_vs_access_size");
+  });
+});
+
 describe("evaluateCrashTrace — structural fabrication aggregation", () => {
   it("hasStructuralFabrication is true only when ≥2 markers fire", () => {
     // Only round_function_offsets should fire here.

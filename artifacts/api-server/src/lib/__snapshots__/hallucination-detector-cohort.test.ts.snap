@@ -86,5 +86,8 @@ exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > p
   "T4-09-ai-tool-curl-uaf": 16,
   "T4-10-fake-openssl-regression": 13,
   "T4-11-impossible-http-shape": 48,
+  "T4-12-fake-prologue-offsets": 38,
+  "T4-13-fake-thread-id-out-of-range": 43,
+  "T4-14-fake-region-vs-access": 38,
 }
 `;

@@ -38,14 +38,23 @@ export interface CrashTraceEvaluation {
 }
 
 /** A single structural-fabrication tell detected against a crash trace.
- * Sprint 13B-2 ships four detectors keyed by `id` so the diagnostics panel
- * can render exactly which markers fired without re-running the regexes. */
+ * Sprint 13B-2 ships four shape detectors (the first four IDs below) and
+ * Sprint 13B-2 / Task #303 adds three bounds detectors (the last three) so
+ * the diagnostics panel can render exactly which markers fired without
+ * re-running the regexes. */
 export interface StructuralMarker {
   id:
     | "round_function_offsets"
     | "frame_numbering_gaps"
     | "thread_id_inconsistency"
-    | "round_heap_region_size";
+    | "round_heap_region_size"
+    // Task #303: bounds checks on the same trace fields. Whereas the four
+    // shape detectors above flag suspiciously round/missing values, these
+    // three flag values that look plausible at a glance but violate the
+    // structural envelope a real sanitizer respects.
+    | "implausible_function_offset"
+    | "implausible_thread_id"
+    | "region_size_vs_access_size";
   description: string;
 }
 
@@ -215,7 +224,151 @@ function detectRoundHeapRegionSize(text: string): StructuralMarker | null {
   return null;
 }
 
-/** Run all four structural-fabrication detectors and return the markers that
+// Task #303 bounds detectors -------------------------------------------------
+//
+// The Sprint 13B-2 shape detectors above catch traces that pick suspiciously
+// round/missing values. These three bounds detectors catch traces whose
+// values *look* plausible but violate the structural envelope sanitizers
+// respect — implausibly small/large function offsets, thread/PID identifiers
+// outside the realistic sanitizer ranges, and heap region sizes that can't
+// possibly satisfy the access-size header.
+
+/** Implausible function offsets in `in <symbol>+0x<offset>` frame fragments.
+ * Real ASan offsets are byte distances into the live function — they are
+ * almost never inside the prologue (offsets 1..3) and almost never imply a
+ * function larger than 1 MiB (offset ≥ 0x100000). The 1 MiB bound is set
+ * deliberately above the typical "huge" function (kernel `main`,
+ * `nghttp2_session_mem_recv`, …) so a real fat function never trips it.
+ *
+ * The match is restricted to `in <symbol>+0x...` fragments so binary-relative
+ * offsets like `(curl+0x4abf1a)` or `(server+0x4f2a31)` — which legitimately
+ * run into the multi-megabyte range — are NOT considered. */
+const IN_FN_OFFSET_RE = /\bin\s+([A-Za-z_][\w:]*)\+0x([0-9a-fA-F]+)\b/g;
+const TINY_OFFSET_MAX = 0x4; // exclusive — values 0x1, 0x2, 0x3 sit in the prologue
+const HUGE_OFFSET_MIN = 0x100000; // inclusive — implies a 1 MiB+ function
+
+function detectImplausibleFunctionOffsets(
+  frameLines: string[],
+): StructuralMarker | null {
+  const tells: string[] = [];
+  for (const line of frameLines) {
+    IN_FN_OFFSET_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = IN_FN_OFFSET_RE.exec(line)) !== null) {
+      const fn = m[1];
+      const offsetHex = m[2];
+      const value = parseInt(offsetHex, 16);
+      if (!Number.isFinite(value)) continue;
+      if (value > 0 && value < TINY_OFFSET_MAX) {
+        tells.push(`${fn}+0x${offsetHex} (in prologue)`);
+      } else if (value >= HUGE_OFFSET_MIN) {
+        tells.push(`${fn}+0x${offsetHex} (implies ≥1 MiB function)`);
+      }
+    }
+  }
+  if (tells.length >= 2) {
+    return {
+      id: "implausible_function_offset",
+      description: `${tells.length} frames carry function offsets outside realistic bounds (${tells.slice(0, 3).join(", ")}); real offsets sit between the prologue and the function epilogue`,
+    };
+  }
+  return null;
+}
+
+/** Implausible thread/PID identifiers anchored to the report header
+ * (`==<pid>==`) and the per-thread blocks (`thread T<n>`). On Linux PIDs
+ * range 1..4_194_304; sanitizer thread IDs start at T0 and rarely climb
+ * past T64 (T1024 is already a wildly threaded process). Values outside
+ * those envelopes don't appear in any real sanitizer output we've seen. */
+const PID_RE = /==(\d+)==/g;
+const THREAD_T_RE = /\bthread\s+T(\d+)\b/gi;
+const LINUX_PID_MAX = 4_194_304;
+const PLAUSIBLE_THREAD_MAX = 1024;
+
+function detectImplausibleThreadIds(text: string): StructuralMarker | null {
+  // PID side: 0 or > LINUX_PID_MAX is impossible on Linux.
+  PID_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = PID_RE.exec(text)) !== null) {
+    const pid = Number(m[1]);
+    if (!Number.isFinite(pid)) continue;
+    if (pid === 0 || pid > LINUX_PID_MAX) {
+      return {
+        id: "implausible_thread_id",
+        description: `PID ${pid} in \`==${m[1]}==\` header is outside the realistic Linux PID range (1..${LINUX_PID_MAX})`,
+      };
+    }
+  }
+  // Thread side: T<n> with n > PLAUSIBLE_THREAD_MAX.
+  THREAD_T_RE.lastIndex = 0;
+  while ((m = THREAD_T_RE.exec(text)) !== null) {
+    const n = Number(m[1]);
+    if (!Number.isFinite(n)) continue;
+    if (n > PLAUSIBLE_THREAD_MAX) {
+      return {
+        id: "implausible_thread_id",
+        description: `Thread \`T${n}\` is outside the realistic sanitizer thread-id range (T0..T${PLAUSIBLE_THREAD_MAX}); real reports rarely climb past a couple of dozen`,
+      };
+    }
+  }
+  return null;
+}
+
+/** Heap region size compared against the access-size header. Real ASan
+ * reports never claim a 0-byte allocated region, and for non-overflow bug
+ * classes (heap-use-after-free, double-free) the access size must fit
+ * inside the chunk that was originally allocated — `READ of size 8` on a
+ * `2-byte region` is structurally impossible. Buffer-overflow classes
+ * legitimately report access > region (that's the bug), so they're
+ * excluded from the access-vs-region comparison; the 0-byte check still
+ * applies to them. */
+const ACCESS_SIZE_RE = /(?:READ|WRITE)\s+of\s+size\s+(\d+)/i;
+const REGION_BRACKETED_RE = /\b(\d+)-byte\s+region\s*\[/i;
+const REGION_DECIMAL_RE = /\bregion\s*size\s*:\s*(\d+)\b(?!\s*\[)/i;
+const OVERFLOW_BUG_RE =
+  /(?:heap[-\s]buffer[-\s]overflow|stack[-\s]buffer[-\s]overflow|global[-\s]buffer[-\s]overflow|heap[-\s]buffer[-\s]underflow|heap\s+overflow|stack\s+overflow)/i;
+const NON_OVERFLOW_BUG_RE =
+  /(?:heap[-\s]use[-\s]after[-\s]free|use[-\s]after[-\s]free|double[-\s]free|use[-\s]after[-\s]return|use[-\s]after[-\s]scope)/i;
+
+function detectRegionSizeVsAccessSize(text: string): StructuralMarker | null {
+  let regionSize: number | null = null;
+  const bracketM = text.match(REGION_BRACKETED_RE);
+  if (bracketM) {
+    regionSize = Number(bracketM[1]);
+  } else {
+    const decM = text.match(REGION_DECIMAL_RE);
+    if (decM) regionSize = Number(decM[1]);
+  }
+  if (regionSize === null || !Number.isFinite(regionSize)) return null;
+
+  if (regionSize === 0) {
+    return {
+      id: "region_size_vs_access_size",
+      description: "Heap region size is reported as 0 bytes; real allocations are non-zero",
+    };
+  }
+
+  const accessM = text.match(ACCESS_SIZE_RE);
+  if (!accessM) return null;
+  const accessSize = Number(accessM[1]);
+  if (!Number.isFinite(accessSize) || accessSize <= 0) return null;
+
+  // Buffer-overflow bugs legitimately read past the region; skip them.
+  if (OVERFLOW_BUG_RE.test(text) && !NON_OVERFLOW_BUG_RE.test(text)) return null;
+  // Only enforce the comparison when the bug class is one where the access
+  // is supposed to fit inside the originally-allocated chunk (UAF / DF).
+  if (!NON_OVERFLOW_BUG_RE.test(text)) return null;
+
+  if (accessSize > regionSize) {
+    return {
+      id: "region_size_vs_access_size",
+      description: `Access size ${accessSize} exceeds the reported ${regionSize}-byte region for a use-after-free / double-free; the access on a freed chunk fits inside the original allocation`,
+    };
+  }
+  return null;
+}
+
+/** Run all structural-fabrication detectors and return the markers that
  * fired. Exported so the hallucination detector can hook the same predicates
  * without re-tokenising the trace. */
 export function detectStructuralFabrication(text: string): StructuralMarker[] {
@@ -229,6 +382,13 @@ export function detectStructuralFabrication(text: string): StructuralMarker[] {
   if (c) markers.push(c);
   const d = detectRoundHeapRegionSize(text);
   if (d) markers.push(d);
+  // Task #303 bounds detectors.
+  const e = detectImplausibleFunctionOffsets(frameLines);
+  if (e) markers.push(e);
+  const f = detectImplausibleThreadIds(text);
+  if (f) markers.push(f);
+  const g = detectRegionSizeVsAccessSize(text);
+  if (g) markers.push(g);
   return markers;
 }
 
