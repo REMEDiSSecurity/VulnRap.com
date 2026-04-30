@@ -1185,6 +1185,89 @@ export function undoHandwavyPhrase(
 }
 
 /**
+ * Task #233 — bulk wrapper around `undoHandwavyPhrase`. The reviewer's UI
+ * accumulates a list of `(phrase, addedAt)` pairs that are still inside
+ * their per-entry undo window (`UNDO_WINDOW_MS`); pressing "Undo last N
+ * adds" calls this with the whole list and the server walks each entry
+ * through the per-marker undo path so every successful undo still
+ * appends its own `undone: true` history row. The audit contract is
+ * NOT collapsed into a single batch row — that would hide which phrase
+ * was actually rolled back. Entries that fail individually (`not-found`,
+ * `addedAt-mismatch`, `window-expired`, `no-addedAt`) are reported in
+ * the per-phrase `results` array with the same reason codes the
+ * single-phrase path returns; they do not abort the batch so a
+ * reviewer who clicks the bulk button right as one entry's window
+ * elapses still gets the rest rolled back.
+ */
+export interface UndoBatchEntry {
+  phrase: string;
+  addedAt: string;
+}
+
+export interface UndoBatchEntryResult {
+  phrase: string;
+  undone: boolean;
+  reason?: "not-found" | "addedAt-mismatch" | "no-addedAt" | "window-expired";
+  /** Present only when `undone: true`. Mirrors the single-undo response. */
+  historyEntry?: HandwavyHistoryEntry;
+}
+
+export interface UndoBatchResult {
+  /** Number of entries actually undone. */
+  undone: number;
+  /** Number of entries skipped (any non-success reason). */
+  skipped: number;
+  /** Active list size after the batch. */
+  total: number;
+  /** Per-entry outcomes in the same order as the input. */
+  results: UndoBatchEntryResult[];
+}
+
+export function undoHandwavyPhrasesBatch(
+  entries: UndoBatchEntry[],
+  options: UndoPhraseOptions = {},
+): UndoBatchResult {
+  const results: UndoBatchEntryResult[] = [];
+  let undone = 0;
+  // Walk each entry through the single-phrase undo path so each successful
+  // undo persists + appends its own `undone: true` history row. We
+  // intentionally don't collapse this into a single in-memory pass +
+  // single persist: the per-phrase audit row is the contract reviewers
+  // (and downstream tooling like the diagnostics export) rely on for
+  // attribution. The list is small in practice (capped by the active
+  // `undoCandidates` map size in the UI), so the extra writes are
+  // cheap relative to keeping the audit log honest.
+  for (const entry of entries) {
+    const result = undoHandwavyPhrase(entry.phrase, entry.addedAt, options);
+    if (result.ok) {
+      undone += 1;
+      results.push({
+        phrase: result.phrase,
+        undone: true,
+        historyEntry: { ...result.historyEntry },
+      });
+    } else {
+      results.push({
+        phrase: result.phrase,
+        undone: false,
+        reason: result.reason,
+      });
+    }
+  }
+  // Re-read the active list AFTER the loop so `total` reflects the
+  // post-batch state regardless of how many entries succeeded vs.
+  // skipped. (`undoHandwavyPhrase` already invalidates + repopulates
+  // the cache on each successful call, so this is a cheap cached read.)
+  const total = getHandwavyPhrases().length;
+  return {
+    undone,
+    skipped: results.length - undone,
+    total,
+    results,
+  };
+}
+
+/**
  * Task #132 — One-click revert of a single edit-history entry. The reviewer
  * picks an entry from a marker's `edits` log and we restore the marker to the
  * "before" state captured by that entry: category goes back to

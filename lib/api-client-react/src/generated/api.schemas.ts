@@ -1927,6 +1927,90 @@ export interface HandwavyPhraseUndoBody {
 }
 
 /**
+ * Task #233 — one `(phrase, addedAt)` pair to undo as part of a batch.
+Mirrors the single-undo body fields; see `HandwavyPhraseUndoBody`
+for the matching contract.
+
+ */
+export interface HandwavyPhraseUndoBatchEntry {
+  /** The (already-normalized) phrase of the live marker to undo. */
+  phrase: string;
+  /** ISO 8601 timestamp from the live marker's `addedAt` field. */
+  addedAt: string;
+}
+
+/**
+ * Task #233 — body for POST /feedback/calibration/handwavy-phrases/undo-batch.
+The reviewer's UI walks every reviewer-added marker that's still
+inside its per-marker undo window and sends each one as a pair
+in `entries`. The server runs each entry through the per-marker
+undo path so every successful undo still produces its own
+`undone: true` history row (no batch-merge row that hides
+per-phrase provenance). Capped at 200 entries per call.
+
+ */
+export interface HandwavyPhraseUndoBatchBody {
+  /**
+   * @minItems 1
+   * @maxItems 200
+   */
+  entries: HandwavyPhraseUndoBatchEntry[];
+  /** Reviewer name or email recorded as `removedBy`/`undoneBy` on every successful undo's history row. Optional. */
+  reviewer?: string;
+}
+
+/**
+ * Present only when `undone` is false.
+ */
+export type HandwavyPhraseUndoBatchEntryResultReason =
+  (typeof HandwavyPhraseUndoBatchEntryResultReason)[keyof typeof HandwavyPhraseUndoBatchEntryResultReason];
+
+export const HandwavyPhraseUndoBatchEntryResultReason = {
+  "not-found": "not-found",
+  "addedAt-mismatch": "addedAt-mismatch",
+  "no-addedAt": "no-addedAt",
+  "window-expired": "window-expired",
+} as const;
+
+/**
+ * Task #233 — outcome of attempting to undo one `(phrase, addedAt)`
+pair as part of a /undo-batch round-trip. Mirrors the
+single-undo failure reasons so the UI can render the same per-row
+explanations the per-row Undo button already surfaces.
+
+ */
+export interface HandwavyPhraseUndoBatchEntryResult {
+  phrase: string;
+  undone: boolean;
+  /** Present only when `undone` is false. */
+  reason?: HandwavyPhraseUndoBatchEntryResultReason;
+  /** Present only when `undone` is true. The fresh `undone:true` history row appended for this phrase. */
+  historyEntry?: HandwavyHistoryEntry;
+}
+
+/**
+ * Task #233 — response from POST /feedback/calibration/handwavy-phrases/undo-batch.
+`phrases` and `history` echo the post-batch active list and audit
+log so callers can refresh their cached views in one round-trip.
+
+ */
+export interface HandwavyPhraseUndoBatchResponse {
+  /** Always true on a successful response (the batch was processed). */
+  undone: boolean;
+  /** Always true — distinguishes this response from a single-phrase /undo. */
+  batch: boolean;
+  /** Number of entries actually undone in this round-trip. */
+  undoneCount: number;
+  /** Number of entries skipped (any non-success per-entry reason). */
+  skipped: number;
+  /** Number of active phrases after the batch. */
+  total: number;
+  results: HandwavyPhraseUndoBatchEntryResult[];
+  phrases: HandwavyMarker[];
+  history: HandwavyHistoryEntry[];
+}
+
+/**
  * Task #132 — body for POST /feedback/calibration/handwavy-phrases/revert-edit.
 The edit entry is matched by `phrase` + `editedAt`.
 

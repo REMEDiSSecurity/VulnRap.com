@@ -16,6 +16,7 @@ let reinstateHandwavyPhrase: typeof import("./handwavy-phrases").reinstateHandwa
 let reinstateHandwavyPhrasesBatch: typeof import("./handwavy-phrases").reinstateHandwavyPhrasesBatch;
 let editHandwavyPhrase: typeof import("./handwavy-phrases").editHandwavyPhrase;
 let undoHandwavyPhrase: typeof import("./handwavy-phrases").undoHandwavyPhrase;
+let undoHandwavyPhrasesBatch: typeof import("./handwavy-phrases").undoHandwavyPhrasesBatch;
 let revertHandwavyPhraseEdit: typeof import("./handwavy-phrases").revertHandwavyPhraseEdit;
 let __resetHandwavyPhrasesForTests: typeof import("./handwavy-phrases").__resetHandwavyPhrasesForTests;
 let __restoreHandwavyPhraseDefaultsForTests: typeof import("./handwavy-phrases").__restoreHandwavyPhraseDefaultsForTests;
@@ -34,6 +35,7 @@ beforeAll(async () => {
   reinstateHandwavyPhrasesBatch = mod.reinstateHandwavyPhrasesBatch;
   editHandwavyPhrase = mod.editHandwavyPhrase;
   undoHandwavyPhrase = mod.undoHandwavyPhrase;
+  undoHandwavyPhrasesBatch = mod.undoHandwavyPhrasesBatch;
   revertHandwavyPhraseEdit = mod.revertHandwavyPhraseEdit;
   __resetHandwavyPhrasesForTests = mod.__resetHandwavyPhrasesForTests;
   __restoreHandwavyPhraseDefaultsForTests = mod.__restoreHandwavyPhraseDefaultsForTests;
@@ -520,6 +522,165 @@ describe("handwavy-phrases loader", () => {
         { now: "2026-04-22T12:00:30.000Z", windowMs: 60_000 },
       );
       expect(ok.ok).toBe(true);
+    });
+  });
+
+  // --- Task #233: bulk-undo wrapper ---
+  describe("undoHandwavyPhrasesBatch", () => {
+    it("emits one undone:true history row per successfully-undone phrase (no batch-merge that hides per-phrase provenance)", () => {
+      addHandwavyPhrase("batch-undo phrase one", "buzzword", {
+        reviewer: "alice@team.com",
+        now: "2026-04-22T12:00:00.000Z",
+      });
+      addHandwavyPhrase("batch-undo phrase two", "absence", {
+        reviewer: "alice@team.com",
+        now: "2026-04-22T12:00:01.000Z",
+      });
+      addHandwavyPhrase("batch-undo phrase three", "hedging", {
+        reviewer: "alice@team.com",
+        now: "2026-04-22T12:00:02.000Z",
+      });
+
+      const result = undoHandwavyPhrasesBatch(
+        [
+          { phrase: "batch-undo phrase one", addedAt: "2026-04-22T12:00:00.000Z" },
+          { phrase: "batch-undo phrase two", addedAt: "2026-04-22T12:00:01.000Z" },
+          { phrase: "batch-undo phrase three", addedAt: "2026-04-22T12:00:02.000Z" },
+        ],
+        { reviewer: "alice@team.com", now: "2026-04-22T12:01:00.000Z" },
+      );
+
+      expect(result.undone).toBe(3);
+      expect(result.skipped).toBe(0);
+      expect(result.results).toHaveLength(3);
+      for (const entry of result.results) {
+        expect(entry.undone).toBe(true);
+        expect(entry.historyEntry?.undone).toBe(true);
+        expect(entry.historyEntry?.undoneBy).toBe("alice@team.com");
+      }
+
+      // All three phrases are off the active list.
+      const active = getHandwavyPhrases().map((m) => m.phrase);
+      expect(active).not.toContain("batch-undo phrase one");
+      expect(active).not.toContain("batch-undo phrase two");
+      expect(active).not.toContain("batch-undo phrase three");
+
+      // The audit log has THREE distinct undone:true rows — one per
+      // phrase. The contract is explicit: no batch-merge row that
+      // collapses provenance.
+      const undoneRows = getHandwavyPhraseHistory().filter(
+        (h) =>
+          h.undone === true &&
+          (h.phrase === "batch-undo phrase one" ||
+            h.phrase === "batch-undo phrase two" ||
+            h.phrase === "batch-undo phrase three"),
+      );
+      expect(undoneRows).toHaveLength(3);
+      const undoneByPhrase = new Set(undoneRows.map((r) => r.phrase));
+      expect(undoneByPhrase.size).toBe(3);
+
+      // The rows survive a cache reset — they were persisted, not just
+      // mutated in memory.
+      __resetHandwavyPhrasesForTests();
+      const reloaded = getHandwavyPhraseHistory().filter(
+        (h) =>
+          h.undone === true &&
+          (h.phrase === "batch-undo phrase one" ||
+            h.phrase === "batch-undo phrase two" ||
+            h.phrase === "batch-undo phrase three"),
+      );
+      expect(reloaded).toHaveLength(3);
+    });
+
+    it("reports per-entry skip reasons (window-expired, addedAt-mismatch, not-found, no-addedAt) without aborting the rest", () => {
+      // One in-window phrase that should succeed.
+      addHandwavyPhrase("mixed-batch fresh", "absence", {
+        now: "2026-04-22T12:00:00.000Z",
+      });
+      // One phrase whose window will be elapsed at undo time.
+      addHandwavyPhrase("mixed-batch stale", "absence", {
+        now: "2026-04-22T11:54:00.000Z",
+      });
+      // One phrase live but with a mismatched addedAt in the request.
+      addHandwavyPhrase("mixed-batch mismatch", "absence", {
+        now: "2026-04-22T12:00:00.000Z",
+      });
+      // Curated default for the no-addedAt case.
+      const curated = getHandwavyPhrases().find((m) => !m.addedAt);
+      expect(curated).toBeDefined();
+      if (!curated) return;
+
+      const result = undoHandwavyPhrasesBatch(
+        [
+          { phrase: "mixed-batch fresh", addedAt: "2026-04-22T12:00:00.000Z" },
+          { phrase: "mixed-batch stale", addedAt: "2026-04-22T11:54:00.000Z" },
+          { phrase: "mixed-batch mismatch", addedAt: "2020-01-01T00:00:00.000Z" },
+          { phrase: "never-added phrase", addedAt: "2026-04-22T12:00:00.000Z" },
+          { phrase: curated.phrase, addedAt: "2026-04-22T12:00:00.000Z" },
+        ],
+        { now: "2026-04-22T12:00:30.000Z" },
+      );
+
+      expect(result.undone).toBe(1);
+      expect(result.skipped).toBe(4);
+      const reasonByPhrase = new Map<string, string | undefined>();
+      for (const r of result.results) reasonByPhrase.set(r.phrase, r.reason);
+      expect(reasonByPhrase.get("mixed-batch fresh")).toBeUndefined();
+      expect(reasonByPhrase.get("mixed-batch stale")).toBe("window-expired");
+      expect(reasonByPhrase.get("mixed-batch mismatch")).toBe("addedAt-mismatch");
+      expect(reasonByPhrase.get("never-added phrase")).toBe("not-found");
+      expect(reasonByPhrase.get(curated.phrase)).toBe("no-addedAt");
+
+      // The fresh entry IS gone from the active list; the stale and
+      // mismatch entries are still there.
+      const active = getHandwavyPhrases().map((m) => m.phrase);
+      expect(active).not.toContain("mixed-batch fresh");
+      expect(active).toContain("mixed-batch stale");
+      expect(active).toContain("mixed-batch mismatch");
+
+      // Only ONE undone:true history row was appended (for the fresh
+      // entry); the failures did not pollute the audit log.
+      const freshUndone = getHandwavyPhraseHistory().filter(
+        (h) => h.phrase === "mixed-batch fresh" && h.undone === true,
+      );
+      expect(freshUndone).toHaveLength(1);
+      const staleHistory = getHandwavyPhraseHistory().filter(
+        (h) => h.phrase === "mixed-batch stale",
+      );
+      expect(staleHistory).toHaveLength(0);
+    });
+
+    it("returns total reflecting the post-batch active list size", () => {
+      const baseline = getHandwavyPhrases().length;
+      addHandwavyPhrase("batch-undo total a", "absence", {
+        now: "2026-04-22T12:00:00.000Z",
+      });
+      addHandwavyPhrase("batch-undo total b", "absence", {
+        now: "2026-04-22T12:00:01.000Z",
+      });
+      expect(getHandwavyPhrases().length).toBe(baseline + 2);
+
+      const result = undoHandwavyPhrasesBatch(
+        [
+          { phrase: "batch-undo total a", addedAt: "2026-04-22T12:00:00.000Z" },
+          { phrase: "batch-undo total b", addedAt: "2026-04-22T12:00:01.000Z" },
+        ],
+        { now: "2026-04-22T12:01:00.000Z" },
+      );
+      expect(result.undone).toBe(2);
+      expect(result.total).toBe(baseline);
+      expect(getHandwavyPhrases().length).toBe(baseline);
+    });
+
+    it("handles an empty entries list as a no-op", () => {
+      const baseline = getHandwavyPhrases().length;
+      const baselineHistory = getHandwavyPhraseHistory().length;
+      const result = undoHandwavyPhrasesBatch([]);
+      expect(result.undone).toBe(0);
+      expect(result.skipped).toBe(0);
+      expect(result.results).toHaveLength(0);
+      expect(result.total).toBe(baseline);
+      expect(getHandwavyPhraseHistory()).toHaveLength(baselineHistory);
     });
   });
 

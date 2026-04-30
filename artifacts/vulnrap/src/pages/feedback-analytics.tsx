@@ -12,7 +12,7 @@ import {
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
   useListHandwavyPhraseRemovalBatches, getListHandwavyPhraseRemovalBatchesQueryKey,
   addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, reinstateHandwavyPhrasesBatch,
-  editHandwavyPhrase, undoHandwavyPhrase,
+  editHandwavyPhrase, undoHandwavyPhrase, undoHandwavyPhrasesBatch,
   revertHandwavyPhraseEdit,
   type HandwavyPhraseDryRunMatches,
   type HandwavyPhraseDryRunOverlaps,
@@ -1947,6 +1947,20 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       phrasesToReinstate: string[];
     } | null
   >(null);
+  // Task #233 — confirmation prompt for the panel-level "Undo last N adds"
+  // button. Mirrors the per-batch reinstate confirm: holds the snapshot of
+  // the `(phrase, addedAt)` pairs that were inside their per-marker undo
+  // window when the reviewer clicked, plus a `count` for the dialog
+  // headline. The snapshot is captured at click time (instead of recomputed
+  // from `undoCandidates` inside the dialog) so a window expiry that
+  // happens between the click and the confirm doesn't silently shrink the
+  // batch the dialog is summarizing. `null` = closed.
+  const [undoAllConfirm, setUndoAllConfirm] = useState<
+    {
+      entries: { phrase: string; addedAtIso: string }[];
+      count: number;
+    } | null
+  >(null);
   // Task #134 + Task #154 — bulk-remove state. `selected` is the set of
   // currently-checked phrases (keyed by the normalized `phrase` string
   // the server stores). Bulk removal goes through the side-by-side
@@ -3626,6 +3640,56 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     }
   };
 
+  // Task #233 — bulk wrapper around the per-row Undo. The reviewer clicks
+  // "Undo last N adds" in the panel header, confirms in the dialog, and
+  // we send every still-in-window `(phrase, addedAt)` pair to the
+  // /undo-batch route in one round-trip. The server walks each entry
+  // through the per-marker undo path so each successful undo still
+  // appends its own `undone: true` history row — no batch-merge row that
+  // hides per-phrase provenance. Per-entry failures (window-expired
+  // mid-flight, addedAt-mismatch from a refresh racing the click, etc.)
+  // are reported in the per-phrase `results` array; we surface the
+  // succeeded vs. skipped split in the success toast and a destructive
+  // toast if EVERY entry was skipped (e.g. the whole window elapsed
+  // between the click and the request landing).
+  const handleUndoAllAdds = async (
+    entries: { phrase: string; addedAtIso: string }[],
+  ) => {
+    if (bailOnCooldown("Undo recent adds")) return;
+    if (entries.length === 0) return;
+    const key = "undo-batch";
+    setBusy(key);
+    try {
+      const resp = await undoHandwavyPhrasesBatch({
+        entries: entries.map((e) => ({ phrase: e.phrase, addedAt: e.addedAtIso })),
+        reviewer: reviewer.trim() || undefined,
+      });
+      const undoneCount = typeof resp.undoneCount === "number" ? resp.undoneCount : 0;
+      const skipped = typeof resp.skipped === "number" ? resp.skipped : 0;
+      const noun = undoneCount === 1 ? "add" : "adds";
+      const skipNote = skipped > 0 ? ` (${skipped} skipped — windows may have elapsed)` : "";
+      if (undoneCount > 0) {
+        toast({
+          title: `Undid ${undoneCount} ${noun}`,
+          description: `Each phrase has its own audit row marked "undone".${skipNote}`,
+        });
+      } else {
+        toast({
+          title: "Nothing to undo",
+          description:
+            "Every entry was skipped — the undo windows may have elapsed before the request landed. Use the regular Trash flow instead.",
+          variant: "destructive",
+        });
+      }
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to undo recent adds.";
+      toast({ title: "Bulk undo failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Most recent removals first, capped to keep the panel tidy.
   // Task #135 — batch entries (one reviewer action that removed multiple
   // phrases at once) carry a `phrases[]` list of inner removals. Each inner
@@ -5023,6 +5087,55 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   <RotateCcw className="w-3 h-3" />
                   <span>Most contentious first</span>
                 </label>
+                {/* Task #233 — panel-level "Undo last N adds" button.
+                    Only renders when at least two reviewer-added phrases
+                    are still inside their per-marker undo window
+                    (`undoCandidates.size >= 2`). For a single eligible
+                    phrase the per-row Undo affordance is enough; the
+                    bulk button is the affordance for "I just added five
+                    phrases and want them all rolled back". A confirm
+                    dialog gates the click so a reviewer can't undo a
+                    whole pasted batch by accident. We capture a snapshot
+                    of the still-eligible pairs at click time so a
+                    window expiry between the click and the confirm
+                    doesn't silently shrink the batch the dialog is
+                    summarizing. */}
+                {undoCandidates.size >= 2 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 border-amber-500/60 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:border-amber-400/40 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                    disabled={
+                      busy === "undo-batch" ||
+                      !mutationsAllowed
+                    }
+                    onClick={() => {
+                      const snapshot = Array.from(undoCandidates.entries()).map(
+                        ([phrase, entry]) => ({
+                          phrase,
+                          addedAtIso: entry.addedAtIso,
+                        }),
+                      );
+                      if (snapshot.length === 0) return;
+                      setUndoAllConfirm({
+                        entries: snapshot,
+                        count: snapshot.length,
+                      });
+                    }}
+                    data-testid="handwavy-undo-all"
+                    data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                    title={
+                      !mutationsAllowed
+                        ? MUTATIONS_BLOCKED_TITLE
+                        : `Roll back every reviewer-added phrase still inside its 5-minute undo window. Each phrase keeps its own audit trail row marked "undone".`
+                    }
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                    {busy === "undo-batch"
+                      ? "Undoing…"
+                      : `Undo last ${undoCandidates.size} adds`}
+                  </Button>
+                )}
                 {/* Task #154 — sole bulk-remove entry point. The reviewer
                     is always routed through the side-by-side preview panel
                     (`handwavy-bulk-preview`) before any DELETE fires. The
@@ -6496,6 +6609,88 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
             }}
           >
             Reinstate phrase
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Task #233 — confirmation prompt for the panel-level "Undo last N
+        adds" button. Mirrors Task #180's reinstate-batch confirm so the
+        reviewer gets the same blast-radius gate (count + per-phrase list
+        + cancel-leaves-it-untouched footer) for the bulk undo as for
+        the bulk reinstate. The snapshot of `(phrase, addedAt)` pairs is
+        captured at click time and stored on `undoAllConfirm.entries`,
+        so a window expiry between the click and the confirm doesn't
+        silently shrink the batch the dialog is summarizing. */}
+    <AlertDialog
+      open={undoAllConfirm !== null}
+      onOpenChange={(open) => {
+        if (!open) setUndoAllConfirm(null);
+      }}
+    >
+      <AlertDialogContent data-testid="handwavy-undo-all-confirm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {undoAllConfirm
+              ? `Undo the last ${undoAllConfirm.count} add${undoAllConfirm.count === 1 ? "" : "s"}?`
+              : "Undo recent adds?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              {undoAllConfirm && (
+                <>
+                  <div>
+                    Roll back the{" "}
+                    <strong>{undoAllConfirm.count}</strong> reviewer-added
+                    phrase
+                    {undoAllConfirm.count === 1 ? "" : "s"} that {" "}
+                    {undoAllConfirm.count === 1 ? "is" : "are"} still inside
+                    the per-marker undo window. Each phrase keeps its own
+                    audit trail row marked{" "}
+                    <span className="font-mono">undone</span> — provenance
+                    isn't collapsed into a single batch row.
+                  </div>
+                  <ul
+                    className="list-disc pl-5 space-y-1 text-foreground/80 max-h-48 overflow-y-auto"
+                    data-testid="handwavy-undo-all-confirm-summary"
+                  >
+                    {undoAllConfirm.entries.map((e) => (
+                      <li key={`${e.phrase}:${e.addedAtIso}`}>
+                        <span className="font-mono text-foreground/80">
+                          “{e.phrase}”
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="text-xs italic">
+                    Any entry whose 5-minute window elapses before the
+                    request lands will be skipped (and called out in the
+                    success toast); the rest will still be rolled back.
+                    Cancel leaves every phrase active.
+                  </div>
+                </>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="handwavy-undo-all-confirm-cancel">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="handwavy-undo-all-confirm-confirm"
+            disabled={!mutationsAllowed}
+            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+            onClick={() => {
+              if (undoAllConfirm) {
+                const { entries } = undoAllConfirm;
+                setUndoAllConfirm(null);
+                void handleUndoAllAdds(entries);
+              }
+            }}
+          >
+            Undo adds
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

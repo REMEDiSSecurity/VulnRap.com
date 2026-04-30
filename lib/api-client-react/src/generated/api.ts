@@ -49,6 +49,8 @@ import type {
   HandwavyPhraseRemovalBatchesList,
   HandwavyPhraseRevertEditBody,
   HandwavyPhraseSingleRemoveDryRunResponse,
+  HandwavyPhraseUndoBatchBody,
+  HandwavyPhraseUndoBatchResponse,
   HandwavyPhraseUndoBody,
   HandwavyPhrasesList,
   HashLookupResult,
@@ -2445,6 +2447,110 @@ export const useUndoHandwavyPhrase = <
   TContext
 > => {
   return useMutation(getUndoHandwavyPhraseMutationOptions(options));
+};
+
+/**
+ * Task #233 — bulk wrapper around POST /feedback/calibration/handwavy-phrases/undo.
+The reviewer's UI tracks every reviewer-added phrase that is still
+inside its per-marker undo window (default 5 minutes) and pressing
+"Undo last N adds" sends every `(phrase, addedAt)` pair in one
+round-trip. The server walks each entry through the per-marker
+undo path so each successful undo still appends its own
+`undone: true` history row — the audit contract is NOT collapsed
+into a single batch row, so per-phrase provenance is preserved
+for downstream tooling. Per-entry failures (`not-found`,
+`addedAt-mismatch`, `window-expired`, `no-addedAt`) are reported
+in the per-phrase `results` array instead of failing the whole
+call so a reviewer who fires the button right as one entry's
+window elapses still gets the rest rolled back.
+
+ * @summary Undo every still-in-window FLAT hand-wavy phrase add in one round-trip
+ */
+export const getUndoHandwavyPhrasesBatchUrl = () => {
+  return `/api/feedback/calibration/handwavy-phrases/undo-batch`;
+};
+
+export const undoHandwavyPhrasesBatch = async (
+  handwavyPhraseUndoBatchBody: HandwavyPhraseUndoBatchBody,
+  options?: RequestInit,
+): Promise<HandwavyPhraseUndoBatchResponse> => {
+  return customFetch<HandwavyPhraseUndoBatchResponse>(
+    getUndoHandwavyPhrasesBatchUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(handwavyPhraseUndoBatchBody),
+    },
+  );
+};
+
+export const getUndoHandwavyPhrasesBatchMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof undoHandwavyPhrasesBatch>>,
+    TError,
+    { data: BodyType<HandwavyPhraseUndoBatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof undoHandwavyPhrasesBatch>>,
+  TError,
+  { data: BodyType<HandwavyPhraseUndoBatchBody> },
+  TContext
+> => {
+  const mutationKey = ["undoHandwavyPhrasesBatch"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof undoHandwavyPhrasesBatch>>,
+    { data: BodyType<HandwavyPhraseUndoBatchBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return undoHandwavyPhrasesBatch(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UndoHandwavyPhrasesBatchMutationResult = NonNullable<
+  Awaited<ReturnType<typeof undoHandwavyPhrasesBatch>>
+>;
+export type UndoHandwavyPhrasesBatchMutationBody =
+  BodyType<HandwavyPhraseUndoBatchBody>;
+export type UndoHandwavyPhrasesBatchMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Undo every still-in-window FLAT hand-wavy phrase add in one round-trip
+ */
+export const useUndoHandwavyPhrasesBatch = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof undoHandwavyPhrasesBatch>>,
+    TError,
+    { data: BodyType<HandwavyPhraseUndoBatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof undoHandwavyPhrasesBatch>>,
+  TError,
+  { data: BodyType<HandwavyPhraseUndoBatchBody> },
+  TContext
+> => {
+  return useMutation(getUndoHandwavyPhrasesBatchMutationOptions(options));
 };
 
 /**

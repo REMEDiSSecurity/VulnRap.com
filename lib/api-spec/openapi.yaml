@@ -840,6 +840,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /feedback/calibration/handwavy-phrases/undo-batch:
+    post:
+      operationId: undoHandwavyPhrasesBatch
+      tags: [feedback]
+      summary: Undo every still-in-window FLAT hand-wavy phrase add in one round-trip
+      description: |
+        Task #233 — bulk wrapper around POST /feedback/calibration/handwavy-phrases/undo.
+        The reviewer's UI tracks every reviewer-added phrase that is still
+        inside its per-marker undo window (default 5 minutes) and pressing
+        "Undo last N adds" sends every `(phrase, addedAt)` pair in one
+        round-trip. The server walks each entry through the per-marker
+        undo path so each successful undo still appends its own
+        `undone: true` history row — the audit contract is NOT collapsed
+        into a single batch row, so per-phrase provenance is preserved
+        for downstream tooling. Per-entry failures (`not-found`,
+        `addedAt-mismatch`, `window-expired`, `no-addedAt`) are reported
+        in the per-phrase `results` array instead of failing the whole
+        call so a reviewer who fires the button right as one entry's
+        window elapses still gets the rest rolled back.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HandwavyPhraseUndoBatchBody"
+      responses:
+        "200":
+          description: Batch processed (see `undoneCount` and per-phrase `results`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandwavyPhraseUndoBatchResponse"
+        "400":
+          description: Invalid body (missing / malformed `entries`, oversized batch, or non-string `reviewer`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /feedback/calibration/handwavy-phrases/reinstate-batch:
     post:
       operationId: reinstateHandwavyPhrasesBatch
@@ -3649,6 +3688,102 @@ components:
           type: string
           description: Reviewer name or email recorded as `removedBy`/`undoneBy` on the resulting history row. Optional.
       required: [phrase, addedAt]
+
+    HandwavyPhraseUndoBatchEntry:
+      type: object
+      description: |
+        Task #233 — one `(phrase, addedAt)` pair to undo as part of a batch.
+        Mirrors the single-undo body fields; see `HandwavyPhraseUndoBody`
+        for the matching contract.
+      properties:
+        phrase:
+          type: string
+          description: The (already-normalized) phrase of the live marker to undo.
+        addedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp from the live marker's `addedAt` field.
+      required: [phrase, addedAt]
+
+    HandwavyPhraseUndoBatchBody:
+      type: object
+      description: |
+        Task #233 — body for POST /feedback/calibration/handwavy-phrases/undo-batch.
+        The reviewer's UI walks every reviewer-added marker that's still
+        inside its per-marker undo window and sends each one as a pair
+        in `entries`. The server runs each entry through the per-marker
+        undo path so every successful undo still produces its own
+        `undone: true` history row (no batch-merge row that hides
+        per-phrase provenance). Capped at 200 entries per call.
+      properties:
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/HandwavyPhraseUndoBatchEntry"
+        reviewer:
+          type: string
+          description: Reviewer name or email recorded as `removedBy`/`undoneBy` on every successful undo's history row. Optional.
+      required: [entries]
+
+    HandwavyPhraseUndoBatchEntryResult:
+      type: object
+      description: |
+        Task #233 — outcome of attempting to undo one `(phrase, addedAt)`
+        pair as part of a /undo-batch round-trip. Mirrors the
+        single-undo failure reasons so the UI can render the same per-row
+        explanations the per-row Undo button already surfaces.
+      properties:
+        phrase:
+          type: string
+        undone:
+          type: boolean
+        reason:
+          type: string
+          enum: [not-found, addedAt-mismatch, no-addedAt, window-expired]
+          description: Present only when `undone` is false.
+        historyEntry:
+          allOf:
+            - $ref: "#/components/schemas/HandwavyHistoryEntry"
+          description: Present only when `undone` is true. The fresh `undone:true` history row appended for this phrase.
+      required: [phrase, undone]
+
+    HandwavyPhraseUndoBatchResponse:
+      type: object
+      description: |
+        Task #233 — response from POST /feedback/calibration/handwavy-phrases/undo-batch.
+        `phrases` and `history` echo the post-batch active list and audit
+        log so callers can refresh their cached views in one round-trip.
+      properties:
+        undone:
+          type: boolean
+          description: Always true on a successful response (the batch was processed).
+        batch:
+          type: boolean
+          description: Always true — distinguishes this response from a single-phrase /undo.
+        undoneCount:
+          type: integer
+          description: Number of entries actually undone in this round-trip.
+        skipped:
+          type: integer
+          description: Number of entries skipped (any non-success per-entry reason).
+        total:
+          type: integer
+          description: Number of active phrases after the batch.
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyPhraseUndoBatchEntryResult"
+        phrases:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyMarker"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandwavyHistoryEntry"
+      required: [undone, batch, undoneCount, skipped, total, results, phrases, history]
 
     HandwavyPhraseRevertEditBody:
       type: object

@@ -1218,6 +1218,170 @@ describe("/feedback/calibration/handwavy-phrases", () => {
     });
   });
 
+  // --- Task #233: bulk-undo wrapper ---
+  describe("Task #233 POST /feedback/calibration/handwavy-phrases/undo-batch", () => {
+    it("undoes every supplied (phrase, addedAt) pair and emits one undone:true history row per phrase", async () => {
+      const a = await request<{ marker: { phrase: string; addedAt: string } }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "batch-undo-route alpha", category: "absence", reviewer: "alice@team.com" },
+      );
+      const b = await request<{ marker: { phrase: string; addedAt: string } }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "batch-undo-route bravo", category: "absence", reviewer: "alice@team.com" },
+      );
+      const c = await request<{ marker: { phrase: string; addedAt: string } }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "batch-undo-route charlie", category: "absence", reviewer: "alice@team.com" },
+      );
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect(c.status).toBe(201);
+
+      const resp = await request<{
+        undone: boolean;
+        batch: boolean;
+        undoneCount: number;
+        skipped: number;
+        total: number;
+        results: Array<{ phrase: string; undone: boolean; reason?: string; historyEntry?: { undone?: boolean; undoneBy?: string } }>;
+        phrases: Array<{ phrase: string }>;
+        history: Array<{ phrase: string; undone?: boolean; undoneBy?: string }>;
+      }>("POST", "/feedback/calibration/handwavy-phrases/undo-batch", {
+        entries: [
+          { phrase: "batch-undo-route alpha", addedAt: a.body.marker.addedAt },
+          { phrase: "batch-undo-route bravo", addedAt: b.body.marker.addedAt },
+          { phrase: "batch-undo-route charlie", addedAt: c.body.marker.addedAt },
+        ],
+        reviewer: "alice@team.com",
+      });
+
+      expect(resp.status).toBe(200);
+      expect(resp.body.undone).toBe(true);
+      expect(resp.body.batch).toBe(true);
+      expect(resp.body.undoneCount).toBe(3);
+      expect(resp.body.skipped).toBe(0);
+      expect(resp.body.results).toHaveLength(3);
+      for (const r of resp.body.results) {
+        expect(r.undone).toBe(true);
+        expect(r.historyEntry?.undone).toBe(true);
+        expect(r.historyEntry?.undoneBy).toBe("alice@team.com");
+      }
+      // Active list no longer includes any of the three.
+      const active = resp.body.phrases.map((m) => m.phrase);
+      expect(active).not.toContain("batch-undo-route alpha");
+      expect(active).not.toContain("batch-undo-route bravo");
+      expect(active).not.toContain("batch-undo-route charlie");
+      // History contains three distinct undone:true rows — no batch-merge collapse.
+      const undone = resp.body.history.filter(
+        (h) =>
+          h.undone === true &&
+          (h.phrase === "batch-undo-route alpha" ||
+            h.phrase === "batch-undo-route bravo" ||
+            h.phrase === "batch-undo-route charlie"),
+      );
+      expect(undone).toHaveLength(3);
+      expect(new Set(undone.map((u) => u.phrase)).size).toBe(3);
+    });
+
+    it("reports a skipped entry alongside successful ones without aborting the batch", async () => {
+      const fresh = await request<{ marker: { phrase: string; addedAt: string } }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { phrase: "batch-undo-route mixed-fresh" },
+      );
+      expect(fresh.status).toBe(201);
+
+      const resp = await request<{
+        undoneCount: number;
+        skipped: number;
+        results: Array<{ phrase: string; undone: boolean; reason?: string }>;
+        phrases: Array<{ phrase: string }>;
+      }>("POST", "/feedback/calibration/handwavy-phrases/undo-batch", {
+        entries: [
+          { phrase: "batch-undo-route mixed-fresh", addedAt: fresh.body.marker.addedAt },
+          { phrase: "batch-undo-route never-existed", addedAt: "2026-04-22T12:00:00.000Z" },
+        ],
+      });
+
+      expect(resp.status).toBe(200);
+      expect(resp.body.undoneCount).toBe(1);
+      expect(resp.body.skipped).toBe(1);
+      expect(resp.body.results).toHaveLength(2);
+      const reasonByPhrase = new Map<string, string | undefined>();
+      for (const r of resp.body.results) reasonByPhrase.set(r.phrase, r.reason);
+      expect(reasonByPhrase.get("batch-undo-route mixed-fresh")).toBeUndefined();
+      expect(reasonByPhrase.get("batch-undo-route never-existed")).toBe("not-found");
+      const active = resp.body.phrases.map((m) => m.phrase);
+      expect(active).not.toContain("batch-undo-route mixed-fresh");
+    });
+
+    it("rejects a missing or empty entries array with 400", async () => {
+      const noEntries = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo-batch",
+        {},
+      );
+      expect(noEntries.status).toBe(400);
+      const empty = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo-batch",
+        { entries: [] },
+      );
+      expect(empty.status).toBe(400);
+    });
+
+    it("rejects malformed entries with 400 (missing phrase, missing addedAt, or non-string)", async () => {
+      const noPhrase = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo-batch",
+        { entries: [{ addedAt: "2026-04-22T12:00:00.000Z" }] },
+      );
+      expect(noPhrase.status).toBe(400);
+      const noAddedAt = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo-batch",
+        { entries: [{ phrase: "x" }] },
+      );
+      expect(noAddedAt.status).toBe(400);
+      const wrongType = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo-batch",
+        { entries: [{ phrase: 42, addedAt: "2026-04-22T12:00:00.000Z" }] },
+      );
+      expect(wrongType.status).toBe(400);
+    });
+
+    it("rejects oversized batches with 400", async () => {
+      const huge = Array.from({ length: 201 }, (_, i) => ({
+        phrase: `over-cap phrase ${i}`,
+        addedAt: "2026-04-22T12:00:00.000Z",
+      }));
+      const resp = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo-batch",
+        { entries: huge },
+      );
+      expect(resp.status).toBe(400);
+      expect(resp.body.error).toMatch(/200/);
+    });
+
+    it("rejects a non-string reviewer with 400", async () => {
+      const resp = await request<{ error: string }>(
+        "POST",
+        "/feedback/calibration/handwavy-phrases/undo-batch",
+        {
+          entries: [{ phrase: "x", addedAt: "2026-04-22T12:00:00.000Z" }],
+          reviewer: 12345,
+        },
+      );
+      expect(resp.status).toBe(400);
+      expect(resp.body.error).toMatch(/reviewer/);
+    });
+  });
+
   // --- Task #132: revert a single edit-history entry ---
 
   describe("POST /feedback/calibration/handwavy-phrases/revert-edit", () => {

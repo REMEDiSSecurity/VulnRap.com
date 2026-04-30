@@ -20,6 +20,7 @@ import {
   reinstateHandwavyPhrasesBatch,
   editHandwavyPhrase,
   undoHandwavyPhrase,
+  undoHandwavyPhrasesBatch,
   revertHandwavyPhraseEdit,
   type HandwavyCategory,
   type HandwavyMarker,
@@ -1449,6 +1450,92 @@ router.post(
     } catch (err) {
       req.log?.error(err, "Failed to undo hand-wavy phrase");
       res.status(500).json({ error: "Failed to undo hand-wavy phrase." });
+    }
+  },
+);
+
+// Task #233 — bulk undo of every still-in-window add. Mirror of the
+// reinstate-batch route: the reviewer's UI sends every `(phrase, addedAt)`
+// pair currently inside its undo window in one round-trip and the server
+// walks each entry through the per-marker undo path so each successful
+// undo still appends its own `undone: true` history row (no batch-merge
+// row that hides per-phrase provenance). Per-entry failures
+// (`not-found`, `addedAt-mismatch`, `window-expired`, `no-addedAt`) are
+// reported in the per-phrase `results` array instead of failing the
+// whole call so a reviewer who fires the button right as one entry's
+// window elapses still gets the rest rolled back.
+router.post(
+  "/feedback/calibration/handwavy-phrases/undo-batch",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { entries, reviewer } = (req.body ?? {}) as {
+        entries?: unknown;
+        reviewer?: unknown;
+      };
+      if (!Array.isArray(entries) || entries.length === 0) {
+        res.status(400).json({
+          error:
+            "Body must include a non-empty 'entries' array of {phrase, addedAt} pairs.",
+        });
+        return;
+      }
+      // Cap matches single-undo throughput expectations: the active
+      // `undoCandidates` map in the UI is gated by `UNDO_WINDOW_MS` (5
+      // minutes) so it cannot realistically exceed a few dozen entries
+      // even for a hyperactive reviewer. The hard cap matches the
+      // bulk-removal cap so abusive callers can't spam the persist path.
+      if (entries.length > 200) {
+        res.status(400).json({
+          error: "entries cannot contain more than 200 pairs per call.",
+        });
+        return;
+      }
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res.status(400).json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      const normalized: { phrase: string; addedAt: string }[] = [];
+      for (const raw of entries) {
+        if (
+          !raw ||
+          typeof raw !== "object" ||
+          typeof (raw as { phrase?: unknown }).phrase !== "string" ||
+          typeof (raw as { addedAt?: unknown }).addedAt !== "string"
+        ) {
+          res.status(400).json({
+            error:
+              "Every entry must be an object with a 'phrase' string and an 'addedAt' ISO timestamp string.",
+          });
+          return;
+        }
+        const phrase = (raw as { phrase: string }).phrase;
+        const addedAt = (raw as { addedAt: string }).addedAt;
+        if (phrase.trim().length === 0 || addedAt.trim().length === 0) {
+          res.status(400).json({
+            error:
+              "Every entry's 'phrase' and 'addedAt' must be non-empty strings.",
+          });
+          return;
+        }
+        normalized.push({ phrase, addedAt });
+      }
+      const result = undoHandwavyPhrasesBatch(normalized, {
+        reviewer: typeof reviewer === "string" ? reviewer : undefined,
+      });
+      res.status(200).json({
+        undone: true,
+        batch: true,
+        undoneCount: result.undone,
+        skipped: result.skipped,
+        total: result.total,
+        results: result.results,
+        phrases: getHandwavyPhrases(),
+        history: getHandwavyPhraseHistory(),
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to undo hand-wavy phrase batch");
+      res.status(500).json({ error: "Failed to undo hand-wavy phrase batch." });
     }
   },
 );
