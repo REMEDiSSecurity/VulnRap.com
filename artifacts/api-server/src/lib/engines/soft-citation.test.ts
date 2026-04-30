@@ -17,8 +17,16 @@ import { FAMILIES_BY_ID } from "./avri/families";
 describe("Sprint 13C: soft-citation lookup", () => {
   it("VULN_TYPE_TO_CWE has an entry for every recognised vuln type", () => {
     // Sanity: every name detectSoftCitation could possibly return must map to
-    // a numeric CWE id, otherwise the lookup silently misses.
-    const names = ["XSS", "SQLi", "SSRF", "Buffer Overflow", "Use After Free", "Path Traversal", "Auth Bypass", "CSRF", "RCE", "Info Disclosure"];
+    // a numeric CWE id, otherwise the lookup silently misses. Task #301
+    // extended the dictionary with XXE, LFI, Open Redirect, Insecure
+    // Deserialization, Prototype Pollution, and Command Injection.
+    const names = [
+      "XSS", "SQLi", "SSRF", "XXE",
+      "Buffer Overflow", "Use After Free", "Path Traversal", "LFI",
+      "Auth Bypass", "CSRF", "Open Redirect",
+      "Insecure Deserialization", "Prototype Pollution",
+      "Command Injection", "RCE", "Info Disclosure",
+    ];
     for (const n of names) {
       expect(VULN_TYPE_TO_CWE[n], `missing CWE for ${n}`).toMatch(/^\d+$/);
     }
@@ -29,6 +37,45 @@ describe("Sprint 13C: soft-citation lookup", () => {
     expect(detectSoftCitation("classic SQLi via the search box")).toEqual({ name: "SQLi", cweId: "89" });
     expect(detectSoftCitation("there is an open SSRF on /fetch")).toEqual({ name: "SSRF", cweId: "918" });
     expect(detectSoftCitation("classic IDOR on /accounts/:id")).toEqual({ name: "Auth Bypass", cweId: "287" });
+  });
+
+  // Task #301: explicit per-class shorthand coverage for the new dictionary
+  // entries. Each acronym / phrase below comes straight from the kind of terse
+  // legit reports the soft-citation tier is meant to recover.
+  it("detectSoftCitation recognises XXE shorthand", () => {
+    expect(detectSoftCitation("plain XXE in the SOAP endpoint")).toEqual({ name: "XXE", cweId: "611" });
+    expect(detectSoftCitation("xml external entity injection in /upload")).toEqual({ name: "XXE", cweId: "611" });
+  });
+
+  it("detectSoftCitation recognises LFI shorthand", () => {
+    expect(detectSoftCitation("found an LFI on ?page=")).toEqual({ name: "LFI", cweId: "98" });
+    expect(detectSoftCitation("local file inclusion via the include param")).toEqual({ name: "LFI", cweId: "98" });
+  });
+
+  it("detectSoftCitation recognises open redirect shorthand", () => {
+    expect(detectSoftCitation("trivial open redirect on /login?next=")).toEqual({ name: "Open Redirect", cweId: "601" });
+    expect(detectSoftCitation("classic unvalidated redirect via returnTo")).toEqual({ name: "Open Redirect", cweId: "601" });
+  });
+
+  it("detectSoftCitation recognises insecure deserialization shorthand", () => {
+    expect(detectSoftCitation("insecure deserialization in the session cookie")).toEqual({ name: "Insecure Deserialization", cweId: "502" });
+    expect(detectSoftCitation("Java deserialization via ObjectInputStream")).toEqual({ name: "Insecure Deserialization", cweId: "502" });
+    expect(detectSoftCitation("unsafe deserialise of user-controlled YAML")).toEqual({ name: "Insecure Deserialization", cweId: "502" });
+  });
+
+  it("detectSoftCitation recognises prototype pollution shorthand", () => {
+    expect(detectSoftCitation("prototype pollution via merge() on user input")).toEqual({ name: "Prototype Pollution", cweId: "1321" });
+    expect(detectSoftCitation("classic obj.__proto__['polluted']=1 sink")).toEqual({ name: "Prototype Pollution", cweId: "1321" });
+  });
+
+  it("detectSoftCitation recognises standalone command injection (separate from RCE)", () => {
+    expect(detectSoftCitation("command injection via the filename param")).toEqual({ name: "Command Injection", cweId: "77" });
+    expect(detectSoftCitation("classic shell injection on POST /api/exec")).toEqual({ name: "Command Injection", cweId: "77" });
+    // Pre-Task-301 this exact phrase routed through the RCE entry to CWE-78;
+    // it must now route to the dedicated Command Injection entry.
+    expect(detectSoftCitation("os command injection in /cgi-bin/run")).toEqual({ name: "Command Injection", cweId: "77" });
+    // RCE shorthand on its own still maps to CWE-78.
+    expect(detectSoftCitation("trivial RCE in /api/eval")).toEqual({ name: "RCE", cweId: "78" });
   });
 
   it("detectSoftCitation returns null when no recognised name appears", () => {
@@ -57,6 +104,51 @@ describe("Sprint 13C: legacy E3 soft-citation tier", () => {
     const signals = extractSignals(text);
     const r = runEngine3(signals, text);
     expect(r.score).toBe(60);
+  });
+
+  // Task #301: end-to-end coverage that the soft-citation tier also lifts
+  // for the newly recognised shorthand. We pick one class per major mapping
+  // path (WEB_CLIENT, INJECTION, DESERIALIZATION) so a regression in any of
+  // those branches surfaces in the legacy engine.
+  it("terse XXE shorthand lifts to E3 = 60 with inferred CWE-611", () => {
+    const text = "found a plain XXE in the SOAP /api/quote endpoint";
+    const signals = extractSignals(text);
+    expect(signals.claimedCwes).toEqual([]);
+    const r = runEngine3(signals, text);
+    expect(r.score).toBe(60);
+    expect(r.signalBreakdown).toMatchObject({
+      softCitation: { name: "XXE", inferredCwe: "CWE-611" },
+    });
+  });
+
+  it("terse open redirect shorthand lifts to E3 = 60 with inferred CWE-601", () => {
+    const text = "trivial open redirect on /login?next= via Location header";
+    const signals = extractSignals(text);
+    const r = runEngine3(signals, text);
+    expect(r.score).toBe(60);
+    expect(r.signalBreakdown).toMatchObject({
+      softCitation: { name: "Open Redirect", inferredCwe: "CWE-601" },
+    });
+  });
+
+  it("terse insecure deserialization shorthand lifts to E3 = 60 with inferred CWE-502", () => {
+    const text = "insecure deserialization in the session cookie value";
+    const signals = extractSignals(text);
+    const r = runEngine3(signals, text);
+    expect(r.score).toBe(60);
+    expect(r.signalBreakdown).toMatchObject({
+      softCitation: { name: "Insecure Deserialization", inferredCwe: "CWE-502" },
+    });
+  });
+
+  it("terse standalone command injection shorthand lifts to E3 = 60 with inferred CWE-77 (not RCE/CWE-78)", () => {
+    const text = "classic command injection via the filename parameter";
+    const signals = extractSignals(text);
+    const r = runEngine3(signals, text);
+    expect(r.score).toBe(60);
+    expect(r.signalBreakdown).toMatchObject({
+      softCitation: { name: "Command Injection", inferredCwe: "CWE-77" },
+    });
   });
 
   it("explicit CWE citation is unchanged (per-CWE fingerprint scoring still wins)", () => {

@@ -48,16 +48,30 @@ export const STRENGTH_MULTIPLIERS: Record<EvidenceType, number> = {
 // inconsistency was a latent bug — the long-form patterns were already /i,
 // but the acronym variants (\bXSS\b, \bSSRF\b, \bUAF\b, \bCSRF\b, \bRCE\b)
 // were not, so half the report corpus was being missed for no good reason.
+//
+// Task #301: extended the dictionary with six more recognised classes
+// (XXE, LFI, Open Redirect, Insecure Deserialization, Prototype Pollution,
+// and Command Injection as a standalone class). The `command.?injection`
+// regex was removed from RCE so terse "command injection" reports route to
+// CWE-77 instead of being silently lumped under RCE/CWE-78. The matcher
+// returns the FIRST entry that matches, so Command Injection is intentionally
+// placed before RCE to take precedence on the shorthand.
 const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
   XSS: [/cross.?site.?script/i, /\bXSS\b/i, /<script>/i, /document\.cookie/i],
   SQLi: [/sql.?inject/i, /\bSQLi\b/i, /UNION\s+SELECT/i, /OR\s+1\s*=\s*1/i],
   SSRF: [/server.?side.?request/i, /\bSSRF\b/i, /169\.254\.169\.254/],
+  XXE: [/xml.?external.?entit/i, /\bXXE\b/i],
   "Buffer Overflow": [/buffer.?overflow/i, /heap.?overflow/i, /stack.?overflow/i, /out.?of.?bounds/i],
   "Use After Free": [/use.?after.?free/i, /\bUAF\b/i, /CWE-416/i],
   "Path Traversal": [/path.?traversal/i, /directory.?traversal/i, /\.\.\//],
+  LFI: [/local.?file.?inclusion/i, /\bLFI\b/i],
   "Auth Bypass": [/auth(?:entication|orization).?bypass/i, /\bIDOR\b/i, /broken.?access/i],
   CSRF: [/cross.?site.?request.?forgery/i, /\bCSRF\b/i],
-  RCE: [/remote.?code.?execution/i, /\bRCE\b/i, /command.?injection/i],
+  "Open Redirect": [/open.?redirect/i, /unvalidated.?redirect/i],
+  "Insecure Deserialization": [/insecure.?deseriali[sz]/i, /unsafe.?deseriali[sz]/i, /\bdeseriali[sz]ation\b/i],
+  "Prototype Pollution": [/prototype.?pollution/i, /__proto__\s*\[/],
+  "Command Injection": [/command.?inject/i, /\bCMDi\b/i, /shell.?inject/i],
+  RCE: [/remote.?code.?execution/i, /\bRCE\b/i],
   "Info Disclosure": [/information.?disclosure/i, /sensitive.?data.?expos/i, /info.?leak/i],
 };
 
@@ -68,15 +82,27 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
 // explicit CWE-XX token. Keep this table in lock-step with VULN_TYPE_PATTERNS:
 // every key here MUST also be a key in VULN_TYPE_PATTERNS, otherwise the
 // soft-citation lookup will silently miss.
+//
+// Task #301: added entries for the six new classes. CWE choices follow MITRE:
+// XXE → CWE-611, LFI → CWE-98, Open Redirect → CWE-601,
+// Insecure Deserialization → CWE-502, Prototype Pollution → CWE-1321,
+// Command Injection → CWE-77 (parent of CWE-78 OS Command Injection, which
+// is what the existing RCE entry maps to).
 export const VULN_TYPE_TO_CWE: Record<string, string> = {
   XSS: "79",
   SQLi: "89",
   SSRF: "918",
+  XXE: "611",
   "Buffer Overflow": "119",
   "Use After Free": "416",
   "Path Traversal": "22",
+  LFI: "98",
   "Auth Bypass": "287",
   CSRF: "352",
+  "Open Redirect": "601",
+  "Insecure Deserialization": "502",
+  "Prototype Pollution": "1321",
+  "Command Injection": "77",
   RCE: "78",
   "Info Disclosure": "200",
 };
