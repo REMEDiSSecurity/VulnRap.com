@@ -124,6 +124,36 @@ Compare baseline response to injection response above. The
 difference proves the SQL injection. Please award bounty.`,
     expectMaxScore: 35,
   },
+  // Sprint 13B-3 (Task #321) WEB_CLIENT companion to slop-10. Claims
+  // CWE-79 and pastes a fabricated `HTTP/1.1 200 OK` whose HTML body
+  // is the ONLY source of the WEB_CLIENT `reflection_or_dom_proof`
+  // gold signal — the response-side validator revokes it and the
+  // composite stays ≤35. Echoes a `<attackerPayload>` slot rather
+  // than literal `<script>` so `concrete_payload` (not in the
+  // response revocation map) doesn't rescue the score.
+  {
+    name: "slop-13-fabricated-xss-response",
+    forceAvri: true,
+    claimedCwes: ["CWE-79"],
+    text: `# Reflected XSS in /search via q parameter
+
+There is an XSS issue in the /search endpoint of the application.
+When the attacker supplies a payload via the q parameter, the
+server echoes it back inside the search-bar widget without HTML-
+encoding. The HTTP exchange below was captured during testing and
+demonstrates the unsafe echo.
+
+\`\`\`http
+HTTP/1.1 200 OK
+Content-Type: text/html
+
+<html><body><h1>Search results for the supplied term</h1><input name="q" value="<attackerPayload>"></body></html>
+\`\`\`
+
+This is a critical vulnerability that lets attackers run arbitrary
+JavaScript in the victim's browser. Please award maximum bounty.`,
+    expectMaxScore: 35,
+  },
   // Sprint 13B-3 (Task #304) calibration fixtures for the new
   // `impossible_http_response` hallucination signal. Each fixture
   // pastes a fenced HTTP excerpt that a real HTTP/1.1 stack never
