@@ -474,7 +474,7 @@
 /* Scroll-triggered fade-in. Sections start hidden and slightly
    translated; once IntersectionObserver flags them visible the
    `is-visible` class is added and the transition runs. The hook
-   that adds the class lives in pages/home.tsx (Home component).
+   that adds the class lives in pages/home/index.tsx (Home component).
    Falls back gracefully (visible by default) if reduced motion
    is requested. */
 @media (prefers-reduced-motion: no-preference) {
