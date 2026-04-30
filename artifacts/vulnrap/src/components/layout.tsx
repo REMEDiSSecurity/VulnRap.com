@@ -361,6 +361,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="flex flex-col gap-2">
               <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">Resources</h4>
               <Link to="/developers" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">API Docs</Link>
+              <a
+                href="/agents.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+                title="Integration manual for AI agents"
+              >
+                Agents Manual
+              </a>
               <Link to="/blog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Blog</Link>
               <Link to="/changelog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Changelog</Link>
               <Link to="/stats" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Stats</Link>
