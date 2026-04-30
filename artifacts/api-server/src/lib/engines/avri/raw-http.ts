@@ -1132,16 +1132,78 @@ const INCIDENTAL_JSON_KEYS = new Set([
   "self",
 ]);
 
-/** True iff the response body is "suspiciously clean" — JSON-shaped with
- * ≤2 top-level keys, no incidental id/timestamp/links/meta key, and a
- * value that contains vulnerability-narrative vocabulary. Real API
- * responses either carry incidental fields or have neutral data; fake
- * responses are the narrative writer's gloss of what "should" come back.
+// Realistic incidental data values that real API responses sprinkle
+// into their bodies. If any string value anywhere in the parsed body
+// looks like a UUID, ISO-8601 timestamp, or IPv4 / IPv6 address, the
+// body is treated as plausible even when the key set is otherwise
+// narrative-looking. Slop authors padding fake responses with throw-
+// away keys almost never invent a believable UUID or timestamp value;
+// they reach for round-number status codes and short status strings.
+const INCIDENTAL_VALUE_PATTERNS: RegExp[] = [
+  // UUID v1-v5 in the canonical 8-4-4-4-12 hex layout.
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i,
+  // ISO-8601 date+time (with or without seconds, with or without TZ).
+  /\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?/,
+  // IPv4 address.
+  /\b(?:\d{1,3}\.){3}\d{1,3}\b/,
+  // IPv6 address (loose: at least three colon-separated hex groups so
+  // a single MAC-like `aa:bb:cc` fragment in prose doesn't count).
+  /\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b/i,
+];
+
+function hasIncidentalValueData(text: string): boolean {
+  return INCIDENTAL_VALUE_PATTERNS.some((re) => re.test(text));
+}
+
+/** Walk every string leaf in a parsed JSON value and count those that
+ * (a) contain whitespace (i.e. read as a phrase, not a single status
+ * token like "ok" or "error") and (b) match the vulnerability-narrative
+ * vocabulary. Slop authors pad fake responses with extra short
+ * status/code keys but still smuggle the narrative into one prose-style
+ * value; legitimate responses carrying narrative-looking words tend to
+ * keep them inside short single-word enums. */
+function countNarrativeBearingStrings(value: unknown): number {
+  let count = 0;
+  const walk = (v: unknown): void => {
+    if (typeof v === "string") {
+      const trimmed = v.trim();
+      if (/\s/.test(trimmed) && NARRATIVE_BODY_VOCAB.test(trimmed)) {
+        count++;
+      }
+      return;
+    }
+    if (Array.isArray(v)) {
+      for (const item of v) walk(item);
+      return;
+    }
+    if (v !== null && typeof v === "object") {
+      for (const inner of Object.values(v as Record<string, unknown>)) {
+        walk(inner);
+      }
+    }
+  };
+  walk(value);
+  return count;
+}
+
+/** True iff the response body is "suspiciously clean" — JSON-shaped
+ * with vulnerability-narrative vocabulary in its values and no signs of
+ * real API incidentals (no id/timestamp/links/meta-style keys, no
+ * UUID / ISO timestamp / IPv4 / IPv6 string values). Real API responses
+ * either carry incidental fields or have neutral data; fake responses
+ * are the narrative writer's gloss of what "should" come back.
+ *
+ * Two slop shapes are flagged:
+ *   - the original ≤2-key narrative body (e.g. `{"error": "SQL injection
+ *     in users.id parameter"}`), and
+ *   - the multi-key padding variant slop authors adopt to dodge a key-
+ *     count threshold (e.g. `{"status": "error", "code": 500, "error":
+ *     "vulnerability narrative"}`) — the narrative phrase is still
+ *     present, just wrapped in throwaway status/code keys.
  *
  * Returns false for non-JSON bodies (free text, HTML, binary), bodies
- * that don't parse as JSON, arrays of non-objects, and any object that
- * carries an incidental key. Conservative on purpose so a real
- * `{"id":4012,"username":"bob"}` excerpt isn't mis-flagged. */
+ * that don't parse as JSON, any object that carries an incidental key,
+ * and any object whose values include realistic incidental data. */
 export function isSuspiciousJsonBody(body: string): boolean {
   const trimmed = body.trim();
   if (trimmed.length === 0) return false;
@@ -1163,11 +1225,20 @@ export function isSuspiciousJsonBody(body: string): boolean {
   }
   const entries = Object.entries(parsed as Record<string, unknown>);
   if (entries.length === 0) return false;
-  if (entries.length > 2) return false;
   for (const [k] of entries) {
     if (INCIDENTAL_JSON_KEYS.has(k.toLowerCase())) return false;
   }
-  return true;
+  if (entries.length <= 2) return true;
+  // Multi-key padding path. Slop authors pad fake bodies with extra
+  // throwaway keys (`status`, `code`, ...) to clear a key-count
+  // threshold while still smuggling the narrative into one value. We
+  // still flag the body when:
+  //   - no value anywhere looks like real incidental data (UUID, ISO
+  //     timestamp, IPv4/IPv6 address); and
+  //   - at least one string value reads as a narrative phrase
+  //     (whitespace-bearing AND in the narrative vocabulary).
+  if (hasIncidentalValueData(valuesText)) return false;
+  return countNarrativeBearingStrings(parsed) >= 1;
 }
 
 export function evaluateRawHttpResponse(

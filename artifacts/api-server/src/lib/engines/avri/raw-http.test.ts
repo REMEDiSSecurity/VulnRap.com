@@ -1903,10 +1903,62 @@ describe("isSuspiciousJsonBody", () => {
     expect(
       isSuspiciousJsonBody('{"uuid": "a-b-c", "data": "leaked"}'),
     ).toBe(false);
-    // ≥3 top-level keys — never suspicious regardless of vocab.
+    // ≥3 top-level keys carrying narrative vocab is no longer
+    // automatically safe (slop authors pad fake bodies with throwaway
+    // keys to clear the old key-count threshold), but the body is
+    // still safe when a value carries a UUID / ISO timestamp / IP
+    // address — real incidental data slop authors don't fabricate.
     expect(
       isSuspiciousJsonBody(
-        '{"a": "vulnerability noted", "b": 1, "c": 2}',
+        '{"event": "vulnerability scan finished", "host": "10.0.0.5", "code": 200}',
+      ),
+    ).toBe(false);
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "compromise detected", "request_uuid": "550e8400-e29b-41d4-a716-446655440000"}',
+      ),
+    ).toBe(false);
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "vulnerability noted", "received_at": "2026-04-30T10:11:12Z"}',
+      ),
+    ).toBe(false);
+  });
+
+  it("flags multi-key bodies whose values smuggle a narrative phrase", () => {
+    // The exact slop-padding shape called out in the detector docs.
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "vulnerability narrative"}',
+      ),
+    ).toBe(true);
+    // Variant: more padding keys, narrative phrase still present.
+    expect(
+      isSuspiciousJsonBody(
+        '{"ok": false, "code": 400, "type": "BadRequest", "msg": "SQL injection in users.id parameter"}',
+      ),
+    ).toBe(true);
+    // Variant: narrative is buried inside a nested object/array, the
+    // detector should still walk into it.
+    expect(
+      isSuspiciousJsonBody(
+        '{"ok": false, "code": 400, "details": {"reason": "XSS payload reflected back"}}',
+      ),
+    ).toBe(true);
+    expect(
+      isSuspiciousJsonBody(
+        '{"ok": false, "code": 400, "errors": ["request smuggled through proxy"]}',
+      ),
+    ).toBe(true);
+  });
+
+  it("does not flag multi-key bodies whose narrative-vocab values are short single-word enums", () => {
+    // A single-word value like "exploit" matches narrative vocab but
+    // doesn't read as a smuggled prose phrase — likely a legitimate
+    // enum/tag value rather than a narrative gloss.
+    expect(
+      isSuspiciousJsonBody(
+        '{"category": "exploit", "severity": "high", "count": 3}',
       ),
     ).toBe(false);
   });
