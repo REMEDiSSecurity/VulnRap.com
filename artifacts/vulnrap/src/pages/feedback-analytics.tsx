@@ -2071,12 +2071,22 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   // This dialog is the direct-click gate; the Task #177 dry-run Preview
   // button next to it is its own (richer) confirm flow and doesn't need
   // this dialog on top of it.
+  // Task #254 — `phrasesToReinstate` is the LIVE list the dialog will
+  // act on; per-row "drop" buttons (mirroring Task #178 on the bulk-remove
+  // confirm) trim it in place. `originalPhraseCount` snapshots the count
+  // when the dialog opened so confirm can tell whether anything was
+  // dropped — when nothing was dropped we can keep using the single
+  // round-trip /reinstate-batch call, but when the reviewer skipped at
+  // least one row we fall back to per-phrase /reinstate calls so the
+  // server-side batch route (which currently has no allow-list parameter)
+  // doesn't reinstate the dropped rows behind the reviewer's back.
   const [reinstateBatchConfirm, setReinstateBatchConfirm] = useState<
     {
       removedAtIso: string;
       removedBy?: string;
       batchSize: number;
       phrasesToReinstate: string[];
+      originalPhraseCount: number;
     } | null
   >(null);
   // Task #233 — confirmation prompt for the panel-level "Undo last N adds"
@@ -3521,6 +3531,102 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to reinstate phrase.";
       toast({ title: "Reinstate failed", description: msg, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Task #254 — drop a single phrase from the pending batch reinstate
+  // confirm dialog. Mirrors Task #178's `dropPhraseFromBulkPreview` on the
+  // bulk-REMOVE preview panel: lets a reviewer dismiss one row inline
+  // instead of cancelling the whole dialog and re-doing the work via the
+  // per-row Reinstate buttons. Dropping the last phrase closes the dialog
+  // (same end state as Cancel) so an empty confirm panel never lingers.
+  const dropPhraseFromReinstateBatchConfirm = (phrase: string) => {
+    setReinstateBatchConfirm((prev) => {
+      if (!prev) return prev;
+      const remaining = prev.phrasesToReinstate.filter((p) => p !== phrase);
+      if (remaining.length === 0) return null;
+      if (remaining.length === prev.phrasesToReinstate.length) return prev;
+      return { ...prev, phrasesToReinstate: remaining };
+    });
+  };
+
+  // Task #254 — partial-batch reinstate. Issues per-phrase /reinstate calls
+  // for an explicit allow-list (the rows the reviewer left checked in the
+  // batch reinstate confirm dialog). The single-round-trip /reinstate-batch
+  // route currently has no allow-list parameter, so dropping any row forces
+  // us off the batch path; tracking per-phrase outcomes (success / not-found
+  // / auth-failed / error) lets us surface a partial-success toast instead of
+  // silently masking failures behind a "batch ok" message. The dropped
+  // phrases stay on the removal-history list as removed, exactly as before.
+  const handleReinstateBatchSubset = async (
+    removedAtIso: string,
+    phrases: string[],
+  ) => {
+    if (phrases.length === 0) return;
+    if (bailOnCooldown("Reinstate batch")) return;
+    const key = `reinstate-batch:${removedAtIso}`;
+    setBusy(key);
+    try {
+      let reinstated = 0;
+      let notFound = 0;
+      let authFailed = 0;
+      let errored = 0;
+      let authFailedSticky = false;
+      const reviewerName = reviewer.trim() || undefined;
+      for (const phrase of phrases) {
+        if (authFailedSticky) {
+          authFailed += 1;
+          continue;
+        }
+        try {
+          await reinstateHandwavyPhrase({
+            phrase,
+            removedAt: removedAtIso,
+            reviewer: reviewerName,
+          });
+          reinstated += 1;
+        } catch (err) {
+          const status = (err as { status?: number } | null)?.status;
+          if (status === 401 || status === 403) {
+            authFailedSticky = true;
+            authFailed += 1;
+          } else if (status === 404) {
+            notFound += 1;
+          } else {
+            errored += 1;
+          }
+        }
+      }
+      // Task #177 — close any open dry-run preview for this batch once the
+      // real call has fired so the panel doesn't linger with stale data.
+      setReinstatePreview((prev) =>
+        prev && prev.removedAtIso === removedAtIso ? null : prev,
+      );
+      const failures = notFound + authFailed + errored;
+      const noun = reinstated === 1 ? "phrase" : "phrases";
+      if (failures === 0) {
+        toast({
+          title: reinstated > 0 ? "Subset reinstated" : "Nothing to reinstate",
+          description:
+            reinstated > 0
+              ? `${reinstated} of ${phrases.length} ${noun} from this batch are back on the active list. The phrases you dropped stay on the removal-history list.`
+              : "Every phrase in the subset was already accounted for.",
+        });
+      } else {
+        const parts: string[] = [];
+        if (reinstated > 0) parts.push(`${reinstated} reinstated`);
+        if (notFound > 0) parts.push(`${notFound} not-found`);
+        if (authFailed > 0) parts.push(`${authFailed} auth-failed`);
+        if (errored > 0) parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
+        toast({
+          title: reinstated > 0 ? "Partial reinstate" : "Reinstate failed",
+          description: parts.join(" · "),
+          variant: reinstated === 0 ? "destructive" : undefined,
+        });
+      }
+      refresh();
     } finally {
       setBusy(null);
     }
@@ -6729,6 +6835,7 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                                   removedBy: group.removedBy,
                                   batchSize: group.batchSize,
                                   phrasesToReinstate,
+                                  originalPhraseCount: phrasesToReinstate.length,
                                 });
                               }}
                               data-testid="handwavy-reinstate-batch"
@@ -7292,17 +7399,64 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   </div>
                   {reinstateBatchConfirm.phrasesToReinstate.length > 0 && (
                     <ul
-                      className="list-disc pl-5 space-y-1 text-foreground/80 max-h-48 overflow-y-auto"
+                      className="pl-1 space-y-1 text-foreground/80 max-h-48 overflow-y-auto"
                       data-testid="handwavy-reinstate-batch-confirm-summary"
                     >
                       {reinstateBatchConfirm.phrasesToReinstate.map((p) => (
-                        <li key={p}>
-                          <span className="font-mono text-foreground/80">
+                        <li
+                          key={p}
+                          className="flex items-start gap-2 leading-snug"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="mt-1 text-foreground/40"
+                          >
+                            •
+                          </span>
+                          <span className="font-mono text-foreground/80 break-all flex-1">
                             “{p}”
                           </span>
+                          {/* Task #254 — per-row drop button. Mirrors
+                              the bulk-remove preview's
+                              `handwavy-bulk-preview-result-drop` so a
+                              reviewer can remove just one phrase from
+                              the pending reinstate set without backing
+                              out and reopening the dialog. Dropping the
+                              last phrase closes the panel. */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              dropPhraseFromReinstateBatchConfirm(p)
+                            }
+                            className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-foreground/30"
+                            data-testid="handwavy-reinstate-batch-confirm-drop"
+                            data-phrase={p}
+                            aria-label={`Skip "${p}" — leave it on the removal-history list`}
+                            title="Skip this phrase — leave it removed"
+                          >
+                            <XIcon className="w-3 h-3" />
+                          </button>
                         </li>
                       ))}
                     </ul>
+                  )}
+                  {reinstateBatchConfirm.phrasesToReinstate.length <
+                    reinstateBatchConfirm.originalPhraseCount && (
+                    <div
+                      className="text-[11px] text-amber-200 italic"
+                      data-testid="handwavy-reinstate-batch-confirm-dropped-note"
+                    >
+                      {reinstateBatchConfirm.originalPhraseCount -
+                        reinstateBatchConfirm.phrasesToReinstate.length}{" "}
+                      phrase
+                      {reinstateBatchConfirm.originalPhraseCount -
+                        reinstateBatchConfirm.phrasesToReinstate.length ===
+                      1
+                        ? ""
+                        : "s"}{" "}
+                      will stay on the removal-history list. Confirm reinstates
+                      only the rows above.
+                    </div>
                   )}
                   <div className="text-xs italic">
                     The original batch removal entry stays in the history; each
@@ -7320,14 +7474,34 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
           </AlertDialogCancel>
           <AlertDialogAction
             data-testid="handwavy-reinstate-batch-confirm-confirm"
-            disabled={!mutationsAllowed}
+            disabled={
+              !mutationsAllowed ||
+              !reinstateBatchConfirm ||
+              reinstateBatchConfirm.phrasesToReinstate.length === 0
+            }
             title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
             data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
             onClick={() => {
               if (reinstateBatchConfirm) {
-                const { removedAtIso, batchSize } = reinstateBatchConfirm;
+                const {
+                  removedAtIso,
+                  batchSize,
+                  phrasesToReinstate,
+                  originalPhraseCount,
+                } = reinstateBatchConfirm;
                 setReinstateBatchConfirm(null);
-                void handleReinstateBatch(removedAtIso, batchSize);
+                // Task #254 — when nothing was dropped we keep using the
+                // single-round-trip /reinstate-batch route. As soon as the
+                // reviewer has trimmed the list we switch to per-phrase
+                // /reinstate calls so the dropped rows are NOT reinstated.
+                if (phrasesToReinstate.length === originalPhraseCount) {
+                  void handleReinstateBatch(removedAtIso, batchSize);
+                } else {
+                  void handleReinstateBatchSubset(
+                    removedAtIso,
+                    phrasesToReinstate,
+                  );
+                }
               }
             }}
           >
