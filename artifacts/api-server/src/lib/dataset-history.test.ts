@@ -17,6 +17,10 @@ import {
   type DatasetCohortSnapshot,
 } from "./dataset-history";
 import { __testing as configTesting } from "./dataset-history-config";
+import {
+  __testing as statsTesting,
+  readDatasetCompactionStats,
+} from "./dataset-history-stats";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -24,12 +28,14 @@ let tmpDir: string;
 let prevPath: string | undefined;
 let prevDays: string | undefined;
 let prevConfigPath: string | undefined;
+let prevStatsPath: string | undefined;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "dataset-history-"));
   prevPath = process.env.DATASET_HISTORY_PATH;
   prevDays = process.env.DATASET_HISTORY_COMPACT_DAYS;
   prevConfigPath = process.env.DATASET_HISTORY_CONFIG_PATH;
+  prevStatsPath = process.env.DATASET_HISTORY_STATS_PATH;
   process.env.DATASET_HISTORY_PATH = path.join(tmpDir, "dataset-history.json");
   // Task #378 — point the persisted-config path at the per-test tmpdir
   // so the cached reviewer setting from one test (or a stray real file
@@ -37,6 +43,11 @@ beforeEach(async () => {
   // effective compaction window.
   process.env.DATASET_HISTORY_CONFIG_PATH = path.join(tmpDir, "dataset-history-config.json");
   configTesting.resetCache();
+  // Task #379 — pin the stats sibling file to the same tmpdir so each
+  // spec gets a clean slate (and the in-memory cache from a previous
+  // spec is invalidated by the new path keying).
+  process.env.DATASET_HISTORY_STATS_PATH = path.join(tmpDir, "dataset-history-stats.json");
+  statsTesting.resetCache();
 });
 
 afterEach(async () => {
@@ -47,6 +58,9 @@ afterEach(async () => {
   if (prevConfigPath === undefined) delete process.env.DATASET_HISTORY_CONFIG_PATH;
   else process.env.DATASET_HISTORY_CONFIG_PATH = prevConfigPath;
   configTesting.resetCache();
+  if (prevStatsPath === undefined) delete process.env.DATASET_HISTORY_STATS_PATH;
+  else process.env.DATASET_HISTORY_STATS_PATH = prevStatsPath;
+  statsTesting.resetCache();
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -495,6 +509,109 @@ describe("appendDatasetCohortSnapshots — compaction integration", () => {
     // Aggregated rows come before the raw recent rows chronologically.
     const ts = file.snapshots.map(s => Date.parse(s.timestamp));
     expect(ts).toEqual([...ts].sort((a, b) => a - b));
+  });
+});
+
+// Task #379 — appendDatasetCohortSnapshots must record the compaction
+// pass's outcome (last-run timestamp + rows removed) to the sibling
+// dataset-history-stats file so the trend panel can confirm the
+// older-than-window roll-up routine is actually doing work.
+describe("appendDatasetCohortSnapshots — compaction stats (Task #379)", () => {
+  it("records a 0-row compaction pass on the very first append so the dashboard can show the routine is alive", async () => {
+    expect(readDatasetCompactionStats()).toBeNull();
+    const before = Date.now();
+    await appendDatasetCohortSnapshots([
+      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+    ]);
+    const after = Date.now();
+    const stats = readDatasetCompactionStats();
+    expect(stats).not.toBeNull();
+    expect(stats!.lastRemovedCount).toBe(0);
+    const t = Date.parse(stats!.lastCompactedAt);
+    expect(Number.isFinite(t)).toBe(true);
+    // The recorded timestamp comes from the recordDatasetCompactionRun
+    // default, which is "now" at append time — assert it falls inside
+    // the wall-clock window that bracketed the call rather than an
+    // exact equality (the helper uses its own new Date() internally).
+    expect(t).toBeGreaterThanOrEqual(before);
+    expect(t).toBeLessThanOrEqual(after + 5);
+  });
+
+  it("records the row count the compaction pass actually collapsed, not the MAX_SNAPSHOTS truncation", async () => {
+    process.env.DATASET_HISTORY_COMPACT_DAYS = "30";
+
+    // Seed a multi-run-per-day window beyond the cutoff so compaction
+    // has work to do. 5 days × 4 runs × 3 cohorts = 60 raw rows that
+    // collapse into 5 × 3 = 15 daily aggregates → 45 rows removed.
+    const todayUtcMidnight = Math.floor(Date.now() / DAY_MS) * DAY_MS;
+    const seed: DatasetCohortSnapshot[] = [];
+    const oldDays = 5;
+    for (let day = 60; day > 60 - oldDays; day--) {
+      const base = todayUtcMidnight - day * DAY_MS;
+      for (let run = 0; run < 4; run++) {
+        const ts = new Date(base + run * 60 * 60 * 1000).toISOString();
+        seed.push(
+          { timestamp: ts, tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+          { timestamp: ts, tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 58, gap: 18 },
+          { timestamp: ts, tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 52, gap: 18 },
+        );
+      }
+    }
+    await fs.writeFile(
+      process.env.DATASET_HISTORY_PATH!,
+      JSON.stringify({ version: 1, snapshots: seed }, null, 2),
+      "utf-8",
+    );
+
+    await appendDatasetCohortSnapshots([
+      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 17 },
+    ]);
+
+    const stats = readDatasetCompactionStats();
+    expect(stats).not.toBeNull();
+    // 60 seeded raw rows + 1 fresh append = 61 rows before compaction;
+    // 5 days × 3 tiers + 1 fresh = 16 rows after → 45 rows removed.
+    expect(stats!.lastRemovedCount).toBe(45);
+  });
+
+  it("overwrites the previous outcome on each successive append so the dashboard always sees the freshest pass", async () => {
+    await appendDatasetCohortSnapshots([
+      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+    ]);
+    const first = readDatasetCompactionStats();
+    expect(first).not.toBeNull();
+    // Second append on a quiet runner — still a 0-row pass, but the
+    // timestamp must move forward so reviewers can tell the routine is
+    // ticking rather than stuck on a stale value.
+    await new Promise(r => setTimeout(r, 5));
+    await appendDatasetCohortSnapshots([
+      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 17 },
+    ]);
+    const second = readDatasetCompactionStats();
+    expect(second).not.toBeNull();
+    expect(second!.lastRemovedCount).toBe(0);
+    expect(Date.parse(second!.lastCompactedAt))
+      .toBeGreaterThanOrEqual(Date.parse(first!.lastCompactedAt));
+  });
+
+  it("persists the stats to the sibling file (not the dataset-history JSON) so concurrent writers can't race each other", async () => {
+    await appendDatasetCohortSnapshots([
+      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+    ]);
+    const statsFile = process.env.DATASET_HISTORY_STATS_PATH!;
+    const raw = await fs.readFile(statsFile, "utf-8");
+    const parsed = JSON.parse(raw) as {
+      version: number;
+      lastCompactedAt: string;
+      lastRemovedCount: number;
+    };
+    expect(parsed.version).toBe(1);
+    expect(parsed.lastRemovedCount).toBe(0);
+    expect(Number.isFinite(Date.parse(parsed.lastCompactedAt))).toBe(true);
+    // The dataset-history JSON itself must not have grown a
+    // compaction-stats key (the two writers are deliberately split).
+    const historyRaw = await fs.readFile(process.env.DATASET_HISTORY_PATH!, "utf-8");
+    expect(historyRaw).not.toMatch(/lastCompactedAt/);
   });
 });
 

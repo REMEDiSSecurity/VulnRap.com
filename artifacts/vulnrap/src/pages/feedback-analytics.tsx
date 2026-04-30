@@ -12787,9 +12787,22 @@ interface DatasetHistoryCohort {
   snapshots: DatasetHistorySnapshot[];
 }
 
+// Task #379 — most recent dataset-history compaction-pass outcome.
+// `null` until the routine has run on this deployment so the panel can
+// hide the "Last compacted …" line cleanly on a fresh env.
+interface DatasetHistoryCompactionStats {
+  lastCompactedAt: string;
+  lastRemovedCount: number;
+}
+
 interface DatasetHistoryResponse {
   totalSnapshots: number;
   cohorts: DatasetHistoryCohort[];
+  // Task #379 — proof the older-than-window compaction routine added
+  // in Task #264 is alive. Optional so older API builds (and the
+  // /api/test/dataset-history empty-shape test that pre-dates this
+  // field) still parse without the line.
+  lastCompaction?: DatasetHistoryCompactionStats | null;
 }
 
 export interface DatasetHistorySeriesPoint {
@@ -13468,6 +13481,32 @@ function DatasetCohortDriftSection() {
           /api/test/run on the curated 25-per-label real-report cohort. Vertical dashed ticks mark
           UTC slice rotations so reviewers can distinguish daily-slice flips from real cohort drift.
         </CardDescription>
+        {/* Task #379 — confirm the older-than-window roll-up routine
+            (Task #264) is alive and surface what it did on its most
+            recent pass so reviewers understand the gradual switch from
+            raw to aggregated points isn't a bug. Hidden when the
+            routine has not run yet (e.g. fresh deploy with no
+            /api/test/run calls that observed the dataset mounted), and
+            degrades to a stable ISO date if relative formatting can't
+            parse the value. */}
+        {data.lastCompaction && (
+          <div
+            className="text-[11px] text-muted-foreground/70"
+            data-testid="dataset-cohort-drift-last-compaction"
+            title={`Last compacted at ${data.lastCompaction.lastCompactedAt}`}
+          >
+            Last compacted{" "}
+            <span className="font-mono text-foreground/80">
+              {formatRelativeAgo(data.lastCompaction.lastCompactedAt)
+                ?? data.lastCompaction.lastCompactedAt}
+            </span>
+            {" — removed "}
+            <span className="font-mono text-foreground/80 tabular-nums">
+              {data.lastCompaction.lastRemovedCount}
+            </span>{" "}
+            snapshot{data.lastCompaction.lastRemovedCount === 1 ? "" : "s"}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {/*

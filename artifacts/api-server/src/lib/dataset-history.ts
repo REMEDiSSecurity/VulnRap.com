@@ -36,6 +36,7 @@ import {
   DEFAULT_COMPACT_AFTER_DAYS as CONFIG_DEFAULT_COMPACT_AFTER_DAYS,
   getEffectiveCompactAfterDays,
 } from "./dataset-history-config";
+import { recordDatasetCompactionRun } from "./dataset-history-stats";
 
 export interface DatasetCohortSnapshot {
   /** ISO-8601 timestamp of the test run that produced this snapshot. */
@@ -289,11 +290,27 @@ export function appendDatasetCohortSnapshots(
     }
     // Down-sample older entries before applying the hard MAX_SNAPSHOTS
     // cap so we trim raw points (not freshly-aggregated daily rows).
+    // Task #379 — record how many rows the compaction pass collapsed so
+    // the dataset trend panel can confirm the routine is alive and
+    // surface its effect ("Last compacted 2h ago — removed 14
+    // snapshots"), mirroring the archetype-history Task #211 pattern.
+    // We only count compaction-driven removal here, not the hard
+    // MAX_SNAPSHOTS truncation below — those are conceptually separate
+    // (eviction vs. roll-up) and reviewers care about the latter. A
+    // 0-row pass is still recorded so reviewers can see the routine
+    // ran on a quiet runner instead of assuming it stopped.
+    const beforeCompact = file.snapshots.length;
     file.snapshots = compactSnapshots(file.snapshots, new Date(), compactAfterDays());
+    const removedByCompaction = beforeCompact - file.snapshots.length;
     if (file.snapshots.length > MAX_SNAPSHOTS) {
       file.snapshots.splice(0, file.snapshots.length - MAX_SNAPSHOTS);
     }
     await writeToDisk(p, file);
+    // Stats write is best-effort: recordDatasetCompactionRun swallows +
+    // warns on failure so a stats-file hiccup never breaks /api/test/run.
+    // We still await it so the next dashboard GET sees the fresh value
+    // rather than the cached stale one from before this append.
+    await recordDatasetCompactionRun(removedByCompaction);
     return file;
   });
   // Keep the chain alive even if a write rejects so subsequent appends still run.

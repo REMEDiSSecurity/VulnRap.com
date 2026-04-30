@@ -66,6 +66,9 @@ beforeAll(async () => {
   // tests don't pollute the repo's data directory and can rely on a
   // clean "no persisted setting" starting state.
   process.env.DATASET_HISTORY_CONFIG_PATH = path.join(tmpDir, "dataset-history-config.json");
+  // Task #379 — pin the dataset-history compaction-stats sibling file
+  // to the tmpdir for the same reason as the archetype-history one.
+  process.env.DATASET_HISTORY_STATS_PATH = path.join(tmpDir, "dataset-history-stats.json");
   // Task #187 — point the dataset-loader at a tmpdir that we'll *only*
   // populate inside the positive Task #187 test. The dataset-loader
   // captures DATA_ROOTS at import time, so the env var must be set
@@ -730,9 +733,20 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
     gap: number | null;
     sampleDateKey?: string;
   }
+  // Task #379 — the dataset trend panel surfaces "Last compacted Xh
+  // ago — removed N snapshots" so reviewers can confirm the
+  // older-than-window roll-up routine is alive. The endpoint exposes
+  // it as `lastCompaction`, which is null until the routine has
+  // actually run (e.g. fresh deploy with no /api/test/run calls that
+  // observed the curated dataset mounted).
+  interface DatasetHistoryCompactionStats {
+    lastCompactedAt: string;
+    lastRemovedCount: number;
+  }
   interface DatasetHistoryResponse {
     totalSnapshots: number;
     cohorts: Array<{ tier: string; snapshots: DatasetHistoryRow[] }>;
+    lastCompaction: DatasetHistoryCompactionStats | null;
   }
 
   it("exposes a stable empty shape when the dataset isn't mounted", async () => {
@@ -742,6 +756,10 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
     const body = await fetchJson<DatasetHistoryResponse>("/api/test/dataset-history");
     expect(body.totalSnapshots).toBe(0);
     expect(body.cohorts).toEqual([]);
+    // Task #379 — lastCompaction is null until appendDatasetCohortSnapshots
+    // has actually run. The dataset isn't mounted in earlier specs, so
+    // the routine has not been invoked yet on this suite.
+    expect(body.lastCompaction).toBeNull();
   });
 
   it("appends one row per cohort on /api/test/run when the dataset IS mounted", async () => {
@@ -839,6 +857,18 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
         c => c.snapshots[c.snapshots.length - 1]!.gap,
       );
       expect(new Set(gaps).size).toBe(1);
+      // Task #379 — once /api/test/run has actually appended cohort
+      // snapshots, the endpoint must surface the compaction pass that
+      // ran alongside that append so the trend panel can render
+      // "Last compacted Xh ago — removed N snapshots". On a fresh
+      // suite with only this single append, the pass will report 0
+      // rows removed (nothing was old enough to roll up) but the
+      // timestamp must still be present and finite.
+      expect(after.lastCompaction).not.toBeNull();
+      expect(typeof after.lastCompaction!.lastCompactedAt).toBe("string");
+      expect(Number.isFinite(Date.parse(after.lastCompaction!.lastCompactedAt))).toBe(true);
+      expect(typeof after.lastCompaction!.lastRemovedCount).toBe("number");
+      expect(after.lastCompaction!.lastRemovedCount).toBeGreaterThanOrEqual(0);
     } finally {
       // Remove the file so any later /api/test/run calls in this process
       // see an empty dataset dir again. A leftover file would let the

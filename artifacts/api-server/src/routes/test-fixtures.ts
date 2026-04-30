@@ -24,6 +24,7 @@ import {
   appendDatasetCohortSnapshots,
   readDatasetHistory,
 } from "../lib/dataset-history";
+import { readDatasetCompactionStats } from "../lib/dataset-history-stats";
 import {
   clearPersistedCompactAfterDays,
   CompactWindowValidationError,
@@ -3061,9 +3062,16 @@ router.get("/test/dataset-history", async (_req, res) => {
   const cohorts = Array.from(byTier.entries())
     .map(([tier, snapshots]) => ({ tier, snapshots }))
     .sort((a, b) => a.tier.localeCompare(b.tier));
+  // Task #379 — surface the most recent dataset-history compaction
+  // pass's outcome so the dataset trend panel can show "Last compacted
+  // Xh ago — removed N snapshots" as proof the older-than-window
+  // roll-up routine (Task #264) is alive. `null` until the routine has
+  // run on this deployment (e.g. fresh env with no /api/test/run calls
+  // that observed the curated dataset mounted).
   res.json({
     totalSnapshots: file.snapshots.length,
     cohorts,
+    lastCompaction: readDatasetCompactionStats(),
   });
 });
 
