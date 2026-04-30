@@ -74,7 +74,7 @@ import {
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
   Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
-  KeyRound, Calendar, ChevronDown, ChevronRight, RefreshCw,
+  KeyRound, Calendar, ChevronDown, ChevronRight, RefreshCw, Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCalibrationCooldown } from "@/lib/calibration-cooldown";
@@ -12086,6 +12086,42 @@ function NotifiedFlagsPanel({
 // re-arm audit log so reviewers can see who re-armed which dedup
 // entry and why. Strict-auth gated; when the reviewer doesn't have
 // a valid token we surface a static explainer instead of a load error.
+function escapeCsvField(value: string | undefined): string {
+  if (value == null) return "";
+  if (/[",\r\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+export function buildRearmHistoryCsv(entries: AvriDriftRearmAuditEntry[]): string {
+  const header = [
+    "rearmedAt",
+    "rearmedBy",
+    "rationale",
+    "key",
+    "weekStart",
+    "kind",
+    "originalNotifiedAt",
+    "originalDetail",
+  ].join(",");
+  const rows = entries.map(e =>
+    [
+      e.rearmedAt,
+      e.rearmedBy,
+      e.rationale,
+      e.key,
+      e.weekStart,
+      e.kind,
+      e.originalNotifiedAt,
+      e.originalDetail,
+    ]
+      .map(escapeCsvField)
+      .join(","),
+  );
+  return [header, ...rows].join("\r\n");
+}
+
 function RearmHistoryPanel({
   authState,
   rearmHistoryQueryKey,
@@ -12135,7 +12171,36 @@ function RearmHistoryPanel({
     return 0;
   });
 
+  const downloadCsv = () => {
+    const csv = buildRearmHistoryCsv(sorted);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.download = `avri-drift-rearm-audit-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
+    <div className="space-y-2">
+    <div className="flex justify-end">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={downloadCsv}
+        className="h-7 px-2 text-[11px] gap-1.5 font-normal"
+        data-testid="avri-drift-rearm-history-csv"
+        title="Download the currently-loaded re-arm audit log as CSV (rearmedAt, rearmedBy, rationale, key, weekStart, kind, originalNotifiedAt, originalDetail)."
+      >
+        <Download className="w-3 h-3" />
+        Download CSV
+      </Button>
+    </div>
     <ul className="space-y-1.5">
       {sorted.map((entry, idx) => {
         const rearmedAt = new Date(entry.rearmedAt);
@@ -12190,6 +12255,7 @@ function RearmHistoryPanel({
         );
       })}
     </ul>
+    </div>
   );
 }
 
