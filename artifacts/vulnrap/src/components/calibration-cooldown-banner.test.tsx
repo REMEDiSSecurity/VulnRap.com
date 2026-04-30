@@ -10,7 +10,10 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { CalibrationCooldownBanner } from "./calibration-cooldown-banner";
+import {
+  CalibrationCooldownBanner,
+  CalibrationCooldownBannerProvider,
+} from "./calibration-cooldown-banner";
 import type { CalibrationCooldownState } from "@/lib/calibration-cooldown";
 
 function makeState(overrides: Partial<CalibrationCooldownState> = {}): CalibrationCooldownState {
@@ -161,6 +164,88 @@ describe("CalibrationCooldownBanner", () => {
       />,
     );
     expect(screen.queryByText(/per window/i)).not.toBeInTheDocument();
+  });
+
+  describe("with CalibrationCooldownBannerProvider (Task #419)", () => {
+    // The page-level coordinator hoists multiple per-section opt-ins down
+    // to a single visible banner so the calibration dashboard, handwavy
+    // admin, and AVRI drift admin don't stack three identical copies on
+    // top of each other when one 429 trips the cooldown.
+
+    it("renders only the topmost banner when several sections opt-in inside the provider", () => {
+      const state = makeState({
+        active: true,
+        secondsRemaining: 5,
+        resetAt: Date.now() + 5_000,
+      });
+      render(
+        <CalibrationCooldownBannerProvider>
+          {/* Three sibling sections each opt-in via the same banner
+              component — mirrors the real feedback-analytics layout. */}
+          <section data-testid="section-top">
+            <CalibrationCooldownBanner state={state} />
+          </section>
+          <section data-testid="section-middle">
+            <CalibrationCooldownBanner state={state} />
+          </section>
+          <section data-testid="section-bottom">
+            <CalibrationCooldownBanner state={state} />
+          </section>
+        </CalibrationCooldownBannerProvider>,
+      );
+
+      // Exactly one visible banner, even though three sections opted in.
+      const banners = screen.getAllByTestId("calibration-cooldown-banner");
+      expect(banners).toHaveLength(1);
+
+      // And it lives inside the topmost-in-document-order section.
+      const topSection = screen.getByTestId("section-top");
+      expect(topSection).toContainElement(banners[0]);
+
+      // Every opt-in still drops a sentinel so the coordinator can keep
+      // electing the topmost as sections mount/unmount.
+      expect(
+        screen.getAllByTestId("calibration-cooldown-banner-sentinel"),
+      ).toHaveLength(3);
+    });
+
+    it("renders no visible banner inside the provider when the cooldown is idle", () => {
+      render(
+        <CalibrationCooldownBannerProvider>
+          <CalibrationCooldownBanner state={makeState({ active: false })} />
+          <CalibrationCooldownBanner state={makeState({ active: false })} />
+        </CalibrationCooldownBannerProvider>,
+      );
+      expect(
+        screen.queryByTestId("calibration-cooldown-banner"),
+      ).not.toBeInTheDocument();
+      // Sentinels are still placed so a 429 mid-render can light up the
+      // topmost without re-mounting anything.
+      expect(
+        screen.getAllByTestId("calibration-cooldown-banner-sentinel"),
+      ).toHaveLength(2);
+    });
+
+    it("does not drop a sentinel when rendered standalone (no provider)", () => {
+      // The standalone path keeps the original behaviour so a calibration
+      // screen mounted on its own page (with no provider) still surfaces
+      // the throttle without DOM-coordinator overhead.
+      render(
+        <CalibrationCooldownBanner
+          state={makeState({
+            active: true,
+            secondsRemaining: 5,
+            resetAt: Date.now() + 5_000,
+          })}
+        />,
+      );
+      expect(
+        screen.getByTestId("calibration-cooldown-banner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("calibration-cooldown-banner-sentinel"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("always tells reviewers to confirm the reviewer token before retrying", () => {

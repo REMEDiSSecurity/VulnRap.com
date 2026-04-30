@@ -78,7 +78,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCalibrationCooldown } from "@/lib/calibration-cooldown";
-import { CalibrationCooldownBanner } from "@/components/calibration-cooldown-banner";
+import {
+  CalibrationCooldownBanner,
+  CalibrationCooldownBannerProvider,
+} from "@/components/calibration-cooldown-banner";
 import {
   HandwavyCategoryFlipBadge,
   getCategoryFlips,
@@ -15611,6 +15614,14 @@ export default function FeedbackAnalytics() {
   const maxRatingCount = Math.max(...Object.values(ratingDistribution).map(Number), 1);
 
   return (
+    // Task #419 — Hoist the wrong-token cooldown banner to a single visible
+    // copy across the page. CalibrationSection, HandwavyPhrasesAdmin (nested
+    // inside it), and AvriDriftSection each opt-in by rendering
+    // <CalibrationCooldownBanner>; the provider elects the topmost-in-DOM
+    // instance so reviewers see exactly one banner during a 429 instead of
+    // up to three identical stacked copies. Sections rendered standalone on
+    // a different page (no provider) keep their own visible banner.
+    <CalibrationCooldownBannerProvider>
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -15788,5 +15799,6 @@ export default function FeedbackAnalytics() {
         </CardContent>
       </Card>
     </div>
+    </CalibrationCooldownBannerProvider>
   );
 }

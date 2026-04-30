@@ -278,15 +278,19 @@ describe("AvriDriftSection — calibration cooldown banner + re-arm gating (Task
       });
     });
 
-    // The banner should pop in. Two banners can show — one from the
-    // calibration card at the top of the page, one from inside the AVRI
-    // drift card — both share the same testid so we just assert ≥1.
+    // The banner should pop in. Task #419 — the page-level coordinator
+    // (CalibrationCooldownBannerProvider) hoists the banner so even though
+    // CalibrationSection, HandwavyPhrasesAdmin, and AvriDriftSection each
+    // opt-in via <CalibrationCooldownBanner>, only the topmost-in-DOM
+    // instance renders the visible card. Assert exactly one is visible
+    // here so a future regression that brings back the stack of three
+    // identical banners gets caught.
     const banners = await screen.findAllByTestId(
       "calibration-cooldown-banner",
       {},
       { timeout: 5_000 },
     );
-    expect(banners.length).toBeGreaterThanOrEqual(1);
+    expect(banners).toHaveLength(1);
     // Headlines should match the friendly copy. We don't pin the exact
     // second count here (the store rounds up against Date.now and tests
     // shouldn't depend on real-clock skew), just the headline shape.
