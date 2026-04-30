@@ -454,13 +454,24 @@ Reject any message containing both Transfer-Encoding and Content-Length with HTT
 
 ## Impact
 Cache poisoning, request hijacking, auth bypass. CVSS 9.0.`,
-    // Sprint 12 A3: this fixture sat at exactly the old 55 threshold under
-    // the 5/55/40 weighting. The new 5/60/35 weighting drops it ~1 point to
-    // 54 because the fixture's E3 contribution shrank (35% vs 40%) faster
-    // than its E2 contribution grew (the report cites CWE-444 cleanly but
-    // doesn't expose any AVRI GOLD_SIGNAL — no crash trace, no real raw
-    // HTTP pair). 50 stays well inside the REASONABLE band and still
-    // distinguishes this from the slop fixtures (all ≤ 35).
+    // Task #299 — investigated the E2 substance score for this fixture under
+    // the AVRI REQUEST_SMUGGLING rubric:
+    //   • Only `te_or_cl_conflict` (+14) fires from gold signals — the printf
+    //     reproduction uses shell-escaped \r\n bytes (literal backslashes,
+    //     not CRLFs) so REQUEST_LINE_RE legitimately doesn't match the
+    //     pasted block, which keeps `raw_http_request` (+18) and
+    //     `smuggled_second_request` (+12) silent. `acme-proxy` isn't on the
+    //     recognized-product list so `specific_proxy_or_server` (+8) stays
+    //     silent too. That yields gold=14 / calibratedMax=31 → baseScore=45,
+    //     -6 absence (no_proxy_named) → rawAvriScore=39, blended with
+    //     legacy=50 → E2=45.
+    //   • E2=45 sits just above the E3_SUBSTANCE_GATE cutoff (gate fires at
+    //     E2<45), so E3 keeps its raw 77, the 5/60/35 composite lands at
+    //     ~57.4, and BEHAVIORAL_MATCH_REWARD adds +6 for a final composite
+    //     of ~63 (REASONABLE). The threshold of 50 stays well inside the
+    //     REASONABLE band and continues to distinguish this fixture from
+    //     the slop cohort (all ≤ 35), without requiring rubric changes that
+    //     would risk rescuing genuine slop.
     expectMinScore: 50,
   },
 ];
