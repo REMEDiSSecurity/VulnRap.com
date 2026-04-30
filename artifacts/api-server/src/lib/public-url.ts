@@ -89,3 +89,96 @@ export function buildPublicUrlForRequest(
 ): string {
   return buildPublicUrl({ req: req ?? null, path });
 }
+
+/**
+ * Result of {@link validatePublicUrlEnv}. Returned so callers (and tests)
+ * can branch on the outcome without parsing log lines.
+ *
+ * - `unset`     — PUBLIC_URL was missing or whitespace-only. Canonical
+ *                 links will fall back to the request origin (or
+ *                 {@link DEFAULT_PUBLIC_URL} when no request is available).
+ * - `valid`     — PUBLIC_URL parsed cleanly as an http(s) URL.
+ * - `malformed` — PUBLIC_URL was set but did not parse as a URL or used a
+ *                 protocol other than http/https. Operators should fix this
+ *                 before reviewers see broken links in webhooks and exports.
+ */
+export type PublicUrlEnvValidationResult =
+  | { kind: "unset" }
+  | { kind: "valid"; url: string }
+  | { kind: "malformed"; value: string; reason: string };
+
+/**
+ * Minimal logger shape used by {@link validatePublicUrlEnv}. Declared
+ * structurally so tests can pass a recording stub without depending on the
+ * full pino API.
+ */
+export interface PublicUrlEnvLogger {
+  warn(obj: object, msg: string): void;
+  error(obj: object, msg: string): void;
+}
+
+/**
+ * Validates `process.env.PUBLIC_URL` at startup and emits a single log line
+ * describing the outcome:
+ *
+ * - Unset / whitespace-only → `logger.warn` (fallback to request origin).
+ * - Set but not parseable as a URL, or using a non-http(s) protocol →
+ *   `logger.error` (operators should fix the typo before reviewers see
+ *   broken links in webhooks and exported reports).
+ * - Set and valid → no log line (silent success).
+ *
+ * Returns a structured result so callers and tests can branch on the
+ * outcome without scraping log output.
+ */
+export function validatePublicUrlEnv(
+  options: { logger?: PublicUrlEnvLogger; env?: NodeJS.ProcessEnv } = {},
+): PublicUrlEnvValidationResult {
+  const env = options.env ?? process.env;
+  const raw = env.PUBLIC_URL;
+  const trimmed = typeof raw === "string" ? raw.trim() : "";
+
+  if (trimmed.length === 0) {
+    options.logger?.warn(
+      { fallback: "request-origin-or-default" },
+      "PUBLIC_URL is not set; canonical links will fall back to the request origin (or https://vulnrap.com when no request is available).",
+    );
+    return { kind: "unset" };
+  }
+
+  // Require the explicit `http://` / `https://` prefix before letting `new
+  // URL` parse the value. Without this guard, scheme-only typos like
+  // `https:example.com` parse successfully (the `URL` parser treats the
+  // host as a relative path) and would be returned as "valid" even though
+  // they would yield broken canonical links when used verbatim.
+  if (!/^https?:\/\//i.test(trimmed)) {
+    const reason = "must start with http:// or https://";
+    options.logger?.error(
+      { publicUrl: trimmed, reason },
+      "PUBLIC_URL is set but does not start with http:// or https://; canonical links will be broken until this is fixed.",
+    );
+    return { kind: "malformed", value: trimmed, reason };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    options.logger?.error(
+      { publicUrl: trimmed, reason },
+      "PUBLIC_URL is set but is not a parseable URL; canonical links will be broken until this is fixed.",
+    );
+    return { kind: "malformed", value: trimmed, reason };
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    const reason = `unsupported protocol "${parsed.protocol}"`;
+    options.logger?.error(
+      { publicUrl: trimmed, reason },
+      "PUBLIC_URL is set but does not start with http:// or https://; canonical links will be broken until this is fixed.",
+    );
+    return { kind: "malformed", value: trimmed, reason };
+  }
+
+  return { kind: "valid", url: trimmed };
+}

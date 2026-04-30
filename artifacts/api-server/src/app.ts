@@ -10,7 +10,9 @@ import fs from "fs";
 import path from "path";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { buildPublicUrl } from "./lib/public-url";
+import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
+
+validatePublicUrlEnv({ logger });
 
 const app: Express = express();
 
