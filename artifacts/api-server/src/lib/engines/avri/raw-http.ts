@@ -386,8 +386,19 @@ const PROSE_PAYLOAD_PLACEHOLDER_RE =
 // aggressive — phrases like "the payload <unknown> was rejected" should
 // not be flagged). The closing backtick is also required so we don't
 // match unterminated code spans that bleed into surrounding prose.
+//
+// The separator class between the payload word and the opening backtick
+// mirrors the bare-angle form: whitespace, commas, parentheses, en-dash
+// (U+2013), and em-dash (U+2014). Slop authors otherwise sidestep the
+// plain-whitespace gate by writing "the payload, `<inject>`, was sent"
+// or "the payload (`<inject>`) was sent" — same gesture, just with the
+// slot wrapped in backticks. The backtick-fenced shape is its own
+// payload-context tell, so unlike the bare-angle form we do not need an
+// extra slop-vocab guard on the slot itself; neutral identifiers like
+// `<unknown>` would still false-positive only if the surrounding prose
+// names a payload, which is exactly the gesture this catches.
 const PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE =
-  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)\s+`(<[^>\n`]{1,80}>)`/gi;
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)[\s,(\u2013\u2014]+`(<[^>\n`]{1,80}>)`/gi;
 
 // Same gesture, neither colon nor backticks: a payload-context word
 // followed by whitespace and a bare `<...>` slot. Slop authors dodge
@@ -464,8 +475,16 @@ const PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE =
 // Both backticks are required for the same reason as the inline form:
 // without them, "`<unknown>` was the payload" would expand to bare
 // "<unknown> was the payload" and false-positive on legitimate prose.
+//
+// The separator class between the closing backtick and the copula
+// mirrors the bare-angle / inline-code forms (whitespace, commas,
+// en-dash U+2013, em-dash U+2014) so the punctuation dodge is closed
+// on the post-slot side too: "`<inject>`, is the payload" and
+// "`<inject>` — is the payload" gesture at the slot exactly the same
+// way as "`<inject>` is the payload", just with a comma or dash
+// wedged between the slot and the copula.
 const PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE =
-  /`(<[^>\n`]{1,80}>)`\s+(?:is|was|were|are|seems|appears)[a-zA-Z \-]{1,25}?\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template)\b/gi;
+  /`(<[^>\n`]{1,80}>)`[\s,\u2013\u2014]+(?:is|was|were|are|seems|appears)[a-zA-Z \-]{1,25}?\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template)\b/gi;
 
 // No-slot dodge variant 1 — the labelled form. Slop authors drop the
 // `<...>` slot entirely and label a payload-context noun with a bare

@@ -1445,6 +1445,158 @@ describe("findProsePlaceholderPayloadRanges", () => {
     ).toBe(0);
   });
 
+  it("flags inline-code <slot> when a comma separates the payload word from the slot", () => {
+    // Slop dodge: keep the backticks but wedge a comma between the
+    // payload-context word and the opening backtick — "the payload,
+    // `<inject>`, was sent" is the same gesture as the bare-angle
+    // comma form, just with the slot wrapped in backticks.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload, `<inject>`, was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send,`<sql payload here>`, to /search",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags inline-code <slot> when the slot is wrapped in parentheses", () => {
+    // Slop dodge: parenthesize the backticked slot. "the payload
+    // (`<inject>`) was sent" wraps the slot in `(...)` so there is no
+    // whitespace immediately before the opening backtick, only an
+    // opening paren after a space.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload (`<inject>`) was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "exec (`<command here>`) to confirm RCE",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags inline-code <slot> when an em-dash separates the payload word from the slot", () => {
+    // Slop dodge: em-dash (U+2014) between the payload word and the
+    // backticked slot — "the payload — `<inject>` —" mirrors the same
+    // gesture as the bare-angle em-dash form.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload \u2014 `<inject>` \u2014 was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send \u2014 `<sql payload here>` \u2014 to /search",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags inline-code <slot> when an en-dash separates the payload word from the slot", () => {
+    // Same as the em-dash form, but with en-dash (U+2013). Slop
+    // authors paste from sources that auto-convert hyphens to
+    // en-dashes too.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload \u2013 `<inject>` \u2013 was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag punctuation-separated inline-code prose without a payload-context word", () => {
+    // Same neutral-prose guard as the bare-angle form: comma / paren /
+    // em-dash separators around a backticked slot are only flagged
+    // when a payload-context word actually leads the run. Neutral
+    // sentences like "the value, `<unknown>`, was rejected" or "the
+    // field (`<x>`) failed" are ordinary prose markup and must stay
+    // safe even though the relaxed separator class is in play.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the value, `<unknown>`, was rejected",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the field (`<x>`) failed validation",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the value \u2014 `<unknown>` \u2014 was rejected",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("does not flag inline-code prose where letters intervene between the payload word and the slot", () => {
+    // The relaxed inline-code separator class only contains whitespace
+    // and punctuation — letters and digits between the payload word
+    // and the opening backtick still break the run. Compound words
+    // whose tail isn't itself a payload-context word (e.g.
+    // "payload-related" / "payload-name") must therefore not light up.
+    // (Compounds whose tail IS a vocab word, like "payload-injected",
+    // would still match via the trailing "injected" — that's correct
+    // behaviour, not a separator-class regression.)
+    expect(
+      findProsePlaceholderPayloadRanges("the payload-related `<foo>`").length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("the payload-name `<foo>`").length,
+    ).toBe(0);
+  });
+
+  it("flags post-slot phrasings when a comma separates the slot from the copula", () => {
+    // Slop dodge: keep the post-slot copula shape but wedge a comma
+    // between the closing backtick and the copula — "`<inject>`, is
+    // the payload" gestures at the slot exactly the same way as
+    // "`<inject>` is the payload" without the comma.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<inject>`, is the payload we sent",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<sql payload here>`, was the SQLi payload tried",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags post-slot phrasings when an em-dash separates the slot from the copula", () => {
+    // Same gesture as the comma form but with em-dash (U+2014) /
+    // en-dash (U+2013) — typographic dashes around the copula must
+    // not let the slot slip past.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<inject>` \u2014 is the payload we sent",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<sql payload here>` \u2013 was the payload tried",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag punctuation-separated post-slot phrasings without a payload-context noun", () => {
+    // Same neutral-prose guard as the plain-whitespace post-slot form:
+    // the relaxed separator must not let "`<unknown>`, is the username"
+    // or "`<x>` — was rejected" slip through, since neither names a
+    // payload after the copula.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<unknown>`, is the username they tried",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "`<x>` \u2014 was rejected because the field was empty",
+      ).length,
+    ).toBe(0);
+  });
+
   // ===================================================================
   // No-slot dodge variants — payload mentions that don't use angle-
   // bracket slots at all. Slop authors dodge the slot-based checks by
