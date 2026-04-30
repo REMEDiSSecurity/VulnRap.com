@@ -2293,6 +2293,20 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     data: HandwavyPhraseBatchRemoveDryRunResponse;
     acknowledged: boolean;
   } | null>(null);
+  // Task #257 — controls the per-phrase outcomes <details> in the
+  // bulk-remove preview panel. The block is collapsed by default for
+  // routine batches (matches the pre-#257 behavior), but auto-expands
+  // when any phrase in the pending batch is high-thrash, so the per-row
+  // amber badge + dismiss button (Task #178) are visible immediately
+  // alongside the high-thrash summary banner. Initialized once per
+  // panel session below (after `thrashByPhrase` is computed) and
+  // tracked through `onToggle` so a manual collapse sticks.
+  const [bulkPreviewOutcomesOpen, setBulkPreviewOutcomesOpen] =
+    useState(false);
+  // Tracks whether the bulk-remove panel was open on the previous render
+  // so we can re-initialize `bulkPreviewOutcomesOpen` exactly once when
+  // the panel transitions from closed → open.
+  const [bulkPreviewWasOpen, setBulkPreviewWasOpen] = useState(false);
   // Task #173 — single-phrase removal-impact preview state. The per-row
   // Trash button now first issues `DELETE {phrase, dryRun: true}` (Task
   // #155). When `validDetectionsLost === 0` we fire the live DELETE in
@@ -4466,6 +4480,32 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     });
   }
 
+  // Task #257 — when the bulk-remove preview panel transitions from
+  // closed → open, decide whether the per-phrase outcomes <details>
+  // should default to open. If any phrase in the pending batch has
+  // already cycled >= 2 times (the same gate the per-row amber badge
+  // and "highThrashCount" summary use below), the outcomes list opens
+  // automatically so the per-row dismiss buttons added by Task #178 are
+  // visible alongside the warning. Routine batches (no high-thrash
+  // phrases) keep the original collapsed-by-default behavior.
+  // Re-initialization only fires on the open transition, not on every
+  // render, so a manual collapse via `onToggle` sticks for the rest of
+  // that panel session — including across drop-a-phrase re-renders that
+  // recompute `bulkPreview`. Pattern: "Adjusting state during render"
+  // from React docs (https://react.dev/learn/you-might-not-need-an-effect#adjusting-state-when-a-prop-changes).
+  const bulkPreviewIsOpenForInit = bulkPreview !== null;
+  if (bulkPreviewIsOpenForInit !== bulkPreviewWasOpen) {
+    setBulkPreviewWasOpen(bulkPreviewIsOpenForInit);
+    if (bulkPreviewIsOpenForInit && bulkPreview) {
+      const HIGH_THRASH_MIN_INIT = 2;
+      const hasHighThrashInBatch = bulkPreview.requestedPhrases.some(
+        (p) =>
+          (thrashByPhrase.get(p)?.length ?? 0) >= HIGH_THRASH_MIN_INIT,
+      );
+      setBulkPreviewOutcomesOpen(hasHighThrashInBatch);
+    }
+  }
+
   // Task #138 — when the "Most contentious first" toggle is on, reorder the
   // active list by descending thrash count. Original index is the tie-breaker
   // so phrases with equal counts (and the long tail of zero-thrash phrases)
@@ -5057,7 +5097,14 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                 </div>
               )}
             </div>
-            <details className="text-[11px]" data-testid="handwavy-bulk-preview-results-details">
+            <details
+              className="text-[11px]"
+              data-testid="handwavy-bulk-preview-results-details"
+              open={bulkPreviewOutcomesOpen}
+              onToggle={(e) =>
+                setBulkPreviewOutcomesOpen(e.currentTarget.open)
+              }
+            >
               <summary className="cursor-pointer text-muted-foreground/80 hover:text-foreground/80 select-none">
                 Per-phrase outcomes ({visibleResults.length})
               </summary>

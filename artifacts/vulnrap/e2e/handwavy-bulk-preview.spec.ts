@@ -5,6 +5,7 @@ import {
   cleanup,
   injectCalibrationTokenIntoPage,
   newApiContext,
+  seedCycles,
   uniquePhrases,
 } from "./helpers/handwavy";
 
@@ -19,6 +20,10 @@ import {
 // matches, so the confirm button is enabled without any acknowledgment.
 
 const REVIEWER = "e2e-task154";
+// Task #257 — separate reviewer tag for the bulk-remove preview's
+// auto-expand specs so audit-log scans can tell them apart from the
+// original Task #154 preview specs above.
+const REVIEWER_TASK257 = "e2e-task257";
 
 // UI-flow helper kept local: it threads checkbox-tick + "Remove selected"
 // click in the order this spec needs (the bulk-undo spec has its own
@@ -471,6 +476,160 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       }
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #257 — when ANY phrase in the pending bulk-remove batch has
+  // already cycled >=2 times, the per-phrase outcomes <details> should
+  // default to OPEN so the high-thrash row's per-row dismiss button
+  // (Task #178) is visible alongside the high-thrash summary banner.
+  // Otherwise a reviewer who notices the warning could still hit Remove
+  // without ever expanding the list. The collapsed-by-default behavior
+  // for routine batches (no high-thrash phrases) must be preserved, and
+  // a manual collapse on a high-thrash batch must stick for the rest of
+  // that panel session — including across drop-a-phrase re-renders.
+  test("Per-phrase outcomes auto-expands when the batch contains a high-thrash phrase", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const thrashy = `task257 thrashy ${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const fresh = `task257 fresh ${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+
+    try {
+      // `thrashy` ends with 2 completed remove+reinstate cycles (the
+      // HIGH_THRASH_MIN gate); `fresh` is a brand-new phrase with 0
+      // cycles. Selecting both means at least one phrase trips the
+      // high-thrash flag → outcomes list should auto-expand.
+      await seedCycles(apiCtx, thrashy, 2, { reviewer: REVIEWER_TASK257 });
+      await addPhrase(apiCtx, fresh, { reviewer: REVIEWER_TASK257 });
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, [thrashy, fresh]);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // The thrash summary banner must be present (sanity check that the
+      // high-thrash gate fired at all).
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-thrash-summary"),
+      ).toBeVisible();
+
+      // The outcomes <details> should be open WITHOUT us clicking the
+      // summary, so the per-row drop button on the thrashy row is
+      // immediately reachable.
+      const details = panel.getByTestId(
+        "handwavy-bulk-preview-results-details",
+      );
+      await expect(details).toHaveJSProperty("open", true);
+
+      const thrashyDropBtn = panel.locator(
+        `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${thrashy}"]`,
+      );
+      await expect(thrashyDropBtn).toBeVisible();
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-thrash-badge"),
+      ).toBeVisible();
+    } finally {
+      await cleanup(apiCtx, [thrashy, fresh], {
+        reviewer: `${REVIEWER_TASK257}-cleanup`,
+      });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #257 — pin the inverse: a routine batch with zero high-thrash
+  // phrases must keep the original collapsed-by-default outcomes block
+  // so we don't add gratuitous noise to every routine bulk removal.
+  test("Per-phrase outcomes stays collapsed by default when no phrase in the batch is high-thrash", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task257 noop");
+
+    try {
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER_TASK257 });
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, phrases);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // No high-thrash summary should fire …
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-thrash-summary"),
+      ).toHaveCount(0);
+      // … and the outcomes <details> should be collapsed (no `open`
+      // attribute on the rendered element).
+      const details = panel.getByTestId(
+        "handwavy-bulk-preview-results-details",
+      );
+      await expect(details).toHaveJSProperty("open", false);
+    } finally {
+      await cleanup(apiCtx, phrases, {
+        reviewer: `${REVIEWER_TASK257}-cleanup`,
+      });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #257 — a manual collapse on a high-thrash batch must stick for
+  // the rest of that panel session. The drop-a-phrase flow re-renders
+  // the panel (bulkPreview state changes), but auto-expand only fires
+  // on the panel's open transition, so the manual collapse should be
+  // preserved across that re-render.
+  test("Manual collapse of the auto-expanded outcomes list is respected across drop-a-phrase re-renders", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const thrashy = `task257 stickycollapse ${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const fresh = `task257 sticky-fresh ${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+
+    try {
+      await seedCycles(apiCtx, thrashy, 2, { reviewer: REVIEWER_TASK257 });
+      await addPhrase(apiCtx, fresh, { reviewer: REVIEWER_TASK257 });
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, [thrashy, fresh]);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+      const details = panel.getByTestId(
+        "handwavy-bulk-preview-results-details",
+      );
+      await expect(details).toHaveJSProperty("open", true);
+
+      // Reviewer manually collapses the outcomes block.
+      await details.locator("summary").click();
+      await expect(details).toHaveJSProperty("open", false);
+
+      // Re-open it just enough to drop the `fresh` phrase, then collapse
+      // again. After the drop, the high-thrash phrase is still in the
+      // batch, but the panel must NOT re-auto-expand.
+      await details.locator("summary").click();
+      await expect(details).toHaveJSProperty("open", true);
+      await panel
+        .locator(
+          `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${fresh}"]`,
+        )
+        .click();
+      // One row left (the thrashy phrase).
+      await expect(
+        panel.locator(`[data-testid="handwavy-bulk-preview-result-row-thrash"]`),
+      ).toHaveCount(1);
+      // Now collapse manually and verify it stays collapsed.
+      await details.locator("summary").click();
+      await expect(details).toHaveJSProperty("open", false);
+    } finally {
+      await cleanup(apiCtx, [thrashy, fresh], {
+        reviewer: `${REVIEWER_TASK257}-cleanup`,
+      });
       await apiCtx.dispose();
     }
   });
