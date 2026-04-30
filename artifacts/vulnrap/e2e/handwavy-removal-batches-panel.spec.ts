@@ -316,4 +316,139 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       await apiCtx.dispose();
     }
   });
+
+  // Task #340 — clicking the conflict chip should reveal an inline detail
+  // panel that names every conflicting phrase, distinguishing "currently
+  // active" entries from "removed again on <date>" entries. The previous
+  // chip only surfaced a count ("3 of 5 may overwrite recent edits"), which
+  // forced reviewers into the full removal-history panel to figure out
+  // which phrases were actually conflicting.
+  test("expands the conflict chip into a detail list with per-phrase status", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3, "task175 batch");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
+      const removedAt = batch.historyEntry!.removedAt;
+
+      // Set up a mixed-status conflict: phrase[0] is currently back on
+      // the active list, phrase[1] was re-added then re-removed (so it
+      // owns a newer removal-history entry), and phrase[2] is untouched
+      // (no conflict — should not appear in the detail list).
+      await addPhrase(apiCtx, phrases[0], { reviewer: REVIEWER });
+      await addPhrase(apiCtx, phrases[1], { reviewer: REVIEWER });
+      const followUp = await batchRemove(apiCtx, [phrases[1]], {
+        reviewer: REVIEWER,
+      });
+      expect(followUp.historyEntry!.removedAt > removedAt).toBe(true);
+
+      const row = await openPanelAndFindBatch(page, removedAt);
+      const chip = row.getByTestId("handwavy-removal-batches-conflict-chip");
+      await expect(chip).toBeVisible({ timeout: 15_000 });
+      await expect(chip).toContainText("2 of 3 may overwrite recent edits");
+
+      // Detail panel is closed by default.
+      await expect(chip).toHaveAttribute("aria-expanded", "false");
+      await expect(row).toHaveAttribute("data-batch-conflict-expanded", "false");
+      await expect(
+        row.getByTestId("handwavy-removal-batches-conflict-detail"),
+      ).toHaveCount(0);
+
+      // Click the chip → detail panel opens with one row per conflicting
+      // phrase (the untouched phrase[2] should NOT appear).
+      await chip.click();
+      await expect(chip).toHaveAttribute("aria-expanded", "true");
+      await expect(row).toHaveAttribute("data-batch-conflict-expanded", "true");
+      const detail = row.getByTestId("handwavy-removal-batches-conflict-detail");
+      await expect(detail).toBeVisible();
+
+      const conflictRows = detail.getByTestId(
+        "handwavy-removal-batches-conflict-row",
+      );
+      await expect(conflictRows).toHaveCount(2);
+
+      const activeRow = detail.locator(
+        `[data-testid="handwavy-removal-batches-conflict-row"][data-conflict-phrase="${phrases[0]}"]`,
+      );
+      await expect(activeRow).toHaveAttribute("data-conflict-status", "active");
+      await expect(activeRow).toContainText(phrases[0]);
+      await expect(activeRow).toContainText("currently active");
+
+      const removedAgainRow = detail.locator(
+        `[data-testid="handwavy-removal-batches-conflict-row"][data-conflict-phrase="${phrases[1]}"]`,
+      );
+      await expect(removedAgainRow).toHaveAttribute(
+        "data-conflict-status",
+        "removed-again",
+      );
+      await expect(removedAgainRow).toContainText(phrases[1]);
+      await expect(removedAgainRow).toContainText(/removed again on /);
+
+      // Untouched phrase[2] should not appear in the detail list at all.
+      await expect(detail).not.toContainText(phrases[2]);
+
+      // Click again to collapse — the detail panel disappears.
+      await chip.click();
+      await expect(chip).toHaveAttribute("aria-expanded", "false");
+      await expect(
+        row.getByTestId("handwavy-removal-batches-conflict-detail"),
+      ).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #340 — each "currently active" phrase in the detail panel should
+  // be a click target that scrolls + pulse-highlights the matching row in
+  // the active phrase list (mirrors the existing draft-overlap hint
+  // behavior backed by `jumpToActivePhrase`).
+  test("clicking an active conflict phrase highlights the matching active-list row", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task175 batch");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
+      const removedAt = batch.historyEntry!.removedAt;
+
+      // Re-add the first phrase so it conflicts as "currently active".
+      await addPhrase(apiCtx, phrases[0], { reviewer: REVIEWER });
+
+      const row = await openPanelAndFindBatch(page, removedAt);
+      const chip = row.getByTestId("handwavy-removal-batches-conflict-chip");
+      await expect(chip).toBeVisible({ timeout: 15_000 });
+      await chip.click();
+
+      const detail = row.getByTestId("handwavy-removal-batches-conflict-detail");
+      await expect(detail).toBeVisible();
+
+      const jumpButton = detail.getByTestId(
+        "handwavy-removal-batches-conflict-jump",
+      );
+      await expect(jumpButton).toHaveCount(1);
+      await expect(jumpButton).toContainText(phrases[0]);
+
+      // Locate the matching active-list row by its stable phrase hook.
+      const activeRow = page.locator(
+        `[data-testid="handwavy-row"][data-handwavy-phrase="${phrases[0]}"]`,
+      );
+      await expect(activeRow).toHaveCount(1);
+      await expect(activeRow).not.toHaveAttribute("data-highlighted", "true");
+
+      // Click the phrase → the active row gets the pulse-highlight class.
+      await jumpButton.click();
+      await expect(activeRow).toHaveAttribute("data-highlighted", "true", {
+        timeout: 5_000,
+      });
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
 });

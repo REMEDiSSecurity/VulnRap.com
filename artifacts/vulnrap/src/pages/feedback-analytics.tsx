@@ -2851,7 +2851,21 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // sample phrases, so we pull the full inner phrase list from the matching
   // history entry (matched by ISO `removedAt`).
   const removalBatchConflicts = useMemo(() => {
-    const result = new Map<string, { conflictCount: number; total: number }>();
+    // Task #340 — alongside the count, capture the specific phrases that
+    // are conflicting and *why* (currently active vs. removed again on a
+    // newer date) so the chip can expand into a popover that lists them
+    // by name. Reviewers previously had to cross-reference the full
+    // removal-history panel to figure out which phrases the warning was
+    // about; now the row owns that detail directly.
+    type ConflictEntry = {
+      phrase: string;
+      status: "active" | "removed-again";
+      laterRemovedAt?: string;
+    };
+    const result = new Map<
+      string,
+      { conflictCount: number; total: number; conflicts: ConflictEntry[] }
+    >();
     if (removalBatches.length === 0 || history.length === 0) return result;
     const activePhrases = new Set(
       (phrases as Array<{ phrase: string }>).map((p) => p.phrase),
@@ -2896,19 +2910,49 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       );
       const innerPhrases = histEntry?.phrases ?? [];
       if (innerPhrases.length === 0) continue;
-      let conflictCount = 0;
+      const conflicts: ConflictEntry[] = [];
       for (const inner of innerPhrases) {
         const isActive = activePhrases.has(inner.phrase);
         const removedAts = phraseRemovedAts.get(inner.phrase) ?? [];
-        const hasNewerHistory = removedAts.some((t) => t > removedAtIso);
-        if (isActive || hasNewerHistory) conflictCount++;
+        const newerRemovedAts = removedAts.filter((t) => t > removedAtIso);
+        if (isActive) {
+          conflicts.push({ phrase: inner.phrase, status: "active" });
+        } else if (newerRemovedAts.length > 0) {
+          // Pick the most recent "removed again" timestamp so the popover
+          // tells the reviewer when the phrase was last retired (not just
+          // *some* newer entry). Strings sort lexicographically the same
+          // way ISO-8601 timestamps sort chronologically.
+          const laterRemovedAt = newerRemovedAts.reduce((acc, t) =>
+            t > acc ? t : acc,
+          );
+          conflicts.push({
+            phrase: inner.phrase,
+            status: "removed-again",
+            laterRemovedAt,
+          });
+        }
       }
-      if (conflictCount > 0) {
-        result.set(removedAtIso, { conflictCount, total: innerPhrases.length });
+      if (conflicts.length > 0) {
+        result.set(removedAtIso, {
+          conflictCount: conflicts.length,
+          total: innerPhrases.length,
+          conflicts,
+        });
       }
     }
     return result;
   }, [removalBatches, history, phrases]);
+  // Task #340 — which batch row's conflict popover is currently open. Only
+  // one is open at a time so the picker stays compact (mirrors the
+  // single-open pattern of the per-row impact preview elsewhere on the
+  // page). Toggling re-clicks closes it; opening a different row replaces
+  // the previously-open one.
+  const [openConflictBatch, setOpenConflictBatch] = useState<string | null>(
+    null,
+  );
+  const toggleConflictExpanded = (removedAtIso: string) => {
+    setOpenConflictBatch((prev) => (prev === removedAtIso ? null : removedAtIso));
+  };
 
   // Task #243 — let reviewers expand a "Recent batch removals" row to see
   // every phrase in that batch, not just the 5-sample preview the
@@ -7417,6 +7461,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     Array.isArray(fullPhrases) &&
                     fullPhrases.length > samples.length;
                   const isExpanded = expandable && expandedBatches.has(removedAtIso);
+                  // Task #340 — track whether THIS row's conflict popover
+                  // is currently open. The chip becomes a button that
+                  // toggles the inline list of conflicting phrases below
+                  // the row's first line.
+                  const isConflictExpanded =
+                    !!conflict && openConflictBatch === removedAtIso;
+                  const conflictDetailId = `handwavy-removal-batches-conflict-detail-${removedAtIso}`;
                   return (
                     <div
                       key={removedAtIso}
@@ -7425,6 +7476,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                       data-batch-removed-at={removedAtIso}
                       data-batch-conflict-count={conflict ? conflict.conflictCount : 0}
                       data-batch-expanded={isExpanded ? "true" : "false"}
+                      data-batch-conflict-expanded={isConflictExpanded ? "true" : "false"}
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-foreground/80 flex-1 min-w-0">
@@ -7435,18 +7487,29 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           {formatAuditTimestamp(b.removedAt) ?? "unknown date"}
                         </span>
                         {conflict && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] border-amber-500/40 text-amber-300 gap-1"
+                          // Task #340 — clickable chip. Toggles the inline
+                          // conflict-detail list below so reviewers can see
+                          // exactly WHICH phrases would overwrite newer
+                          // state without scrolling into the full
+                          // removal-history panel. Styled to match the
+                          // original Badge but rendered as a button so
+                          // aria-expanded / aria-controls and keyboard
+                          // activation work out of the box.
+                          <button
+                            type="button"
+                            onClick={() => toggleConflictExpanded(removedAtIso)}
+                            className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 px-2 py-0.5 text-[10px] text-amber-300 hover:border-amber-400/60 hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70"
                             data-testid="handwavy-removal-batches-conflict-chip"
                             data-conflict-count={conflict.conflictCount}
                             data-conflict-total={conflict.total}
-                            title={`${conflict.conflictCount} of ${conflict.total} phrase${conflict.total === 1 ? "" : "s"} in this batch ${conflict.conflictCount === 1 ? "is" : "are"} either back on the active list or have a newer removal entry — reinstating this batch will overwrite that newer state. Use the full removal-history panel below for a per-phrase decision.`}
-                            aria-label={`${conflict.conflictCount} of ${conflict.total} phrases in this batch may overwrite recent edits`}
+                            aria-expanded={isConflictExpanded}
+                            aria-controls={conflictDetailId}
+                            title={`${conflict.conflictCount} of ${conflict.total} phrase${conflict.total === 1 ? "" : "s"} in this batch ${conflict.conflictCount === 1 ? "is" : "are"} either back on the active list or have a newer removal entry — reinstating this batch will overwrite that newer state. Click to see which.`}
+                            aria-label={`${conflict.conflictCount} of ${conflict.total} phrases in this batch may overwrite recent edits — click to expand`}
                           >
                             <AlertTriangle className="w-3 h-3" />
                             {conflict.conflictCount} of {conflict.total} may overwrite recent edits
-                          </Badge>
+                          </button>
                         )}
                         {b.reinstated ? (
                           <Badge
@@ -7487,6 +7550,60 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           </Button>
                         )}
                       </div>
+                      {isConflictExpanded && conflict && (
+                        // Task #340 — inline detail panel attached to the
+                        // conflict chip. Lists each conflicting phrase
+                        // with a short status note. "Currently active"
+                        // entries become click targets that scroll +
+                        // pulse-highlight the matching active-list row
+                        // (mirrors `jumpToActivePhrase`, the same helper
+                        // the draft-overlap hint uses). "Removed again"
+                        // entries are plain text — there's no live row
+                        // to jump to — and surface the date the phrase
+                        // was last retired so the reviewer can decide
+                        // whether the bulk reinstate is safe.
+                        <div
+                          id={conflictDetailId}
+                          className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-amber-100"
+                          data-testid="handwavy-removal-batches-conflict-detail"
+                        >
+                          <div className="text-[10px] uppercase tracking-wider text-amber-300/80 mb-1">
+                            Conflicting phrase{conflict.conflicts.length === 1 ? "" : "s"}
+                          </div>
+                          <ul className="space-y-1">
+                            {conflict.conflicts.map((c, i) => (
+                              <li
+                                key={`${removedAtIso}-conflict-${i}`}
+                                className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
+                                data-testid="handwavy-removal-batches-conflict-row"
+                                data-conflict-phrase={c.phrase}
+                                data-conflict-status={c.status}
+                              >
+                                {c.status === "active" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => jumpToActivePhrase(c.phrase)}
+                                    className="font-mono break-all underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm text-left"
+                                    data-testid="handwavy-removal-batches-conflict-jump"
+                                    aria-label={`Jump to "${c.phrase}" in the active phrase list`}
+                                  >
+                                    &ldquo;{c.phrase}&rdquo;
+                                  </button>
+                                ) : (
+                                  <span className="font-mono break-all">
+                                    &ldquo;{c.phrase}&rdquo;
+                                  </span>
+                                )}
+                                <span className="text-amber-200/70">
+                                  {c.status === "active"
+                                    ? "currently active"
+                                    : `removed again on ${formatAuditTimestamp(c.laterRemovedAt) ?? "unknown date"}`}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       {isExpanded && fullPhrases ? (
                         <ul
                           className="pl-4 list-disc text-foreground/70 space-y-0.5 marker:text-muted-foreground/40"
