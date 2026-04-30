@@ -16,7 +16,10 @@ import {
   reconstructHallucinationTriggerText,
   parseArgs,
   chooseConcurrencyGuard,
+  buildBackfillRescoreAuditEntry,
+  appendRescoreHistory,
   CliExit,
+  type BackfillRescoreAuditEntry,
 } from "./backfill-vulnrap-helpers";
 import { detectHallucinationSignals } from "./lib/hallucination-detector";
 import { computeComposite, type EngineResult } from "./lib/engines";
@@ -218,6 +221,130 @@ describe("parseArgs (rescore flags)", () => {
       expect(e).toBeInstanceOf(CliExit);
       expect((e as CliExit).code).toBe(2);
     }
+  });
+});
+
+describe("buildBackfillRescoreAuditEntry (Task #389)", () => {
+  it("captures every prior + new field with the fixed source tag", () => {
+    const entry = buildBackfillRescoreAuditEntry({
+      mode: "engine",
+      priorCompositeScore: 47,
+      priorCompositeLabel: "NEEDS REVIEW",
+      priorCorrelationId: "corr-prev-123",
+      newCompositeScore: 22,
+      newCompositeLabel: "LIKELY INVALID",
+      newCorrelationId: "corr-new-456",
+      now: new Date("2026-04-30T12:34:56.000Z"),
+    });
+    expect(entry).toEqual({
+      source: "backfill-rescore",
+      mode: "engine",
+      rescoredAt: "2026-04-30T12:34:56.000Z",
+      priorCompositeScore: 47,
+      priorCompositeLabel: "NEEDS REVIEW",
+      priorCorrelationId: "corr-prev-123",
+      newCompositeScore: 22,
+      newCompositeLabel: "LIKELY INVALID",
+      newCorrelationId: "corr-new-456",
+    });
+  });
+
+  it("preserves null prior label / correlation id (legacy already-scored rows)", () => {
+    const entry = buildBackfillRescoreAuditEntry({
+      mode: "reconstruction",
+      priorCompositeScore: 51,
+      priorCompositeLabel: null,
+      priorCorrelationId: null,
+      newCompositeScore: 60,
+      newCompositeLabel: "REASONABLE",
+      newCorrelationId: "recon-abc-def",
+      now: new Date("2026-04-30T00:00:00.000Z"),
+    });
+    expect(entry.priorCompositeLabel).toBeNull();
+    expect(entry.priorCorrelationId).toBeNull();
+    expect(entry.mode).toBe("reconstruction");
+    expect(entry.source).toBe("backfill-rescore");
+  });
+
+  it("defaults rescoredAt to now() when no clock is injected", () => {
+    const before = Date.now();
+    const entry = buildBackfillRescoreAuditEntry({
+      mode: "engine",
+      priorCompositeScore: 50,
+      priorCompositeLabel: "NEEDS REVIEW",
+      priorCorrelationId: "p",
+      newCompositeScore: 50,
+      newCompositeLabel: "NEEDS REVIEW",
+      newCorrelationId: "n",
+    });
+    const ts = Date.parse(entry.rescoredAt);
+    expect(Number.isFinite(ts)).toBe(true);
+    expect(ts).toBeGreaterThanOrEqual(before - 1);
+    expect(ts).toBeLessThanOrEqual(Date.now() + 1);
+  });
+});
+
+describe("appendRescoreHistory (Task #389)", () => {
+  const sampleEntry = (overrides: Partial<BackfillRescoreAuditEntry> = {}): BackfillRescoreAuditEntry => ({
+    source: "backfill-rescore",
+    mode: "engine",
+    rescoredAt: "2026-04-30T01:02:03.000Z",
+    priorCompositeScore: 50,
+    priorCompositeLabel: "NEEDS REVIEW",
+    priorCorrelationId: "corr-old",
+    newCompositeScore: 70,
+    newCompositeLabel: "REASONABLE",
+    newCorrelationId: "corr-new",
+    ...overrides,
+  });
+
+  it("starts a fresh history when the prior blob has no rescoreHistory", () => {
+    const entry = sampleEntry();
+    expect(appendRescoreHistory(undefined, entry)).toEqual([entry]);
+    expect(appendRescoreHistory(null, entry)).toEqual([entry]);
+    expect(appendRescoreHistory({ engines: [], engineCount: 3 }, entry)).toEqual([entry]);
+  });
+
+  it("preserves prior valid entries in chronological order (oldest first, new last)", () => {
+    const existing = sampleEntry({
+      rescoredAt: "2026-04-01T00:00:00.000Z",
+      newCompositeScore: 60,
+      newCorrelationId: "corr-mid",
+    });
+    const fresh = sampleEntry({
+      rescoredAt: "2026-04-30T00:00:00.000Z",
+      priorCompositeScore: 60,
+      priorCorrelationId: "corr-mid",
+      newCompositeScore: 75,
+      newCorrelationId: "corr-newest",
+    });
+    const result = appendRescoreHistory({ rescoreHistory: [existing] }, fresh);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual(existing);
+    expect(result[1]).toEqual(fresh);
+  });
+
+  it("drops malformed historical entries but keeps valid ones", () => {
+    const valid = sampleEntry();
+    const malformed = [
+      null,
+      "not an object",
+      { source: "manual-override" }, // wrong source
+      { source: "backfill-rescore", mode: "weird" }, // bad mode
+      { source: "backfill-rescore", mode: "engine", rescoredAt: 123 }, // non-string ts
+    ];
+    const fresh = sampleEntry({ newCorrelationId: "corr-fresh" });
+    const result = appendRescoreHistory(
+      { rescoreHistory: [...malformed, valid] as unknown[] },
+      fresh,
+    );
+    expect(result).toEqual([valid, fresh]);
+  });
+
+  it("treats a non-array rescoreHistory as missing without throwing", () => {
+    const entry = sampleEntry();
+    expect(appendRescoreHistory({ rescoreHistory: "oops" }, entry)).toEqual([entry]);
+    expect(appendRescoreHistory({ rescoreHistory: { 0: entry } }, entry)).toEqual([entry]);
   });
 });
 

@@ -1972,6 +1972,20 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
         warnings?: string[];
         engineCount?: number;
         reconstructed?: boolean;
+        // Task #389 — chronological audit trail of backfill rescores.
+        // Only present on rows the rescore backfill has rewritten; legacy
+        // / first-time scores omit the field entirely.
+        rescoreHistory?: Array<{
+          source: "backfill-rescore";
+          mode: "engine" | "reconstruction";
+          rescoredAt: string;
+          priorCompositeScore: number;
+          priorCompositeLabel: string | null;
+          priorCorrelationId: string | null;
+          newCompositeScore: number;
+          newCompositeLabel: string;
+          newCorrelationId: string;
+        }>;
       };
       // Legacy reports stored without raw text get their composite rebuilt by
       // backfill-vulnrap.ts from cached v3.5.0 signals. Surface that fact so
@@ -1989,6 +2003,11 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
         warnings: stored.warnings ?? [],
         engineCount: stored.engineCount ?? (stored.engines?.length ?? 0),
         reconstructed,
+        // Surface the audit trail so the report detail UI can show
+        // reviewers "this composite was rescored from X to Y on date Z by
+        // the backfill". Empty array (rather than undefined) when no
+        // rescores have happened keeps the client-side check trivial.
+        rescoreHistory: Array.isArray(stored.rescoreHistory) ? stored.rescoreHistory : [],
       };
     })(),
     avriFamily: report.avriFamily ?? null,

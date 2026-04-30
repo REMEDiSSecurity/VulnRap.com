@@ -632,6 +632,24 @@ interface VulnrapEngineResultPanel {
   note?: string;
 }
 
+// Task #389 — chronological audit trail of times the bulk vulnrap
+// backfill rewrote this report's composite. Surfaced by the report-detail
+// API (routes/reports.ts) so reviewers can tell from the UI that a
+// composite was changed by a `--rescore` run (vs. a real recheck) and
+// what the prior value was. Empty/absent on rows that have only ever
+// been scored by a normal recheck or first-time analysis.
+interface VulnrapRescoreAuditEntry {
+  source: "backfill-rescore";
+  mode: "engine" | "reconstruction";
+  rescoredAt: string;
+  priorCompositeScore: number;
+  priorCompositeLabel: string | null;
+  priorCorrelationId: string | null;
+  newCompositeScore: number;
+  newCompositeLabel: string;
+  newCorrelationId: string;
+}
+
 interface VulnrapPanelData {
   compositeScore: number;
   label: string;
@@ -641,6 +659,7 @@ interface VulnrapPanelData {
   engineCount?: number;
   compositeBreakdown?: { weightedSum: number; totalWeight: number; beforeOverride: number; afterOverride: number };
   reconstructed?: boolean;
+  rescoreHistory?: VulnrapRescoreAuditEntry[];
 }
 
 const VULNRAP_LABEL_COLOR: Record<string, string> = {
@@ -1601,6 +1620,74 @@ export default function Results() {
                   {vulnrap.overridesApplied.map((rule, i) => (
                     <div key={i} className="text-[11px] font-mono text-orange-400/90">· {rule}</div>
                   ))}
+                </div>
+              </>
+            )}
+            {vulnrap.rescoreHistory && vulnrap.rescoreHistory.length > 0 && (
+              <>
+                <Separator className="bg-border/30" />
+                <div className="space-y-2" data-testid="panel-vulnrap-rescore-history">
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide">Backfill Rescore Audit Trail</div>
+                    <Hint text="This composite was rewritten by the bulk vulnrap backfill (--rescore). Each entry records the prior composite + label + correlation id, the rescore mode (engine re-run vs. reconstruction from cached signals), and the timestamp of the rewrite. Normal rechecks do not populate this list." />
+                  </div>
+                  <div className="space-y-1.5">
+                    {[...vulnrap.rescoreHistory].reverse().map((entry, i) => {
+                      const delta = entry.newCompositeScore - entry.priorCompositeScore;
+                      const deltaSign = delta > 0 ? "+" : "";
+                      const deltaTone =
+                        delta > 0
+                          ? "text-emerald-400"
+                          : delta < 0
+                            ? "text-red-400"
+                            : "text-muted-foreground";
+                      let formattedTs = entry.rescoredAt;
+                      try {
+                        formattedTs = new Date(entry.rescoredAt).toISOString().replace("T", " ").slice(0, 19) + " UTC";
+                      } catch {}
+                      return (
+                        <div
+                          key={`${entry.newCorrelationId}-${i}`}
+                          className="glass-card rounded-md px-3 py-2 text-[11px] space-y-1"
+                          data-testid={`row-vulnrap-rescore-${i}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 h-4 font-mono uppercase tracking-wide text-amber-300 border-amber-500/40"
+                              >
+                                {entry.source}
+                              </Badge>
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 h-4 font-mono uppercase tracking-wide text-muted-foreground border-muted-foreground/30"
+                              >
+                                {entry.mode}
+                              </Badge>
+                              <span className="text-muted-foreground font-mono">{formattedTs}</span>
+                            </div>
+                            <span className={`font-mono font-bold ${deltaTone}`}>
+                              {entry.priorCompositeScore} → {entry.newCompositeScore} ({deltaSign}{delta})
+                            </span>
+                          </div>
+                          <div className="text-muted-foreground/90 leading-snug">
+                            <span className="font-mono">{entry.priorCompositeLabel ?? "?"}</span>
+                            {" → "}
+                            <span className="font-mono">{entry.newCompositeLabel}</span>
+                            {entry.priorCorrelationId && (
+                              <>
+                                {" · prior "}
+                                <span className="font-mono text-muted-foreground/70">{entry.priorCorrelationId}</span>
+                              </>
+                            )}
+                            {" · new "}
+                            <span className="font-mono text-muted-foreground/70">{entry.newCorrelationId}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </>
             )}

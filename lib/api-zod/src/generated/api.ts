@@ -1030,6 +1030,57 @@ export const GetReportResponse = zod.object({
             .describe(
               "True when the composite was rebuilt by backfill-vulnrap from cached v3.5.0 signals (legacy reports stored without raw text). Reviewers should treat the score as approximate — CWE coherence is neutralized, no perplexity is available, and per-engine scores derive from cached slop \/ validity \/ quality \/ evidence values rather than a fresh pipeline run.",
             ),
+          rescoreHistory: zod
+            .array(
+              zod.object({
+                source: zod
+                  .enum(["backfill-rescore"])
+                  .describe(
+                    "Always `backfill-rescore` for now; reserved for future audit sources (e.g. manual reviewer overrides).",
+                  ),
+                mode: zod
+                  .enum(["engine", "reconstruction"])
+                  .describe(
+                    "Which rescore branch produced this entry. `engine` means the live pipeline re-ran on stored text; `reconstruction` means the composite was rebuilt from cached v3.5.0 signals.",
+                  ),
+                rescoredAt: zod.coerce
+                  .date()
+                  .describe(
+                    "ISO timestamp of the moment the rescore wrote this row.",
+                  ),
+                priorCompositeScore: zod
+                  .number()
+                  .describe(
+                    "Composite score the row carried before this rescore.",
+                  ),
+                priorCompositeLabel: zod
+                  .string()
+                  .nullish()
+                  .describe(
+                    "Composite label the row carried before this rescore (null for very old rows where the label column was unset).",
+                  ),
+                priorCorrelationId: zod
+                  .string()
+                  .nullish()
+                  .describe(
+                    "Correlation id the row carried before this rescore (null for legacy rows analyzed before the column existed).",
+                  ),
+                newCompositeScore: zod
+                  .number()
+                  .describe("Composite score this rescore wrote onto the row."),
+                newCompositeLabel: zod
+                  .string()
+                  .optional()
+                  .describe("Composite label this rescore wrote onto the row."),
+                newCorrelationId: zod
+                  .string()
+                  .describe(
+                    "Correlation id this rescore wrote onto the row (joinable to the analysis_traces table for engine-mode rescores; `recon-…` for reconstruction-mode rescores).",
+                  ),
+              }),
+            )
+            .optional()
+            .describe("Task"),
         })
         .describe(
           "VulnRap multi-engine consensus score with per-engine breakdowns.",

@@ -55,6 +55,8 @@ import {
   reconstructHallucinationTriggerText,
   parseArgs,
   chooseConcurrencyGuard,
+  buildBackfillRescoreAuditEntry,
+  appendRescoreHistory,
   CliExit,
   type CliOpts,
   type ConcurrencyGuard,
@@ -297,6 +299,10 @@ async function backfill(opts: CliOpts): Promise<void> {
         priorCompositeScore: reportsTable.vulnrapCompositeScore,
         priorCompositeLabel: reportsTable.vulnrapCompositeLabel,
         priorCorrelationId: reportsTable.vulnrapCorrelationId,
+        // Task #389 — read the prior engine-results blob so we can carry
+        // any existing rescoreHistory forward when this row is rescored
+        // again. Legacy/unrescored rows just have undefined here.
+        priorEngineResults: reportsTable.vulnrapEngineResults,
       })
       .from(reportsTable)
       .where(
@@ -355,12 +361,38 @@ async function backfill(opts: CliOpts): Promise<void> {
           evidence: row.evidence,
           humanIndicators: row.humanIndicators,
         });
+        // Task #389 — synthesize the new correlation id up-front so the
+        // audit entry below (and the UPDATE below it) can both reference
+        // the same value, and reviewers can join the audit row to
+        // diagnostics by correlation id later.
+        const correlationId = `recon-${crypto.randomUUID()}`;
+        // Task #389 — when this run is rewriting an already-scored row,
+        // append a "backfill-rescore" audit entry to the blob's
+        // rescoreHistory so the row itself records the prior composite +
+        // label + correlation id and the source/timestamp of this
+        // rewrite. First-time scores (wasRescore=false) leave the field
+        // off so unrescored rows stay untouched.
+        const rescoreHistory = wasRescore
+          ? appendRescoreHistory(
+              row.priorEngineResults,
+              buildBackfillRescoreAuditEntry({
+                mode: "reconstruction",
+                priorCompositeScore: row.priorCompositeScore as number,
+                priorCompositeLabel: row.priorCompositeLabel,
+                priorCorrelationId: row.priorCorrelationId,
+                newCompositeScore: composite.overallScore,
+                newCompositeLabel: composite.label,
+                newCorrelationId: correlationId,
+              }),
+            )
+          : undefined;
         const engineResultsBlob = {
           engines: composite.engineResults,
           compositeBreakdown: composite.compositeBreakdown,
           warnings: composite.warnings,
           engineCount: composite.engineCount,
           reconstructed: true,
+          ...(rescoreHistory ? { rescoreHistory } : {}),
         };
 
         if (opts.dryRun) {
@@ -378,11 +410,12 @@ async function backfill(opts: CliOpts): Promise<void> {
           continue;
         }
 
-        // Synthetic correlation id makes reconstructed rows easy to find
-        // in logs / analytics; we deliberately do NOT insert an
-        // analysis_traces row because no real pipeline ran and the trace
-        // shape requires stage timings we don't have.
-        const correlationId = `recon-${crypto.randomUUID()}`;
+        // Synthetic correlation id (built above so the rescoreHistory entry
+        // and the row's vulnrap_correlation_id reference the same value)
+        // makes reconstructed rows easy to find in logs / analytics; we
+        // deliberately do NOT insert an analysis_traces row because no
+        // real pipeline ran and the trace shape requires stage timings
+        // we don't have.
         const wrote = await db
           .update(reportsTable)
           .set({
@@ -417,11 +450,31 @@ async function backfill(opts: CliOpts): Promise<void> {
 
       try {
         const { composite, trace } = analyzeWithEnginesTraced(text, { reportId: row.id });
+        // Task #389 — rescored rows get an audit entry on the engine-
+        // results blob so the row records the prior composite + label +
+        // correlation id, the source ("backfill-rescore"), and the
+        // timestamp / new correlation id for this rewrite. First-time
+        // scores leave the field off so unrescored rows stay untouched.
+        const rescoreHistory = wasRescore
+          ? appendRescoreHistory(
+              row.priorEngineResults,
+              buildBackfillRescoreAuditEntry({
+                mode: "engine",
+                priorCompositeScore: row.priorCompositeScore as number,
+                priorCompositeLabel: row.priorCompositeLabel,
+                priorCorrelationId: row.priorCorrelationId,
+                newCompositeScore: composite.overallScore,
+                newCompositeLabel: composite.label,
+                newCorrelationId: trace.correlationId,
+              }),
+            )
+          : undefined;
         const engineResultsBlob = {
           engines: composite.engineResults,
           compositeBreakdown: composite.compositeBreakdown,
           warnings: composite.warnings,
           engineCount: composite.engineCount,
+          ...(rescoreHistory ? { rescoreHistory } : {}),
         };
 
         if (opts.dryRun) {

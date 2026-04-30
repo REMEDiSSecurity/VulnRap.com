@@ -1652,6 +1652,51 @@ components:
         reconstructed:
           type: boolean
           description: True when the composite was rebuilt by backfill-vulnrap from cached v3.5.0 signals (legacy reports stored without raw text). Reviewers should treat the score as approximate — CWE coherence is neutralized, no perplexity is available, and per-engine scores derive from cached slop / validity / quality / evidence values rather than a fresh pipeline run.
+        rescoreHistory:
+          type: array
+          description: Task #389 — chronological audit trail (oldest first) of times the bulk vulnrap backfill rewrote this report's composite. Empty when the row has only ever been scored by a normal recheck or first-time analysis. Lets reviewers tell from the row itself that the composite was changed by a `--rescore` run (vs. a real recheck) and what the prior value was.
+          items:
+            type: object
+            required:
+              - source
+              - mode
+              - rescoredAt
+              - priorCompositeScore
+              - newCompositeScore
+              - newCorrelationId
+            properties:
+              source:
+                type: string
+                enum: ["backfill-rescore"]
+                description: Always `backfill-rescore` for now; reserved for future audit sources (e.g. manual reviewer overrides).
+              mode:
+                type: string
+                enum: ["engine", "reconstruction"]
+                description: Which rescore branch produced this entry. `engine` means the live pipeline re-ran on stored text; `reconstruction` means the composite was rebuilt from cached v3.5.0 signals.
+              rescoredAt:
+                type: string
+                format: date-time
+                description: ISO timestamp of the moment the rescore wrote this row.
+              priorCompositeScore:
+                type: integer
+                description: Composite score the row carried before this rescore.
+              priorCompositeLabel:
+                type: string
+                nullable: true
+                description: Composite label the row carried before this rescore (null for very old rows where the label column was unset).
+              priorCorrelationId:
+                type: string
+                nullable: true
+                description: Correlation id the row carried before this rescore (null for legacy rows analyzed before the column existed).
+              newCompositeScore:
+                type: integer
+                description: Composite score this rescore wrote onto the row.
+              newCompositeLabel:
+                type: string
+                description: Composite label this rescore wrote onto the row.
+              newCorrelationId:
+                type: string
+                description: Correlation id this rescore wrote onto the row (joinable to the analysis_traces table for engine-mode rescores; `recon-…` for reconstruction-mode rescores).
       required:
         - compositeScore
         - label

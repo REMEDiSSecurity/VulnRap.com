@@ -797,11 +797,53 @@ export interface VulnrapEngineResult {
   note?: string;
 }
 
+/**
+ * Always `backfill-rescore` for now; reserved for future audit sources (e.g. manual reviewer overrides).
+ */
+export type VulnrapCompositeRescoreHistoryItemSource =
+  (typeof VulnrapCompositeRescoreHistoryItemSource)[keyof typeof VulnrapCompositeRescoreHistoryItemSource];
+
+export const VulnrapCompositeRescoreHistoryItemSource = {
+  "backfill-rescore": "backfill-rescore",
+} as const;
+
+/**
+ * Which rescore branch produced this entry. `engine` means the live pipeline re-ran on stored text; `reconstruction` means the composite was rebuilt from cached v3.5.0 signals.
+ */
+export type VulnrapCompositeRescoreHistoryItemMode =
+  (typeof VulnrapCompositeRescoreHistoryItemMode)[keyof typeof VulnrapCompositeRescoreHistoryItemMode];
+
+export const VulnrapCompositeRescoreHistoryItemMode = {
+  engine: "engine",
+  reconstruction: "reconstruction",
+} as const;
+
 export type VulnrapCompositeCompositeBreakdown = {
   weightedSum?: number;
   totalWeight?: number;
   beforeOverride?: number;
   afterOverride?: number;
+};
+
+export type VulnrapCompositeRescoreHistoryItem = {
+  /** Always `backfill-rescore` for now; reserved for future audit sources (e.g. manual reviewer overrides). */
+  source: VulnrapCompositeRescoreHistoryItemSource;
+  /** Which rescore branch produced this entry. `engine` means the live pipeline re-ran on stored text; `reconstruction` means the composite was rebuilt from cached v3.5.0 signals. */
+  mode: VulnrapCompositeRescoreHistoryItemMode;
+  /** ISO timestamp of the moment the rescore wrote this row. */
+  rescoredAt: string;
+  /** Composite score the row carried before this rescore. */
+  priorCompositeScore: number;
+  /** Composite label the row carried before this rescore (null for very old rows where the label column was unset). */
+  priorCompositeLabel?: string | null;
+  /** Correlation id the row carried before this rescore (null for legacy rows analyzed before the column existed). */
+  priorCorrelationId?: string | null;
+  /** Composite score this rescore wrote onto the row. */
+  newCompositeScore: number;
+  /** Composite label this rescore wrote onto the row. */
+  newCompositeLabel?: string;
+  /** Correlation id this rescore wrote onto the row (joinable to the analysis_traces table for engine-mode rescores; `recon-…` for reconstruction-mode rescores). */
+  newCorrelationId: string;
 };
 
 /**
@@ -819,6 +861,8 @@ export interface VulnrapComposite {
   engineCount?: number;
   /** True when the composite was rebuilt by backfill-vulnrap from cached v3.5.0 signals (legacy reports stored without raw text). Reviewers should treat the score as approximate — CWE coherence is neutralized, no perplexity is available, and per-engine scores derive from cached slop / validity / quality / evidence values rather than a fresh pipeline run. */
   reconstructed?: boolean;
+  /** Task */
+  rescoreHistory?: VulnrapCompositeRescoreHistoryItem[];
 }
 
 export interface ReportAnalysis {

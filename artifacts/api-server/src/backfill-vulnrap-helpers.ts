@@ -107,6 +107,81 @@ export class CliExit extends Error {
   }
 }
 
+// Task #389 — audit-trail entry persisted onto a rescored report's
+// `vulnrap_engine_results.rescoreHistory` array. Lets reviewers tell from
+// the row itself that the composite was rewritten by a backfill rescore
+// (vs. a normal recheck), what the prior composite was, and which run did
+// it. Plain JSON shape so it survives a roundtrip through the jsonb column
+// without needing schema migrations.
+//
+// `mode` distinguishes the two rescore branches (`engine` re-runs the live
+// pipeline; `reconstruction` rebuilds from cached v3.5.0 signals because
+// the report has no stored text). The history is appended-to, so multiple
+// rescores leave a chronological trail (oldest first).
+export interface BackfillRescoreAuditEntry {
+  source: "backfill-rescore";
+  mode: "engine" | "reconstruction";
+  rescoredAt: string;
+  priorCompositeScore: number;
+  priorCompositeLabel: string | null;
+  priorCorrelationId: string | null;
+  newCompositeScore: number;
+  newCompositeLabel: string;
+  newCorrelationId: string;
+}
+
+// Build an audit entry for a single rescored row. `now` is injectable so
+// tests can pin the timestamp; the script default uses `new Date()`.
+export function buildBackfillRescoreAuditEntry(args: {
+  mode: "engine" | "reconstruction";
+  priorCompositeScore: number;
+  priorCompositeLabel: string | null;
+  priorCorrelationId: string | null;
+  newCompositeScore: number;
+  newCompositeLabel: string;
+  newCorrelationId: string;
+  now?: Date;
+}): BackfillRescoreAuditEntry {
+  const ts = (args.now ?? new Date()).toISOString();
+  return {
+    source: "backfill-rescore",
+    mode: args.mode,
+    rescoredAt: ts,
+    priorCompositeScore: args.priorCompositeScore,
+    priorCompositeLabel: args.priorCompositeLabel,
+    priorCorrelationId: args.priorCorrelationId,
+    newCompositeScore: args.newCompositeScore,
+    newCompositeLabel: args.newCompositeLabel,
+    newCorrelationId: args.newCorrelationId,
+  };
+}
+
+// Append a fresh audit entry to whatever rescoreHistory already lives on
+// the prior `vulnrap_engine_results` blob. Tolerates a missing/non-array
+// field (legacy rows never had this), and silently drops malformed entries
+// from the existing history rather than throwing — reviewers care about
+// the most recent rescore, not historical schema drift.
+export function appendRescoreHistory(
+  priorBlob: unknown,
+  entry: BackfillRescoreAuditEntry,
+): BackfillRescoreAuditEntry[] {
+  const prior = (priorBlob ?? {}) as { rescoreHistory?: unknown };
+  const existing = Array.isArray(prior.rescoreHistory) ? prior.rescoreHistory : [];
+  const cleaned = existing.filter((e): e is BackfillRescoreAuditEntry => {
+    if (!e || typeof e !== "object") return false;
+    const r = e as Record<string, unknown>;
+    return (
+      r.source === "backfill-rescore" &&
+      (r.mode === "engine" || r.mode === "reconstruction") &&
+      typeof r.rescoredAt === "string" &&
+      typeof r.priorCompositeScore === "number" &&
+      typeof r.newCompositeScore === "number" &&
+      typeof r.newCorrelationId === "string"
+    );
+  });
+  return [...cleaned, entry];
+}
+
 // Optimistic concurrency guard chosen for an UPDATE of one row. Returned
 // as a discriminated union so the SQL builder lives in the script (where
 // drizzle is in scope) but the decision logic stays pure and testable.
