@@ -296,14 +296,14 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
         .join(", ")}`,
     );
   }
+  const traceKindLabel =
+    familyId === "RACE_CONCURRENCY"
+      ? "race trace"
+      : familyId === "MEMORY_CORRUPTION"
+        ? "crash trace"
+        : "tool trace";
   if (engine2?.crashTrace?.isStripped) {
     const ct = engine2.crashTrace;
-    const traceKindLabel =
-      familyId === "RACE_CONCURRENCY"
-        ? "race trace"
-        : familyId === "MEMORY_CORRUPTION"
-          ? "crash trace"
-          : "tool trace";
     lines.push(
       `- **Stripped ${traceKindLabel}** (penalty ${ct.penalty}): ${ct.reason ?? "stripped trace"} — frames ${ct.framesAnalyzed}, good ${ct.goodFrames}, placeholder ${ct.placeholderFrames}`,
     );
@@ -311,6 +311,31 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
       lines.push(
         `  - Trace gold signals revoked: ${ct.revokedGoldHits.map((r) => `${r.id} (−${r.points})`).join(", ")}`,
       );
+    }
+  }
+  // Task #317: surface the Sprint 13B-2 / Task #303 structural-fabrication
+  // markers (round offsets, frame-numbering gaps, missing PID anchor, hex
+  // region size, implausible function offsets / thread ids, region-vs-
+  // access mismatch). Mirrors the diagnostics-panel UI block so a copied
+  // markdown summary or printable triage report carries the same evidence
+  // the on-screen panel shows. Renders independently of `isStripped` so
+  // both flags can appear in the same export when both fired.
+  const ct = engine2?.crashTrace;
+  if (
+    ct?.hasStructuralFabrication &&
+    ct.structuralMarkers &&
+    ct.structuralMarkers.length > 0
+  ) {
+    const penalty = ct.structuralFabricationPenalty ?? 0;
+    const penaltyNote =
+      penalty < 0
+        ? `penalty ${penalty}`
+        : "penalty subsumed by stripped-trace";
+    lines.push(
+      `- **Structural fabrication in ${traceKindLabel}** (${penaltyNote}): ${ct.structuralMarkers.length} marker${ct.structuralMarkers.length === 1 ? "" : "s"} fired`,
+    );
+    for (const m of ct.structuralMarkers) {
+      lines.push(`  - ${m.description} (${m.id})`);
     }
   }
   // Task #300 — AI self-disclosure (e.g. "prepared using an AI security

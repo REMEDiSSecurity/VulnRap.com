@@ -594,6 +594,23 @@ const AVRI_OVERRIDE_TONES: Record<string, string> = {
   AVRI_TEMPLATE_CAMPAIGN: "text-orange-400",
 };
 
+// Task #317: short, plain-English label for each Sprint 13B-2 / Task #303
+// structural-fabrication marker. Keep the keys in sync with the
+// `StructuralMarker.id` union in
+// `artifacts/api-server/src/lib/engines/avri/crash-trace.ts`. The marker's
+// `description` field already includes the offending excerpt (e.g. the
+// round offsets, the frame numbers, the hex region size); these labels are
+// the one-line headline reviewers see above each excerpt.
+const STRUCTURAL_MARKER_LABELS: Record<string, string> = {
+  round_function_offsets: "Round/zero function offsets",
+  frame_numbering_gaps: "Frame-numbering gap inside a block",
+  thread_id_inconsistency: "Thread block without `==<pid>==` anchor",
+  round_heap_region_size: "Heap region size in hex / textbook power-of-two",
+  implausible_function_offset: "Function offsets outside realistic bounds",
+  implausible_thread_id: "PID or thread id outside realistic range",
+  region_size_vs_access_size: "Region size incompatible with access size",
+};
+
 function AvriFamilySection({
   avri,
   engines,
@@ -908,6 +925,71 @@ function AvriFamilySection({
                 )}
               </div>
             )}
+
+            {/*
+              Task #317: surface the Sprint 13B-2 / Task #303 structural-
+              fabrication markers (round function offsets, frame-numbering
+              gaps, missing PID anchor, hex region size, implausible
+              function offsets / thread ids, region-vs-access mismatch).
+              Reuses the same red-box visual treatment as STRIPPED_CRASH_TRACE
+              above so reviewers learn the "fabricated trace" pattern at a
+              glance. Renders whenever the Engine 2 block carries
+              structuralMarkers, even if STRIPPED_CRASH_TRACE also fired —
+              the two flags surface different evidence (placeholder symbols
+              vs. internally-inconsistent values) and reviewers benefit from
+              seeing both.
+            */}
+            {crashTrace?.hasStructuralFabrication &&
+              (crashTrace.structuralMarkers?.length ?? 0) > 0 && (
+                <div
+                  className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 space-y-2"
+                  data-testid="structural-fabrication-block"
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 h-5 font-mono text-red-400 border-red-500/40"
+                    >
+                      STRUCTURAL_FABRICATION
+                    </Badge>
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {(() => {
+                        const p = crashTrace.structuralFabricationPenalty ?? 0;
+                        if (p < 0) {
+                          return `${traceKindLabel} downgraded (${p})`;
+                        }
+                        return `${traceKindLabel} fabrication tells (penalty subsumed by stripped-trace)`;
+                      })()}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-red-300/90 leading-relaxed">
+                    {crashTrace.structuralMarkers!.length} structural marker
+                    {crashTrace.structuralMarkers!.length === 1 ? "" : "s"} fired
+                    against this {traceKindLabel}; real sanitizer output never
+                    hits this combination.
+                  </p>
+                  <ul className="space-y-1.5">
+                    {crashTrace.structuralMarkers!.map((m) => (
+                      <li
+                        key={m.id}
+                        className="text-[11px] font-mono space-y-0.5"
+                      >
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                          <span className="text-red-400/90 font-semibold">
+                            {STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}
+                          </span>
+                          <span className="text-muted-foreground">
+                            ({m.id})
+                          </span>
+                        </div>
+                        <div className="text-foreground/80 leading-snug">
+                          {m.description}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
             {/*
               Sprint 12 / Task 104: mirror the FAKE_RAW_HTTP block from the

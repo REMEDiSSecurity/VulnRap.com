@@ -303,6 +303,113 @@ describe("buildAvriRubricMarkdown", () => {
     );
   });
 
+  it("renders the Sprint 13B-2 / Task #303 structural-fabrication markers when crashTrace.hasStructuralFabrication is true (Task #317)", () => {
+    const lines = buildAvriRubricMarkdown({
+      composite: { family: "MEMORY_CORRUPTION" },
+      engine2: {
+        crashTrace: {
+          framesAnalyzed: 6,
+          goodFrames: 4,
+          placeholderFrames: 0,
+          isStripped: false,
+          reason: null,
+          revokedGoldHits: [],
+          penalty: 0,
+          hasStructuralFabrication: true,
+          structuralFabricationPenalty: -12,
+          structuralMarkers: [
+            {
+              id: "round_function_offsets",
+              description:
+                "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000); real offsets are non-zero and non-round",
+            },
+            {
+              id: "thread_id_inconsistency",
+              description:
+                "Trace references `thread T0`/`T1` but no `==<pid>==` header is present",
+            },
+          ],
+        },
+      },
+    });
+    // Header line names the family (crash trace for MEMORY_CORRUPTION) and
+    // surfaces the out-of-cap penalty.
+    expect(lines).toContain(
+      "- **Structural fabrication in crash trace** (penalty -12): 2 markers fired",
+    );
+    // Each marker is rendered as a sub-bullet with its description (which
+    // already embeds the offending excerpt) and id in parens.
+    expect(lines).toContain(
+      "  - 3 frames carry round/zero function offsets (0x0, 0x100, 0x1000); real offsets are non-zero and non-round (round_function_offsets)",
+    );
+    expect(lines).toContain(
+      "  - Trace references `thread T0`/`T1` but no `==<pid>==` header is present (thread_id_inconsistency)",
+    );
+  });
+
+  it("notes when the structural-fab penalty is subsumed by stripped-trace (Task #317)", () => {
+    const lines = buildAvriRubricMarkdown({
+      composite: { family: "RACE_CONCURRENCY" },
+      engine2: {
+        crashTrace: {
+          framesAnalyzed: 6,
+          goodFrames: 1,
+          placeholderFrames: 4,
+          isStripped: true,
+          reason: "4/6 frames placeholder",
+          revokedGoldHits: [],
+          penalty: -18,
+          // structuralFabricationPenalty 0 means the structural-fab penalty
+          // was suppressed because stripped-trace already charged the report.
+          hasStructuralFabrication: true,
+          structuralFabricationPenalty: 0,
+          structuralMarkers: [
+            {
+              id: "frame_numbering_gaps",
+              description: "Frame numbering jumps from #1 to #4",
+            },
+            {
+              id: "round_heap_region_size",
+              description:
+                'Heap "region size: 0x100" in hex; real ASan emits decimal',
+            },
+          ],
+        },
+      },
+    });
+    // Both blocks render — stripped-trace and structural-fab — and the
+    // structural-fab line spells out the subsumed-penalty case so the
+    // markdown reader doesn't think two penalties were applied.
+    expect(lines).toContain(
+      "- **Stripped race trace** (penalty -18): 4/6 frames placeholder — frames 6, good 1, placeholder 4",
+    );
+    expect(lines).toContain(
+      "- **Structural fabrication in race trace** (penalty subsumed by stripped-trace): 2 markers fired",
+    );
+  });
+
+  it("does not render structural-fab block when hasStructuralFabrication is false (Task #317)", () => {
+    const lines = buildAvriRubricMarkdown({
+      composite: { family: "MEMORY_CORRUPTION" },
+      engine2: {
+        crashTrace: {
+          framesAnalyzed: 6,
+          goodFrames: 4,
+          placeholderFrames: 0,
+          isStripped: false,
+          reason: null,
+          revokedGoldHits: [],
+          penalty: 0,
+          hasStructuralFabrication: false,
+          structuralMarkers: [],
+        },
+      },
+    });
+    expect(
+      lines.some((l) => l.includes("Structural fabrication")),
+    ).toBe(false);
+  });
+
   it("only emits the Composite overrides block when there is something to show", () => {
     const lines = buildAvriRubricMarkdown({
       composite: { family: "GENERIC", goldHitCount: 1 },

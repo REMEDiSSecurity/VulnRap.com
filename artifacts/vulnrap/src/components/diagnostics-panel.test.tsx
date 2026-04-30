@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -415,6 +415,314 @@ describe("DiagnosticsPanel smoke test", () => {
       screen.getByText(/TSan trace has 3\/5 frames with placeholder symbols\/offsets/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/tsan_or_helgrind_header/)).toBeInTheDocument();
+  });
+
+  it("renders the STRUCTURAL_FABRICATION block with each marker label, id, and offending excerpt (Task #317)", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "MEMORY_CORRUPTION",
+          familyName: "Memory corruption / unsafe C",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-787",
+            evidence: ["CWE-787"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 28,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 28,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "MEMORY_CORRUPTION",
+                  familyName: "Memory corruption / unsafe C",
+                  baseScore: 22,
+                  goldHitCount: 0,
+                  goldTotalCount: 8,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  // crashTrace is NOT stripped (good frames are present),
+                  // but the Sprint 13B-2 / Task #303 detectors fired against
+                  // the trace's structural envelope. The panel must surface
+                  // the markers in their own block so reviewers can see why
+                  // the report was downgraded.
+                  crashTrace: {
+                    framesAnalyzed: 6,
+                    goodFrames: 5,
+                    placeholderFrames: 0,
+                    isStripped: false,
+                    reason: null,
+                    revokedGoldHits: [],
+                    penalty: 0,
+                    hasStructuralFabrication: true,
+                    structuralFabricationPenalty: -12,
+                    structuralMarkers: [
+                      {
+                        id: "round_function_offsets",
+                        description:
+                          "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000); real offsets are non-zero and non-round",
+                      },
+                      {
+                        id: "thread_id_inconsistency",
+                        description:
+                          "Trace references `thread T0`/`T1` but no `==<pid>==` header is present (real ASan/TSan output always anchors thread blocks to a PID)",
+                      },
+                    ],
+                  },
+                  rawAvriScore: 10,
+                  legacyScore: 45,
+                  blendedScore: 28,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("STRUCTURAL_FABRICATION")).toBeInTheDocument();
+    });
+
+    // The block reuses the stripped-trace red-box treatment so reviewers
+    // learn the "fabricated trace" pattern at a glance.
+    expect(screen.getByTestId("structural-fabrication-block")).toHaveClass(
+      "border-red-500/40",
+    );
+
+    // Penalty surfaced in the header.
+    expect(
+      screen.getByText(/crash trace downgraded \(-12\)/i),
+    ).toBeInTheDocument();
+
+    // Each marker renders its plain-English label, the marker id, and the
+    // description (which carries the offending excerpt inline). The block has
+    // a stable testid so we can scope queries inside it.
+    const block = screen.getByTestId("structural-fabrication-block");
+    expect(within(block).getByText("Round/zero function offsets")).toBeInTheDocument();
+    expect(within(block).getByText("(round_function_offsets)")).toBeInTheDocument();
+    expect(
+      within(block).getByText(
+        /3 frames carry round\/zero function offsets \(0x0, 0x100, 0x1000\)/i,
+      ),
+    ).toBeInTheDocument();
+
+    expect(
+      within(block).getByText("Thread block without `==<pid>==` anchor"),
+    ).toBeInTheDocument();
+    expect(within(block).getByText("(thread_id_inconsistency)")).toBeInTheDocument();
+    expect(
+      within(block).getByText(
+        /Trace references `thread T0`\/`T1` but no `==<pid>==` header is present/i,
+      ),
+    ).toBeInTheDocument();
+
+    // STRIPPED_CRASH_TRACE block is NOT shown (isStripped=false), proving
+    // the structural-fab block is independent.
+    expect(
+      screen.queryByText("STRIPPED_CRASH_TRACE"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders STRUCTURAL_FABRICATION with subsumed-penalty wording when stripped-trace already fired (Task #317)", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "RACE_CONCURRENCY",
+          familyName: "Concurrency / data race",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-362",
+            evidence: ["CWE-362"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 22,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "RACE_CONCURRENCY",
+                  familyName: "Concurrency / data race",
+                  baseScore: 18,
+                  goldHitCount: 0,
+                  goldTotalCount: 6,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  crashTrace: {
+                    framesAnalyzed: 6,
+                    goodFrames: 1,
+                    placeholderFrames: 4,
+                    isStripped: true,
+                    reason: "TSan trace has 4/6 frames placeholder",
+                    revokedGoldHits: [],
+                    penalty: -18,
+                    hasStructuralFabrication: true,
+                    // Penalty 0 — engine deliberately subsumes the
+                    // structural-fab charge under stripped-trace so the
+                    // report isn't double-charged for the same trace.
+                    structuralFabricationPenalty: 0,
+                    structuralMarkers: [
+                      {
+                        id: "frame_numbering_gaps",
+                        description:
+                          "Frame numbering jumps from #1 to #4; real sanitizer output is contiguous within a block",
+                      },
+                      {
+                        id: "round_heap_region_size",
+                        description:
+                          'Heap "region size: 0x100" in hex; real ASan emits "<N>-byte region [0x..., 0x...)" in decimal',
+                      },
+                    ],
+                  },
+                  rawAvriScore: 0,
+                  legacyScore: 30,
+                  blendedScore: 22,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("STRUCTURAL_FABRICATION")).toBeInTheDocument();
+    });
+
+    // Both blocks are visible: STRIPPED_CRASH_TRACE (with race-trace wording)
+    // and STRUCTURAL_FABRICATION (penalty subsumed).
+    expect(screen.getByText("STRIPPED_CRASH_TRACE")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /race trace fabrication tells \(penalty subsumed by stripped-trace\)/i,
+      ),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText(/Frame-numbering gap inside a block/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Heap region size in hex \/ textbook power-of-two/i),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render the STRUCTURAL_FABRICATION block when hasStructuralFabrication is false (Task #317)", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "MEMORY_CORRUPTION",
+          familyName: "Memory corruption / unsafe C",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-787",
+            evidence: ["CWE-787"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 28,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 60,
+              verdict: "GREEN" as const,
+              confidence: "HIGH" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "MEMORY_CORRUPTION",
+                  familyName: "Memory corruption / unsafe C",
+                  baseScore: 60,
+                  goldHitCount: 2,
+                  goldTotalCount: 8,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  crashTrace: {
+                    framesAnalyzed: 6,
+                    goodFrames: 6,
+                    placeholderFrames: 0,
+                    isStripped: false,
+                    reason: null,
+                    revokedGoldHits: [],
+                    penalty: 0,
+                    hasStructuralFabrication: false,
+                    structuralFabricationPenalty: 0,
+                    structuralMarkers: [],
+                  },
+                  rawAvriScore: 60,
+                  legacyScore: 60,
+                  blendedScore: 60,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/AVRI Family Rubric/i)).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByText("STRUCTURAL_FABRICATION"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("structural-fabrication-block"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the FAKE_RAW_HTTP block with reason, request counters, and revoked smuggling gold signals", async () => {
