@@ -434,20 +434,112 @@ const PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE =
 const PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE =
   /`(<[^>\n`]{1,80}>)`\s+(?:is|was|were|are|seems|appears)[a-zA-Z \-]{1,25}?\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template)\b/gi;
 
-/** Find prose snippets shaped like "Payload: `<sql payload here>`",
- * "the payload `<inject>` was sent", the no-backticks dodge "the
- * payload <inject> was sent", the alternate-fence dodges "the payload
- * \"<inject>\" was sent" / "the payload [<inject>] was sent", or the
- * post-slot dodge "`<inject>` is the payload" whose `<...>` slot is
- * itself a placeholder.
+// No-slot dodge variant 1 — the labelled form. Slop authors drop the
+// `<...>` slot entirely and label a payload-context noun with a bare
+// slop term (TBD / TODO / FIXME / placeholder / N/A) or a square-bracket
+// placeholder whose first word is itself slop vocabulary:
+//   - "Payload: TBD"
+//   - "Payload: TODO"
+//   - "payload = N/A"
+//   - "Payload: [insert here]"
+//   - "Payload: [your payload]"
+//
+// The bare-term branch is anchored with `\b` so a real exploit string
+// that happens to start with one of those tokens (`Payload: tbd-fixme
+// crash repro`) still has a non-word character after; we only match the
+// bare standalone slop term. The bracket branch requires the bracket's
+// first word to be slop vocabulary (your/insert/placeholder/fill/todo/
+// tbd/payload/inject/here/add/to-be/will-be/n-a/actual/real) so a
+// reporter quoting an array index or HTTP method line in brackets
+// (e.g. "Payload: [1234]" / "command: [GET /a]") is left alone.
+const PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_LABEL_RE =
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|exploits?)\s*[:=]\s*[`'"]?(?:(?:tbd|todo|fixme|placeholder|n\/?a)\b|\[(?:your|insert(?:ed)?|placeholder|fill|todo|tbd|fixme|payload|inject|here|add(?:ed)?|to[\s-]?be|will[\s-]?be|n\/?a|actual|real)\b[^\]\n]{0,60}\])[`'"]?/gi;
+
+// No-slot dodge variant 2 — the parenthetical form. A payload-context
+// noun followed by `(...)` whose first word names a deferral gesture:
+//   - "the payload (to be added)"
+//   - "the payload (TBD)"
+//   - "the command (placeholder)"
+//   - "the payload (will be filled in)"
+//
+// The parenthetical's first word must come from a closed slop list, so
+// neutral parentheticals like "the payload (200 bytes)" or "the
+// command (above)" are left alone.
+const PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_PARENS_RE =
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|exploits?)\s+\(\s*(?:tbd|todo|fixme|placeholder|n\/?a|forthcoming|coming\s+soon|added\s+(?:later|soon)|to\s+be\s+(?:added|determined|filled(?:\s+in)?|provided|inserted|named|specified|disclosed|posted|published|shared|attached)|will\s+be\s+(?:added|determined|filled(?:\s+in)?|provided|inserted|named|specified|disclosed|posted|published|shared|attached))\b[^)\n]{0,40}\)/gi;
+
+// No-slot dodge variant 3 — the passive-future form. A payload-context
+// noun phrase followed by a copula and a deferral verb:
+//   - "the payload will be added later"
+//   - "the actual payload will be provided"
+//   - "the command was filled in below"
+//
+// Requires a determiner (the/a/an/our/my/this/that) before the noun to
+// keep the pattern from latching onto incidental subjects. The deferral
+// verb list is intentionally narrow — added/provided/filled/inserted/
+// specified/determined/posted/shared/published/disclosed/named/listed/
+// attached — so factual prose like "the payload was rejected" or "the
+// command returned 500" is left alone.
+const PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_DEFERRED_RE =
+  /\b(?:the|a|an|our|my|this|that)\s+(?:actual\s+|real\s+|exact\s+|specific\s+|full\s+|complete\s+)?(?:payloads?|inject(?:ion|s)?|commands?|cmd|exploits?|sqli?|nosql|ldap|xpath|template)\s+(?:will\s+be|is\s+to\s+be|to\s+be|has\s+been|was|were)\s+(?:added|provided|filled(?:\s+in)?|inserted|specified|determined|posted|shared|published|disclosed|named|listed|attached)\b/gi;
+
+// No-slot dodge variant 4 — the active-promise form. A first-person
+// promise to deliver the payload later:
+//   - "I'll add the actual payload later"
+//   - "we'll provide the exact command shortly"
+//   - "I will share the payload in a follow-up"
+//
+// Two sub-cases share the regex via alternation:
+//   (a) the noun is qualified by actual/real/exact/specific/full/
+//       complete — the qualifier is itself a "you know this is a
+//       placeholder" tell, so no deferral keyword is required;
+//   (b) the noun is bare but a deferral keyword (later/soon/shortly/
+//       tomorrow/asap/follow-up/comments/update) appears within 60
+//       characters after the noun — this stops "I'll add the payload
+//       to the request" or "I'll add the payload after the prefix"
+//       (a reporter narrating payload construction) from firing.
+const PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_PROMISE_RE =
+  /\b(?:i(?:'ll|\s+will|\s+can|\s+plan\s+to|\s+intend\s+to)|we(?:'ll|\s+will|\s+can|\s+plan\s+to|\s+intend\s+to))\s+(?:add|provide|insert|share|post|publish|disclose|attach|specify|fill\s+in|include)\s+(?:the\s+)?(?:(?:actual|real|exact|specific|full|complete)\s+(?:payloads?|inject(?:ion|s)?|commands?|cmd|exploits?|sqli?|nosql|ldap|xpath|template)|(?:payloads?|inject(?:ion|s)?|commands?|cmd|exploits?|sqli?|nosql|ldap|xpath|template)\b[^.\n]{0,60}?\b(?:later|soon|shortly|tomorrow|asap|in\s+(?:a\s+)?(?:follow[\s-]?up|comment|comments|update))\b)/gi;
+
+// No-slot dodge variant 5 — a bare square-bracket placeholder used as
+// the payload itself, with no surrounding `Payload:` label. The
+// bracket's contents must include BOTH a slop directive word
+// (your/insert/placeholder/fill/todo/tbd/fixme/add/to-be/will-be/n-a/
+// actual/real) AND a payload-context noun (payload/inject/exploit/
+// sqli/cmd/command/shell/exec/nosql/ldap/xpath/template) so neutral
+// brackets like "[insert your name]" or "[your address]" stay safe:
+//   - "[insert payload here]"
+//   - "[your sql payload]"
+//   - "[add the actual command here]"
+const PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_BRACKET_RE =
+  /\[(?:your|insert(?:ed)?|placeholder|fill|todo|tbd|fixme|add(?:ed)?|to[\s-]?be|will[\s-]?be|n\/?a|actual|real)\b[^\]\n]{0,60}(?:payload|inject|exploit|sqli?|cmd|command|shell|exec|nosql|ldap|xpath|template)[^\]\n]{0,40}\]/gi;
+
+/** Find prose snippets that gesture at a payload without actually naming
+ * one. Two families of dodge are caught:
  *
- * The colon, inline-code, and post-slot forms all accept either slop
- * vocabulary or any bare short identifier in the slot (the surrounding
- * `Payload:` label, backtick fence, or copula clause is itself enough
- * of a payload-context tell). The bare-angle, double-quote, and
- * square-bracket forms are stricter and only fire when the slot's
- * inner text is slop vocabulary, so neutral prose like "the payload
- * \"<unknown>\" was rejected" is left alone.
+ *   1. Slot-based gestures — a payload-context word adjacent to an
+ *      angle-bracket `<...>` slot (optionally wrapped in inline-code or
+ *      quotes). Covers the colon form ("Payload: `<sql payload here>`"),
+ *      the word-then-slot inline form ("the payload `<inject>` was
+ *      sent"), the bare-angle dodge ("the payload <inject> was sent"),
+ *      the alternate-fence dodges ("the payload \"<inject>\" was sent"
+ *      / "the payload [<inject>] was sent"), and the post-slot dodge
+ *      ("`<inject>` is the payload"). The colon, inline-code, and
+ *      post-slot forms accept either slop vocabulary or any bare short
+ *      identifier in the slot; the bare-angle, double-quote, and
+ *      square-bracket forms are stricter and only fire when the slot's
+ *      inner text is slop vocabulary, so neutral prose like "the
+ *      payload \"<unknown>\" was rejected" is left alone.
+ *
+ *   2. No-slot gestures — phrases that gesture at a payload without
+ *      using `<...>` at all. Covers the labelled form ("Payload: TBD",
+ *      "Payload: [insert here]"), the parenthetical form ("the payload
+ *      (to be added)"), the passive-future form ("the payload will be
+ *      added later"), the active-promise form ("I'll add the actual
+ *      payload later"), and a bare square-bracket placeholder used as
+ *      the payload itself ("[insert payload here]"). These don't have
+ *      a slot to validate — the regex itself constrains the gesture
+ *      tightly enough that any match counts.
  *
  * Returns the byte ranges of the full match so the caller can strip
  * them before re-testing payload-class gold signals. */
@@ -455,36 +547,66 @@ export function findProsePlaceholderPayloadRanges(
   text: string,
 ): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
-  const cases: Array<{ re: RegExp; requireSlopVocab: boolean }> = [
+  const cases: Array<{
+    re: RegExp;
+    requireSlopVocab: boolean;
+    noSlot?: boolean;
+  }> = [
     { re: PROSE_PAYLOAD_PLACEHOLDER_RE, requireSlopVocab: false },
     { re: PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE, requireSlopVocab: false },
     { re: PROSE_PAYLOAD_PLACEHOLDER_BARE_RE, requireSlopVocab: true },
     { re: PROSE_PAYLOAD_PLACEHOLDER_DQUOTE_RE, requireSlopVocab: true },
     { re: PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE, requireSlopVocab: true },
     { re: PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE, requireSlopVocab: false },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_LABEL_RE,
+      requireSlopVocab: false,
+      noSlot: true,
+    },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_PARENS_RE,
+      requireSlopVocab: false,
+      noSlot: true,
+    },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_DEFERRED_RE,
+      requireSlopVocab: false,
+      noSlot: true,
+    },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_PROMISE_RE,
+      requireSlopVocab: false,
+      noSlot: true,
+    },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_BRACKET_RE,
+      requireSlopVocab: false,
+      noSlot: true,
+    },
   ];
-  for (const { re, requireSlopVocab } of cases) {
+  for (const { re, requireSlopVocab, noSlot } of cases) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
-      const slot = m[1];
-      const inner = slot.slice(1, -1).trim();
-      if (inner.length === 0) continue;
-      const looksPlaceholder = requireSlopVocab
-        ? BODY_PLACEHOLDER_KEYWORDS.test(inner)
-        : BODY_PLACEHOLDER_KEYWORDS.test(inner) ||
-          /^[a-z][a-z0-9_\-\s]{0,30}$/i.test(inner);
-      if (!looksPlaceholder) continue;
+      if (!noSlot) {
+        const slot = m[1];
+        const inner = slot.slice(1, -1).trim();
+        if (inner.length === 0) continue;
+        const looksPlaceholder = requireSlopVocab
+          ? BODY_PLACEHOLDER_KEYWORDS.test(inner)
+          : BODY_PLACEHOLDER_KEYWORDS.test(inner) ||
+            /^[a-z][a-z0-9_\-\s]{0,30}$/i.test(inner);
+        if (!looksPlaceholder) continue;
+      }
       const start = m.index;
       const end = m.index + m[0].length;
-      // Dedupe against any range already added (the six regexes are
-      // disjoint by design — one requires `[:=]`, one requires word +
-      // whitespace + backtick, one requires word + whitespace + bare
-      // angle bracket, two require word + whitespace + a `"`/`[` fence
-      // around the slot, and the post-slot one requires backtick +
-      // slot + copula after — but a future edit could broaden any of
-      // them, so we still skip overlapping ranges to keep the
-      // byte-strip pass idempotent).
+      // Dedupe against any range already added. The slot-based regexes
+      // are disjoint by design — colon vs word+space+backtick vs
+      // word+space+bare-angle vs word+space+`"`/`[` fence around the
+      // slot vs backtick+slot+copula — and the no-slot regexes target
+      // shapes the slot regexes don't match at all (no `<...>`
+      // anywhere). A future edit could broaden any of them, so we still
+      // skip overlapping ranges to keep the byte-strip pass idempotent.
       const overlaps = ranges.some(
         (r) => start < r.end && end > r.start,
       );

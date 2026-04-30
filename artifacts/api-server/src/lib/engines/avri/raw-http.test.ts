@@ -781,6 +781,95 @@ const SLOP_CMDI_PROSE_PLACEHOLDER_POSTSLOT_FIXTURE = [
   "fleet — please prioritize.",
 ].join("\n");
 
+// SQLi slop fixture using the no-slot LABEL dodge: prose says "Payload:
+// TBD" — no `<...>` slot at all, just a label and a slop term. The
+// injection family's `concrete_payload` gold signal would happily fire
+// on the incidental "UNION SELECT" token in the CWE description, so the
+// no-slot label check must revoke it.
+const SLOP_SQLI_PROSE_PLACEHOLDER_NOSLOT_LABEL_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query.",
+  "This is the canonical UNION SELECT class of attacks (CWE-89).",
+  "Severity: Critical. Affects all customers in production.",
+  "",
+  "Payload: TBD.",
+  "",
+  "Replay against any modern database backend; the response will",
+  "include sensitive rows.",
+].join("\n");
+
+// SQLi slop fixture using the no-slot SQUARE-BRACKET dodge: "Payload:
+// [insert here]" — the value is a bracketed placeholder rather than a
+// `<...>` slot. Same revocation expectation as the bare-term form.
+const SLOP_SQLI_PROSE_PLACEHOLDER_NOSLOT_BRACKET_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query.",
+  "This is the canonical UNION SELECT class of attacks (CWE-89).",
+  "Severity: Critical. Affects all customers in production.",
+  "",
+  "Payload: [insert here].",
+  "",
+  "Replay against any modern database backend; the response will",
+  "include sensitive rows.",
+].join("\n");
+
+// Command-injection slop fixture using the no-slot PARENTHETICAL dodge:
+// "the payload (to be added)" — payload-context noun followed by a
+// parenthetical deferral instead of a slot. The incidental
+// "; cat /etc/passwd" token in the CWE description should be revoked.
+const SLOP_CMDI_PROSE_PLACEHOLDER_NOSLOT_PARENS_FIXTURE = [
+  "# Critical command injection on POST /api/exec",
+  "",
+  "The cmd field is passed straight to a shell, allowing arbitrary",
+  "command execution. Per CWE-78, exploitation typically uses",
+  "separators like ; cat /etc/passwd to chain commands.",
+  "Severity: Critical.",
+  "",
+  "We confirmed the issue end-to-end with the payload (to be added)",
+  "against /api/exec.",
+  "",
+  "Any modern shell will exhibit this. Severe risk to the production",
+  "fleet — please prioritize.",
+].join("\n");
+
+// SQLi slop fixture using the no-slot PASSIVE-FUTURE dodge: "the
+// payload will be added later" — a copula + deferral verb in place of
+// any slot. Same revocation expectation as the parenthetical form.
+const SLOP_SQLI_PROSE_PLACEHOLDER_NOSLOT_DEFERRED_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query.",
+  "This is the canonical UNION SELECT class of attacks (CWE-89).",
+  "Severity: Critical. Affects all customers in production.",
+  "",
+  "We confirmed the issue end-to-end against /search; the payload",
+  "will be added later.",
+  "",
+  "Replay against any modern database backend; the response will",
+  "include sensitive rows.",
+].join("\n");
+
+// Command-injection slop fixture using the no-slot ACTIVE-PROMISE
+// dodge: "I'll add the actual payload later" — a first-person promise
+// to deliver the payload, with the "actual" qualifier doing the heavy
+// lifting.
+const SLOP_CMDI_PROSE_PLACEHOLDER_NOSLOT_PROMISE_FIXTURE = [
+  "# Critical command injection on POST /api/exec",
+  "",
+  "The cmd field is passed straight to a shell, allowing arbitrary",
+  "command execution. Per CWE-78, exploitation typically uses",
+  "separators like ; cat /etc/passwd to chain commands.",
+  "Severity: Critical.",
+  "",
+  "I confirmed the issue against /api/exec; I'll add the actual",
+  "payload later.",
+  "",
+  "Any modern shell will exhibit this. Severe risk to the production",
+  "fleet — please prioritize.",
+].join("\n");
+
 
 describe("findProsePlaceholderPayloadRanges", () => {
   it("flags Payload:/Inject:/Exec:/Run: <slot> in prose", () => {
@@ -1282,6 +1371,245 @@ describe("findProsePlaceholderPayloadRanges", () => {
         .length,
     ).toBe(0);
   });
+
+  // ===================================================================
+  // No-slot dodge variants — payload mentions that don't use angle-
+  // bracket slots at all. Slop authors dodge the slot-based checks by
+  // skipping the `<...>` entirely: "Payload: TBD", "the payload (to be
+  // added)", "I'll add the actual payload later", "[insert payload
+  // here]". Each of these is a no-payload gesture and must still feed
+  // the strip-and-retest pass.
+
+  it("flags the labelled no-slot dodge with a bare slop term", () => {
+    // "Payload: TBD" / "Payload: TODO" / "payload = N/A" — the label is
+    // followed by a standalone slop term in place of any slot.
+    expect(
+      findProsePlaceholderPayloadRanges("Payload: TBD").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("Payload: TODO").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("payload = N/A").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("Command: FIXME").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("Inject: placeholder").length,
+    ).toBe(1);
+  });
+
+  it("flags the labelled no-slot dodge with a square-bracket placeholder", () => {
+    // "Payload: [insert here]" / "Payload: [your payload]" — the label
+    // is followed by a square-bracket placeholder whose first word is
+    // slop vocabulary.
+    expect(
+      findProsePlaceholderPayloadRanges("Payload: [insert here]").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("Payload: [your payload]").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("payload: [todo]").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "Command: [insert the actual command here]",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag the labelled form when the value is a real payload or non-slop bracket", () => {
+    // A real exploit string after the label is not a placeholder — the
+    // bare-term branch requires a closed slop word and the bracket
+    // branch requires a slop-vocab first word.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "Payload: ' UNION SELECT password FROM users--",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("payload = 1234").length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("command: [GET /api/users]").length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("Payload: [1234]").length,
+    ).toBe(0);
+  });
+
+  it("flags the parenthetical no-slot dodge", () => {
+    // "the payload (to be added)" / "the payload (TBD)" — a payload-
+    // context noun followed by a parenthetical whose first word is a
+    // deferral gesture.
+    expect(
+      findProsePlaceholderPayloadRanges("the payload (to be added)").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("the payload (TBD)").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("the command (placeholder)").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload (will be filled in below)",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the exploit (to be provided in a follow-up)",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag neutral parentheticals after a payload word", () => {
+    // The parenthetical's first word must come from the closed slop
+    // list; size annotations, position references, and other neutral
+    // parentheticals stay safe.
+    expect(
+      findProsePlaceholderPayloadRanges("the payload (200 bytes)").length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("the command (above)").length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload (see appendix A) was sent",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("flags the passive-future no-slot dodge", () => {
+    // "the payload will be added later" / "the actual payload was
+    // provided" — payload-context noun phrase followed by a copula and
+    // a deferral verb.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload will be added later",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the actual payload will be provided",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the command was filled in below",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("the exploit is to be shared").length,
+    ).toBe(1);
+  });
+
+  it("does not flag factual passive prose after a payload word", () => {
+    // The deferral-verb list is intentionally narrow — rejected /
+    // returned / blocked / accepted are not deferral verbs and must
+    // stay safe.
+    expect(
+      findProsePlaceholderPayloadRanges("the payload was rejected").length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the command returned a 500 response",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("the payload was blocked").length,
+    ).toBe(0);
+  });
+
+  it("flags the active-promise no-slot dodge", () => {
+    // "I'll add the actual payload later" — first-person promise to
+    // deliver the payload. The qualifier (actual/real/exact/...)
+    // OR a deferral keyword after the noun is required.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "I'll add the actual payload later",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we'll provide the exact command shortly",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "I will share the payload in a follow-up",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "I plan to insert the real exploit later",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag a promise to deliver the payload mid-construction", () => {
+    // Without a qualifier (actual/real/exact/...) AND without a
+    // deferral keyword (later/soon/shortly/...), a promise to "add the
+    // payload" is just a reporter narrating payload construction — not
+    // a deferral.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "I'll add the payload to the request body",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we'll add the payload after the prefix",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("flags a bare square-bracket payload placeholder with no surrounding label", () => {
+    // "[insert payload here]" — the bracket itself contains both a slop
+    // directive word AND a payload-context noun, so it qualifies even
+    // without a "Payload:" label in front.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "Replace [insert payload here] with the SQL string",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges("[your sql payload]").length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "Use [add the actual command here] in the cmd field",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag bare brackets without both slop directive AND payload noun", () => {
+    // Brackets that are only slop-direction ("[insert your name]") or
+    // only payload-noun ("[payload]") don't qualify on their own —
+    // both are too easy to false-positive on.
+    expect(
+      findProsePlaceholderPayloadRanges("[insert your name]").length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("[your address]").length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges("see [your settings]").length,
+    ).toBe(0);
+  });
+
+  it("does not double-count when slot-based and no-slot regexes could overlap", () => {
+    // The slot-based and no-slot regexes target disjoint shapes (one
+    // requires `<...>`, the others require bare slop terms or
+    // brackets), but the dedup keeps the strip pass idempotent if a
+    // future broadening accidentally lets both fire on the same span.
+    const ranges = findProsePlaceholderPayloadRanges(
+      "Payload: TBD and Payload: `<inject>`.",
+    );
+    expect(ranges.length).toBe(2);
+  });
 });
 
 describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
@@ -1402,6 +1730,97 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
     const result = runEngine2Avri(
       sig,
       SLOP_CMDI_PROSE_PLACEHOLDER_POSTSLOT_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+  });
+
+  it("revokes concrete_payload when prose drops the slot entirely: 'Payload: TBD'", () => {
+    // No-slot label dodge: there's no `<...>` slot, just a label
+    // followed by a slop term. The incidental "UNION SELECT" token in
+    // the CWE description must still lose its `concrete_payload` point.
+    const sig = extractSignals(
+      SLOP_SQLI_PROSE_PLACEHOLDER_NOSLOT_LABEL_FIXTURE,
+    );
+    const result = runEngine2Avri(
+      sig,
+      SLOP_SQLI_PROSE_PLACEHOLDER_NOSLOT_LABEL_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+  });
+
+  it("revokes concrete_payload when prose drops the slot entirely: 'Payload: [insert here]'", () => {
+    // No-slot square-bracket dodge: the label is followed by a
+    // bracketed placeholder rather than a `<...>` slot.
+    const sig = extractSignals(
+      SLOP_SQLI_PROSE_PLACEHOLDER_NOSLOT_BRACKET_FIXTURE,
+    );
+    const result = runEngine2Avri(
+      sig,
+      SLOP_SQLI_PROSE_PLACEHOLDER_NOSLOT_BRACKET_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+  });
+
+  it("revokes concrete_payload when prose uses the parenthetical no-slot dodge: 'the payload (to be added)'", () => {
+    // No-slot parenthetical dodge: payload-context noun followed by a
+    // parenthetical deferral. Same revocation expectation as the
+    // labelled forms.
+    const sig = extractSignals(
+      SLOP_CMDI_PROSE_PLACEHOLDER_NOSLOT_PARENS_FIXTURE,
+    );
+    const result = runEngine2Avri(
+      sig,
+      SLOP_CMDI_PROSE_PLACEHOLDER_NOSLOT_PARENS_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+  });
+
+  it("revokes concrete_payload when prose defers the payload: 'the payload will be added later'", () => {
+    // No-slot passive-future dodge: copula + deferral verb stand in
+    // for any slot.
+    const sig = extractSignals(
+      SLOP_SQLI_PROSE_PLACEHOLDER_NOSLOT_DEFERRED_FIXTURE,
+    );
+    const result = runEngine2Avri(
+      sig,
+      SLOP_SQLI_PROSE_PLACEHOLDER_NOSLOT_DEFERRED_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+  });
+
+  it("revokes concrete_payload when the reporter promises to add the payload: 'I'll add the actual payload later'", () => {
+    // No-slot active-promise dodge: first-person promise to deliver
+    // the payload. The "actual" qualifier is the tell.
+    const sig = extractSignals(
+      SLOP_CMDI_PROSE_PLACEHOLDER_NOSLOT_PROMISE_FIXTURE,
+    );
+    const result = runEngine2Avri(
+      sig,
+      SLOP_CMDI_PROSE_PLACEHOLDER_NOSLOT_PROMISE_FIXTURE,
       INJ,
     );
     const survivingIds = result.detail.goldHits.map((g) => g.id);
