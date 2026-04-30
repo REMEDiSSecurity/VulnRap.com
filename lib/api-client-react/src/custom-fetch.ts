@@ -111,6 +111,61 @@ function emitRateLimit(
   }
 }
 
+// Task #297 — surface unauthorized (HTTP 401) responses to subscribers so
+// the vulnrap calibration UI can render a distinct, non-toast banner the
+// moment the FIRST 401 lands on a calibration mutation, naming the env
+// var the reviewer needs to fix BEFORE the per-IP wrong-token throttle
+// (Task #116) trips and the cooldown banner (Task #212) takes over.
+// Putting the wiring in one place mirrors the rate-limit observer above
+// so every generated mutation hook automatically gets the signal without
+// each call site having to inspect `ApiError.status` itself.
+export interface UnauthorizedNotice {
+  /** HTTP method of the rejected request (uppercased). */
+  method: string;
+  /** Fully-resolved request URL (path + query). */
+  url: string;
+  /** Always 401 today; carried through so a future expansion can branch on it. */
+  status: number;
+  /** Response body (already parsed by parseErrorBody). Useful for surfacing the server's friendly message. */
+  body: unknown;
+  /** Raw response headers, in case a subscriber needs the exact wire values. */
+  headers: Headers;
+}
+
+type UnauthorizedObserver = (notice: UnauthorizedNotice) => void;
+
+const unauthorizedObservers = new Set<UnauthorizedObserver>();
+
+export function addUnauthorizedObserver(observer: UnauthorizedObserver): () => void {
+  unauthorizedObservers.add(observer);
+  return () => {
+    unauthorizedObservers.delete(observer);
+  };
+}
+
+function emitUnauthorized(
+  response: Response,
+  body: unknown,
+  requestInfo: { method: string; url: string },
+): void {
+  if (unauthorizedObservers.size === 0) return;
+  const notice: UnauthorizedNotice = {
+    method: requestInfo.method,
+    url: response.url || requestInfo.url,
+    status: response.status,
+    body,
+    headers: response.headers,
+  };
+  for (const observer of Array.from(unauthorizedObservers)) {
+    try {
+      observer(notice);
+    } catch {
+      // Swallow observer failures — a misbehaving subscriber must not
+      // mask the underlying ApiError throw below.
+    }
+  }
+}
+
 export type ErrorType<T = unknown> = ApiError<T>;
 
 export type BodyType<T> = T;
@@ -424,6 +479,12 @@ export async function customFetch<T = unknown>(
       // about to surface as a toast / banner. Subscribers are isolated
       // (see emitRateLimit) so a thrown listener cannot mask the throw.
       emitRateLimit(response, errorData, requestInfo);
+    } else if (response.status === 401) {
+      // Task #297 — same fan-out for unauthorized responses so the
+      // calibration UI can flip its "token rejected" banner the moment
+      // the FIRST mutation 401 lands, before the wrong-token throttle
+      // (Task #116) trips and the cooldown banner (Task #212) takes over.
+      emitUnauthorized(response, errorData, requestInfo);
     }
     throw new ApiError(response, errorData, requestInfo);
   }

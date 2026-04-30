@@ -74,6 +74,10 @@ import { cn } from "@/lib/utils";
 import { useCalibrationCooldown } from "@/lib/calibration-cooldown";
 import { CalibrationCooldownBanner } from "@/components/calibration-cooldown-banner";
 import {
+  useCalibrationTokenRejection,
+  type CalibrationTokenRejectionState,
+} from "@/lib/calibration-token-rejection";
+import {
   formatHistoryRange,
   recentHeadroomDecline,
   type ArchetypeHistorySnapshot,
@@ -428,6 +432,33 @@ interface CalibrationAuthState {
 const MUTATIONS_BLOCKED_TITLE =
   "Calibration mutations are blocked: the reviewer token is missing or invalid (see the warning banner above the calibration card).";
 
+// Task #297 — once the dedicated CalibrationTokenRejectedBanner is on
+// screen for a calibration mutation 401, the generic destructive toasts
+// each handler used to fire ("Failed to add phrase.", "Reinstate failed.",
+// etc.) are duplicate noise: they say the same thing the banner already
+// says (HTTP 401 Unauthorized…) without the env-var diagnosis or the
+// retry-budget warning. Each catch block calls this helper to suppress
+// the toast for that specific case while still firing it for every other
+// failure mode (network errors, 4xx other than 401, 5xx, parse errors, …).
+//
+// Bulk handlers (e.g. the per-phrase outcome panels at lines ~3475 / ~3800
+// / ~3990) already special-case 401/403 separately and don't fire a
+// destructive toast for them; this helper only changes the single-mutation
+// catches that previously fired one unconditionally.
+function isCalibrationMutationAuthError(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  if (err.status !== 401) return false;
+  const url = err.url || "";
+  if (!url.includes("/feedback/calibration/")) return false;
+  const method = (err.method || "").toUpperCase();
+  return (
+    method === "POST" ||
+    method === "PUT" ||
+    method === "PATCH" ||
+    method === "DELETE"
+  );
+}
+
 function useCalibrationAuthState(): CalibrationAuthState {
   // Refetch periodically so a reviewer who configures the server token while
   // the dashboard is open sees the indicator flip without a hard reload.
@@ -520,6 +551,81 @@ function CalibrationAuthBanner({ state }: { state: CalibrationAuthState }) {
 // (this dashboard, the handwavy admin, the AVRI drift admin, and any future
 // calibration surface) can mount it without re-implementing the markup.
 
+// Task #297 — distinct, non-toast warning shown the moment the FIRST 401
+// lands on a calibration mutation. Today the only signal a reviewer gets
+// that VITE_CALIBRATION_TOKEN is mismatched is repeated 401 toasts, which
+// silently consume the per-IP wrong-token budget (Task #116) until the
+// throttle trips and the cooldown banner (Task #212) finally appears 5–10
+// attempts later. The shared API client publishes every 401 to
+// `useCalibrationTokenRejection`, which filters down to calibration
+// mutation URLs and flips a sticky `rejected` flag. We render this banner
+// alongside (above) the cooldown banner so reviewers see the env-var
+// diagnosis the instant their first add/remove is rejected, instead of
+// having to deduce "oh, the token must be wrong" from a generic toast.
+//
+// `cooldown.active` is consulted so that once the per-IP throttle has
+// actually tripped, the Task #212 cooldown banner wins — its countdown is
+// the more actionable signal at that point.
+function CalibrationTokenRejectedBanner({
+  rejection,
+  cooldownActive,
+  authStateKind,
+}: {
+  rejection: CalibrationTokenRejectionState;
+  cooldownActive: boolean;
+  authStateKind: CalibrationAuthStateKind;
+}) {
+  if (!rejection.rejected) return null;
+  // Cooldown wins — once the throttle has tripped, the countdown banner
+  // is the more useful signal (and tells reviewers the remediation is to
+  // wait, not to keep retrying with the same token).
+  if (cooldownActive) return null;
+  // If the periodic auth-status probe has already caught up to the same
+  // diagnosis, the existing missing/invalid banner from Task #117/#215 is
+  // already on screen with the same env-var guidance, so skip rendering
+  // a second one.
+  if (authStateKind === "missing" || authStateKind === "invalid") return null;
+
+  const detail =
+    rejection.serverMessage ??
+    "The API server rejected this calibration mutation with HTTP 401, which means the reviewer token the dashboard sent does not match the server's CALIBRATION_TOKEN.";
+  const subject =
+    rejection.method && rejection.url
+      ? `${rejection.method} ${rejection.url}`
+      : "the most recent calibration mutation";
+  return (
+    <Card
+      className="glass-card rounded-xl border-red-500/40 bg-red-500/5"
+      role="alert"
+      data-testid="calibration-token-rejected-banner"
+    >
+      <CardContent className="p-4 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <div
+            className="text-sm font-semibold text-red-300"
+            data-testid="calibration-token-rejected-headline"
+          >
+            Reviewer token rejected — check VITE_CALIBRATION_TOKEN
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {detail}
+          </p>
+          <p className="text-xs text-muted-foreground/70 leading-relaxed">
+            Confirm the reviewer token (<code className="font-mono text-[11px]">VITE_CALIBRATION_TOKEN</code>)
+            matches the server's <code className="font-mono text-[11px]">CALIBRATION_TOKEN</code>{" "}
+            before retrying — every wrong-token attempt eats into the per-IP
+            throttle and will eventually trigger the cooldown.
+          </p>
+          <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+            Triggered by {subject}.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function CalibrationSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -530,6 +636,10 @@ function CalibrationSection() {
   // appears above the dashboard so reviewers know to wait rather than retry
   // (which would just reset the bucket).
   const cooldown = useCalibrationCooldown();
+  // Task #297 — observe live 401s on calibration mutations so the banner
+  // above can flip the moment the FIRST rejection lands instead of waiting
+  // for the next 60s auth-status probe tick.
+  const tokenRejection = useCalibrationTokenRejection();
 
   const { data: calibration, isLoading: calLoading } = useGetCalibrationReport({
     query: {
@@ -575,8 +685,12 @@ function CalibrationSection() {
       toast({ title: "Config updated", description: `${suggestion.parameter} changed to ${suggestion.suggestedValue}. New version applied.` });
       queryClient.invalidateQueries({ queryKey: getGetCalibrationReportQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetScoringConfigQueryKey() });
-    } catch {
-      toast({ title: "Error", description: "Failed to apply calibration change.", variant: "destructive" });
+    } catch (err) {
+      // Task #297 — the dedicated rejected-token banner already names
+      // VITE_CALIBRATION_TOKEN; suppress the duplicate destructive toast.
+      if (!isCalibrationMutationAuthError(err)) {
+        toast({ title: "Error", description: "Failed to apply calibration change.", variant: "destructive" });
+      }
     } finally {
       setApplying(false);
     }
@@ -598,6 +712,11 @@ function CalibrationSection() {
   return (
     <div className="space-y-6">
       <CalibrationAuthBanner state={authState} />
+      <CalibrationTokenRejectedBanner
+        rejection={tokenRejection}
+        cooldownActive={cooldown.active}
+        authStateKind={authState.kind}
+      />
       <CalibrationCooldownBanner state={cooldown} />
       <AvriDriftSection />
       <Card className="glass-card rounded-xl border-primary/10">
@@ -2056,6 +2175,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   // cooldown the same way the calibration Apply button does. Used both in
   // the visible banner and in per-handler defense-in-depth checks below.
   const cooldown = useCalibrationCooldown();
+  // Task #297 — same live 401 observer the CalibrationSection uses, mirrored
+  // here so a reviewer who scrolls past the calibration card and lands on
+  // the hand-wavy admin still sees the env-var diagnosis the moment their
+  // first mutation 401s.
+  const tokenRejection = useCalibrationTokenRejection();
   const [draft, setDraft] = useState("");
   const [draftRationale, setDraftRationale] = useState("");
   const [reviewer, setReviewer] = useState<string>(() => {
@@ -2735,8 +2859,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         overlaps: dry.dryRunOverlaps ?? null,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to preview phrase.";
-      toast({ title: "Error", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to preview phrase.";
+        toast({ title: "Error", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -2763,8 +2890,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       setPreview(null);
       refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to add phrase.";
-      toast({ title: "Error", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to add phrase.";
+        toast({ title: "Error", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -2830,8 +2960,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       setEditPreview(null);
       refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to edit phrase.";
-      toast({ title: "Error", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to edit phrase.";
+        toast({ title: "Error", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -2918,8 +3051,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         acknowledged: false,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to preview rename.";
-      toast({ title: "Preview failed", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to preview rename.";
+        toast({ title: "Preview failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -2969,8 +3105,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       }
       refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to revert edit.";
-      toast({ title: "Revert failed", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to revert edit.";
+        toast({ title: "Revert failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -3011,8 +3150,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       }
       refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to remove phrase.";
-      toast({ title: "Error", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to remove phrase.";
+        toast({ title: "Error", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -3054,7 +3196,8 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
           description: `"${singleUndo.phrase}" was already reinstated elsewhere.`,
         });
         refresh();
-      } else {
+      } else if (!isCalibrationMutationAuthError(err)) {
+        // Task #297 — skip duplicate toast when the rejected-token banner is showing.
         const msg = err instanceof Error ? err.message : "Failed to reinstate phrase.";
         toast({ title: "Undo failed", description: msg, variant: "destructive" });
       }
@@ -3201,8 +3344,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       }
       setRemovePreview({ phrase, data: single, acknowledged: false });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to preview removal.";
-      toast({ title: "Preview failed", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to preview removal.";
+        toast({ title: "Preview failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -3453,8 +3599,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         acknowledged: false,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to preview removal.";
-      toast({ title: "Preview failed", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to preview removal.";
+        toast({ title: "Preview failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -3803,8 +3952,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       });
       refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to reinstate phrase.";
-      toast({ title: "Reinstate failed", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to reinstate phrase.";
+        toast({ title: "Reinstate failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -3939,8 +4091,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       );
       refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to reinstate batch.";
-      toast({ title: "Batch reinstate failed", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to reinstate batch.";
+        toast({ title: "Batch reinstate failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -4343,8 +4498,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       });
       refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to undo phrase.";
-      toast({ title: "Undo failed", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to undo phrase.";
+        toast({ title: "Undo failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
       window.setTimeout(() => {
@@ -4396,8 +4554,11 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       }
       refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to undo recent adds.";
-      toast({ title: "Bulk undo failed", description: msg, variant: "destructive" });
+      // Task #297 — skip duplicate toast when the rejected-token banner is showing.
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to undo recent adds.";
+        toast({ title: "Bulk undo failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setBusy(null);
     }
@@ -4625,6 +4786,15 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         repeated above the phrase editor so reviewers who scroll past the
         calibration section still see it before attempting an add/remove. */}
     <CalibrationAuthBanner state={authState} />
+    {/* Task #297 — live 401 banner mirrored here so a reviewer who scrolls
+        past the calibration card still sees the env-var diagnosis the
+        moment their first handwavy mutation 401s. Hidden when the cooldown
+        banner below is showing — the throttle countdown wins once it trips. */}
+    <CalibrationTokenRejectedBanner
+      rejection={tokenRejection}
+      cooldownActive={cooldown.active}
+      authStateKind={authState.kind}
+    />
     {/* Task #212 — wrong-token throttle countdown banner, mirrored above the
         admin card so reviewers see it before attempting any handwavy mutation. */}
     <CalibrationCooldownBanner state={cooldown} />
