@@ -572,6 +572,157 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
     }
   });
 
+  // Task #293 — Task #218 added a "Scanned N reports from <oldest> to
+  // <newest>" line to the bulk hand-wavy phrase removal preview's
+  // production block (rendered via `BulkRemovalImpactBlock` with the
+  // `handwavy-bulk-preview-production-range` test id). The curated
+  // block intentionally never renders this line because curated
+  // fixtures carry no wall-clock timestamps. The per-row Trash preview
+  // reuses the same renderer, so this spec locks both halves of that
+  // asymmetry in: the production block surfaces the scan-range line
+  // (with the right corpus size, plural, date range, and testid) when
+  // the dry-run carries oldest/newest createdAt; the curated block
+  // never grows a `handwavy-bulk-preview-curated-range` testid.
+  test("production block renders the scan-range line and the curated block does not (Task #218 / #293)", async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const phrase = uniquePhrase("scan-range");
+
+    try {
+      await addPhrase(apiCtx, phrase);
+
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrase?: string; phrases?: string[] }
+            | undefined;
+          if (body?.dryRun && body.phrase === phrase) {
+            await route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify({
+                dryRun: true,
+                batch: false,
+                wouldRemove: 1,
+                notFound: 0,
+                duplicateInBatch: 0,
+                phrase,
+                raw: phrase,
+                removed: true,
+                reason: null,
+                total: 99,
+                projectedTotal: 98,
+                results: [{ raw: phrase, phrase, removed: true }],
+                dryRunImpact: {
+                  // Curated block carries no wall-clock timestamps, so the
+                  // scan-range line MUST stay out of the DOM here.
+                  corpus: {
+                    total: 1,
+                    validDetectionsLost: 1,
+                    falsePositivesDropped: 0,
+                    byTier: {
+                      t1Legit: 1,
+                      t2Borderline: 0,
+                      t3Slop: 0,
+                      t4Hallucinated: 0,
+                    },
+                    sampleMatches: [],
+                    warning:
+                      "1 legitimate detection would be lost from the curated benchmark",
+                    corpusSize: 47,
+                    oldestCreatedAt: null,
+                    newestCreatedAt: null,
+                  },
+                  // Production block carries a real createdAt window, so
+                  // the scan-range line MUST render with the corpus size,
+                  // plural noun ("reports"), and "from … to …" range.
+                  production: {
+                    total: 2,
+                    validDetectionsLost: 1,
+                    falsePositivesDropped: 1,
+                    byTier: {
+                      t1Legit: 1,
+                      t2Borderline: 0,
+                      t3Slop: 0,
+                      t4Hallucinated: 1,
+                    },
+                    sampleMatches: [],
+                    warning:
+                      "1 legitimate detection would be lost from the production archive",
+                    corpusSize: 173,
+                    oldestCreatedAt: "2026-04-01T00:00:00.000Z",
+                    newestCreatedAt: "2026-04-29T00:00:00.000Z",
+                  },
+                  productionError: null,
+                  productionLimit: 200,
+                },
+                phrases: [],
+              }),
+            });
+            return;
+          }
+          await route.fallback();
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const row = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      await expect(row).toHaveCount(1, { timeout: 15_000 });
+      await row.getByTestId("handwavy-remove").click();
+
+      const panel = page.getByTestId("handwavy-remove-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      const curatedBlock = panel.getByTestId("handwavy-bulk-preview-curated");
+      const productionBlock = panel.getByTestId(
+        "handwavy-bulk-preview-production",
+      );
+      await expect(curatedBlock).toBeVisible();
+      await expect(productionBlock).toBeVisible();
+
+      // Production block's scan-range line: same testid as the renderer,
+      // mentions corpus size + pluralised noun + the "from … to …" range
+      // produced by `formatProductionScanRange` for distinct dates.
+      const productionRange = productionBlock.getByTestId(
+        "handwavy-bulk-preview-production-range",
+      );
+      await expect(productionRange).toBeVisible();
+      await expect(productionRange).toContainText("Scanned 173 reports");
+      // Date formatting is locale-dependent (toLocaleDateString) and the
+      // ISO inputs are UTC midnight (so they may render as the prior day
+      // in negative-offset locales). Match the structural "from <…> to
+      // <…>" shape and the year, which are stable across locales.
+      await expect(productionRange).toContainText(/from .+ to .+/);
+      await expect(productionRange).toContainText("2026");
+
+      // Curated block carries no timestamps → the matching range testid
+      // must not appear in the DOM at all (the curated/production
+      // asymmetry the renderer enforces).
+      await expect(
+        curatedBlock.getByTestId("handwavy-bulk-preview-curated-range"),
+      ).toHaveCount(0);
+      // Belt-and-braces: the testid must not exist anywhere on the page,
+      // not just inside the curated block.
+      await expect(
+        page.getByTestId("handwavy-bulk-preview-curated-range"),
+      ).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, [phrase]);
+      await apiCtx.dispose();
+    }
+  });
+
   test("'Back out' on the impact preview panel cancels without firing the live DELETE", async ({
     page,
   }) => {
