@@ -8,10 +8,10 @@
 // pipeline trace row, so subsequent /reports/:id and /reports/check responses
 // get matrix-driven recommendations for those legacy reports.
 //
-// Task #193 — both branches (engine re-run + cached-signal reconstruction)
-// pass report text into `computeComposite`, so the v3.6.0 fabricated-evidence
+// Both branches (engine re-run + cached-signal reconstruction) feed the
+// report text into `computeComposite` so the v3.6.0 fabricated-evidence
 // composite penalty fires for legacy reports during a re-backfill. The
-// engine path forwards the persisted redactedText/contentText; the
+// engine path forwards persisted redactedText/contentText; the
 // reconstruction path rebuilds a synthetic trigger text from the cached
 // `hallucination_*` evidence entries so legacy reports stored without raw
 // text still get rescored when the cached signals warrant it.
@@ -22,6 +22,17 @@
 //   --dry-run        Report what would change without writing.
 //   --limit=N        Cap how many reports are processed in this run.
 //   --batch-size=N   Page size when scanning the table (default 50).
+//   --rescore        Also process rows that already have a composite,
+//                    rewriting them with a fresh engine run (or a fresh
+//                    reconstruction). Without this flag the script keeps
+//                    its NULL-only behavior so scheduled jobs are
+//                    unaffected.
+//   --only-with-cached-hallucination
+//                    Restrict the scan to rows whose `evidence` jsonb
+//                    contains `hallucination_*` entries. Pairs with
+//                    --rescore to re-rate already-scored fabricated
+//                    legacy reports without pointlessly rebuilding traces
+//                    for clean ones.
 
 import {
   db,
@@ -40,7 +51,15 @@ import {
   type EngineResult,
   type CompositeResult,
 } from "./lib/engines";
-import { reconstructHallucinationTriggerText } from "./backfill-vulnrap-helpers";
+import {
+  reconstructHallucinationTriggerText,
+  parseArgs,
+  chooseConcurrencyGuard,
+  CliExit,
+  type CliOpts,
+  type ConcurrencyGuard,
+} from "./backfill-vulnrap-helpers";
+import type { SQL } from "drizzle-orm";
 
 // Evidence types that count as "strong" for the v3.6.0 triage matrix's
 // strongEvidenceCount input. Mirrors the strength multipliers in
@@ -193,54 +212,65 @@ function reconstructFromCachedSignals(s: CachedSignals): CompositeResult {
   return composite;
 }
 
-interface CliOpts {
-  dryRun: boolean;
-  limit: number | null;
-  batchSize: number;
-}
-
-function parsePositiveInt(raw: string, flag: string): number {
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n <= 0) {
-    console.error(`[backfill] ${flag} must be a positive integer, got: ${raw}`);
-    process.exit(2);
+// Drizzle SQL fragment for the per-row UPDATE WHERE clause; the choice
+// itself lives in chooseConcurrencyGuard so it stays unit-testable.
+function guardToSql(guard: ConcurrencyGuard): SQL {
+  switch (guard.kind) {
+    case "isNullComposite":
+      return isNull(reportsTable.vulnrapCompositeScore) as SQL;
+    case "matchCorrelationId":
+      return eq(reportsTable.vulnrapCorrelationId, guard.correlationId) as SQL;
+    case "isNullCorrelationAndScore":
+      // Already-scored legacy row with no correlation id: pin the UPDATE
+      // to (composite still equals what we read AND correlation id still
+      // null) so a concurrent re-check that meanwhile populated either
+      // field is left alone.
+      return and(
+        eq(reportsTable.vulnrapCompositeScore, guard.compositeScore),
+        isNull(reportsTable.vulnrapCorrelationId),
+      ) as SQL;
   }
-  return n;
-}
-
-function parseArgs(argv: string[]): CliOpts {
-  const opts: CliOpts = { dryRun: false, limit: null, batchSize: 50 };
-  for (const arg of argv.slice(2)) {
-    if (arg === "--" || arg === "") continue;
-    if (arg === "--dry-run") opts.dryRun = true;
-    else if (arg.startsWith("--limit=")) opts.limit = parsePositiveInt(arg.slice("--limit=".length), "--limit");
-    else if (arg.startsWith("--batch-size=")) opts.batchSize = parsePositiveInt(arg.slice("--batch-size=".length), "--batch-size");
-    else if (arg === "--help" || arg === "-h") {
-      console.log("Usage: backfill-vulnrap [--dry-run] [--limit=N] [--batch-size=N]");
-      process.exit(0);
-    } else {
-      console.error(`[backfill] unknown argument: ${arg}`);
-      process.exit(2);
-    }
-  }
-  return opts;
 }
 
 async function backfill(opts: CliOpts): Promise<void> {
   const startedAt = Date.now();
 
+  // EXISTS over the evidence jsonb array matches any element whose `type`
+  // starts with `hallucination_` — exactly the rows the v3.6.0 fabricated-
+  // evidence composite override can re-penalize. coalesce handles legacy
+  // rows where evidence is NULL.
+  const hallucinationFilter = sql`EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(coalesce(${reportsTable.evidence}, '[]'::jsonb)) AS e
+    WHERE e->>'type' LIKE 'hallucination_%'
+  )`;
+  const baseFilters = [
+    opts.rescore ? sql`true` : isNull(reportsTable.vulnrapCompositeScore),
+    opts.onlyWithCachedHallucination ? hallucinationFilter : sql`true`,
+  ];
+
   const totalRow = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(reportsTable)
-    .where(isNull(reportsTable.vulnrapCompositeScore));
-  const totalLegacy = totalRow[0]?.n ?? 0;
-  console.log(`[backfill] legacy reports without composite: ${totalLegacy}`);
+    .where(and(...baseFilters));
+  const totalCandidates = totalRow[0]?.n ?? 0;
+  const scopeLabel = opts.rescore
+    ? opts.onlyWithCachedHallucination
+      ? "candidate reports (rescore + cached-hallucination only)"
+      : "candidate reports (rescore: includes already-scored rows)"
+    : opts.onlyWithCachedHallucination
+      ? "legacy reports without composite (with cached hallucination signals)"
+      : "legacy reports without composite";
+  console.log(`[backfill] ${scopeLabel}: ${totalCandidates}`);
   if (opts.dryRun) console.log("[backfill] dry-run mode: no writes will be performed");
 
   let processed = 0;
   let updated = 0;
   let reconstructed = 0;
+  let rescoredUpdated = 0;
+  let rescoredReconstructed = 0;
   let skippedNoSignals = 0;
+  let skippedConcurrent = 0;
   let failed = 0;
   let lastId = 0;
 
@@ -262,11 +292,16 @@ async function backfill(opts: CliOpts): Promise<void> {
         breakdown: reportsTable.breakdown,
         evidence: reportsTable.evidence,
         humanIndicators: reportsTable.humanIndicators,
+        // Used by chooseConcurrencyGuard and before/after logging when the
+        // row is being rescored.
+        priorCompositeScore: reportsTable.vulnrapCompositeScore,
+        priorCompositeLabel: reportsTable.vulnrapCompositeLabel,
+        priorCorrelationId: reportsTable.vulnrapCorrelationId,
       })
       .from(reportsTable)
       .where(
         and(
-          isNull(reportsTable.vulnrapCompositeScore),
+          ...baseFilters,
           sql`${reportsTable.id} > ${lastId}`,
         ),
       )
@@ -278,6 +313,14 @@ async function backfill(opts: CliOpts): Promise<void> {
     for (const row of rows) {
       lastId = row.id;
       processed++;
+
+      const wasRescore = row.priorCompositeScore !== null;
+      const beforeLabel = wasRescore
+        ? `${row.priorCompositeScore} (${row.priorCompositeLabel ?? "?"})`
+        : null;
+      const concurrencyGuard = guardToSql(
+        chooseConcurrencyGuard(row.priorCompositeScore, row.priorCorrelationId),
+      );
 
       const text = row.redactedText ?? row.contentText;
       if (!text) {
@@ -321,17 +364,24 @@ async function backfill(opts: CliOpts): Promise<void> {
         };
 
         if (opts.dryRun) {
-          console.log(
-            `[backfill] #${row.id}: would reconstruct composite=${composite.overallScore} (${composite.label}) from cached signals`,
-          );
-          reconstructed++;
+          if (wasRescore) {
+            console.log(
+              `[backfill] #${row.id}: would rescore composite ${beforeLabel} → ${composite.overallScore} (${composite.label}) from cached signals`,
+            );
+            rescoredReconstructed++;
+          } else {
+            console.log(
+              `[backfill] #${row.id}: would reconstruct composite=${composite.overallScore} (${composite.label}) from cached signals`,
+            );
+            reconstructed++;
+          }
           continue;
         }
 
-        // Synthetic correlation id makes reconstructed rows easy to find in
-        // logs / analytics; we deliberately do NOT insert an analysis_traces
-        // row because no real pipeline ran and the trace shape requires
-        // stage timings we don't have.
+        // Synthetic correlation id makes reconstructed rows easy to find
+        // in logs / analytics; we deliberately do NOT insert an
+        // analysis_traces row because no real pipeline ran and the trace
+        // shape requires stage timings we don't have.
         const correlationId = `recon-${crypto.randomUUID()}`;
         const wrote = await db
           .update(reportsTable)
@@ -343,21 +393,24 @@ async function backfill(opts: CliOpts): Promise<void> {
             vulnrapCorrelationId: correlationId,
             vulnrapDurationMs: 0,
           })
-          .where(
-            and(
-              eq(reportsTable.id, row.id),
-              isNull(reportsTable.vulnrapCompositeScore),
-            ),
-          )
+          .where(and(eq(reportsTable.id, row.id), concurrencyGuard))
           .returning({ id: reportsTable.id });
 
         if (wrote.length > 0) {
-          reconstructed++;
-          console.log(
-            `[backfill] #${row.id}: reconstructed composite=${composite.overallScore} (${composite.label}) from cached signals`,
-          );
+          if (wasRescore) {
+            rescoredReconstructed++;
+            console.log(
+              `[backfill] #${row.id}: rescored composite ${beforeLabel} → ${composite.overallScore} (${composite.label}) from cached signals`,
+            );
+          } else {
+            reconstructed++;
+            console.log(
+              `[backfill] #${row.id}: reconstructed composite=${composite.overallScore} (${composite.label}) from cached signals`,
+            );
+          }
         } else {
-          console.log(`[backfill] #${row.id}: skip (composite populated concurrently)`);
+          skippedConcurrent++;
+          console.log(`[backfill] #${row.id}: skip (composite changed concurrently)`);
         }
         continue;
       }
@@ -372,10 +425,17 @@ async function backfill(opts: CliOpts): Promise<void> {
         };
 
         if (opts.dryRun) {
-          console.log(
-            `[backfill] #${row.id}: would set composite=${composite.overallScore} (${composite.label}), engines=${composite.engineResults.length}`,
-          );
-          updated++;
+          if (wasRescore) {
+            console.log(
+              `[backfill] #${row.id}: would rescore composite ${beforeLabel} → ${composite.overallScore} (${composite.label}), engines=${composite.engineResults.length}`,
+            );
+            rescoredUpdated++;
+          } else {
+            console.log(
+              `[backfill] #${row.id}: would set composite=${composite.overallScore} (${composite.label}), engines=${composite.engineResults.length}`,
+            );
+            updated++;
+          }
           continue;
         }
 
@@ -392,14 +452,7 @@ async function backfill(opts: CliOpts): Promise<void> {
               vulnrapCorrelationId: persistedTrace.correlationId,
               vulnrapDurationMs: persistedTrace.totalDurationMs,
             })
-            .where(
-              and(
-                eq(reportsTable.id, row.id),
-                // Concurrency guard: do not overwrite a row that another process
-                // (e.g. a re-check) populated between the SELECT and UPDATE.
-                isNull(reportsTable.vulnrapCompositeScore),
-              ),
-            )
+            .where(and(eq(reportsTable.id, row.id), concurrencyGuard))
             .returning({ id: reportsTable.id });
 
           // Only persist the trace when the UPDATE actually claimed the row,
@@ -418,12 +471,20 @@ async function backfill(opts: CliOpts): Promise<void> {
         });
 
         if (wrote) {
-          updated++;
-          console.log(
-            `[backfill] #${row.id}: composite=${composite.overallScore} (${composite.label}) duration=${persistedTrace.totalDurationMs}ms`,
-          );
+          if (wasRescore) {
+            rescoredUpdated++;
+            console.log(
+              `[backfill] #${row.id}: rescored composite ${beforeLabel} → ${composite.overallScore} (${composite.label}) duration=${persistedTrace.totalDurationMs}ms`,
+            );
+          } else {
+            updated++;
+            console.log(
+              `[backfill] #${row.id}: composite=${composite.overallScore} (${composite.label}) duration=${persistedTrace.totalDurationMs}ms`,
+            );
+          }
         } else {
-          console.log(`[backfill] #${row.id}: skip (composite populated concurrently)`);
+          skippedConcurrent++;
+          console.log(`[backfill] #${row.id}: skip (composite changed concurrently)`);
         }
       } catch (err) {
         failed++;
@@ -436,12 +497,27 @@ async function backfill(opts: CliOpts): Promise<void> {
 
   const elapsedMs = Date.now() - startedAt;
   console.log(
-    `[backfill] done: processed=${processed} updated=${updated} reconstructed=${reconstructed} skipped_no_signals=${skippedNoSignals} failed=${failed} elapsed=${elapsedMs}ms`,
+    `[backfill] done: processed=${processed} updated=${updated} reconstructed=${reconstructed} ` +
+      `rescored_updated=${rescoredUpdated} rescored_reconstructed=${rescoredReconstructed} ` +
+      `skipped_no_signals=${skippedNoSignals} skipped_concurrent=${skippedConcurrent} ` +
+      `failed=${failed} elapsed=${elapsedMs}ms`,
   );
 }
 
-const opts = parseArgs(process.argv);
-backfill(opts)
+// parseArgs throws CliExit so it stays unit-testable; translate to a
+// real process.exit here at the script entry.
+let parsed: CliOpts;
+try {
+  parsed = parseArgs(process.argv);
+} catch (err) {
+  if (err instanceof CliExit) {
+    if (err.code === 0) console.log(err.message);
+    else console.error(err.message);
+    process.exit(err.code);
+  }
+  throw err;
+}
+backfill(parsed)
   .then(() => process.exit(0))
   .catch((err) => {
     console.error("[backfill] fatal:", err);

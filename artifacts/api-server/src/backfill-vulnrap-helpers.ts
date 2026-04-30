@@ -86,3 +86,86 @@ export function reconstructHallucinationTriggerText(
   }
   return snippets.join("\n\n");
 }
+
+// CLI options for backfill-vulnrap. Lives here (not in the script entry)
+// so unit tests can import parseArgs without tripping the script's
+// top-level db connection and backfill kickoff.
+export interface CliOpts {
+  dryRun: boolean;
+  limit: number | null;
+  batchSize: number;
+  rescore: boolean;
+  onlyWithCachedHallucination: boolean;
+}
+
+// Throwing instead of process.exit keeps parseArgs unit-testable; the
+// script entry catches CliExit and translates it to a real exit code.
+export class CliExit extends Error {
+  constructor(public readonly code: number, message: string) {
+    super(message);
+    this.name = "CliExit";
+  }
+}
+
+// Optimistic concurrency guard chosen for an UPDATE of one row. Returned
+// as a discriminated union so the SQL builder lives in the script (where
+// drizzle is in scope) but the decision logic stays pure and testable.
+//
+// `matchCorrelationId` pins the UPDATE to the correlation id read at
+// SELECT time (the normal rescore case). `isNullCorrelationAndScore` is
+// the fallback for already-scored legacy rows whose correlation id was
+// never persisted — without it, `eq(corrId, null)` evaluates to NULL in
+// SQL and the row would be silently skipped, defeating the rescore.
+// `isNullComposite` is the original NULL-only behavior, kept for rows
+// that were never scored (whether or not --rescore is on).
+export type ConcurrencyGuard =
+  | { kind: "isNullComposite" }
+  | { kind: "matchCorrelationId"; correlationId: string }
+  | { kind: "isNullCorrelationAndScore"; compositeScore: number };
+
+export function chooseConcurrencyGuard(
+  priorCompositeScore: number | null,
+  priorCorrelationId: string | null,
+): ConcurrencyGuard {
+  if (priorCompositeScore === null) return { kind: "isNullComposite" };
+  if (priorCorrelationId !== null) {
+    return { kind: "matchCorrelationId", correlationId: priorCorrelationId };
+  }
+  return { kind: "isNullCorrelationAndScore", compositeScore: priorCompositeScore };
+}
+
+function parsePositiveInt(raw: string, flag: string): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new CliExit(2, `[backfill] ${flag} must be a positive integer, got: ${raw}`);
+  }
+  return n;
+}
+
+export function parseArgs(argv: string[]): CliOpts {
+  const opts: CliOpts = {
+    dryRun: false,
+    limit: null,
+    batchSize: 50,
+    rescore: false,
+    onlyWithCachedHallucination: false,
+  };
+  for (const arg of argv.slice(2)) {
+    if (arg === "--" || arg === "") continue;
+    if (arg === "--dry-run") opts.dryRun = true;
+    else if (arg.startsWith("--limit=")) opts.limit = parsePositiveInt(arg.slice("--limit=".length), "--limit");
+    else if (arg.startsWith("--batch-size=")) opts.batchSize = parsePositiveInt(arg.slice("--batch-size=".length), "--batch-size");
+    else if (arg === "--rescore") opts.rescore = true;
+    else if (arg === "--only-with-cached-hallucination") opts.onlyWithCachedHallucination = true;
+    else if (arg === "--help" || arg === "-h") {
+      throw new CliExit(
+        0,
+        "Usage: backfill-vulnrap [--dry-run] [--limit=N] [--batch-size=N]" +
+          " [--rescore] [--only-with-cached-hallucination]",
+      );
+    } else {
+      throw new CliExit(2, `[backfill] unknown argument: ${arg}`);
+    }
+  }
+  return opts;
+}

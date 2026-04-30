@@ -14,6 +14,9 @@ import { describe, it, expect } from "vitest";
 import {
   HALLUCINATION_TRIGGER_SNIPPETS,
   reconstructHallucinationTriggerText,
+  parseArgs,
+  chooseConcurrencyGuard,
+  CliExit,
 } from "./backfill-vulnrap-helpers";
 import { detectHallucinationSignals } from "./lib/hallucination-detector";
 import { computeComposite, type EngineResult } from "./lib/engines";
@@ -160,5 +163,87 @@ describe("backfill reconstruction path drops composite for fabricated reports", 
         o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"),
       ),
     ).toBe(false);
+  });
+});
+
+describe("parseArgs (rescore flags)", () => {
+  const argv = (...flags: string[]) => ["node", "backfill-vulnrap.mjs", ...flags];
+
+  it("defaults rescore=false and onlyWithCachedHallucination=false", () => {
+    const opts = parseArgs(argv());
+    expect(opts.rescore).toBe(false);
+    expect(opts.onlyWithCachedHallucination).toBe(false);
+    // Existing defaults stay unchanged so scheduled jobs keep their behavior.
+    expect(opts.dryRun).toBe(false);
+    expect(opts.limit).toBeNull();
+    expect(opts.batchSize).toBe(50);
+  });
+
+  it("--rescore and --only-with-cached-hallucination flip independently", () => {
+    expect(parseArgs(argv("--rescore")).rescore).toBe(true);
+    expect(parseArgs(argv("--rescore")).onlyWithCachedHallucination).toBe(false);
+    expect(parseArgs(argv("--only-with-cached-hallucination")).rescore).toBe(false);
+    expect(
+      parseArgs(argv("--only-with-cached-hallucination")).onlyWithCachedHallucination,
+    ).toBe(true);
+  });
+
+  it("accepts both new flags alongside dry-run / limit", () => {
+    const opts = parseArgs(
+      argv("--dry-run", "--rescore", "--only-with-cached-hallucination", "--limit=25"),
+    );
+    expect(opts).toEqual({
+      dryRun: true,
+      limit: 25,
+      batchSize: 50,
+      rescore: true,
+      onlyWithCachedHallucination: true,
+    });
+  });
+
+  it("--help throws CliExit(0) and unknown flags throw CliExit(2)", () => {
+    expect(() => parseArgs(argv("--help"))).toThrow(CliExit);
+    try {
+      parseArgs(argv("--help"));
+    } catch (e) {
+      expect((e as CliExit).code).toBe(0);
+      expect((e as CliExit).message).toContain("--rescore");
+      expect((e as CliExit).message).toContain("--only-with-cached-hallucination");
+    }
+
+    try {
+      parseArgs(argv("--no-such-flag"));
+      throw new Error("expected CliExit");
+    } catch (e) {
+      expect(e).toBeInstanceOf(CliExit);
+      expect((e as CliExit).code).toBe(2);
+    }
+  });
+});
+
+describe("chooseConcurrencyGuard", () => {
+  it("returns isNullComposite when the row was never scored", () => {
+    expect(chooseConcurrencyGuard(null, null)).toEqual({ kind: "isNullComposite" });
+    // Even if a stale correlation id happens to be present, the score
+    // being NULL is the source of truth: keep the original NULL-only
+    // guard so we don't clobber a concurrent first-time write.
+    expect(chooseConcurrencyGuard(null, "stale-id")).toEqual({ kind: "isNullComposite" });
+  });
+
+  it("pins to the captured correlation id when both score and id are present", () => {
+    expect(chooseConcurrencyGuard(72, "corr-abc")).toEqual({
+      kind: "matchCorrelationId",
+      correlationId: "corr-abc",
+    });
+  });
+
+  it("falls back to score+null-correlation guard when correlation id is missing", () => {
+    // Without this fallback `eq(corrId, null)` evaluates to NULL in SQL
+    // and the row is silently skipped — defeating the rescore for
+    // already-scored legacy rows that never had a correlation id.
+    expect(chooseConcurrencyGuard(58, null)).toEqual({
+      kind: "isNullCorrelationAndScore",
+      compositeScore: 58,
+    });
   });
 });
