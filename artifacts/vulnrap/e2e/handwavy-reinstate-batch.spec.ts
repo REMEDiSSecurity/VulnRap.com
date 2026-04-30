@@ -288,6 +288,19 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
         previewDialog.getByTestId("handwavy-removal-batches-preview-remaining"),
       ).toHaveText(String(phrases.length - 1));
 
+      // Task #341 — the Confirm button label itself must surface the
+      // *remaining* phrase count (not the original batch total) on a
+      // partial batch so reviewers can see exactly how many phrases will
+      // actually be reinstated before they click. Here 1 of 8 has been
+      // individually reinstated, so 7 are pending.
+      const confirmBtn = previewDialog.getByTestId(
+        "handwavy-removal-batches-preview-confirm-confirm",
+      );
+      await expect(confirmBtn).toHaveText(
+        `Reinstate ${phrases.length - 1} remaining phrases`,
+      );
+      await expect(confirmBtn).toBeEnabled();
+
       // Cancel must NOT fire the mutation.
       await previewDialog
         .getByTestId("handwavy-removal-batches-preview-cancel")

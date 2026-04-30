@@ -8867,28 +8867,53 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           >
             Cancel — don’t reinstate
           </AlertDialogCancel>
-          <AlertDialogAction
-            data-testid="handwavy-removal-batches-preview-confirm-confirm"
-            disabled={
-              !mutationsAllowed ||
-              pickerBatchPreview?.status !== "ready" ||
-              (pickerBatchPreview.status === "ready" &&
-                pickerBatchPreview.detail.phraseCount -
-                  pickerBatchPreview.detail.reinstatedCount ===
-                  0)
-            }
-            title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-            onClick={() => {
-              if (pickerBatchPreview?.status === "ready") {
-                const { removedAtIso, detail } = pickerBatchPreview;
-                setPickerBatchPreview(null);
-                void handleReinstateBatch(removedAtIso, detail.phraseCount);
-              }
-            }}
-          >
-            Reinstate batch
-          </AlertDialogAction>
+          {(() => {
+            const ready = pickerBatchPreview?.status === "ready"
+              ? pickerBatchPreview
+              : null;
+            const remaining = ready
+              ? Math.max(
+                  0,
+                  ready.detail.phraseCount - ready.detail.reinstatedCount,
+                )
+              : 0;
+            const partial =
+              ready !== null && remaining !== ready.detail.phraseCount;
+            const nothingToDo = ready !== null && remaining === 0;
+            const label = (() => {
+              if (!ready) return "Reinstate batch";
+              if (nothingToDo) return "Nothing left to reinstate";
+              if (partial)
+                return `Reinstate ${remaining} remaining phrase${remaining === 1 ? "" : "s"}`;
+              return "Reinstate batch";
+            })();
+            const title = !mutationsAllowed
+              ? MUTATIONS_BLOCKED_TITLE
+              : nothingToDo
+                ? "Every phrase in this batch has already been reinstated — there's nothing left to do."
+                : undefined;
+            return (
+              <AlertDialogAction
+                data-testid="handwavy-removal-batches-preview-confirm-confirm"
+                disabled={
+                  !mutationsAllowed ||
+                  pickerBatchPreview?.status !== "ready" ||
+                  nothingToDo
+                }
+                title={title}
+                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                onClick={() => {
+                  if (pickerBatchPreview?.status === "ready") {
+                    const { removedAtIso, detail } = pickerBatchPreview;
+                    setPickerBatchPreview(null);
+                    void handleReinstateBatch(removedAtIso, detail.phraseCount);
+                  }
+                }}
+              >
+                {label}
+              </AlertDialogAction>
+            );
+          })()}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
