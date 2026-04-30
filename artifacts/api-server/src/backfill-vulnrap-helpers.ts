@@ -25,7 +25,8 @@
 //     `hasRealCrashIndicators` allowlist in the detector does NOT suppress
 //     `fabricated_addresses`.
 
-import type { EvidenceItem } from "@workspace/db";
+import { reportsTable, type EvidenceItem } from "@workspace/db";
+import { isNull, sql, type SQL } from "drizzle-orm";
 
 export const HALLUCINATION_TRIGGER_SNIPPETS: Record<string, string> = {
   fabricated_stack_trace: [
@@ -232,6 +233,37 @@ export function chooseConcurrencyGuard(
     return { kind: "matchCorrelationId", correlationId: priorCorrelationId };
   }
   return { kind: "isNullCorrelationAndScore", compositeScore: priorCompositeScore };
+}
+
+// SQL predicates that scope the rescore-mode SELECT in `backfill()` to the
+// rows the run intends to touch. Returned as an array so the caller can
+// spread it into `and(...)` alongside its own pagination predicate.
+//
+// Two flags drive the shape of the filter:
+//   - `rescore`: when false, restrict to rows whose composite is still
+//     NULL (the original "legacy reports without composite" behavior).
+//     When true, accept every row so already-scored rows get re-rated.
+//   - `onlyWithCachedHallucination`: when true, only rows whose
+//     `evidence` jsonb contains at least one element of type
+//     `hallucination_*` are considered. The `coalesce` keeps NULL
+//     evidence rows from breaking the EXISTS scan.
+//
+// Kept here (rather than inline in `backfill()`) so an integration test
+// can run the same SQL against a real Postgres test schema and verify
+// the candidate set without invoking the full backfill pipeline.
+export function buildRescoreCandidateFilters(opts: {
+  rescore: boolean;
+  onlyWithCachedHallucination: boolean;
+}): SQL[] {
+  const hallucinationFilter = sql`EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(coalesce(${reportsTable.evidence}, '[]'::jsonb)) AS e
+    WHERE e->>'type' LIKE 'hallucination_%'
+  )`;
+  return [
+    opts.rescore ? sql`true` : (isNull(reportsTable.vulnrapCompositeScore) as SQL),
+    opts.onlyWithCachedHallucination ? hallucinationFilter : sql`true`,
+  ];
 }
 
 function parsePositiveInt(raw: string, flag: string): number {

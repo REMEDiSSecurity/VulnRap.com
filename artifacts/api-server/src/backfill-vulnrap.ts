@@ -57,6 +57,7 @@ import {
   chooseConcurrencyGuard,
   buildBackfillRescoreAuditEntry,
   appendRescoreHistory,
+  buildRescoreCandidateFilters,
   CliExit,
   type CliOpts,
   type BackfillStats,
@@ -250,16 +251,11 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
   // EXISTS over the evidence jsonb array matches any element whose `type`
   // starts with `hallucination_` — exactly the rows the v3.6.0 fabricated-
   // evidence composite override can re-penalize. coalesce handles legacy
-  // rows where evidence is NULL.
-  const hallucinationFilter = sql`EXISTS (
-    SELECT 1
-    FROM jsonb_array_elements(coalesce(${reportsTable.evidence}, '[]'::jsonb)) AS e
-    WHERE e->>'type' LIKE 'hallucination_%'
-  )`;
-  const baseFilters = [
-    opts.rescore ? sql`true` : isNull(reportsTable.vulnrapCompositeScore),
-    opts.onlyWithCachedHallucination ? hallucinationFilter : sql`true`,
-  ];
+  // rows where evidence is NULL. The predicate logic is built in the
+  // helpers module so the integration test can exercise the same SQL
+  // against a real Postgres test schema (see backfill-vulnrap-rescore-
+  // filters.test.ts).
+  const baseFilters = buildRescoreCandidateFilters(opts);
 
   const totalRow = await db
     .select({ n: sql<number>`count(*)::int` })

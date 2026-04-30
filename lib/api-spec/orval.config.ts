@@ -55,6 +55,19 @@ export default defineConfig({
       mode: "split",
       clean: true,
       prettier: true,
+      // Keep `indexFiles: true` so orval generates
+      // `./generated/types/index.ts` (re-exports of every `.ts` schema
+      // file) — the hand-controlled workspace-root barrel
+      // `lib/api-zod/src/index.ts` imports named TS interfaces from it
+      // (e.g. `DeleteReportBody as DeleteReportBodyType`,
+      // `ErrorResponse`, ...). Orval will only auto-create a
+      // workspace-root barrel here if none exists; it does not
+      // overwrite the existing curated one. The curated barrel
+      // sidesteps the TS2308 collision between the zod schemas in
+      // `./generated/api` and the TS interfaces in `./generated/types`
+      // (shared names like `ApplyCalibrationBody`, `SubmitFeedbackBody`)
+      // by selectively renaming the type-side imports.
+      indexFiles: true,
       override: {
         zod: {
           coerce: {
