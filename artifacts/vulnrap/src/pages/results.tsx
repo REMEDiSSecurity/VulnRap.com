@@ -1542,6 +1542,28 @@ export default function Results() {
                   </div>
                   <Progress value={eng.score} className="h-1.5" indicatorClassName={VULNRAP_VERDICT_COLOR[eng.verdict] || "bg-muted"} />
                   {eng.note && <p className="text-[11px] text-muted-foreground leading-relaxed">{eng.note}</p>}
+                  {(() => {
+                    const sb = (eng.signalBreakdown ?? {}) as {
+                      softCitation?: { name?: string; inferredCwe?: string } | null;
+                      avri?: { softCitation?: { name?: string; inferredCwe?: string } | null } | null;
+                    };
+                    const soft = sb.avri?.softCitation ?? sb.softCitation ?? null;
+                    if (!soft || !soft.name || !soft.inferredCwe) return null;
+                    const source = sb.avri?.softCitation ? "avri" : "legacy";
+                    return (
+                      <div
+                        className="flex items-center gap-2 text-[11px] rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1"
+                        data-testid={`badge-soft-citation-${source}`}
+                      >
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 font-mono shrink-0 text-cyan-300 border-cyan-500/40">
+                          INFERRED CWE
+                        </Badge>
+                        <span className="text-cyan-200/90 leading-snug">
+                          Soft citation: <span className="font-semibold">{soft.name}</span> → <span className="font-mono">{soft.inferredCwe}</span>
+                        </span>
+                      </div>
+                    );
+                  })()}
                   {eng.triggeredIndicators && eng.triggeredIndicators.length > 0 && (
                     <div className="space-y-1 pt-1">
                       {eng.triggeredIndicators.slice(0, 4).map((ind, i) => (
