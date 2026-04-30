@@ -124,6 +124,71 @@ Compare baseline response to injection response above. The
 difference proves the SQL injection. Please award bounty.`,
     expectMaxScore: 35,
   },
+  // Sprint 13B-3 (Task #304) calibration fixtures for the new
+  // `impossible_http_response` hallucination signal. Each fixture
+  // pastes a fenced HTTP excerpt that a real HTTP/1.1 stack never
+  // produces — these are the patterns the new signal targets and
+  // serve as the calibration delta alongside Task #206's deltas.
+  // Composite range: ≤35 (LIKELY-INVALID band). The composite
+  // override is reached because each fixture trips at least two
+  // markers (weight ≥ 16, plus other slop tells), clearing the
+  // -10 moderate-tier hallucination override floor.
+  {
+    name: "slop-11-impossible-http-204-with-body",
+    forceAvri: true,
+    claimedCwes: ["CWE-89"],
+    text: `# SQL injection confirmed via 204 leak
+
+The injection in /api/users.search?q=' OR 1=1-- causes the server
+to return a 204 with the leaked rows in the body. This is a critical
+issue and trivially exploitable.
+
+\`\`\`http
+HTTP/1.1 204 Found
+Content-Type: application/json
+Content-Length: 0
+Cookie: session=admin_recovered
+Referer: https://attacker.example/exploit
+
+{"leak":"all 50000 user records returned, including password_hash and otp_secret","admin_recovery_token":"abc123","root_session":"xyz789"}
+\`\`\`
+
+The 204 status with a body is the smoking gun — the server is
+clearly leaking data while pretending the response is empty.
+Please award maximum bounty.`,
+    expectMaxScore: 35,
+  },
+  {
+    name: "slop-12-impossible-http-head-returns-body",
+    forceAvri: true,
+    claimedCwes: ["CWE-200"],
+    text: `# Information disclosure via HEAD on /admin
+
+A HEAD request to /admin returns the full admin panel HTML in the
+response body, exposing internal account data without
+authentication. The HTTP exchange is reproduced below from a curl
+session.
+
+\`\`\`http
+HEAD /admin/users HTTP/1.1
+Host: app.target.test
+Set-Cookie: forced=yes
+
+HTTP/1.1 200 Not Found
+Content-Type: text/html
+Content-Length: 0
+Cookie: leaked_session=admin
+Referer: https://attacker.example/exploit
+
+<html><body><h1>Admin Panel</h1><table><tr><td>alice@target.test</td><td>admin</td></tr><tr><td>bob@target.test</td><td>admin</td></tr></table></body></html>
+\`\`\`
+
+The combination of HEAD returning a body and Content-Length: 0
+disagreeing with the visible HTML proves the server is
+mis-configured and leaking data. Please rate this critical and
+award bounty.`,
+    expectMaxScore: 35,
+  },
 ];
 
 // Sprint 13B Task 204: real-world curl HackerOne slop corpus.

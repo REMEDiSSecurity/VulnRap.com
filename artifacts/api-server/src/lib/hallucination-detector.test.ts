@@ -199,3 +199,322 @@ SUMMARY: AddressSanitizer: heap-buffer-overflow src/parse.c:120 in foo_parse`;
     expect(r.signals.map((s) => s.type)).not.toContain("fabricated_addresses");
   });
 });
+
+describe("Task #304: impossible_http_response signal", () => {
+  // Helper: assert the signal fires with at least the expected number of
+  // markers. Each test exercises one predicate in isolation so a future
+  // regression points directly at the broken predicate.
+  const expectFires = (text: string, minMarkers = 1) => {
+    const r = detectHallucinationSignals(text);
+    const sig = r.signals.find((s) => s.type === "impossible_http_response");
+    expect(sig, "impossible_http_response signal should fire").toBeDefined();
+    // Description format: "... — marker_a, marker_b, ..."
+    const markersInDesc = sig!.description.split("—")[1]?.split(",").length ?? 0;
+    expect(markersInDesc).toBeGreaterThanOrEqual(minMarkers);
+    expect(sig!.weight).toBeGreaterThanOrEqual(minMarkers * 8);
+    return sig!;
+  };
+
+  describe("predicate 1: reason-phrase mismatch", () => {
+    it("flags '200 Not Found'", () => {
+      const text = [
+        "Server confirmed the bypass:",
+        "```http",
+        "HTTP/1.1 200 Not Found",
+        "Content-Type: application/json",
+        "",
+        '{"admin":true}',
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("flags '404 OK'", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 404 OK",
+        "Content-Type: text/plain",
+        "",
+        "ok",
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("does not flag the canonical reason phrase", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 200 OK",
+        "Content-Type: text/plain",
+        "Content-Length: 5",
+        "",
+        "hello",
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+    });
+
+    it("accepts both 'Found' and 'Moved Temporarily' for 302", () => {
+      for (const phrase of ["Found", "Moved Temporarily"]) {
+        const text = [
+          "```http",
+          `HTTP/1.1 302 ${phrase}`,
+          "Location: /next",
+          "",
+          "```",
+        ].join("\n");
+        const r = detectHallucinationSignals(text);
+        expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+      }
+    });
+  });
+
+  describe("predicate 2: no-body status with body", () => {
+    it("flags 204 followed by a body", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 204 No Content",
+        "Content-Type: application/json",
+        "",
+        '{"leak":"all rows"}',
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("flags 304 followed by a body", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 304 Not Modified",
+        "ETag: \"abc\"",
+        "",
+        "<html>cached payload returned anyway</html>",
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("flags 1xx followed by a body", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 100 Continue",
+        "",
+        "{\"premature_payload\":\"yes\"}",
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("does NOT flag 204 with an empty body (the legit shape)", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 204 No Content",
+        "Server: nginx",
+        "",
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+    });
+  });
+
+  describe("predicate 3: Content-Length disagreement", () => {
+    it("flags Content-Length: 0 with body present", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 200 OK",
+        "Content-Type: application/json",
+        "Content-Length: 0",
+        "",
+        '{"injection_succeeded":true,"rows":50000}',
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("flags large declared length with empty body", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 200 OK",
+        "Content-Type: text/html",
+        "Content-Length: 2048",
+        "",
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("does NOT flag a body whose length matches Content-Length", () => {
+      // "hello world" is 11 bytes — well under the >50 absolute floor
+      // and within 50% of the declared 11.
+      const text = [
+        "```http",
+        "HTTP/1.1 200 OK",
+        "Content-Type: text/plain",
+        "Content-Length: 11",
+        "",
+        "hello world",
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+    });
+  });
+
+  describe("predicate 4: header in wrong direction", () => {
+    it("flags a response carrying a Cookie header", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 200 OK",
+        "Cookie: sid=abc123",
+        "",
+        "{}",
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("flags a request carrying a Set-Cookie header", () => {
+      const text = [
+        "```http",
+        "POST /login HTTP/1.1",
+        "Host: target.test",
+        "Set-Cookie: stolen=yes",
+        "",
+        "user=admin",
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("flags a response carrying a Referer header", () => {
+      const text = [
+        "```http",
+        "HTTP/1.1 200 OK",
+        "Referer: https://attacker.example",
+        "",
+        "{}",
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("does NOT flag Server / Host (permitted in either direction enough to skip)", () => {
+      // Host on a response is unusual but not impossible (some buggy
+      // proxies emit it). Server on a request is unusual but allowed.
+      // Both must stay out of the impossibility list to avoid FPs on
+      // odd-but-real captures.
+      const text = [
+        "```http",
+        "HTTP/1.1 200 OK",
+        "Host: api.target.test",
+        "Server: nginx/1.21",
+        "",
+        "ok",
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+    });
+  });
+
+  describe("predicate 5: HEAD/CONNECT response with body", () => {
+    it("flags a HEAD request followed by a response with a body", () => {
+      const text = [
+        "```http",
+        "HEAD /admin HTTP/1.1",
+        "Host: app.test",
+        "",
+        "HTTP/1.1 200 OK",
+        "Content-Type: text/html",
+        "",
+        "<html>full admin panel returned for HEAD</html>",
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("flags a CONNECT request followed by a response with a body", () => {
+      const text = [
+        "```http",
+        "CONNECT proxy.target.test:443 HTTP/1.1",
+        "Host: proxy.target.test:443",
+        "",
+        "HTTP/1.1 200 OK",
+        "Content-Type: text/plain",
+        "",
+        "tunnel established and here's the secret payload too",
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("does NOT flag a HEAD request followed by a 200 with no body", () => {
+      // Mirrors the T2-03 fixture shape — HEAD + headers-only response.
+      const text = [
+        "```http",
+        "HEAD /file HTTP/1.1",
+        "Host: app.test",
+        "",
+        "HTTP/1.1 200 OK",
+        "Server: nginx",
+        "X-Powered-By: Express",
+        "",
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+    });
+  });
+
+  describe("scoping: only fenced code blocks are inspected", () => {
+    it("ignores HTTP-shaped prose outside any fence", () => {
+      // Even a clear "200 Not Found" in narrative prose must not
+      // trigger the signal — narrative summaries of HTTP behaviour
+      // are common in real reports.
+      const text = [
+        "The server returned HTTP/1.1 200 Not Found",
+        "with a Set-Cookie request header. We confirmed via curl.",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+    });
+
+    it("composes when a single fence carries multiple impossibilities", () => {
+      // Two markers → weight ≥ 16, which on its own clears the
+      // moderate-tier composite-override floor (totalWeight ≥ 12).
+      const text = [
+        "```http",
+        "HTTP/1.1 204 Not Found",
+        "Content-Length: 0",
+        "Cookie: sid=stolen",
+        "",
+        '{"impossible":"in every direction"}',
+        "```",
+      ].join("\n");
+      const sig = expectFires(text, 2);
+      expect(sig.weight).toBeGreaterThanOrEqual(16);
+    });
+  });
+
+  describe("legit-cohort silence guard", () => {
+    // The canonical legit/curl/HackerOne fixtures must remain at
+    // zero impossible_http_response weight. T1-01 has a Content-
+    // Length: 32 line outside any fence; T2-03 has a fenced HEAD +
+    // 200 OK with no body. Neither should ever fire this signal.
+    for (const id of [
+      "T1-01-uaf-libfoo",
+      "T1-AVRI-firefox-uaf",
+      "T1-AVRI-cve-2025-0725-curl",
+      "T2-03-info-disclosure-headers",
+    ]) {
+      it(`${id} does not fire impossible_http_response`, () => {
+        const r = detectHallucinationSignals(findFixture(id).text);
+        expect(r.signals.map((s) => s.type)).not.toContain(
+          "impossible_http_response",
+        );
+      });
+    }
+  });
+});

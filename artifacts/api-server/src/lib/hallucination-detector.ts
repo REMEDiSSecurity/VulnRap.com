@@ -38,6 +38,30 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     });
   }
 
+  // Sprint 13B-3 (Task #304): impossible_http_response evaluates raw
+  // HTTP request / response excerpts pasted in fenced code blocks for
+  // internal consistency. Slop authors paste plausible-looking HTTP
+  // blocks to "show" the vulnerability, but the small details — a 204
+  // followed by a body, "200 Not Found" as the status line, a
+  // Content-Length that flatly disagrees with the body bytes it labels,
+  // a Cookie header on a response, Set-Cookie on a request, a HEAD
+  // request answered with a body — are arrangements a real HTTP stack
+  // never produces. The five predicates here mirror the structural-
+  // fabrication design (Sprint 13B-2): each fires independently and
+  // weight scales linearly so a single tell lands as a mild signal
+  // (8) while a two-tell cluster crosses the moderate-override
+  // threshold (16, paired with anything else clears the -10 tier).
+  // Per-marker weight matches structural_fabrication so the two
+  // detectors compose cleanly when both fire on the same report.
+  const httpMarkers = detectImpossibleHttpResponse(text);
+  if (httpMarkers.length >= 1) {
+    signals.push({
+      type: "impossible_http_response",
+      description: `HTTP excerpt is internally inconsistent — ${httpMarkers.join(", ")}`,
+      weight: httpMarkers.length * 8,
+    });
+  }
+
   const stackFrames = text.match(/#\d+\s+0x[0-9a-f]+\s+in\s+\S+/gi) || [];
   if (stackFrames.length >= 3) {
     const uniqueFrames = new Set(stackFrames.map(f => f.replace(/#\d+/, "#N")));
@@ -291,4 +315,290 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   const score = Math.max(0, 100 - totalWeight * 2);
 
   return { score, signals, totalWeight };
+}
+
+// =============================================================================
+// Sprint 13B-3 (Task #304): impossible_http_response helper.
+//
+// Walks every fenced code block in `text` and returns a deduplicated list
+// of marker IDs for HTTP request/response excerpts whose status, headers,
+// and body are arranged in ways a real HTTP stack never produces. The
+// caller wraps the markers into a single `impossible_http_response`
+// signal whose weight scales with the marker count.
+//
+// Scoping: this validator only inspects HTTP excerpts inside fenced
+// code blocks (```http or bare ```). Real bug reports — including the
+// curl/HackerOne legit cohort — paste their HTTP excerpts inside
+// fences; running outside fences would risk false-positives on prose
+// that incidentally mentions header names. The AVRI raw-HTTP family
+// validator (`raw-http.ts`) already handles structural fakeness
+// (placeholder values, broken TE/CL conflicts, fabricated response
+// shape) inside the SMUGGLING / response-class gold-signal path; this
+// signal is complementary, focused on bytes that *cannot exist* per
+// the HTTP/1.1 spec rather than on bytes that merely *look fake*.
+// =============================================================================
+
+// Status code → expected reason phrase(s), lowercase. We only enumerate
+// phrases that have a single canonical wording (or two well-known
+// alternates). Comparison is case-insensitive after collapsing inner
+// whitespace, so "OK" / "ok" / "Ok" all match the canonical "ok".
+const STATUS_REASON_PHRASES: Readonly<Record<number, ReadonlyArray<string>>> = {
+  100: ["continue"],
+  101: ["switching protocols"],
+  200: ["ok"],
+  201: ["created"],
+  202: ["accepted"],
+  203: ["non-authoritative information"],
+  204: ["no content"],
+  205: ["reset content"],
+  206: ["partial content"],
+  301: ["moved permanently"],
+  302: ["found", "moved temporarily"],
+  303: ["see other"],
+  304: ["not modified"],
+  307: ["temporary redirect"],
+  308: ["permanent redirect"],
+  400: ["bad request"],
+  401: ["unauthorized"],
+  403: ["forbidden"],
+  404: ["not found"],
+  405: ["method not allowed"],
+  406: ["not acceptable"],
+  408: ["request timeout"],
+  409: ["conflict"],
+  410: ["gone"],
+  411: ["length required"],
+  413: ["payload too large", "request entity too large", "content too large"],
+  414: ["uri too long", "request-uri too long"],
+  415: ["unsupported media type"],
+  418: ["i'm a teapot", "im a teapot"],
+  422: ["unprocessable entity", "unprocessable content"],
+  429: ["too many requests"],
+  500: ["internal server error"],
+  501: ["not implemented"],
+  502: ["bad gateway"],
+  503: ["service unavailable"],
+  504: ["gateway timeout"],
+  505: ["http version not supported"],
+};
+
+// Headers a real HTTP stack only emits in one direction. We deliberately
+// pick the strongest cases (RFC 6265 §3 — Cookie request-only,
+// Set-Cookie response-only; RFC 7231/7232 — Location/WWW-Authenticate
+// response-only, Referer/Origin/Range request-only) so an unusual but
+// permitted shape (Server header on a request, Host on a response) does
+// NOT trip the detector.
+const REQUEST_ONLY_HEADERS = new Set<string>([
+  "cookie",
+  "referer",
+  "origin",
+  "range",
+  "if-none-match",
+  "if-modified-since",
+]);
+const RESPONSE_ONLY_HEADERS = new Set<string>([
+  "set-cookie",
+  "www-authenticate",
+  "proxy-authenticate",
+  "location",
+]);
+
+interface HttpMessage {
+  kind: "request" | "response";
+  method?: string;
+  statusCode?: number;
+  reasonPhrase?: string;
+  headers: Map<string, string>;
+  body: string;
+}
+
+// Match a request-line OR a status-line at start of line. We allow any
+// 3–10 uppercase ASCII method token (so smuggled methods are not
+// excluded), and constrain the reason phrase to ≤80 visible chars
+// (printf-escaped lines whose "phrase" is a backslash sequence won't
+// match — the trailing CRLF requirement enforces real line breaks).
+const HTTP_MESSAGE_START_RE =
+  /(^|\n)(?:(HTTP\/1\.[01])[ \t]+(\d{3})[ \t]+([^\r\n]{1,80})|([A-Z]{3,10})[ \t]+(\S+)[ \t]+(HTTP\/1\.[01]))\r?\n/g;
+
+const FENCED_BLOCK_RE = /```[a-zA-Z0-9_+-]*\r?\n([\s\S]*?)\r?\n```/g;
+
+const HEADER_LINE_HALLUCINATION_RE = /^([A-Za-z][A-Za-z0-9\-_]*)\s*:\s*(.*?)\s*$/;
+
+function parseHttpMessages(block: string): HttpMessage[] {
+  HTTP_MESSAGE_START_RE.lastIndex = 0;
+  type Start = {
+    msgStart: number;
+    headerStart: number;
+    kind: "request" | "response";
+    method?: string;
+    statusCode?: number;
+    reasonPhrase?: string;
+  };
+  const starts: Start[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = HTTP_MESSAGE_START_RE.exec(block)) !== null) {
+    const lead = m[1] === "\n" ? 1 : 0;
+    const msgStart = m.index + lead;
+    const headerStart = m.index + m[0].length;
+    if (m[2]) {
+      starts.push({
+        msgStart,
+        headerStart,
+        kind: "response",
+        statusCode: Number(m[3]),
+        reasonPhrase: m[4],
+      });
+    } else if (m[5]) {
+      starts.push({
+        msgStart,
+        headerStart,
+        kind: "request",
+        method: m[5],
+      });
+    }
+  }
+  const out: HttpMessage[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const s = starts[i];
+    const nextStart = i + 1 < starts.length ? starts[i + 1].msgStart : block.length;
+    const tail = block.slice(s.headerStart, nextStart);
+    let headerSection = tail;
+    let body = "";
+    // The status/request-line CRLF was already consumed by the
+    // message-start regex, so `tail` begins with the next line. If that
+    // next line is itself blank, the message has zero headers and the
+    // body starts immediately — this is the canonical shape for
+    // "HTTP/1.1 100 Continue" or any 204/304 message that paste authors
+    // type as `STATUS_LINE\n\nBODY`. Without this branch the
+    // double-CRLF search below would miss the separator and the body
+    // would silently get parsed as a (malformed) header line.
+    const leadingBlank = /^\r?\n/.exec(tail);
+    if (leadingBlank) {
+      headerSection = "";
+      body = tail.slice(leadingBlank[0].length);
+    } else {
+      const blank = /\r?\n\r?\n/.exec(tail);
+      if (blank) {
+        headerSection = tail.slice(0, blank.index);
+        body = tail.slice(blank.index + blank[0].length);
+      }
+    }
+    const headers = new Map<string, string>();
+    for (const line of headerSection.split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t) continue;
+      const hm = HEADER_LINE_HALLUCINATION_RE.exec(t);
+      if (hm) headers.set(hm[1].toLowerCase(), hm[2]);
+    }
+    out.push({
+      kind: s.kind,
+      method: s.method,
+      statusCode: s.statusCode,
+      reasonPhrase: s.reasonPhrase,
+      headers,
+      body,
+    });
+  }
+  return out;
+}
+
+function inspectMessages(messages: HttpMessage[], markers: Set<string>): void {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    const bodyTrimmed = msg.body.trim();
+    const bodyLen = bodyTrimmed.length;
+
+    if (msg.kind === "response") {
+      const code = msg.statusCode!;
+
+      // Predicate 1: reason-phrase mismatch. We compare the pasted
+      // phrase (lowercased, inner whitespace collapsed) against the
+      // canonical phrase(s) for the status code. Unknown codes are
+      // skipped — the detector only flags codes whose canonical
+      // wording is unambiguous.
+      const expected = STATUS_REASON_PHRASES[code];
+      if (expected && msg.reasonPhrase) {
+        const phrase = msg.reasonPhrase.trim().toLowerCase().replace(/\s+/g, " ");
+        if (phrase.length > 0 && !expected.includes(phrase)) {
+          markers.add(`status_${code}_with_wrong_reason_phrase`);
+        }
+      }
+
+      // Predicate 2: no-body status with a body. RFC 7230 §3.3.3
+      // forbids 1xx / 204 / 304 from carrying a payload body. The
+      // 8-char floor on the trimmed body lets through trailing
+      // whitespace / a stray newline that the markdown fence
+      // boundary may introduce.
+      if ((code === 204 || code === 304 || (code >= 100 && code < 200)) && bodyLen >= 8) {
+        markers.add(`status_${code}_must_have_no_body`);
+      }
+
+      // Predicate 3: Content-Length disagreement. Real responses
+      // always agree; slop authors paste round-numbered CL values
+      // ("Content-Length: 0" with content present, "Content-Length:
+      // 1024" with an empty body) without re-counting the body.
+      // We use the raw byte length of the body region (including
+      // trailing whitespace inside the fence) when comparing — slop
+      // bodies are short enough that the difference is dramatic.
+      const cl = msg.headers.get("content-length");
+      if (cl !== undefined && /^\d+$/.test(cl.trim())) {
+        const declared = Number(cl.trim());
+        const actual = msg.body.length;
+        if (declared === 0 && bodyLen >= 8) {
+          markers.add("content_length_zero_but_body_present");
+        } else if (declared >= 100 && bodyLen === 0) {
+          markers.add("content_length_declared_but_body_empty");
+        } else if (
+          declared > 20 &&
+          bodyLen > 0 &&
+          Math.abs(declared - actual) > Math.max(50, declared * 0.5)
+        ) {
+          markers.add("content_length_disagrees_with_body");
+        }
+      }
+
+      // Predicate 4: response carrying a request-only header.
+      for (const name of msg.headers.keys()) {
+        if (REQUEST_ONLY_HEADERS.has(name)) {
+          markers.add(`response_carries_request_only_${name}`);
+        }
+      }
+
+      // Predicate 5: response to HEAD/CONNECT carrying a body. RFC
+      // 7230 §3.3.3 forbids both. We look at the immediately preceding
+      // request message in the same fence to pick up the method.
+      const prev = i > 0 ? messages[i - 1] : null;
+      if (
+        prev?.kind === "request" &&
+        (prev.method === "HEAD" || prev.method === "CONNECT") &&
+        bodyLen >= 8
+      ) {
+        markers.add(`response_to_${prev.method}_must_have_no_body`);
+      }
+    } else {
+      // Request-side: the only impossibility we flag is a request
+      // carrying a response-only header. (Method / version validity
+      // is left to other validators; an LLM-fabricated request line
+      // is usually caught by the family-level raw-HTTP validator.)
+      for (const name of msg.headers.keys()) {
+        if (RESPONSE_ONLY_HEADERS.has(name)) {
+          markers.add(`request_carries_response_only_${name}`);
+        }
+      }
+    }
+  }
+}
+
+export function detectImpossibleHttpResponse(text: string): string[] {
+  const markers = new Set<string>();
+  FENCED_BLOCK_RE.lastIndex = 0;
+  let fm: RegExpExecArray | null;
+  while ((fm = FENCED_BLOCK_RE.exec(text)) !== null) {
+    const inner = fm[1];
+    if (!inner) continue;
+    const messages = parseHttpMessages(inner);
+    if (messages.length === 0) continue;
+    inspectMessages(messages, markers);
+  }
+  return [...markers];
 }

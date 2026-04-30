@@ -2117,6 +2117,45 @@ in constant time.`,
     expectedEngine2: [0, 35],
     expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
   },
+  // Sprint 13B-3 (Task #304): T4 cohort exemplar for the new
+  // `impossible_http_response` hallucination signal. Pasted HTTP
+  // exchange fails three independent shape predicates at once:
+  //   - "200 Not Found" — reason-phrase mismatch
+  //   - HEAD request answered with a body — RFC 7230 §3.3.3
+  //   - Content-Length: 0 with a populated body
+  // plus a request-direction Set-Cookie header. A real HTTP/1.1 stack
+  // does not produce any of these, let alone all four together.
+  {
+    id: "T4-11-impossible-http-shape",
+    tier: "T4_HALLUCINATED",
+    text: `# Information disclosure via HEAD on /admin (LLM-assisted finding)
+
+A HEAD request to /admin returns the full admin panel HTML in the
+response body, exposing internal account data without
+authentication. The HTTP exchange below was captured during testing.
+
+\`\`\`http
+HEAD /admin/users HTTP/1.1
+Host: app.target.test
+Set-Cookie: forced=yes
+
+HTTP/1.1 200 Not Found
+Content-Type: text/html
+Content-Length: 0
+Cookie: leaked_session=admin
+Referer: https://attacker.example/exploit
+
+<html><body><h1>Admin Panel</h1><table><tr><td>alice@target.test</td><td>admin</td></tr><tr><td>bob@target.test</td><td>admin</td></tr></table></body></html>
+\`\`\`
+
+The combination of HEAD returning a body, "200 Not Found" status,
+Content-Length: 0 disagreeing with the visible HTML, and a Cookie
+header on the response proves the server is leaking data. Severity:
+Critical. CVSS: 9.1.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 35],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
 ];
 
 const FIXTURES: Fixture[] = [...T1, ...T2, ...T3, ...T4];
