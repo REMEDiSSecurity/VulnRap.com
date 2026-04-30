@@ -29,6 +29,16 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
     ],
   },
   {
+    id: "2026-04-30-add-fabricated-evidence-cache",
+    description: "Add cached fake_raw_http / stripped_crash_trace columns + partial indexes for the AVRI fabricated-evidence feed filter",
+    statements: [
+      `ALTER TABLE reports ADD COLUMN IF NOT EXISTS fake_raw_http boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE reports ADD COLUMN IF NOT EXISTS stripped_crash_trace boolean NOT NULL DEFAULT false`,
+      `CREATE INDEX IF NOT EXISTS idx_reports_fake_raw_http ON reports (show_in_feed, created_at) WHERE fake_raw_http = true`,
+      `CREATE INDEX IF NOT EXISTS idx_reports_stripped_crash_trace ON reports (show_in_feed, created_at) WHERE stripped_crash_trace = true`,
+    ],
+  },
+  {
     // page_views is materialized only in production. Replit's deploy validator
     // performs a live dev↔prod schema diff; if the dev DB had page_views with
     // the desired shape and production had the historical broken shape, the

@@ -1,4 +1,5 @@
 import { pgTable, text, serial, integer, timestamp, jsonb, index, varchar, boolean, real } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -89,6 +90,12 @@ export const reportsTable = pgTable("reports", {
   // drift dashboard and any per-family filters can read it without
   // re-running classifyReport over contentText for every row.
   avriFamily: varchar("avri_family", { length: 32 }),
+  // Cached AVRI Engine 2 fabricated-evidence flags, persisted at write
+  // time from `vulnrapEngineResults` so the feed's fabricated-evidence
+  // filter hits a partial btree index instead of jsonb_path_exists.
+  // Legacy rows default to false until backfill-fabricated-evidence runs.
+  fakeRawHttp: boolean("fake_raw_http").notNull().default(false),
+  strippedCrashTrace: boolean("stripped_crash_trace").notNull().default(false),
   showInFeed: boolean("show_in_feed").notNull().default(false),
   fileName: varchar("file_name", { length: 255 }),
   fileSize: integer("file_size").notNull(),
@@ -101,6 +108,15 @@ export const reportsTable = pgTable("reports", {
   index("idx_reports_slop_score").on(table.slopScore),
   index("idx_reports_template_hash").on(table.templateHash),
   index("idx_reports_avri_family").on(table.avriFamily),
+  // Partial indexes for the AVRI fabricated-evidence feed filter — keyed
+  // on (show_in_feed, created_at) since the filter always pairs with the
+  // feed gate and the default sort is created_at desc.
+  index("idx_reports_fake_raw_http")
+    .on(table.showInFeed, table.createdAt)
+    .where(sql`${table.fakeRawHttp} = true`),
+  index("idx_reports_stripped_crash_trace")
+    .on(table.showInFeed, table.createdAt)
+    .where(sql`${table.strippedCrashTrace} = true`),
   index("idx_reports_lsh_buckets").using("gin", table.lshBuckets),
 ]);
 

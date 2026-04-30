@@ -1,10 +1,8 @@
 // Route tests for GET /api/reports/feed?fabricatedEvidence=... — uses the
-// same in-memory fake-DB pattern as reports.diagnostics.test.ts, extended
-// so the fabricated-evidence SQL predicates (drizzle `sql` template tags,
-// not `eq`) are evaluated in JS against each row's vulnrapEngineResults.
-// The fake matcher mirrors the route's Engine 2 (Technical Substance)
-// scoping so a row whose AVRI block lives on a different engine does NOT
-// match the filter.
+// same in-memory fake-DB pattern as reports.diagnostics.test.ts. The seed
+// helper derives the cached `fakeRawHttp` / `strippedCrashTrace` columns
+// from each row's `vulnrapEngineResults` so the in-memory rows mirror what
+// the real insert path writes.
 
 process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
@@ -28,52 +26,10 @@ const dbState: DbState = freshState();
 (globalThis as unknown as { __fakeDbStateFeedFab: DbState }).__fakeDbStateFeedFab =
   dbState;
 
-// We tag the route's fabricated-evidence sql predicates with a sentinel
-// string so applyCond can recognize and evaluate them. Other sql usages
-// (orderBy, count(*)::int, coalesce(...)) are passed through transparently.
-const FAKE_RAW_HTTP_TAG = "__fab_fakeRawHttp__";
-const STRIPPED_TRACE_TAG = "__fab_strippedTrace__";
-const EITHER_TAG = "__fab_either__";
-
 vi.mock("drizzle-orm", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("drizzle-orm");
-  type SqlFn = ((strings: TemplateStringsArray, ...args: unknown[]) => unknown) & {
-    raw?: (s: string) => unknown;
-  };
-  const realSql = actual.sql as SqlFn;
-  const wrappedSql: SqlFn = ((strings: TemplateStringsArray, ...args: unknown[]) => {
-    const joined = strings.join("?");
-    // Detect the route's two AVRI predicates and the OR ("either") wrapper.
-    // The route builds "either" by interpolating the two predicates inside
-    // an outer sql`(... OR ...)` so we identify it by checking that both
-    // tags appear inside the args.
-    if (joined.includes('signalBreakdown.avri.rawHttp.isFake')) {
-      return { __fabKind: FAKE_RAW_HTTP_TAG };
-    }
-    if (joined.includes('signalBreakdown.avri.crashTrace.isStripped')) {
-      return { __fabKind: STRIPPED_TRACE_TAG };
-    }
-    const innerKinds = args
-      .map((a) => (a as { __fabKind?: string })?.__fabKind)
-      .filter(Boolean) as string[];
-    if (
-      innerKinds.includes(FAKE_RAW_HTTP_TAG) &&
-      innerKinds.includes(STRIPPED_TRACE_TAG)
-    ) {
-      return { __fabKind: EITHER_TAG };
-    }
-    return realSql(strings, ...args);
-  }) as SqlFn;
-  // Preserve the .raw/.placeholder helpers the route or drizzle internals
-  // may reach for. We don't intercept those; they fall back to the real impl.
-  for (const key of Object.keys(realSql)) {
-    (wrappedSql as unknown as Record<string, unknown>)[key] = (
-      realSql as unknown as Record<string, unknown>
-    )[key];
-  }
   return {
     ...actual,
-    sql: wrappedSql,
     eq: (col: unknown, val: unknown) => ({ __op: "eq", col, val }),
     or: (...conds: unknown[]) => ({ __op: "or", conds }),
     and: (...conds: unknown[]) => ({ __op: "and", conds }),
@@ -93,7 +49,6 @@ vi.mock("@workspace/db", async () => {
     | { __op: "eq"; col: unknown; val: unknown }
     | { __op: "or"; conds: Cond[] }
     | { __op: "and"; conds: Cond[] }
-    | { __fabKind: string }
     | null
     | undefined;
 
@@ -104,48 +59,12 @@ vi.mock("@workspace/db", async () => {
     return "__unknown__";
   }
 
-  // Mirrors the JS row mapper: only the engine whose name matches
-  // /Technical Substance/i is considered when deriving the AVRI booleans.
-  function rowMatchesFakeRawHttp(row: FakeRow): boolean {
-    const engines = ((row.vulnrapEngineResults ?? {}) as {
-      engines?: Array<{
-        engine?: string;
-        signalBreakdown?: { avri?: { rawHttp?: { isFake?: boolean } | null } };
-      }>;
-    }).engines ?? [];
-    const e2 = engines.find((e) => /Technical Substance/i.test(e?.engine ?? ""));
-    return e2?.signalBreakdown?.avri?.rawHttp?.isFake === true;
-  }
-  function rowMatchesStrippedTrace(row: FakeRow): boolean {
-    const engines = ((row.vulnrapEngineResults ?? {}) as {
-      engines?: Array<{
-        engine?: string;
-        signalBreakdown?: {
-          avri?: { crashTrace?: { isStripped?: boolean } | null };
-        };
-      }>;
-    }).engines ?? [];
-    const e2 = engines.find((e) => /Technical Substance/i.test(e?.engine ?? ""));
-    return e2?.signalBreakdown?.avri?.crashTrace?.isStripped === true;
-  }
-
   function applyCond(
     rows: FakeRow[],
     cond: Cond,
     table: Record<string, unknown>,
   ): FakeRow[] {
     if (!cond || typeof cond !== "object") return rows;
-    if ((cond as { __fabKind?: string }).__fabKind === FAKE_RAW_HTTP_TAG) {
-      return rows.filter(rowMatchesFakeRawHttp);
-    }
-    if ((cond as { __fabKind?: string }).__fabKind === STRIPPED_TRACE_TAG) {
-      return rows.filter(rowMatchesStrippedTrace);
-    }
-    if ((cond as { __fabKind?: string }).__fabKind === EITHER_TAG) {
-      return rows.filter(
-        (r) => rowMatchesFakeRawHttp(r) || rowMatchesStrippedTrace(r),
-      );
-    }
     if ((cond as { __op?: string }).__op === "eq") {
       const c = cond as { col: unknown; val: unknown };
       const colName = findColName(table, c.col);
@@ -344,8 +263,37 @@ function makeEngine2(opts: { fake?: boolean; stripped?: boolean }) {
   };
 }
 
+// Mirrors deriveFabricatedEvidenceFlags + the route's insert-time
+// population so seeded rows behave like real inserts: only the engine
+// whose name matches /Technical Substance/i is considered. Callers can
+// still override `fakeRawHttp` / `strippedCrashTrace` explicitly to
+// simulate legacy rows that the backfill hasn't touched yet.
+function deriveSeedFlags(blob: unknown): {
+  fakeRawHttp: boolean;
+  strippedCrashTrace: boolean;
+} {
+  const engines = ((blob ?? {}) as {
+    engines?: Array<{
+      engine?: string;
+      signalBreakdown?: {
+        avri?: {
+          rawHttp?: { isFake?: boolean } | null;
+          crashTrace?: { isStripped?: boolean } | null;
+        };
+      };
+    }>;
+  }).engines ?? [];
+  const e2 = engines.find((e) => /Technical Substance/i.test(e?.engine ?? ""))
+    ?.signalBreakdown?.avri;
+  return {
+    fakeRawHttp: e2?.rawHttp?.isFake === true,
+    strippedCrashTrace: e2?.crashTrace?.isStripped === true,
+  };
+}
+
 function seedReport(overrides: Partial<FakeRow> = {}): FakeRow {
   const id = dbState.nextReportId++;
+  const derived = deriveSeedFlags(overrides.vulnrapEngineResults);
   const row: FakeRow = {
     id,
     deleteToken: "tok",
@@ -386,6 +334,8 @@ function seedReport(overrides: Partial<FakeRow> = {}): FakeRow {
     fileName: null,
     fileSize: 0,
     avriFamily: "FLAT",
+    fakeRawHttp: derived.fakeRawHttp,
+    strippedCrashTrace: derived.strippedCrashTrace,
     createdAt: new Date(),
     ...overrides,
   };
@@ -531,6 +481,64 @@ describe("GET /api/reports/feed — fabricated-evidence filter", () => {
     expect(body.reports).toHaveLength(0);
     expect(body.summary.totalPublic).toBe(0);
     expect(body.summary.familyCounts).toEqual({});
+  });
+
+  it("SQL filter reads the cached column (unbackfilled row with blob fake=true but cached column false is NOT matched)", async () => {
+    // Simulates an unbackfilled legacy row: the JSONB blob carries
+    // isFake=true but the cached column is still false. The route filters
+    // on the cached column, so the row must be excluded.
+    seedReport({
+      avriFamily: "MEMORY_CORRUPTION",
+      vulnrapEngineResults: makeEngine2({ fake: true }),
+      fakeRawHttp: false,
+      strippedCrashTrace: false,
+    });
+
+    const res = await fetch(
+      `${baseUrl}/api/reports/feed?fabricatedEvidence=fake_raw_http`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.total).toBe(0);
+    expect(body.reports).toHaveLength(0);
+  });
+
+  it("backfilled cached column makes the row match (same blob, cached column flipped to true)", async () => {
+    seedReport({
+      avriFamily: "MEMORY_CORRUPTION",
+      vulnrapEngineResults: makeEngine2({ fake: true }),
+      fakeRawHttp: true,
+      strippedCrashTrace: false,
+    });
+
+    const res = await fetch(
+      `${baseUrl}/api/reports/feed?fabricatedEvidence=fake_raw_http`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.total).toBe(1);
+    expect(body.reports).toHaveLength(1);
+    expect(body.reports[0].fakeRawHttp).toBe(true);
+  });
+
+  it("chips fall back to the JSONB blob when the cached column hasn't been backfilled yet", async () => {
+    // No filter applied, so the SQL gate is just `show_in_feed = true`.
+    // The row mapper should still surface fakeRawHttp=true on the chip
+    // by deriving it from the blob, keeping per-row chips correct during
+    // the deploy-vs-backfill window.
+    seedReport({
+      avriFamily: "FLAT",
+      vulnrapEngineResults: makeEngine2({ fake: true, stripped: true }),
+      fakeRawHttp: false,
+      strippedCrashTrace: false,
+    });
+
+    const res = await fetch(`${baseUrl}/api/reports/feed`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.total).toBe(1);
+    expect(body.reports[0].fakeRawHttp).toBe(true);
+    expect(body.reports[0].strippedCrashTrace).toBe(true);
   });
 
   it("unknown fabricatedEvidence value falls through to no-op (mirrors avriFamily handling)", async () => {

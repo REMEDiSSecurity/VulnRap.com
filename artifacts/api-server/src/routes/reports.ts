@@ -65,6 +65,7 @@ import {
   generateTriageAssistant,
   type TriageAssistantResult,
 } from "../lib/triage-assistant";
+import { deriveFabricatedEvidenceFlags } from "../lib/fabricated-evidence-flags";
 
 function parseBoolParam(value: unknown): boolean {
   return value === "true" || value === true;
@@ -988,6 +989,13 @@ router.post("/reports", async (req, res): Promise<void> => {
         // an AVRI block.
         avriFamily:
           (vulnrapComposite as (VulnrapComposite & { avri?: { family?: string } }) | null)?.avri?.family ?? null,
+        // Cache the AVRI Engine 2 fabricated-evidence flags so the feed
+        // filter can hit a partial index instead of jsonb_path_exists.
+        ...(vulnrapComposite
+          ? deriveFabricatedEvidenceFlags({
+              engines: vulnrapComposite.engineResults,
+            })
+          : { fakeRawHttp: false, strippedCrashTrace: false }),
       })
       .returning();
 
@@ -1472,18 +1480,20 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       conditions.push(eq(reportsTable.avriFamily, avriFamilyFilter));
     }
   }
-  // JSONPath scopes to engine name matching /Technical Substance/i so the
-  // SQL filter agrees with the JS row mapper (which derives the chip flags
-  // from Engine 2 only).
-  const fakeRawHttpPredicate = sql`jsonb_path_exists(${reportsTable.vulnrapEngineResults}, '$.engines[*] ? (@.engine like_regex "Technical Substance" flag "i").signalBreakdown.avri.rawHttp.isFake ? (@ == true)')`;
-  const strippedTracePredicate = sql`jsonb_path_exists(${reportsTable.vulnrapEngineResults}, '$.engines[*] ? (@.engine like_regex "Technical Substance" flag "i").signalBreakdown.avri.crashTrace.isStripped ? (@ == true)')`;
-  let fabricatedEvidenceCondition: ReturnType<typeof sql> | null = null;
+  // Filter against the cached `fake_raw_http` / `stripped_crash_trace`
+  // columns so the planner can use the partial indexes instead of
+  // jsonb_path_exists. Two eq() predicates let the planner BitmapOr the
+  // two indexes for the `either` case.
+  let fabricatedEvidenceCondition: ReturnType<typeof or> | ReturnType<typeof eq> | null = null;
   if (fabricatedEvidenceFilter === "fake_raw_http") {
-    fabricatedEvidenceCondition = fakeRawHttpPredicate;
+    fabricatedEvidenceCondition = eq(reportsTable.fakeRawHttp, true);
   } else if (fabricatedEvidenceFilter === "stripped_trace") {
-    fabricatedEvidenceCondition = strippedTracePredicate;
+    fabricatedEvidenceCondition = eq(reportsTable.strippedCrashTrace, true);
   } else if (fabricatedEvidenceFilter === "either") {
-    fabricatedEvidenceCondition = sql`(${fakeRawHttpPredicate} OR ${strippedTracePredicate})`;
+    fabricatedEvidenceCondition = or(
+      eq(reportsTable.fakeRawHttp, true),
+      eq(reportsTable.strippedCrashTrace, true),
+    )!;
   }
   if (fabricatedEvidenceCondition) {
     conditions.push(fabricatedEvidenceCondition);
@@ -1579,6 +1589,11 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       // panel for each one. The blob is JSONB so this is a single
       // column read; we extract just the AVRI sub-block client-side.
       vulnrapEngineResults: reportsTable.vulnrapEngineResults,
+      // Cached fabricated-evidence flags (filled at insert time and by
+      // the backfill on legacy rows). Selected alongside the JSONB blob
+      // so the row mapper can fall back to the blob for unbackfilled rows.
+      fakeRawHttp: reportsTable.fakeRawHttp,
+      strippedCrashTrace: reportsTable.strippedCrashTrace,
     })
     .from(reportsTable)
     .where(whereClause)
@@ -1588,26 +1603,11 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
 
   const mapped = feedReports.map((r) => {
     const matches = r.similarityMatches as Array<{ reportId: number }>;
-    // Task #198 — Walk the engines list to find the Engine 2 (Technical
-    // Substance Analyzer) AVRI breakdown, then extract the two boolean
-    // flags. Defaults to false for legacy rows / non-AVRI runs / shapes
-    // that don't include the sub-block. Mirrors the path the diagnostics
-    // panel already reads (engines[].signalBreakdown.avri.{rawHttp,crashTrace}).
-    const engines = ((r.vulnrapEngineResults ?? {}) as {
-      engines?: Array<{
-        engine?: string;
-        signalBreakdown?: {
-          avri?: {
-            rawHttp?: { isFake?: boolean } | null;
-            crashTrace?: { isStripped?: boolean } | null;
-          };
-        };
-      }>;
-    }).engines ?? [];
-    const e2Avri = engines.find((e) => /Technical Substance/i.test(e?.engine ?? ""))
-      ?.signalBreakdown?.avri;
-    const fakeRawHttp = e2Avri?.rawHttp?.isFake === true;
-    const strippedCrashTrace = e2Avri?.crashTrace?.isStripped === true;
+    // Prefer the cached columns; fall back to deriving from the JSONB
+    // blob so chips stay correct on legacy rows during the backfill window.
+    const derived = deriveFabricatedEvidenceFlags(r.vulnrapEngineResults);
+    const fakeRawHttp = r.fakeRawHttp || derived.fakeRawHttp;
+    const strippedCrashTrace = r.strippedCrashTrace || derived.strippedCrashTrace;
     return {
       id: r.id,
       reportCode: anonymizeId(r.id),
