@@ -8502,16 +8502,18 @@ function ArchetypeRowView({
 const ARCHETYPE_HISTORY_QUERY_KEY = ["test-run-archetype-history"] as const;
 const ARCHETYPE_HISTORY_CONFIG_QUERY_KEY = ["test-run-archetype-history-config"] as const;
 
-// Task #99 — shape returned by GET /api/test/archetype-history/config so the
-// reviewer can see *why* the effective compaction window is what it is
-// (env var override, persisted reviewer setting, or the built-in default).
-// Task #211 — `lastCompaction` carries the most recent compaction pass's
-// timestamp + rows-collapsed count so the dashboard can render
-// "Last compacted Xh ago — removed N snapshots" next to the window
-// control. `null` while the routine has not run yet.
+// Shape returned by GET /api/test/archetype-history/config — exposes the
+// effective compaction window + source (Task #99), the most recent
+// compaction outcome (Task #211), and a bounded recent-runs buffer for
+// cadence (Task #289). `lastCompaction` is null until the routine first runs.
+interface ArchetypeHistoryCompactionRunRecord {
+  at: string;
+  removed: number;
+}
 interface ArchetypeHistoryCompactionStats {
   lastCompactedAt: string;
   lastRemovedCount: number;
+  recentRuns: ArchetypeHistoryCompactionRunRecord[];
 }
 // Task #288 — on-disk size + snapshot count of the persisted history
 // file. `null` while the file does not exist yet.
@@ -9604,6 +9606,22 @@ function EmergingArchetypesSection() {
                 snapshot{configData.lastCompaction.lastRemovedCount === 1 ? "" : "s"}
               </span>
             )}
+            {/* Task #289 — recent compaction-pass cadence, oldest -> newest.
+                Hidden when there's only one entry (the line above covers it). */}
+            {configData.lastCompaction
+              && configData.lastCompaction.recentRuns.length >= 2 && (
+                <span
+                  className="basis-full text-muted-foreground/60"
+                  title={`Removed counts from the last ${configData.lastCompaction.recentRuns.length} compaction passes (oldest first).`}
+                >
+                  Recent rollups:{" "}
+                  <span className="font-mono text-foreground/70 tabular-nums">
+                    {configData.lastCompaction.recentRuns
+                      .map(r => r.removed)
+                      .join(", ")}
+                  </span>
+                </span>
+              )}
             {/* Task #288 — surface the persisted history file's on-disk
                 size + snapshot count for storage-sizing decisions.
                 Hidden until the file exists or if the size can't be

@@ -228,5 +228,73 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
     expect(stats).not.toBeNull();
     expect(stats!.lastRemovedCount).toBe(0);
     expect(Number.isFinite(Date.parse(stats!.lastCompactedAt))).toBe(true);
+    // Task #289 — ring buffer always has at least the most recent run.
+    expect(stats!.recentRuns).toHaveLength(1);
+    expect(stats!.recentRuns[0]!.removed).toBe(0);
+    expect(stats!.recentRuns[0]!.at).toBe(stats!.lastCompactedAt);
+  });
+
+  // Task #289 — recent-runs ring buffer behavior.
+  it("appends each successive compaction outcome to the recentRuns ring buffer", async () => {
+    for (let i = 0; i < 3; i++) {
+      await appendArchetypeSnapshots([
+        { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
+      ]);
+    }
+    const stats = readCompactionStats();
+    expect(stats).not.toBeNull();
+    expect(stats!.recentRuns).toHaveLength(3);
+    const timestamps = stats!.recentRuns.map(r => Date.parse(r.at));
+    for (const t of timestamps) expect(Number.isFinite(t)).toBe(true);
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
+    // Tail mirrors the legacy "last run" fields.
+    const tail = stats!.recentRuns.at(-1)!;
+    expect(tail.at).toBe(stats!.lastCompactedAt);
+    expect(tail.removed).toBe(stats!.lastRemovedCount);
+  });
+
+  it("caps the recentRuns buffer at MAX_RECENT_RUNS so the stats file stays bounded", async () => {
+    const cap = statsTesting.MAX_RECENT_RUNS;
+    for (let i = 0; i < cap + 5; i++) {
+      await appendArchetypeSnapshots([
+        { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
+      ]);
+    }
+    const stats = readCompactionStats();
+    expect(stats).not.toBeNull();
+    expect(stats!.recentRuns.length).toBe(cap);
+    // Cap must hold on disk too, so a process restart can't resurrect dropped entries.
+    const raw = await fs.readFile(process.env.ARCHETYPE_HISTORY_STATS_PATH!, "utf-8");
+    const persisted = JSON.parse(raw) as { recentRuns?: unknown[] };
+    expect(Array.isArray(persisted.recentRuns)).toBe(true);
+    expect(persisted.recentRuns!.length).toBe(cap);
+  });
+
+  it("back-fills recentRuns from a legacy stats file that only carries the last-run fields", async () => {
+    // Pre-Task-#289 stats shape (no recentRuns) must still parse and
+    // back-fill so the dashboard isn't blank on first post-upgrade GET.
+    const statsFile = process.env.ARCHETYPE_HISTORY_STATS_PATH!;
+    await fs.writeFile(
+      statsFile,
+      JSON.stringify({
+        version: 1,
+        lastCompactedAt: "2026-04-22T12:00:00.000Z",
+        lastRemovedCount: 14,
+      }),
+      "utf-8",
+    );
+    statsTesting.resetCache();
+    const stats = readCompactionStats();
+    expect(stats).not.toBeNull();
+    expect(stats!.recentRuns).toEqual([
+      { at: "2026-04-22T12:00:00.000Z", removed: 14 },
+    ]);
+    // Subsequent passes extend the synthesized buffer rather than restarting it.
+    await appendArchetypeSnapshots([
+      { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
+    ]);
+    const after = readCompactionStats();
+    expect(after!.recentRuns.length).toBe(2);
+    expect(after!.recentRuns[0]!.removed).toBe(14);
   });
 });

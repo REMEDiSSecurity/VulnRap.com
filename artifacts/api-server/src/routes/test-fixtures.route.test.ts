@@ -422,9 +422,13 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     defaultDays: number;
     min: number;
     max: number;
-    // Task #211 — most recent compaction pass outcome, or null if the
-    // routine has not run yet on this deployment.
-    lastCompaction: { lastCompactedAt: string; lastRemovedCount: number } | null;
+    // Task #211 — most recent compaction outcome (null if not run yet).
+    // Task #289 — recentRuns ring buffer (oldest -> newest) for cadence.
+    lastCompaction: {
+      lastCompactedAt: string;
+      lastRemovedCount: number;
+      recentRuns: Array<{ at: string; removed: number }>;
+    } | null;
     // Task #288 — on-disk size of the persisted history file plus the
     // snapshot count it currently holds, or null until the file exists.
     historyFile: { sizeBytes: number; snapshotCount: number } | null;
@@ -589,6 +593,29 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     // must report zero rolled-up rows. (If this ever flips to non-zero
     // it means the compaction pass started misclassifying recent rows.)
     expect(stats.lastRemovedCount).toBe(0);
+  });
+
+  // Task #289 — recentRuns ring buffer surfaced via the config endpoint.
+  // Earlier describe blocks have already triggered multiple /api/test/run
+  // calls, so the buffer must contain >1 entry (proving append, not overwrite).
+  it("GET surfaces a bounded recentRuns history with at least the most recent passes", async () => {
+    const cfg = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    expect(cfg.lastCompaction).not.toBeNull();
+    const stats = cfg.lastCompaction!;
+    expect(Array.isArray(stats.recentRuns)).toBe(true);
+    expect(stats.recentRuns.length).toBeGreaterThan(1);
+    for (const run of stats.recentRuns) {
+      expect(typeof run.at).toBe("string");
+      expect(Number.isFinite(Date.parse(run.at))).toBe(true);
+      expect(typeof run.removed).toBe("number");
+      expect(run.removed).toBeGreaterThanOrEqual(0);
+    }
+    const order = stats.recentRuns.map(r => Date.parse(r.at));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    // Tail mirrors the legacy last-run fields so the indicator and the list agree.
+    const tail = stats.recentRuns.at(-1)!;
+    expect(tail.at).toBe(stats.lastCompactedAt);
+    expect(tail.removed).toBe(stats.lastRemovedCount);
   });
 
   // Task #288 — the config response also surfaces the persisted history
