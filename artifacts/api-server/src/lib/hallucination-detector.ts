@@ -71,6 +71,30 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     });
   }
 
+  // Task #430: impossible_graphql_response is the GraphQL sibling of the
+  // impossible_http_response detector above. LLM-generated bug reports
+  // increasingly paste fenced GraphQL response bodies whose top-level
+  // shape contradicts the GraphQL spec — `data: null` with no `errors`,
+  // an empty `errors` array, an error `path` whose first segment names a
+  // non-null `data` field (or a field that doesn't appear in `data` at
+  // all), or an `extensions.code` describing an attack outcome rather
+  // than a server error condition. None of these arrangements are
+  // produced by Apollo / Hasura / GitHub's GraphQL API or any other
+  // real implementation. The validator only inspects fenced code blocks
+  // that parse as JSON and look like a GraphQL response (top-level
+  // `data` or `errors` plus a GraphQL-shaped `errors[]` entry, or an
+  // explicit `graphql` fence label, or surrounding prose mentioning
+  // GraphQL). Per-marker weight matches the HTTP detector so the two
+  // compose cleanly when both fire on the same report.
+  const graphqlMarkers = detectImpossibleGraphqlResponse(text);
+  if (graphqlMarkers.length >= 1) {
+    signals.push({
+      type: "impossible_graphql_response",
+      description: `GraphQL response is internally inconsistent — ${graphqlMarkers.join(", ")}`,
+      weight: graphqlMarkers.length * 8,
+    });
+  }
+
   const stackFrames = text.match(/#\d+\s+0x[0-9a-f]+\s+in\s+\S+/gi) || [];
   if (stackFrames.length >= 3) {
     const uniqueFrames = new Set(stackFrames.map(f => f.replace(/#\d+/, "#N")));
@@ -608,6 +632,239 @@ export function detectImpossibleHttpResponse(text: string): string[] {
     const messages = parseHttpMessages(inner);
     if (messages.length === 0) continue;
     inspectMessages(messages, markers);
+  }
+  return [...markers];
+}
+
+// =============================================================================
+// Task #430: impossible_graphql_response helper.
+//
+// Walks every fenced code block in `text` and returns a deduplicated list
+// of marker IDs for GraphQL response bodies whose top-level shape
+// contradicts the GraphQL spec. The caller wraps the markers into a
+// single `impossible_graphql_response` signal whose weight scales with
+// the marker count.
+//
+// Scoping: a fenced block is inspected only when it parses as a JSON
+// object AND we can identify it as a GraphQL response with reasonable
+// confidence. The four positive identification routes are:
+//   • Fence label is `graphql`, `graphql-response`, or `gql`.
+//   • The block contains an `errors` array whose entries carry a
+//     GraphQL-shaped field (`locations`, `path`, or `extensions`).
+//   • The block contains a top-level `data` key AND surrounding prose
+//     within ~400 chars before the fence mentions "graphql" / "GraphQL".
+//   • The block has both `data` AND `errors` keys at the top level (the
+//     canonical GraphQL partial-success shape — REST APIs that emit one
+//     of those keys rarely emit both).
+// This deliberately avoids firing on REST-style JSON that happens to use
+// a `data` key, which is common in the legit cohort.
+// =============================================================================
+
+// Regex for the fence label (the language tag immediately after the
+// opening backticks). Mirrors FENCED_BLOCK_RE's first capture group but
+// keeps just the label portion.
+const FENCED_BLOCK_WITH_LABEL_RE =
+  /```([a-zA-Z0-9_+-]*)\r?\n([\s\S]*?)\r?\n```/g;
+
+// Substrings (uppercased) that real GraphQL servers do NOT emit as
+// extension codes. Each names an attack outcome (the bad guy succeeded)
+// rather than a server error condition (parsing failed, auth missing,
+// validation rejected the input). Matched as substrings against the
+// uppercased code so variants like `SQL_INJECTION_DETECTED`,
+// `INJECTION_SUCCESS`, `RCE_ACHIEVED`, `BYPASS_TRIGGERED` all hit. Real
+// production codes (BAD_USER_INPUT, FORBIDDEN, GRAPHQL_PARSE_FAILED,
+// PERSISTED_QUERY_NOT_FOUND, validation-failed, permission-error, …)
+// contain none of these tokens.
+const FABRICATED_EXTENSION_CODE_TOKENS: ReadonlyArray<string> = [
+  "INJECTION",
+  "EXPLOIT",
+  "RCE_",
+  "_RCE",
+  "SQLI",
+  "XSS_",
+  "_XSS",
+  "IDOR",
+  "PWNED",
+  "STOLEN",
+  "VULNERAB",
+  "_LEAKED",
+  "LEAK_",
+  "_LEAK_",
+  "BYPASS_SUCCESS",
+  "BYPASS_TRIGGERED",
+  "BYPASS_ACHIEVED",
+  "BYPASS_DETECTED",
+  "BYPASS_CONFIRMED",
+  "ATTACK_SUCCESS",
+  "ATTACK_TRIGGERED",
+];
+
+interface GraphqlResponse {
+  raw: Record<string, unknown>;
+  hasDataKey: boolean;
+  data: unknown;
+  hasErrorsKey: boolean;
+  errors: unknown;
+}
+
+function looksLikeGraphqlError(entry: unknown): boolean {
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+    return false;
+  }
+  const e = entry as Record<string, unknown>;
+  return (
+    Array.isArray(e.locations) ||
+    Array.isArray(e.path) ||
+    (e.extensions !== undefined &&
+      e.extensions !== null &&
+      typeof e.extensions === "object" &&
+      !Array.isArray(e.extensions))
+  );
+}
+
+function tryParseGraphqlResponse(
+  inner: string,
+  fenceLabel: string,
+  prosePreceding: string,
+): GraphqlResponse | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(inner);
+  } catch {
+    return null;
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    Array.isArray(parsed)
+  ) {
+    return null;
+  }
+  const obj = parsed as Record<string, unknown>;
+  const hasDataKey = Object.prototype.hasOwnProperty.call(obj, "data");
+  const hasErrorsKey = Object.prototype.hasOwnProperty.call(obj, "errors");
+  if (!hasDataKey && !hasErrorsKey) return null;
+
+  const labelLower = fenceLabel.toLowerCase();
+  const labelIsGraphql =
+    labelLower === "graphql" ||
+    labelLower === "graphql-response" ||
+    labelLower === "gql";
+
+  const errorsValue = hasErrorsKey ? obj.errors : undefined;
+  const errorsLooksGraphql =
+    Array.isArray(errorsValue) &&
+    errorsValue.some((e) => looksLikeGraphqlError(e));
+
+  const proseMentionsGraphql = /graphql/i.test(prosePreceding);
+
+  const bothDataAndErrors = hasDataKey && hasErrorsKey;
+
+  // Identify as GraphQL only when at least one positive signal fires —
+  // otherwise we risk false-positives on REST APIs that happen to use a
+  // `data` or `errors` key in isolation.
+  const isGraphql =
+    labelIsGraphql ||
+    errorsLooksGraphql ||
+    bothDataAndErrors ||
+    (hasDataKey && proseMentionsGraphql);
+  if (!isGraphql) return null;
+
+  return {
+    raw: obj,
+    hasDataKey,
+    data: hasDataKey ? obj.data : undefined,
+    hasErrorsKey,
+    errors: hasErrorsKey ? obj.errors : undefined,
+  };
+}
+
+function inspectGraphqlResponse(
+  resp: GraphqlResponse,
+  markers: Set<string>,
+): void {
+  // Predicate 1: `data: null` with no `errors` key. Per spec §7.1.2 a
+  // null `data` field can only appear alongside a non-empty `errors`
+  // array (it is the propagation result of an error during execution).
+  if (resp.hasDataKey && resp.data === null && !resp.hasErrorsKey) {
+    markers.add("data_null_with_no_errors");
+  }
+
+  // Predicate 2: `errors: []` (empty array). Per spec §7.1.2 the
+  // `errors` field MUST be a non-empty list when present.
+  if (resp.hasErrorsKey && Array.isArray(resp.errors) && resp.errors.length === 0) {
+    markers.add("empty_errors_array");
+  }
+
+  if (Array.isArray(resp.errors)) {
+    const dataIsObject =
+      resp.data !== null &&
+      typeof resp.data === "object" &&
+      !Array.isArray(resp.data);
+    const dataKeys = dataIsObject
+      ? new Set(Object.keys(resp.data as Record<string, unknown>))
+      : null;
+
+    for (const entry of resp.errors) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const e = entry as Record<string, unknown>;
+
+      // Predicate 3 / 4: error path[0] vs. top-level `data` keys. Only
+      // run when `data` is an object (errors against `data: null` or a
+      // scalar payload don't have a top-level field to clash with).
+      if (Array.isArray(e.path) && e.path.length > 0 && dataKeys) {
+        const head = e.path[0];
+        if (typeof head === "string") {
+          const dataValue = (resp.data as Record<string, unknown>)[head];
+          if (!dataKeys.has(head)) {
+            // Predicate 4: error path references a field that doesn't
+            // exist in the response data. Per spec §7.1.2 the `path`
+            // segments must reference response fields.
+            markers.add("error_path_references_unknown_field");
+          } else if (dataValue !== null && dataValue !== undefined) {
+            // Predicate 3: error path references a field that resolved
+            // to a non-null value. Per spec §6.4.4 errors propagate
+            // null up to the nearest nullable parent — a top-level
+            // field named in `errors[].path` cannot also carry data.
+            markers.add("errored_field_not_null");
+          }
+        }
+      }
+
+      // Predicate 5: `extensions.code` describes an attack outcome
+      // rather than a server error condition. Real GraphQL servers
+      // emit categorical codes (BAD_USER_INPUT, GRAPHQL_PARSE_FAILED,
+      // FORBIDDEN, validation-failed, …); never `INJECTION_DETECTED`,
+      // `RCE_ACHIEVED`, `BYPASS_TRIGGERED`, etc.
+      const ext = e.extensions;
+      if (
+        ext !== null &&
+        typeof ext === "object" &&
+        !Array.isArray(ext) &&
+        typeof (ext as Record<string, unknown>).code === "string"
+      ) {
+        const code = ((ext as Record<string, unknown>).code as string).toUpperCase();
+        if (FABRICATED_EXTENSION_CODE_TOKENS.some((tok) => code.includes(tok))) {
+          markers.add("fabricated_extensions_code");
+        }
+      }
+    }
+  }
+}
+
+export function detectImpossibleGraphqlResponse(text: string): string[] {
+  const markers = new Set<string>();
+  FENCED_BLOCK_WITH_LABEL_RE.lastIndex = 0;
+  let fm: RegExpExecArray | null;
+  while ((fm = FENCED_BLOCK_WITH_LABEL_RE.exec(text)) !== null) {
+    const label = fm[1] || "";
+    const inner = fm[2];
+    if (!inner) continue;
+    const proseStart = Math.max(0, fm.index - 400);
+    const prosePreceding = text.slice(proseStart, fm.index);
+    const resp = tryParseGraphqlResponse(inner, label, prosePreceding);
+    if (!resp) continue;
+    inspectGraphqlResponse(resp, markers);
   }
   return [...markers];
 }

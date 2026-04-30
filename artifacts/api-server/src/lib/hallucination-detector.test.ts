@@ -522,6 +522,351 @@ describe("Task #304: impossible_http_response signal", () => {
   });
 });
 
+describe("Task #430: impossible_graphql_response signal", () => {
+  // Helper: assert the signal fires with at least the expected number of
+  // markers. Each test exercises one predicate in isolation so a future
+  // regression points directly at the broken predicate.
+  const expectFires = (text: string, minMarkers = 1) => {
+    const r = detectHallucinationSignals(text);
+    const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+    expect(sig, "impossible_graphql_response signal should fire").toBeDefined();
+    const markersInDesc = sig!.description.split("—")[1]?.split(",").length ?? 0;
+    expect(markersInDesc).toBeGreaterThanOrEqual(minMarkers);
+    expect(sig!.weight).toBeGreaterThanOrEqual(minMarkers * 8);
+    return sig!;
+  };
+
+  describe("predicate 1: data:null with no errors key", () => {
+    it("flags `{\"data\": null}` in a graphql-tagged fence", () => {
+      const text = [
+        "```graphql",
+        '{"data": null}',
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("flags `{\"data\": null}` in a json fence when prose mentions GraphQL", () => {
+      const text = [
+        "The GraphQL mutation returned this response:",
+        "```json",
+        '{"data": null}',
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("does NOT flag `{\"data\": null}` in a json fence with no GraphQL context", () => {
+      // Many REST APIs return {"data": null} legitimately. Without any
+      // GraphQL identification signal we must stay quiet.
+      const text = [
+        "The REST endpoint returned this response:",
+        "```json",
+        '{"data": null}',
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_graphql_response");
+    });
+
+    it("does NOT flag `{\"data\": null, \"errors\": [{...}]}` (the legit shape)", () => {
+      const text = [
+        "```graphql",
+        '{"data": null, "errors": [{"message": "boom", "locations": [{"line": 1, "column": 1}]}]}',
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+      // Either the signal doesn't fire at all, or it fires for some
+      // other marker — but never `data_null_with_no_errors` because the
+      // errors field is present and non-empty.
+      if (sig) {
+        expect(sig.description).not.toContain("data_null_with_no_errors");
+      }
+    });
+  });
+
+  describe("predicate 2: empty errors array", () => {
+    it("flags `errors: []`", () => {
+      const text = [
+        "GraphQL response:",
+        "```graphql",
+        '{"data": {"x": 1}, "errors": []}',
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("does NOT flag a populated errors array", () => {
+      const text = [
+        "```graphql",
+        '{"data": {"x": null}, "errors": [{"message": "boom", "path": ["x"]}]}',
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+      if (sig) {
+        expect(sig.description).not.toContain("empty_errors_array");
+      }
+    });
+  });
+
+  describe("predicate 3: errored field is non-null in data", () => {
+    it("flags errors[].path naming a non-null top-level data field", () => {
+      const text = [
+        "```graphql",
+        '{"data": {"users": [{"id": 1}]}, "errors": [{"message": "x", "path": ["users"], "locations": [{"line": 1, "column": 1}]}]}',
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("does NOT flag when the errored field resolved to null (legit shape)", () => {
+      const text = [
+        "```graphql",
+        '{"data": {"users": null}, "errors": [{"message": "x", "path": ["users"], "locations": [{"line": 1, "column": 1}]}]}',
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+      if (sig) {
+        expect(sig.description).not.toContain("errored_field_not_null");
+      }
+    });
+  });
+
+  describe("predicate 4: error path references unknown field", () => {
+    it("flags errors[].path[0] not present in data", () => {
+      const text = [
+        "```graphql",
+        '{"data": {"viewer": {"id": 1}}, "errors": [{"message": "x", "path": ["adminRoot"], "locations": [{"line": 1, "column": 1}]}]}',
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("does NOT flag when the path head exists in data (even if null)", () => {
+      const text = [
+        "```graphql",
+        '{"data": {"adminRoot": null}, "errors": [{"message": "x", "path": ["adminRoot"], "locations": [{"line": 1, "column": 1}]}]}',
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+      if (sig) {
+        expect(sig.description).not.toContain("error_path_references_unknown_field");
+      }
+    });
+  });
+
+  describe("predicate 5: fabricated extensions.code", () => {
+    it("flags an attack-outcome code like INJECTION_DETECTED", () => {
+      const text = [
+        "```graphql",
+        '{"data": null, "errors": [{"message": "x", "path": ["x"], "extensions": {"code": "SQL_INJECTION_DETECTED"}}]}',
+        "```",
+      ].join("\n");
+      expectFires(text);
+    });
+
+    it("flags RCE_ACHIEVED, BYPASS_TRIGGERED, PWNED variants", () => {
+      for (const code of ["RCE_ACHIEVED", "BYPASS_TRIGGERED", "ACCOUNT_PWNED", "VULNERABILITY_CONFIRMED"]) {
+        const text = [
+          "```graphql",
+          `{"data": null, "errors": [{"message": "x", "path": ["x"], "extensions": {"code": "${code}"}}]}`,
+          "```",
+        ].join("\n");
+        const r = detectHallucinationSignals(text);
+        const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+        expect(sig, `signal should fire for ${code}`).toBeDefined();
+        expect(sig!.description).toContain("fabricated_extensions_code");
+      }
+    });
+
+    it("does NOT flag legit Apollo / Hasura codes", () => {
+      for (const code of [
+        "BAD_USER_INPUT",
+        "FORBIDDEN",
+        "UNAUTHENTICATED",
+        "GRAPHQL_PARSE_FAILED",
+        "GRAPHQL_VALIDATION_FAILED",
+        "PERSISTED_QUERY_NOT_FOUND",
+        "INTERNAL_SERVER_ERROR",
+        "validation-failed",
+        "permission-error",
+        "invalid-jwt",
+      ]) {
+        const text = [
+          "```graphql",
+          `{"data": {"x": null}, "errors": [{"message": "x", "path": ["x"], "extensions": {"code": "${code}"}}]}`,
+          "```",
+        ].join("\n");
+        const r = detectHallucinationSignals(text);
+        const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+        if (sig) {
+          expect(sig.description).not.toContain("fabricated_extensions_code");
+        }
+      }
+    });
+  });
+
+  describe("scoping: only fenced GraphQL responses are inspected", () => {
+    it("ignores GraphQL-shaped JSON outside any fence", () => {
+      const text = `The server replied with {"data": null} and no errors. We confirmed via curl.`;
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_graphql_response");
+    });
+
+    it("ignores REST-style JSON whose `errors` entries lack GraphQL shape", () => {
+      // No locations/path/extensions on the error entries, no graphql
+      // fence label, no GraphQL prose mention, only `errors` (no `data`)
+      // — should not be identified as a GraphQL response.
+      const text = [
+        "REST endpoint returned:",
+        "```json",
+        '{"errors": [{"message": "validation failed", "code": 422}]}',
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_graphql_response");
+    });
+
+    it("ignores fenced blocks that are not valid JSON", () => {
+      // T1-09-ssrf-graphql shape: a GraphQL *query* in a graphql fence.
+      // It's not JSON so the detector must skip it cleanly.
+      const text = [
+        "```graphql",
+        '{ fetchUrl(url: "http://metadata/") }',
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain("impossible_graphql_response");
+    });
+
+    it("composes when a single response carries multiple impossibilities", () => {
+      // Three markers in one fence: errored_field_not_null,
+      // error_path_references_unknown_field, fabricated_extensions_code.
+      // 3 × 8 = 24 weight, clearing the strong-tier (≥ 20) override floor.
+      const text = [
+        "```graphql",
+        "{",
+        '  "data": {"users": [{"id": 1}]},',
+        '  "errors": [',
+        '    {"message": "a", "path": ["users"], "locations": [{"line": 1, "column": 1}], "extensions": {"code": "SQL_INJECTION_DETECTED"}},',
+        '    {"message": "b", "path": ["adminRoot"], "extensions": {"code": "BAD_USER_INPUT"}}',
+        "  ]",
+        "}",
+        "```",
+      ].join("\n");
+      const sig = expectFires(text, 3);
+      expect(sig.weight).toBeGreaterThanOrEqual(24);
+    });
+  });
+
+  describe("legit-cohort silence guard", () => {
+    // The canonical legit fixtures must remain at zero
+    // impossible_graphql_response weight. T1-09-ssrf-graphql pastes a
+    // GraphQL *query* (not a response JSON object) inside a graphql
+    // fence — the detector must not parse it as a response.
+    for (const id of [
+      "T1-01-uaf-libfoo",
+      "T1-09-ssrf-graphql",
+      "T1-AVRI-firefox-uaf",
+      "T1-AVRI-cve-2025-0725-curl",
+      "T2-03-info-disclosure-headers",
+    ]) {
+      it(`${id} does not fire impossible_graphql_response`, () => {
+        const r = detectHallucinationSignals(findFixture(id).text);
+        expect(r.signals.map((s) => s.type)).not.toContain(
+          "impossible_graphql_response",
+        );
+      });
+    }
+
+    it("Apollo-style partial-success response stays silent", () => {
+      // Real Apollo response: data is partially populated, the errored
+      // field is null in data, the error path matches that null field,
+      // and the extensions.code is BAD_USER_INPUT. None of the five
+      // predicates should fire.
+      const text = [
+        "Apollo returned this partial-success response:",
+        "```graphql",
+        "{",
+        '  "data": {"viewer": {"id": "u1", "name": "alice"}, "post": null},',
+        '  "errors": [',
+        '    {',
+        '      "message": "Post not found",',
+        '      "path": ["post"],',
+        '      "locations": [{"line": 5, "column": 3}],',
+        '      "extensions": {"code": "BAD_USER_INPUT"}',
+        '    }',
+        "  ]",
+        "}",
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_graphql_response",
+      );
+    });
+
+    it("Hasura permission-error response stays silent", () => {
+      const text = [
+        "Hasura GraphQL response:",
+        "```json",
+        "{",
+        '  "errors": [',
+        '    {',
+        '      "message": "field \\"users\\" not found",',
+        '      "extensions": {"code": "validation-failed", "path": "$.selectionSet.users"}',
+        '    }',
+        "  ]",
+        "}",
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_graphql_response",
+      );
+    });
+
+    it("GitHub-API-style response stays silent", () => {
+      const text = [
+        "GitHub GraphQL API response:",
+        "```graphql",
+        "{",
+        '  "data": {',
+        '    "repository": {',
+        '      "issue": {"title": "bug", "number": 42}',
+        '    }',
+        '  }',
+        "}",
+        "```",
+      ].join("\n");
+      const r = detectHallucinationSignals(text);
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_graphql_response",
+      );
+    });
+  });
+
+  describe("calibration fixtures land in the T4 band", () => {
+    for (const id of [
+      "T4-15-fake-graphql-extensions-and-path",
+      "T4-16-fake-graphql-impossible-shape",
+    ]) {
+      it(`${id} fires impossible_graphql_response and clears the moderate-tier floor`, () => {
+        const r = detectHallucinationSignals(findFixture(id).text);
+        const types = r.signals.map((s) => s.type);
+        expect(types).toContain("impossible_graphql_response");
+        // Each fixture is built to clear the moderate-tier floor (≥ 12)
+        // on the strength of GraphQL markers alone.
+        expect(r.totalWeight).toBeGreaterThanOrEqual(12);
+      });
+    }
+  });
+});
+
 describe("Task #303: bounds-based structural detectors", () => {
   // Each fabricated fixture below trips its target bounds detector — pinning
   // it so future tweaks to the regex / threshold can't quietly regress the

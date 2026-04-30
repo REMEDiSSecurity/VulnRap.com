@@ -263,6 +263,57 @@ mis-configured and leaking data. Please rate this critical and
 award bounty.`,
     expectMaxScore: 35,
   },
+  // Task #430 calibration fixture for the new
+  // `impossible_graphql_response` hallucination signal. The fenced
+  // GraphQL response trips three independent shape predicates at
+  // once: `errored_field_not_null` (errors[].path = ["users"] yet
+  // data.users is non-null), `error_path_references_unknown_field`
+  // (errors[].path = ["adminRoot"] not present in data), and
+  // `fabricated_extensions_code` (extensions.code values describe
+  // attack outcomes rather than server error conditions). 3 markers
+  // × 8 = 24 weight clears the strong-tier (-15) hallucination
+  // override floor on its own; the report's other tells push the
+  // composite well into LIKELY-INVALID range.
+  {
+    name: "slop-14-impossible-graphql-response",
+    forceAvri: true,
+    claimedCwes: ["CWE-89"],
+    text: `# SQL injection via /graphql users resolver
+
+The mutation against the GraphQL endpoint at /graphql confirms a
+SQL injection that exfiltrates the user table. Server response is
+reproduced below verbatim from the burp capture.
+
+\`\`\`graphql
+{
+  "data": {
+    "users": [
+      {"id": 1, "email": "alice@target.test", "passwordHash": "$2b$10$xyz"},
+      {"id": 2, "email": "bob@target.test", "passwordHash": "$2b$10$abc"}
+    ]
+  },
+  "errors": [
+    {
+      "message": "Injection succeeded; dumped 50000 rows",
+      "path": ["users"],
+      "locations": [{"line": 2, "column": 3}],
+      "extensions": {"code": "SQL_INJECTION_DETECTED"}
+    },
+    {
+      "message": "Privilege escalation triggered",
+      "path": ["adminRoot"],
+      "locations": [{"line": 4, "column": 3}],
+      "extensions": {"code": "RCE_ACHIEVED"}
+    }
+  ]
+}
+\`\`\`
+
+The errors array references both a populated users array and a
+non-existent adminRoot field, with attack-outcome extension codes
+that no real GraphQL server emits. Please award maximum bounty.`,
+    expectMaxScore: 35,
+  },
 ];
 
 // Sprint 13B Task 204: real-world curl HackerOne slop corpus.

@@ -2323,6 +2323,110 @@ Critical. CVSS: 9.1.`,
     expectedEngine2: [0, 35],
     expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
   },
+  // Task #430: T4 cohort exemplars for the new
+  // `impossible_graphql_response` hallucination signal. Each fixture
+  // pastes a fenced GraphQL response body whose top-level shape
+  // contradicts the GraphQL spec in ways an Apollo / Hasura / GitHub
+  // server never produces — these are the patterns the new signal
+  // targets and serve as the calibration delta alongside Task #304's
+  // HTTP-shape deltas. Composite range: ≤35 (LIKELY-INVALID band). The
+  // composite override is reached because each fixture trips at least
+  // two GraphQL markers (weight ≥ 16) plus a phantom_exploit_script
+  // tell, clearing the strong-tier (-15) hallucination override floor
+  // under both AVRI on/off scoring paths.
+  {
+    id: "T4-15-fake-graphql-extensions-and-path",
+    tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
+    // Trips three GraphQL markers in a single fenced block:
+    //   • errored_field_not_null — errors[0].path = ["users"], yet
+    //     data.users is a populated array (per spec §6.4.4 errored
+    //     fields propagate null up to the nearest nullable parent).
+    //   • error_path_references_unknown_field — errors[1].path =
+    //     ["adminRoot"] but data has no adminRoot key.
+    //   • fabricated_extensions_code — extensions.code values are
+    //     "SQL_INJECTION_DETECTED" / "RCE_ACHIEVED", neither of which
+    //     any real GraphQL server emits (they describe attack outcomes,
+    //     not server error conditions).
+    // 3 GraphQL markers × 8 = 24 weight, plus phantom_exploit_script
+    // (+8) clears the strong-tier (≥ 20) -15 hallucination override.
+    text: `# SQL injection in /graphql users resolver (LLM-assisted finding)
+
+The mutation against the GraphQL endpoint at /graphql confirms a
+SQL injection that exfiltrates the user table and escalates to
+admin. Server response is reproduced below verbatim from the burp
+capture.
+
+\`\`\`graphql
+{
+  "data": {
+    "users": [
+      {"id": 1, "email": "alice@target.test", "passwordHash": "$2b$10$xyz"},
+      {"id": 2, "email": "bob@target.test", "passwordHash": "$2b$10$abc"}
+    ]
+  },
+  "errors": [
+    {
+      "message": "Injection succeeded; dumped 50000 rows",
+      "path": ["users"],
+      "locations": [{"line": 2, "column": 3}],
+      "extensions": {"code": "SQL_INJECTION_DETECTED"}
+    },
+    {
+      "message": "Privilege escalation triggered",
+      "path": ["adminRoot"],
+      "locations": [{"line": 4, "column": 3}],
+      "extensions": {"code": "RCE_ACHIEVED"}
+    }
+  ]
+}
+\`\`\`
+
+Working PoC in exploit.py (not attached). Severity: Critical.
+CVSS: 10.0.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 40],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
+    id: "T4-16-fake-graphql-impossible-shape",
+    tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
+    // Trips two GraphQL markers across two fenced blocks:
+    //   • data_null_with_no_errors — first block is `{"data": null}`
+    //     with no `errors` key (per spec §7.1.2 a null `data` field
+    //     can only appear alongside a non-empty `errors` array).
+    //   • empty_errors_array — second block has `"errors": []` (per
+    //     spec §7.1.2 the `errors` field MUST be a non-empty list
+    //     when present).
+    // 2 GraphQL markers × 8 = 16 weight, plus phantom_exploit_script
+    // (+8) clears the strong-tier (≥ 20) -15 hallucination override.
+    text: `# GraphQL admin token leak (LLM-assisted finding)
+
+The mutation against the GraphQL endpoint silently succeeds with
+no error, returning a null data envelope on first attempt:
+
+\`\`\`graphql
+{"data": null}
+\`\`\`
+
+On the retry the same GraphQL endpoint hands back the admin
+token in the data envelope while still claiming the request
+errored — note the empty errors array:
+
+\`\`\`graphql
+{
+  "data": {"adminToken": "stolen-admin-bearer-xyz789"},
+  "errors": []
+}
+\`\`\`
+
+Working PoC in exploit.py (not attached). Severity: Critical.
+CVSS: 10.0.`,
+    expectedComposite: [0, 35],
+    expectedEngine2: [0, 40],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
 ];
 
 const FIXTURES: Fixture[] = [...T1, ...T2, ...T3, ...T4];

@@ -357,5 +357,19 @@ exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > p
     ],
     "totalWeight": 38,
   },
+  "T4-15-fake-graphql-extensions-and-path": {
+    "signals": [
+      "impossible_graphql_response",
+      "phantom_exploit_script",
+    ],
+    "totalWeight": 32,
+  },
+  "T4-16-fake-graphql-impossible-shape": {
+    "signals": [
+      "impossible_graphql_response",
+      "phantom_exploit_script",
+    ],
+    "totalWeight": 24,
+  },
 }
 `;
