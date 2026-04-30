@@ -3616,6 +3616,13 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     undone?: boolean;
     undoneBy?: string;
     batchSize?: number;
+    // Task #234 — preserved edit history for the removed phrase, copied
+    // straight off the source HandwavyHistoryEntry / HandwavyBatchHistoryPhrase
+    // so the removed-history rows can render the same "N category flips"
+    // badge as the active list. For batch entries this is the per-inner-
+    // phrase array (NOT aggregated across the batch) so a partial reinstate
+    // sees the churn signal for that specific phrase.
+    edits?: HandwavyEditEntry[];
   };
   type DisplayHistoryGroup =
     | { kind: "single"; sortKey: number; row: DisplayHistoryRow }
@@ -3645,6 +3652,10 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         reinstatedBy: inner.reinstatedBy,
         reinstatedAt: inner.reinstatedAt,
         batchSize: h.phrases!.length,
+        // Task #234 — carry the per-inner-phrase edits forward so each
+        // batch row can render its own category-flip badge independently
+        // of the rest of the batch.
+        edits: inner.edits,
       }));
       const removedAtIso = String(h.removedAt);
       const reinstatedCount = rows.filter((r) => r.reinstated).length;
@@ -3675,6 +3686,10 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
           reinstatedAt: h.reinstatedAt,
           undone: h.undone,
           undoneBy: h.undoneBy,
+          // Task #234 — preserved edits are also surfaced on single-removal
+          // rows so the same category-flip badge appears next to the
+          // Reinstate button.
+          edits: h.edits,
         },
       });
     }
@@ -5692,6 +5707,26 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                       !h.reinstated &&
                       !isActive &&
                       cycleCount >= HANDWAVY_HIGH_THRASH_MIN;
+                    // Task #234 — surface the same category-flip badge that
+                    // the active-row list shows (Task #149) on removed-history
+                    // rows, so a reviewer about to click Reinstate sees that
+                    // the phrase has bounced between categories. We pull
+                    // straight off the row's preserved `edits` array (which
+                    // mirrors the active-list source) and only count edits
+                    // that actually changed the category — rationale-only
+                    // edits are intentionally ignored. Threshold matches the
+                    // active list (>= 2 distinct transitions) so a one-off
+                    // re-categorization doesn't produce noise. For batch
+                    // entries this is per-inner-phrase, not aggregated, so a
+                    // partial reinstate still sees per-phrase churn.
+                    const HANDWAVY_HIGH_FLIP_MIN = 2;
+                    const historyEditsList: HandwavyEditEntry[] =
+                      h.edits ?? [];
+                    const historyCategoryFlips = historyEditsList.filter(
+                      (e) => e.category && e.category.from !== e.category.to,
+                    );
+                    const showHistoryCategoryFlipBadge =
+                      historyCategoryFlips.length >= HANDWAVY_HIGH_FLIP_MIN;
                     return (
                       <div
                         key={`${h.phrase}-${removedAtKey}-${rowIdx}`}
@@ -5715,6 +5750,72 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                               <RotateCcw className="w-3 h-3 mr-1" />
                               {cycleCount}× cycles
                             </Badge>
+                          )}
+                          {/* Task #234 — category-flip badge mirrors the
+                              active-row badge from Task #149 so a reviewer
+                              about to Reinstate sees the same churn signal.
+                              Tooltip lists each transition with reviewer +
+                              timestamp. For batch rows this is per-inner-
+                              phrase (not aggregated). */}
+                          {showHistoryCategoryFlipBadge && (
+                            <TooltipProvider delayDuration={150}>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  type="button"
+                                  className="cursor-help inline-flex"
+                                  data-testid="handwavy-history-category-flip-badge"
+                                  aria-label={`Category changed ${historyCategoryFlips.length} times across edit history`}
+                                >
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] border-sky-500/40 text-sky-300"
+                                  >
+                                    <ArrowLeftRight className="w-3 h-3 mr-1" />
+                                    {historyCategoryFlips.length} category flips
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="top"
+                                  align="end"
+                                  collisionPadding={12}
+                                  className="max-w-xs glass-card glow-border text-popover-foreground text-left font-normal normal-case px-3 py-2 whitespace-normal"
+                                  data-testid="handwavy-history-category-flip-tooltip"
+                                >
+                                  <div className="text-[11px] font-semibold mb-1">
+                                    Category changed {historyCategoryFlips.length} times
+                                  </div>
+                                  <ol className="space-y-1 text-[10px] leading-snug">
+                                    {historyCategoryFlips.map((e, i) => {
+                                      const at = formatAuditTimestamp(e.editedAt);
+                                      return (
+                                        <li
+                                          key={`${e.editedAt}-${i}`}
+                                          className="space-y-0.5"
+                                        >
+                                          <div>
+                                            <span className="text-muted-foreground">#{i + 1}:</span>{" "}
+                                            <span className="text-foreground/90 capitalize">
+                                              {e.category!.from}
+                                            </span>
+                                            {" → "}
+                                            <span className="text-foreground/90 capitalize">
+                                              {e.category!.to}
+                                            </span>
+                                          </div>
+                                          <div className="text-muted-foreground">
+                                            by{" "}
+                                            <span className="text-foreground/80">
+                                              {e.editedBy || "anonymous"}
+                                            </span>
+                                            {at && <> • {at}</>}
+                                          </div>
+                                        </li>
+                                      );
+                                    })}
+                                  </ol>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                           <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
                           {isUndone && (
