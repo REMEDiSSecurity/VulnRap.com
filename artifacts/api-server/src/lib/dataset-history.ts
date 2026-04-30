@@ -14,6 +14,16 @@
 // serialized writes) rather than introducing a new persistence layer:
 // it keeps the on-disk format easy to reason about and lets the
 // dashboard reuse the same sparkline rendering pattern.
+//
+// Task #264 — to keep the trend window growing without ballooning the
+// file, snapshots older than COMPACT_AFTER_DAYS (default 30, override
+// via DATASET_HISTORY_COMPACT_DAYS) are down-sampled to one row per
+// (UTC day, tier) on every append. Aggregated rows carry
+// `aggregated: true` so the dashboard can render them with a different
+// stroke than the raw recent points. Without this pass the 2 000-row
+// MAX_SNAPSHOTS cap would just truncate the oldest detail abruptly
+// after several months of runs instead of preserving the long-tail
+// trend at coarser resolution.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -35,6 +45,14 @@ export interface DatasetCohortSnapshot {
    * missing for the run.
    */
   gap: number | null;
+  /**
+   * True when this row is a daily roll-up of multiple original
+   * snapshots produced by the older-than-window compaction pass.
+   * Absent (undefined) for raw per-run snapshots so the dashboard can
+   * style aggregated rows differently (e.g. dashed stroke, or a
+   * tooltip explaining "rolled up from N runs that day").
+   */
+  aggregated?: boolean;
 }
 
 export interface DatasetHistoryFile {
@@ -43,6 +61,8 @@ export interface DatasetHistoryFile {
 }
 
 const MAX_SNAPSHOTS = 2_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_COMPACT_AFTER_DAYS = 30;
 const DEFAULT_PATH = path.resolve(
   process.cwd(),
   "artifacts/api-server/data/dataset-history.json",
@@ -50,6 +70,14 @@ const DEFAULT_PATH = path.resolve(
 
 function historyPath(): string {
   return process.env.DATASET_HISTORY_PATH ?? DEFAULT_PATH;
+}
+
+function compactAfterDays(): number {
+  const raw = process.env.DATASET_HISTORY_COMPACT_DAYS;
+  if (raw === undefined) return DEFAULT_COMPACT_AFTER_DAYS;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_COMPACT_AFTER_DAYS;
+  return n;
 }
 
 async function readFromDisk(p: string): Promise<DatasetHistoryFile> {
@@ -79,6 +107,110 @@ async function writeToDisk(p: string, file: DatasetHistoryFile): Promise<void> {
   await fs.rename(tmp, p);
 }
 
+/** UTC day key (YYYY-MM-DD) for an ISO timestamp. */
+function dayKey(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso.slice(0, 10);
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/**
+ * Weighted mean of a numeric field across `bucket`, weighted by sample
+ * `count` (clamped to ≥1 so a count-of-zero row still contributes).
+ * Returns null when no row has a finite value for the field, so a
+ * cohort with no samples that day stays explicitly null in the rolled
+ * up row instead of silently turning into 0. Two decimals match the
+ * archetype-history rounding so the on-disk file stays readable.
+ */
+function weightedMean(
+  bucket: DatasetCohortSnapshot[],
+  pick: (s: DatasetCohortSnapshot) => number | null,
+): number | null {
+  let totalWeight = 0;
+  let weightedSum = 0;
+  for (const s of bucket) {
+    const v = pick(s);
+    if (v == null || !Number.isFinite(v)) continue;
+    const w = Math.max(1, s.count);
+    weightedSum += v * w;
+    totalWeight += w;
+  }
+  if (totalWeight === 0) return null;
+  return Number((weightedSum / totalWeight).toFixed(2));
+}
+
+/**
+ * Roll up snapshots older than `now - windowDays` into one row per
+ * (UTC day, tier). Recent snapshots are preserved unchanged. The pass
+ * is idempotent: a previously-aggregated row simply lands in a bucket
+ * of size 1 and is re-emitted with the same numbers. Tier (not label)
+ * is the bucketing key because the dashboard charts one series per
+ * tier; the tier→label mapping is stable, so we copy the bucket's
+ * label through unchanged.
+ */
+export function compactSnapshots(
+  snaps: DatasetCohortSnapshot[],
+  now: Date,
+  windowDays: number,
+): DatasetCohortSnapshot[] {
+  const cutoff = now.getTime() - windowDays * DAY_MS;
+  const old: DatasetCohortSnapshot[] = [];
+  const recent: DatasetCohortSnapshot[] = [];
+  for (const s of snaps) {
+    const t = Date.parse(s.timestamp);
+    if (Number.isFinite(t) && t < cutoff) old.push(s);
+    else recent.push(s);
+  }
+  if (old.length === 0) return snaps;
+
+  // Bucket by day, then by tier, to avoid relying on a separator
+  // character that could collide with tier names.
+  const byDay = new Map<string, Map<string, DatasetCohortSnapshot[]>>();
+  for (const s of old) {
+    const day = dayKey(s.timestamp);
+    let perTier = byDay.get(day);
+    if (!perTier) {
+      perTier = new Map();
+      byDay.set(day, perTier);
+    }
+    let bucket = perTier.get(s.tier);
+    if (!bucket) {
+      bucket = [];
+      perTier.set(s.tier, bucket);
+    }
+    bucket.push(s);
+  }
+
+  const aggregated: DatasetCohortSnapshot[] = [];
+  for (const [day, perTier] of byDay) {
+    for (const [tier, bucket] of perTier) {
+      aggregated.push({
+        timestamp: `${day}T00:00:00.000Z`,
+        tier,
+        // Tier→label is stable across runs, so copy through.
+        label: bucket[0]!.label,
+        // Sum of contributing fixture-counts so the UI can show "N
+        // samples rolled into this day" if it wants to. For a single
+        // per-run snapshot this stays equal to the original count.
+        count: bucket.reduce((a, b) => a + b.count, 0),
+        compositeMean: weightedMean(bucket, b => b.compositeMean),
+        // The gap is repeated across cohort rows of the same run, so
+        // averaging it weighted by count gives a representative
+        // run-day value while still folding multi-run days correctly.
+        gap: weightedMean(bucket, b => b.gap),
+        aggregated: true,
+      });
+    }
+  }
+
+  aggregated.sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? -1 : 1;
+    return a.tier.localeCompare(b.tier);
+  });
+
+  return [...aggregated, ...recent];
+}
+
 let writeChain: Promise<unknown> = Promise.resolve();
 
 export function appendDatasetCohortSnapshots(
@@ -91,6 +223,9 @@ export function appendDatasetCohortSnapshots(
     for (const row of rows) {
       file.snapshots.push({ timestamp, ...row });
     }
+    // Down-sample older entries before applying the hard MAX_SNAPSHOTS
+    // cap so we trim raw points (not freshly-aggregated daily rows).
+    file.snapshots = compactSnapshots(file.snapshots, new Date(), compactAfterDays());
     if (file.snapshots.length > MAX_SNAPSHOTS) {
       file.snapshots.splice(0, file.snapshots.length - MAX_SNAPSHOTS);
     }
@@ -108,5 +243,9 @@ export async function readDatasetHistory(): Promise<DatasetHistoryFile> {
 
 export const __testing = {
   MAX_SNAPSHOTS,
+  DEFAULT_COMPACT_AFTER_DAYS,
   historyPath,
+  compactAfterDays,
 };
+
+export { DEFAULT_COMPACT_AFTER_DAYS };
