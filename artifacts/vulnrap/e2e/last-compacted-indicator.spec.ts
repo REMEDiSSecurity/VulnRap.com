@@ -84,6 +84,11 @@ test.describe("EmergingArchetypesSection — Last compacted indicator (Task #211
             lastCompaction: {
               lastCompactedAt: compactedAt,
               lastRemovedCount: REMOVED_COUNT,
+              // Required by CompactionStats; the Task #289 render block
+              // reads `recentRuns.length` without an optional chain, so
+              // omitting it crashes the page. Empty keeps that block
+              // hidden (gated on length >= 2) for this spec.
+              recentRuns: [],
             },
           }),
         });

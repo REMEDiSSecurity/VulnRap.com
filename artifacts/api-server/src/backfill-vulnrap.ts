@@ -597,12 +597,19 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
 // Auto-run guard (Task #388): the recurring rescore scheduler imports
 // `backfill` from this module, so the side-effecting CLI parse + DB
 // kickoff at the bottom must only fire when the file is invoked as the
-// process entry point (e.g. `node ./dist/backfill-vulnrap.mjs`). esbuild
-// emits the bundled file under dist/ with a `.mjs` extension, so we
-// match the resolved entry against `import.meta.url`.
+// process entry point (e.g. `node ./dist/backfill-vulnrap.mjs`).
+//
+// Task #404 also gates on the entry-point's basename: esbuild inlines
+// this module into the api-server's `dist/index.mjs`, where
+// `import.meta.url` resolves to the bundle's own path and matches
+// `process.argv[1]` at api-server startup — which previously triggered
+// the CLI and `process.exit(0)`'d before `app.listen` bound a port.
 function isInvokedAsScript(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
+  // Reject the bundled-into-index.mjs case by basename.
+  const entryBase = entry.split(/[\\/]/).pop() ?? "";
+  if (!/^backfill-vulnrap(?:\.|$)/.test(entryBase)) return false;
   try {
     const here = fileURLToPath(import.meta.url);
     if (entry === here) return true;
