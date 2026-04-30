@@ -4,6 +4,7 @@ import { UploadCloud, Shield, FileText, Loader2, CheckCircle, XCircle, Search, Z
 import { LogoBeams } from "@/components/laser-effects";
 import { CrawlingBugs } from "@/components/crawling-bugs";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
+import { ScrollProgress } from "@/components/scroll-progress";
 import { useSubmitReport, SubmitReportBodyContentMode, useGetReportFeed, getGetReportFeedQueryKey, useGetVisitorStats, getGetVisitorStatsQueryKey, recordVisit } from "@workspace/api-client-react";
 import { addHistoryEntry } from "@/lib/history";
 import { Button } from "@/components/ui/button";
@@ -1269,6 +1270,7 @@ export default function Home() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 sm:space-y-10">
+      <ScrollProgress />
       <CrawlingBugs />
       <DriftFlagsBanner />
       {!mirrorBannerDismissed && (
