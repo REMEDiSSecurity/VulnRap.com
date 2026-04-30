@@ -340,4 +340,153 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await apiCtx.dispose();
     }
   });
+
+  // Task #342 — picker preview groups phrases by category with a per-
+  // category subtotal so reviewers triaging a mixed batch (e.g. some
+  // hedging + some absence) can see the breakdown at a glance instead
+  // of mentally tagging each row.
+  test("picker preview groups phrases by category with per-category subtotals for a mixed batch", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const hedgingPhrases = uniquePhrases(3, "task342 hedging");
+    const absencePhrases = uniquePhrases(2, "task342 absence");
+    const buzzwordPhrases = uniquePhrases(1, "task342 buzzword");
+    const allPhrases = [
+      ...hedgingPhrases,
+      ...absencePhrases,
+      ...buzzwordPhrases,
+    ];
+
+    try {
+      for (const p of hedgingPhrases) {
+        await addPhrase(apiCtx, p, { ...REVIEWER_OPTS, category: "hedging" });
+      }
+      for (const p of absencePhrases) {
+        await addPhrase(apiCtx, p, { ...REVIEWER_OPTS, category: "absence" });
+      }
+      for (const p of buzzwordPhrases) {
+        await addPhrase(apiCtx, p, { ...REVIEWER_OPTS, category: "buzzword" });
+      }
+      const batch = await batchRemove(apiCtx, allPhrases, REVIEWER_OPTS);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const pickerRow = page.locator(
+        `[data-testid="handwavy-removal-batches-row"][data-batch-removed-at="${removedAt}"]`,
+      );
+      await expect(pickerRow).toHaveCount(1, { timeout: 15_000 });
+
+      const pickerBtn = pickerRow.getByTestId(
+        "handwavy-removal-batches-reinstate",
+      );
+      await expect(pickerBtn).toBeEnabled();
+      await pickerBtn.click();
+
+      const previewDialog = page.getByTestId(
+        "handwavy-removal-batches-preview-confirm",
+      );
+      await expect(previewDialog).toBeVisible({ timeout: 10_000 });
+      await expect(previewDialog).toHaveAttribute("data-status", "ready", {
+        timeout: 10_000,
+      });
+
+      const previewList = previewDialog.getByTestId(
+        "handwavy-removal-batches-preview-list",
+      );
+      await expect(previewList).toBeVisible();
+
+      // Three category groups must render: one per category present in
+      // the batch. Empty categories must NOT appear.
+      const groups = previewList.getByTestId(
+        "handwavy-removal-batches-preview-group",
+      );
+      await expect(groups).toHaveCount(3);
+
+      // Each group should carry the matching count attribute and
+      // contain only its own phrases.
+      const absenceGroup = previewList.locator(
+        `[data-testid="handwavy-removal-batches-preview-group"][data-category="absence"]`,
+      );
+      await expect(absenceGroup).toHaveCount(1);
+      await expect(absenceGroup).toHaveAttribute(
+        "data-category-count",
+        String(absencePhrases.length),
+      );
+      await expect(
+        absenceGroup.getByTestId(
+          "handwavy-removal-batches-preview-group-count",
+        ),
+      ).toHaveText(String(absencePhrases.length));
+      await expect(
+        absenceGroup.getByTestId("handwavy-removal-batches-preview-row"),
+      ).toHaveCount(absencePhrases.length);
+      for (const p of absencePhrases) {
+        await expect(absenceGroup).toContainText(p);
+      }
+      for (const p of [...hedgingPhrases, ...buzzwordPhrases]) {
+        await expect(absenceGroup).not.toContainText(p);
+      }
+
+      const hedgingGroup = previewList.locator(
+        `[data-testid="handwavy-removal-batches-preview-group"][data-category="hedging"]`,
+      );
+      await expect(hedgingGroup).toHaveCount(1);
+      await expect(hedgingGroup).toHaveAttribute(
+        "data-category-count",
+        String(hedgingPhrases.length),
+      );
+      await expect(
+        hedgingGroup.getByTestId(
+          "handwavy-removal-batches-preview-group-count",
+        ),
+      ).toHaveText(String(hedgingPhrases.length));
+      await expect(
+        hedgingGroup.getByTestId("handwavy-removal-batches-preview-row"),
+      ).toHaveCount(hedgingPhrases.length);
+      for (const p of hedgingPhrases) {
+        await expect(hedgingGroup).toContainText(p);
+      }
+
+      const buzzwordGroup = previewList.locator(
+        `[data-testid="handwavy-removal-batches-preview-group"][data-category="buzzword"]`,
+      );
+      await expect(buzzwordGroup).toHaveCount(1);
+      await expect(buzzwordGroup).toHaveAttribute(
+        "data-category-count",
+        String(buzzwordPhrases.length),
+      );
+      await expect(
+        buzzwordGroup.getByTestId("handwavy-removal-batches-preview-row"),
+      ).toHaveCount(buzzwordPhrases.length);
+
+      // Sections render in the canonical order: absence → hedging →
+      // buzzword (matching the CATEGORY_LABELS ordering in the page),
+      // regardless of the batch's submission order.
+      const renderedCategories = await groups.evaluateAll((nodes) =>
+        nodes.map(
+          (n) => (n as HTMLElement).getAttribute("data-category") ?? "",
+        ),
+      );
+      expect(renderedCategories).toEqual(["absence", "hedging", "buzzword"]);
+
+      // Per-row "will reinstate" badges still render on every row in
+      // every group — grouping must NOT drop the existing flag.
+      const willReinstate = previewList.locator(
+        `[data-testid="handwavy-removal-batches-preview-row"][data-already-reinstated="false"]`,
+      );
+      await expect(willReinstate).toHaveCount(allPhrases.length);
+
+      await previewDialog
+        .getByTestId("handwavy-removal-batches-preview-cancel")
+        .click();
+      await expect(previewDialog).toHaveCount(0, { timeout: 5_000 });
+    } finally {
+      await cleanup(apiCtx, allPhrases, {
+        reviewer: `${REVIEWER}-cleanup`,
+      });
+      await apiCtx.dispose();
+    }
+  });
 });

@@ -9463,51 +9463,144 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                       already been reinstated and will be skipped.
                     </div>
                   )}
-                  <ul
-                    className="list-none pl-0 space-y-1 max-h-56 overflow-y-auto border border-border/30 rounded-md p-2"
-                    data-testid="handwavy-removal-batches-preview-list"
-                  >
-                    {pickerBatchPreview.detail.phrases.map((p: { phrase: string; category?: string; reinstated?: boolean }, idx: number) => (
-                      <li
-                        key={`${p.phrase}-${idx}`}
-                        className="flex items-start gap-2 text-[11px]"
-                        data-testid="handwavy-removal-batches-preview-row"
-                        data-phrase={p.phrase}
-                        data-already-reinstated={
-                          p.reinstated === true ? "true" : "false"
-                        }
+                  {/* Task #342 — group rows by category so reviewers
+                      triaging a mixed batch (e.g. 4 hedging + 3 absence)
+                      can see the per-category subtotals at a glance and
+                      scan related phrases together instead of mentally
+                      tagging each row themselves. The per-phrase
+                      "already reinstated" / "will reinstate" badges are
+                      preserved on every row. */}
+                  {(() => {
+                    type PreviewPhrase = {
+                      phrase: string;
+                      category?: string;
+                      reinstated?: boolean;
+                    };
+                    const phrases = pickerBatchPreview.detail
+                      .phrases as PreviewPhrase[];
+                    // Stable category order so the same batch always
+                    // renders the same section sequence — known
+                    // categories first (in CATEGORY_LABELS order), then
+                    // any unknown buckets (alphabetised) and finally an
+                    // "Uncategorized" fallback for rows with no
+                    // category field. Derived from CATEGORY_LABELS so a
+                    // future-added category renders in the right slot
+                    // without touching this block.
+                    const knownOrder = Object.keys(
+                      CATEGORY_LABELS,
+                    ) as ReadonlyArray<keyof typeof CATEGORY_LABELS>;
+                    const knownSet = new Set<string>(knownOrder);
+                    const groups = new Map<string, PreviewPhrase[]>();
+                    for (const p of phrases) {
+                      const key =
+                        typeof p.category === "string" && p.category
+                          ? p.category
+                          : "__uncategorized__";
+                      const bucket = groups.get(key);
+                      if (bucket) bucket.push(p);
+                      else groups.set(key, [p]);
+                    }
+                    const orderedKeys: string[] = [];
+                    for (const k of knownOrder) {
+                      if (groups.has(k)) orderedKeys.push(k);
+                    }
+                    const extra = Array.from(groups.keys())
+                      .filter(
+                        (k) =>
+                          !knownSet.has(k) && k !== "__uncategorized__",
+                      )
+                      .sort();
+                    orderedKeys.push(...extra);
+                    if (groups.has("__uncategorized__"))
+                      orderedKeys.push("__uncategorized__");
+
+                    const labelFor = (key: string): string => {
+                      if (key === "__uncategorized__")
+                        return "Uncategorized";
+                      if (knownSet.has(key))
+                        return CATEGORY_LABELS[
+                          key as keyof typeof CATEGORY_LABELS
+                        ];
+                      return key;
+                    };
+
+                    return (
+                      <div
+                        className="max-h-56 overflow-y-auto border border-border/30 rounded-md p-2 space-y-3"
+                        data-testid="handwavy-removal-batches-preview-list"
                       >
-                        <span className="font-mono text-foreground/80 break-all flex-1">
-                          “{p.phrase}”
-                        </span>
-                        {typeof p.category === "string" && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] capitalize shrink-0"
-                          >
-                            {p.category}
-                          </Badge>
-                        )}
-                        {p.reinstated === true ? (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] border-emerald-500/40 text-emerald-300 shrink-0"
-                            data-testid="handwavy-removal-batches-preview-row-already"
-                          >
-                            Already reinstated
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] border-sky-500/40 text-sky-300 shrink-0"
-                            data-testid="handwavy-removal-batches-preview-row-pending"
-                          >
-                            Will reinstate
-                          </Badge>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                        {orderedKeys.map((key) => {
+                          const rows = groups.get(key) ?? [];
+                          return (
+                            <section
+                              key={key}
+                              className="space-y-1"
+                              data-testid="handwavy-removal-batches-preview-group"
+                              data-category={key}
+                              data-category-count={rows.length}
+                            >
+                              <header
+                                className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-foreground/70 sticky top-0 bg-background/80 backdrop-blur-sm py-0.5"
+                                data-testid="handwavy-removal-batches-preview-group-header"
+                              >
+                                <span className="font-medium">
+                                  {labelFor(key)}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] shrink-0"
+                                  data-testid="handwavy-removal-batches-preview-group-count"
+                                >
+                                  {rows.length}
+                                </Badge>
+                              </header>
+                              <ul className="list-none pl-0 space-y-1">
+                                {rows.map((p, idx) => (
+                                  <li
+                                    key={`${p.phrase}-${idx}`}
+                                    className="flex items-start gap-2 text-[11px]"
+                                    data-testid="handwavy-removal-batches-preview-row"
+                                    data-phrase={p.phrase}
+                                    data-category={
+                                      typeof p.category === "string"
+                                        ? p.category
+                                        : ""
+                                    }
+                                    data-already-reinstated={
+                                      p.reinstated === true
+                                        ? "true"
+                                        : "false"
+                                    }
+                                  >
+                                    <span className="font-mono text-foreground/80 break-all flex-1">
+                                      “{p.phrase}”
+                                    </span>
+                                    {p.reinstated === true ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] border-emerald-500/40 text-emerald-300 shrink-0"
+                                        data-testid="handwavy-removal-batches-preview-row-already"
+                                      >
+                                        Already reinstated
+                                      </Badge>
+                                    ) : (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] border-sky-500/40 text-sky-300 shrink-0"
+                                        data-testid="handwavy-removal-batches-preview-row-pending"
+                                      >
+                                        Will reinstate
+                                      </Badge>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </section>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   <div className="text-xs italic">
                     The original batch removal entry stays in the history;
                     each reinstate is recorded as a new audit entry. Cancel
