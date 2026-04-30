@@ -28,7 +28,11 @@ import {
   AI_SELF_DISCLOSURE_PENALTY,
   type AiSelfDisclosureResult,
 } from "./ai-self-disclosure";
-import type { AvriEngine2Block } from "@workspace/avri-rubric";
+import type {
+  AvriEngine2AbsencePenalty,
+  AvriEngine2Block,
+  AvriEngine2GoldSignal,
+} from "@workspace/avri-rubric";
 
 const ABSENCE_PENALTY_CAP = 12;
 /** Out-of-cap penalty applied to crash-/race-trace-bearing reports whose
@@ -107,18 +111,28 @@ function stripCodeAndDiffs(text: string): string {
  */
 export type HandwavyCategory = "absence" | "hedging" | "buzzword";
 
-export interface AvriEngine2Detail {
+/**
+ * Task #394: the engine's internal computational record is now the same
+ * shape as the persisted `AvriEngine2Block` from `@workspace/avri-rubric`
+ * — one canonical type covers `signalBreakdown.avri`, the diagnostics-
+ * panel reader, the printable triage report, and the engine's own
+ * downstream consumers (`composite.ts`, the crash-trace / raw-HTTP
+ * tests). The intersection below pins the fields the engine always emits
+ * as required so callers can read them without optional chaining noise.
+ */
+export type AvriEngine2Detail = AvriEngine2Block & {
   family: string;
+  familyName: string;
   baseScore: number;
-  goldHits: Array<{ id: string; description: string; points: number }>;
-  absencePenaltiesApplied: Array<{ id: string; description: string; points: number; flatHandwavyCategory?: HandwavyCategory }>;
-  contradictionsFound: string[];
-  totalAbsencePenalty: number;
+  goldHits: AvriEngine2GoldSignal[];
+  absencePenalties: AvriEngine2AbsencePenalty[];
+  contradictions: string[];
+  absencePenalty: number;
   contradictionPenalty: number;
   rawAvriScore: number;
   legacyScore: number;
   blendedScore: number;
-}
+};
 
 export interface AvriEngine2Result {
   engine: EngineResult;
@@ -185,8 +199,9 @@ export function runEngine2Avri(
       }
     }
     // The composite override math (lib/engines/avri/composite.ts ≥18 check)
-    // keys off `totalAbsencePenalty`, so cap the applied total here while
-    // leaving every matched-phrase entry visible in `absencePenaltiesApplied`.
+    // keys off the persisted `absencePenalty` magnitude, so cap the applied
+    // total here while leaving every matched-phrase entry visible in
+    // `absencePenalties`.
     const haircut = Math.min(HANDWAVY_HAIRCUT_CAP, haircutRaw);
     // Task #300 — AI self-disclosure penalty is out-of-cap (separate from
     // the curated hand-wavy haircut budget) so a slop FLAT report whose
@@ -234,6 +249,10 @@ export function runEngine2Avri(
     if (aiSelfDisclosure.detected) {
       flatIndicators.push(buildAiSelfDisclosureIndicator(aiSelfDisclosure, aiSelfDisclosurePenalty));
     }
+    // Task #394: `detail` is the same `AvriEngine2Block` instance the
+    // diagnostics panel and triage exporter read from
+    // `signalBreakdown.avri` — one source of truth, no parallel record
+    // to keep in sync.
     return {
       engine: {
         ...legacy,
@@ -248,18 +267,7 @@ export function runEngine2Avri(
           : legacy.note,
       },
       goldHitCount: 0,
-      detail: {
-        family: family.id,
-        baseScore: legacy.score,
-        goldHits: [],
-        absencePenaltiesApplied,
-        contradictionsFound: [],
-        totalAbsencePenalty: haircut,
-        contradictionPenalty: 0,
-        rawAvriScore: adjusted,
-        legacyScore: legacy.score,
-        blendedScore: adjusted,
-      },
+      detail: flatAvriBreakdown,
     };
   }
 
@@ -768,20 +776,14 @@ export function runEngine2Avri(
     note: `AVRI ${family.displayName}: ${goldHits.length} gold signal(s) (+${goldTotal}), -${totalAbsencePenalty} absence, -${contradictionPenalty} contradiction${strippedTracePenalty ? `, -${strippedTracePenalty} stripped-trace` : ""}${structuralFabPenalty ? `, -${structuralFabPenalty} structural-fabrication` : ""}${fakeRawHttpPenalty ? `, -${fakeRawHttpPenalty} fake-raw-http` : ""}${aiSelfDisclosurePenalty ? `, -${aiSelfDisclosurePenalty} ai-self-disclosure` : ""}. Blended with legacy substance: ${blendedScore}.`,
   };
 
+  // Task #394: `detail` is the same `AvriEngine2Block` instance written
+  // into `signalBreakdown.avri`. The diagnostics panel, triage exporter,
+  // composite override rules, and the engine's unit tests all read from
+  // the same single record now — no parallel detail shape with
+  // differently-spelled fields to keep in sync.
   return {
     engine,
     goldHitCount: goldHits.length,
-    detail: {
-      family: family.id,
-      baseScore: Math.round(baseScore),
-      goldHits,
-      absencePenaltiesApplied,
-      contradictionsFound,
-      totalAbsencePenalty,
-      contradictionPenalty,
-      rawAvriScore: Math.round(rawAvriScore),
-      legacyScore: legacy.score,
-      blendedScore,
-    },
+    detail: avriBlock,
   };
 }

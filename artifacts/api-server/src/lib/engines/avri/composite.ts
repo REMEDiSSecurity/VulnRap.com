@@ -96,21 +96,25 @@ export function runAvriComposite(
   if (family.id !== "FLAT" && e2.goldHitCount === 0 && e3.detail.goldHitCount === 0) {
     newOverrides.push(`AVRI_NO_GOLD_SIGNALS: zero gold signals for ${family.displayName}`);
   }
-  if (family.id !== "FLAT" && e2.detail.contradictionsFound.length >= 1) {
-    newOverrides.push(`AVRI_FAMILY_CONTRADICTION: report contradicts claimed family (${e2.detail.contradictionsFound[0]})`);
+  if (family.id !== "FLAT" && e2.detail.contradictions.length >= 1) {
+    newOverrides.push(`AVRI_FAMILY_CONTRADICTION: report contradicts claimed family (${e2.detail.contradictions[0]})`);
   }
 
   // FLAT slop additional composite haircut: when an unclassifiable report
   // self-admits to having no concrete evidence (≥3 hand-wavy markers fired
-  // in Engine 2 → totalAbsencePenalty=18+), apply an extra -8 at the
+  // in Engine 2 → applied haircut of 18+), apply an extra -8 at the
   // composite level. The Engine 2 haircut alone only zeroes the substance
   // score; Engines 1 and 3 still contribute their legacy values, which can
   // leave a buzzword-soup composite hovering in the high teens to twenties.
   // This penalty pushes those reports below the LIKELY INVALID band where
   // they belong, without touching legitimate FLAT reports (which never
   // accumulate a haircut).
+  //
+  // Task #394: the persisted `absencePenalty` is stored as a negative
+  // number (e.g. -18), so the haircut magnitude is `-absencePenalty`.
+  const flatHaircut = -e2.detail.absencePenalty;
   let flatSlopPenalty = 0;
-  if (family.id === "FLAT" && e2.detail.totalAbsencePenalty >= 18) {
+  if (family.id === "FLAT" && flatHaircut >= 18) {
     flatSlopPenalty = -8;
     newOverrides.push(`AVRI_FLAT_SLOP_HAIRCUT: hand-wavy unclassifiable report (${flatSlopPenalty})`);
   }

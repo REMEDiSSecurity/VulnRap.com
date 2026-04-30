@@ -1696,7 +1696,7 @@ High.`,
   // AVRI_FAMILY_CONTRADICTION detector. Each fixture cites a CWE that
   // anchors it into one major family but its prose drops a phrase from a
   // different family's contradictionPhrases list (e.g. an XSS payload in
-  // an INJECTION-cited report) so e2.detail.contradictionsFound is
+  // an INJECTION-cited report) so e2.detail.contradictions is
   // non-empty. Each fixture also names the cited CWE id in plain text so
   // the cwe_correct_class gold signal fires for the cited family — that
   // suppresses the AVRI_NO_GOLD_SIGNALS override and keeps each fixture
