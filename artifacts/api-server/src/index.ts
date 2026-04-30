@@ -1,7 +1,10 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupMigrations } from "./lib/startup-migrations";
-import { startDriftNotificationScheduler } from "./lib/avri-drift-notifications";
+import {
+  startDriftNotificationScheduler,
+  startStalledSchedulerWatchdog,
+} from "./lib/avri-drift-notifications";
 import { startRescoreBackfillScheduler } from "./lib/rescore-backfill-scheduler";
 
 const rawPort = process.env["PORT"];
@@ -37,6 +40,16 @@ app.listen(port, (err) => {
   // handlers can stop the timer cleanly during a graceful shutdown.
   const driftScheduler = startDriftNotificationScheduler();
 
+  // Task #396 — Independent watchdog that periodically reads the drift
+  // scheduler status and dispatches a one-off "scheduler appears wedged"
+  // webhook when the next scheduled tick is significantly overdue
+  // (Date.now() > nextTickAt + 2 * intervalMs). Independent of the main
+  // scheduler timer so a wedged scheduler can't suppress its own alarm.
+  // Dedup state lives in the same JSON file as drift flags, so a process
+  // restart never re-pages reviewers for a stall window that was already
+  // announced.
+  const stalledSchedulerWatchdog = startStalledSchedulerWatchdog();
+
   // Task #388 — Kick off the recurring rescore backfill. The scheduler
   // is opt-in via RESCORE_BACKFILL_SCHEDULER_ENABLED so dev / test
   // environments don't accidentally rescore data; in production it
@@ -52,6 +65,7 @@ app.listen(port, (err) => {
         "Shutting down: stopping drift + rescore schedulers.",
       );
       driftScheduler.stop();
+      stalledSchedulerWatchdog.stop();
       rescoreScheduler.stop();
     });
   }

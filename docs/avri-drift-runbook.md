@@ -202,3 +202,70 @@ notified, so transient webhook outages auto-recover on the next run.
   records them as notified locally so wiring up a webhook later
   does not produce a retroactive flood. Truncate the state file if
   you actually want the backlog.
+
+### Stalled-scheduler alerts (Task #396)
+
+The scheduler runs in-process, so a hung event loop, a botched
+deploy, or a forgotten `stop()` can silently stop new drift flags
+from paging anyone. To catch that case, a separate **watchdog timer**
+also boots from `src/index.ts` (`startStalledSchedulerWatchdog`) and
+polls the in-memory scheduler status every
+`AVRI_DRIFT_STALL_WATCHDOG_INTERVAL_MS` (default 5 minutes).
+
+- **Trigger.** The watchdog dispatches when the main scheduler is
+  started, has a non-null `nextTickAt`, and the wall clock has moved
+  past `nextTickAt + 2 * intervalMs`. The 2× buffer absorbs the
+  normal jitter from a single failed-then-retried tick (which uses
+  the shorter `AVRI_DRIFT_NOTIFY_RETRY_INTERVAL_MS`) without paging
+  reviewers.
+- **Webhook.** The alert reuses `AVRI_DRIFT_WEBHOOK_URL`. Payload:
+  ```json
+  {
+    "event": "avri_drift_scheduler_stalled",
+    "detectedAt": "2026-04-29T00:02:10.000Z",
+    "expectedNextTickAt": "2026-04-29T00:00:00.000Z",
+    "overdueByMs": 130000,
+    "intervalMs": 60000,
+    "retryIntervalMs": 5000,
+    "schedulerStartedAt": "2026-04-28T00:00:00.000Z",
+    "lastTickAt": "2026-04-28T23:59:00.000Z",
+    "lastTickOk": true,
+    "ticksCompleted": 7,
+    "calibrationUrl": "https://vulnrap.example.com/feedback-analytics",
+    "runbookUrl": "https://vulnrap.example.com/docs/avri-drift-runbook.md"
+  }
+  ```
+- **De-duplication.** Each stall detection is keyed by
+  `STALL|${expectedNextTickAt}` and stored in the same
+  `avri-drift-notifications.json` file (under `schedulerStalls`) as
+  drift dedup state, so the watchdog fires at most once per stall
+  window even across process restarts. A failed dispatch is NOT
+  persisted, so a flaky webhook auto-recovers on the next poll. If
+  the scheduler resumes and later wedges on a *different* expected
+  tick, the dedup key changes and the watchdog re-pages.
+- **Calibration banner.** The calibration page header renders a
+  red "Scheduler appears stalled" banner driven by the same
+  `nextTickAt + 2 * intervalMs` predicate, so reviewers see the
+  problem in the UI even when `AVRI_DRIFT_WEBHOOK_URL` is unset.
+- **Silencing.** To clear historical stall records (e.g. after a
+  long-resolved incident), edit
+  `artifacts/api-server/data/avri-drift-notifications.json` and
+  truncate the `schedulerStalls` array. Removing only the most
+  recent entry will allow the watchdog to re-page for that same
+  stall window — usually only useful if you intentionally want a
+  re-test page during recovery drills.
+- **Recovery checklist.** When a stall page fires:
+  1. Open the calibration page and confirm the red banner is still
+     visible (the banner clears as soon as the next tick lands).
+  2. Check `Scheduler heartbeat` for `lastTickOk` and `lastTickAt`
+     — a long-stale `lastTickAt` with `lastTickOk: true` typically
+     means the timer was cleared (e.g. the process is shutting
+     down) rather than the tick body throwing.
+  3. If the API server is up but the scheduler is wedged, restart
+     the `artifacts/api-server: API Server` workflow. The dedup
+     state file survives the restart, so the watchdog will not
+     re-page for the same stall window.
+  4. After recovery, confirm `nextTickAt` advances on the next
+     poll. The stall record stays in `schedulerStalls` as an audit
+     trail; truncate it once the incident is closed if you'd
+     rather not retain it.

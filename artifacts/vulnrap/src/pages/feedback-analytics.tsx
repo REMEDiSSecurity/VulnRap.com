@@ -794,6 +794,7 @@ function CalibrationSection() {
 
   return (
     <div className="space-y-6">
+      <SchedulerStalledBanner />
       <CalibrationAuthBanner state={authState} />
       <CalibrationTokenRejectedBanner
         rejection={tokenRejection}
@@ -11052,6 +11053,64 @@ function formatRelativeUntil(iso: string, now: number = Date.now()): string | nu
   if (hr < 24) return fmt(`${hr}h`);
   const day = Math.round(hr / 24);
   return fmt(`${day}d`);
+}
+
+// Task #396 — Top-of-page banner that fires when the AVRI drift
+// scheduler hasn't completed its next expected tick within 2 *
+// intervalMs. Mirrors the server-side `isSchedulerStalled` predicate so
+// the UI flags a wedge even before the watchdog dispatches the webhook
+// (e.g. AVRI_DRIFT_WEBHOOK_URL unset). Reuses the same React Query key
+// as SchedulerStatusPanel so both share a single 30s poll.
+function SchedulerStalledBanner() {
+  const queryKey = getGetAvriDriftSchedulerStatusQueryKey();
+  const { data } = useGetAvriDriftSchedulerStatus({
+    query: { queryKey, refetchInterval: 30_000 },
+  });
+  // Re-evaluate stall predicate on a wall-clock interval so the banner
+  // appears between server polls if the scheduler stops firing.
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  if (!data) return null;
+  if (!data.schedulerStarted) return null;
+  if (!data.nextTickAt) return null;
+  const intervalMs = typeof data.intervalMs === "number" ? data.intervalMs : 0;
+  if (intervalMs <= 0) return null;
+  const expected = Date.parse(data.nextTickAt);
+  if (!Number.isFinite(expected)) return null;
+  // Match the server-side `isSchedulerStalled` predicate: only flag a
+  // stall once the wall clock has moved past `nextTickAt + 2 *
+  // intervalMs`. The displayed "overdue by" reports total time past
+  // `nextTickAt` (matches the watchdog webhook payload's
+  // `overdueByMs`) rather than time past the grace window, so the
+  // banner and the page sent to reviewers always agree.
+  const totalOverdueMs = now - expected;
+  if (totalOverdueMs <= 2 * intervalMs) return null;
+
+  const overdueMin = Math.max(1, Math.round(totalOverdueMs / 60_000));
+  const intervalMin = Math.max(1, Math.round(intervalMs / 60_000));
+  return (
+    <div
+      role="alert"
+      data-testid="scheduler-stalled-banner"
+      className="rounded-md border border-red-400/40 bg-red-400/10 px-4 py-3 text-red-300 flex items-start gap-3"
+    >
+      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+      <div className="space-y-1 text-sm">
+        <p className="font-semibold">Scheduler appears stalled</p>
+        <p className="text-xs text-red-200/80">
+          The AVRI drift scheduler should have fired ~{intervalMin} min ago, but
+          its next tick is overdue by ~{overdueMin} min. New drift flags will
+          not page reviewers until it resumes. See{" "}
+          <code className="font-mono text-[11px]">docs/avri-drift-runbook.md</code>{" "}
+          (&ldquo;Notifications&rdquo;) for recovery steps.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 // Operator-visible heartbeat for the in-process AVRI drift scheduler.

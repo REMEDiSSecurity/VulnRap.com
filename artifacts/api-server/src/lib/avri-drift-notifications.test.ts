@@ -12,11 +12,19 @@ import {
   removeNotifiedFlags,
   getDriftSchedulerStatus,
   listRearmHistory,
+  isSchedulerStalled,
+  detectAndNotifyStalledScheduler,
+  listSchedulerStalls,
+  startStalledSchedulerWatchdog,
   __testing,
   type WebhookDispatcher,
   type WebhookPayload,
   type NotifiedFlagRecord,
   type RearmAuditEntry,
+  type SchedulerStallDispatcher,
+  type SchedulerStallPayload,
+  type SchedulerStallRecord,
+  type DriftSchedulerStatus,
 } from "./avri-drift-notifications";
 import type { AvriDriftReport, DriftFlag } from "./avri-drift";
 
@@ -1151,5 +1159,477 @@ describe("removeNotifiedFlags audit log + listRearmHistory", () => {
     const snap = listRearmHistory();
     snap[0]!.rearmedBy = "MUTATED";
     expect(listRearmHistory()[0]!.rearmedBy).toBe("alice");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task #396 — Stalled-scheduler watchdog. Each test pins the wall clock,
+// pins a tmp state file path, and feeds a synthetic scheduler status so
+// the dispatch decision is deterministic without spinning up the real
+// background timer.
+// ---------------------------------------------------------------------------
+
+function makeStatus(
+  overrides: Partial<DriftSchedulerStatus> = {},
+): DriftSchedulerStatus {
+  return {
+    schedulerStarted: true,
+    startedAt: "2026-04-29T00:00:00.000Z",
+    intervalMs: 60_000,
+    retryIntervalMs: 5_000,
+    webhookConfigured: true,
+    lastTickAt: "2026-04-29T00:00:01.000Z",
+    lastTickOk: true,
+    lastTickRanCheck: true,
+    lastTickDispatched: false,
+    lastTickNewFlagCount: 0,
+    nextTickAt: "2026-04-29T00:01:01.000Z",
+    ticksCompleted: 1,
+    ...overrides,
+  };
+}
+
+describe("isSchedulerStalled", () => {
+  it("returns false when the scheduler is not started", () => {
+    expect(
+      isSchedulerStalled(
+        makeStatus({ schedulerStarted: false, nextTickAt: null }),
+        Date.parse("2030-01-01T00:00:00.000Z"),
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when nextTickAt is null (e.g. stop() ran)", () => {
+    expect(
+      isSchedulerStalled(
+        makeStatus({ nextTickAt: null }),
+        Date.parse("2030-01-01T00:00:00.000Z"),
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when nextTickAt is in the future", () => {
+    expect(
+      isSchedulerStalled(
+        makeStatus({
+          nextTickAt: "2026-04-29T01:00:00.000Z",
+          intervalMs: 60_000,
+        }),
+        Date.parse("2026-04-29T00:30:00.000Z"),
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when overdue by less than 2 * intervalMs", () => {
+    // intervalMs = 60s, nextTickAt + 1.5 * intervalMs = 90s past expected.
+    expect(
+      isSchedulerStalled(
+        makeStatus({
+          nextTickAt: "2026-04-29T00:00:00.000Z",
+          intervalMs: 60_000,
+        }),
+        Date.parse("2026-04-29T00:01:30.000Z"),
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true when overdue by more than 2 * intervalMs", () => {
+    expect(
+      isSchedulerStalled(
+        makeStatus({
+          nextTickAt: "2026-04-29T00:00:00.000Z",
+          intervalMs: 60_000,
+        }),
+        // 130s past expected = 2.16 * intervalMs
+        Date.parse("2026-04-29T00:02:10.000Z"),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("detectAndNotifyStalledScheduler", () => {
+  let tmpDir: string;
+  let statePath: string;
+  let originalEnv: { url?: string; statePath?: string };
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "avri-drift-stall-"));
+    statePath = path.join(tmpDir, "notifications.json");
+    originalEnv = {
+      url: process.env.AVRI_DRIFT_WEBHOOK_URL,
+      statePath: process.env.AVRI_DRIFT_NOTIFICATIONS_PATH,
+    };
+    process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = statePath;
+    delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    __testing.resetResolvedPath();
+    __testing.resetSchedulerStatus();
+  });
+
+  afterEach(() => {
+    if (originalEnv.url === undefined) delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    else process.env.AVRI_DRIFT_WEBHOOK_URL = originalEnv.url;
+    if (originalEnv.statePath === undefined)
+      delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    else process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = originalEnv.statePath;
+    __testing.resetResolvedPath();
+    __testing.resetSchedulerStatus();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function recordingStallDispatcher(): {
+    dispatch: SchedulerStallDispatcher;
+    calls: Array<{ url: string; payload: SchedulerStallPayload }>;
+    response: { ok: boolean; status?: number; error?: string };
+  } {
+    const calls: Array<{ url: string; payload: SchedulerStallPayload }> = [];
+    const handle: {
+      dispatch: SchedulerStallDispatcher;
+      calls: Array<{ url: string; payload: SchedulerStallPayload }>;
+      response: { ok: boolean; status?: number; error?: string };
+    } = {
+      dispatch: (async (url: string, payload: SchedulerStallPayload) => {
+        calls.push({ url, payload });
+        return handle.response;
+      }) as SchedulerStallDispatcher,
+      calls,
+      response: { ok: true, status: 200 },
+    };
+    return handle;
+  }
+
+  it("returns stalled:false when the scheduler is healthy", async () => {
+    const rec = recordingStallDispatcher();
+    const result = await detectAndNotifyStalledScheduler({
+      webhookUrl: "https://example.com/hook",
+      dispatch: rec.dispatch,
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+      status: makeStatus({
+        nextTickAt: "2026-04-29T00:01:00.000Z",
+        intervalMs: 60_000,
+      }),
+    });
+    expect(result.stalled).toBe(false);
+    expect(result.dispatched).toBe(false);
+    expect(rec.calls).toHaveLength(0);
+    // Nothing persisted when the scheduler is healthy.
+    expect(existsSync(statePath)).toBe(false);
+  });
+
+  it("dispatches the watchdog payload and persists a stall record on first detection", async () => {
+    const rec = recordingStallDispatcher();
+    const stalled = makeStatus({
+      nextTickAt: "2026-04-29T00:00:00.000Z",
+      intervalMs: 60_000,
+      retryIntervalMs: 5_000,
+      lastTickAt: "2026-04-28T23:59:00.000Z",
+      lastTickOk: true,
+      ticksCompleted: 7,
+      startedAt: "2026-04-28T00:00:00.000Z",
+    });
+    const result = await detectAndNotifyStalledScheduler({
+      webhookUrl: "https://example.com/hook",
+      publicUrl: "https://vulnrap.example.com",
+      dispatch: rec.dispatch,
+      // 130s past nextTickAt -> 2.16 * intervalMs overdue.
+      now: () => new Date("2026-04-29T00:02:10.000Z"),
+      status: stalled,
+    });
+    expect(result.stalled).toBe(true);
+    expect(result.alreadyAlerted).toBe(false);
+    expect(result.dispatched).toBe(true);
+    expect(result.webhookSkipped).toBe(false);
+    expect(result.record).toBeDefined();
+    expect(result.record!.key).toBe("STALL|2026-04-29T00:00:00.000Z");
+    expect(result.record!.expectedNextTickAt).toBe("2026-04-29T00:00:00.000Z");
+    expect(result.record!.overdueByMs).toBe(130_000);
+    expect(result.record!.intervalMs).toBe(60_000);
+    expect(result.record!.detectedAt).toBe("2026-04-29T00:02:10.000Z");
+
+    expect(rec.calls).toHaveLength(1);
+    const payload = rec.calls[0]!.payload;
+    expect(payload.event).toBe("avri_drift_scheduler_stalled");
+    expect(payload.expectedNextTickAt).toBe("2026-04-29T00:00:00.000Z");
+    expect(payload.overdueByMs).toBe(130_000);
+    expect(payload.intervalMs).toBe(60_000);
+    expect(payload.retryIntervalMs).toBe(5_000);
+    expect(payload.schedulerStartedAt).toBe("2026-04-28T00:00:00.000Z");
+    expect(payload.lastTickAt).toBe("2026-04-28T23:59:00.000Z");
+    expect(payload.lastTickOk).toBe(true);
+    expect(payload.ticksCompleted).toBe(7);
+    expect(payload.calibrationUrl).toBe(
+      "https://vulnrap.example.com/feedback-analytics",
+    );
+    expect(payload.runbookUrl).toBe(
+      "https://vulnrap.example.com/docs/avri-drift-runbook.md",
+    );
+
+    // Persisted to the same state file as drift flags.
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      schedulerStalls: SchedulerStallRecord[];
+    };
+    expect(persisted.schedulerStalls).toHaveLength(1);
+    expect(persisted.schedulerStalls[0]!.key).toBe(
+      "STALL|2026-04-29T00:00:00.000Z",
+    );
+  });
+
+  it("dedupes within the same stall window — no second dispatch for the same nextTickAt", async () => {
+    const rec = recordingStallDispatcher();
+    const stalled = makeStatus({
+      nextTickAt: "2026-04-29T00:00:00.000Z",
+      intervalMs: 60_000,
+    });
+    const opts = {
+      webhookUrl: "https://example.com/hook",
+      dispatch: rec.dispatch,
+      now: () => new Date("2026-04-29T00:02:10.000Z"),
+      status: stalled,
+    };
+    const first = await detectAndNotifyStalledScheduler(opts);
+    expect(first.dispatched).toBe(true);
+    const second = await detectAndNotifyStalledScheduler(opts);
+    expect(second.stalled).toBe(true);
+    expect(second.alreadyAlerted).toBe(true);
+    expect(second.dispatched).toBe(false);
+    // Only one webhook total despite repeated polls.
+    expect(rec.calls).toHaveLength(1);
+    // And only one persisted record.
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      schedulerStalls: SchedulerStallRecord[];
+    };
+    expect(persisted.schedulerStalls).toHaveLength(1);
+  });
+
+  it("re-fires for a different stall window (different expected nextTickAt)", async () => {
+    const rec = recordingStallDispatcher();
+    const stalledA = makeStatus({
+      nextTickAt: "2026-04-29T00:00:00.000Z",
+      intervalMs: 60_000,
+    });
+    await detectAndNotifyStalledScheduler({
+      webhookUrl: "https://example.com/hook",
+      dispatch: rec.dispatch,
+      now: () => new Date("2026-04-29T00:02:10.000Z"),
+      status: stalledA,
+    });
+    expect(rec.calls).toHaveLength(1);
+    // Scheduler resumed and later got stuck on a *different* expected
+    // tick. The dedup key changes, so the watchdog fires again.
+    const stalledB = makeStatus({
+      nextTickAt: "2026-04-29T06:00:00.000Z",
+      intervalMs: 60_000,
+    });
+    await detectAndNotifyStalledScheduler({
+      webhookUrl: "https://example.com/hook",
+      dispatch: rec.dispatch,
+      now: () => new Date("2026-04-29T06:02:10.000Z"),
+      status: stalledB,
+    });
+    expect(rec.calls).toHaveLength(2);
+    expect(rec.calls[1]!.payload.expectedNextTickAt).toBe(
+      "2026-04-29T06:00:00.000Z",
+    );
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      schedulerStalls: SchedulerStallRecord[];
+    };
+    expect(persisted.schedulerStalls.map((s) => s.key)).toEqual([
+      "STALL|2026-04-29T00:00:00.000Z",
+      "STALL|2026-04-29T06:00:00.000Z",
+    ]);
+  });
+
+  it("does NOT persist the stall when the webhook fails", async () => {
+    const rec = recordingStallDispatcher();
+    rec.response = { ok: false, status: 503, error: "HTTP 503" };
+    const stalled = makeStatus({
+      nextTickAt: "2026-04-29T00:00:00.000Z",
+      intervalMs: 60_000,
+    });
+    const result = await detectAndNotifyStalledScheduler({
+      webhookUrl: "https://example.com/hook",
+      dispatch: rec.dispatch,
+      now: () => new Date("2026-04-29T00:02:10.000Z"),
+      status: stalled,
+    });
+    expect(result.stalled).toBe(true);
+    expect(result.dispatched).toBe(false);
+    expect(result.dispatchResult).toEqual({
+      ok: false,
+      status: 503,
+      error: "HTTP 503",
+    });
+    // State must not have been written so the next watchdog tick retries.
+    if (existsSync(statePath)) {
+      const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+        schedulerStalls?: SchedulerStallRecord[];
+      };
+      expect(persisted.schedulerStalls ?? []).toEqual([]);
+    }
+  });
+
+  it("records the stall locally when AVRI_DRIFT_WEBHOOK_URL is unset (no retro flood)", async () => {
+    const rec = recordingStallDispatcher();
+    const stalled = makeStatus({
+      nextTickAt: "2026-04-29T00:00:00.000Z",
+      intervalMs: 60_000,
+    });
+    const result = await detectAndNotifyStalledScheduler({
+      // No webhookUrl override; AVRI_DRIFT_WEBHOOK_URL deleted in beforeEach.
+      dispatch: rec.dispatch,
+      now: () => new Date("2026-04-29T00:02:10.000Z"),
+      status: stalled,
+    });
+    expect(result.stalled).toBe(true);
+    expect(result.dispatched).toBe(false);
+    expect(result.webhookSkipped).toBe(true);
+    expect(rec.calls).toHaveLength(0);
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      schedulerStalls: SchedulerStallRecord[];
+    };
+    expect(persisted.schedulerStalls.map((s) => s.key)).toEqual([
+      "STALL|2026-04-29T00:00:00.000Z",
+    ]);
+  });
+
+  it("preserves the existing notified array when persisting a stall record", async () => {
+    // Seed an existing dedup record so we can verify the watchdog
+    // doesn't accidentally clobber it.
+    writeFileSync(
+      statePath,
+      JSON.stringify({
+        notified: [
+          {
+            key: "2026-04-20|GAP_BELOW_45",
+            weekStart: "2026-04-20",
+            kind: "GAP_BELOW_45",
+            notifiedAt: "2026-04-21T00:00:00.000Z",
+            detail: "old",
+          },
+        ],
+      }),
+    );
+    const rec = recordingStallDispatcher();
+    await detectAndNotifyStalledScheduler({
+      webhookUrl: "https://example.com/hook",
+      dispatch: rec.dispatch,
+      now: () => new Date("2026-04-29T00:02:10.000Z"),
+      status: makeStatus({
+        nextTickAt: "2026-04-29T00:00:00.000Z",
+        intervalMs: 60_000,
+      }),
+    });
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      notified: NotifiedFlagRecord[];
+      schedulerStalls: SchedulerStallRecord[];
+    };
+    expect(persisted.notified).toHaveLength(1);
+    expect(persisted.notified[0]!.key).toBe("2026-04-20|GAP_BELOW_45");
+    expect(persisted.schedulerStalls).toHaveLength(1);
+  });
+
+  it("listSchedulerStalls returns a fresh, mutation-safe snapshot", async () => {
+    const rec = recordingStallDispatcher();
+    await detectAndNotifyStalledScheduler({
+      webhookUrl: "https://example.com/hook",
+      dispatch: rec.dispatch,
+      now: () => new Date("2026-04-29T00:02:10.000Z"),
+      status: makeStatus({
+        nextTickAt: "2026-04-29T00:00:00.000Z",
+        intervalMs: 60_000,
+      }),
+    });
+    const snap = listSchedulerStalls();
+    expect(snap).toHaveLength(1);
+    snap[0]!.key = "MUTATED";
+    expect(listSchedulerStalls()[0]!.key).toBe("STALL|2026-04-29T00:00:00.000Z");
+  });
+});
+
+describe("startStalledSchedulerWatchdog", () => {
+  let tmpDir: string;
+  let statePath: string;
+  let originalEnv: { url?: string; statePath?: string };
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "avri-drift-stall-watchdog-"));
+    statePath = path.join(tmpDir, "notifications.json");
+    originalEnv = {
+      url: process.env.AVRI_DRIFT_WEBHOOK_URL,
+      statePath: process.env.AVRI_DRIFT_NOTIFICATIONS_PATH,
+    };
+    process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = statePath;
+    delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    __testing.resetResolvedPath();
+    __testing.resetSchedulerStatus();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-29T00:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (originalEnv.url === undefined) delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    else process.env.AVRI_DRIFT_WEBHOOK_URL = originalEnv.url;
+    if (originalEnv.statePath === undefined)
+      delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    else process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = originalEnv.statePath;
+    __testing.resetResolvedPath();
+    __testing.resetSchedulerStatus();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("polls at the configured cadence and dispatches when stalled", async () => {
+    const calls: SchedulerStallPayload[] = [];
+    const dispatch: SchedulerStallDispatcher = async (_url, payload) => {
+      calls.push(payload);
+      return { ok: true, status: 200 };
+    };
+    const stalled = makeStatus({
+      nextTickAt: "2026-04-28T23:50:00.000Z",
+      intervalMs: 60_000,
+    });
+    const watchdog = startStalledSchedulerWatchdog({
+      watchdogIntervalMs: 1_000,
+      initialDelayMs: 1_000,
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      status: stalled,
+    });
+    try {
+      // Advance to fire the first poll.
+      await vi.advanceTimersByTimeAsync(1_000);
+      // Yield once more so the awaited dispatch + writeState resolve.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(watchdog.ticksCompleted()).toBeGreaterThanOrEqual(1);
+      expect(calls).toHaveLength(1);
+      // Subsequent polls dedupe — no second dispatch for the same window.
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(calls).toHaveLength(1);
+    } finally {
+      watchdog.stop();
+    }
+  });
+
+  it("stop() cancels future polls", async () => {
+    const calls: SchedulerStallPayload[] = [];
+    const dispatch: SchedulerStallDispatcher = async (_url, payload) => {
+      calls.push(payload);
+      return { ok: true, status: 200 };
+    };
+    const watchdog = startStalledSchedulerWatchdog({
+      watchdogIntervalMs: 1_000,
+      initialDelayMs: 1_000,
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      status: makeStatus({
+        nextTickAt: "2026-04-28T23:50:00.000Z",
+        intervalMs: 60_000,
+      }),
+    });
+    watchdog.stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(0);
   });
 });

@@ -68,6 +68,31 @@ export interface RearmAuditEntry {
   rationale?: string;
 }
 
+/**
+ * Audit entry recorded every time the stalled-scheduler watchdog
+ * dispatches a "scheduler appears wedged" alert. Persisted to the same
+ * state file as drift flags so a process restart still remembers which
+ * stall windows were already announced and never double-pages reviewers
+ * for the same missed tick.
+ */
+export interface SchedulerStallRecord {
+  /**
+   * Stable per-stall key. Derived from the missed `nextTickAt` so a
+   * different stall window (i.e. the scheduler resumed and later got
+   * stuck on a *different* expected tick) produces a distinct key and
+   * a fresh alert.
+   */
+  key: string;
+  /** ISO timestamp when the stall was detected and dispatched. */
+  detectedAt: string;
+  /** ISO timestamp of the missed scheduled tick. */
+  expectedNextTickAt: string;
+  /** ms that had elapsed past `expectedNextTickAt` when detected. */
+  overdueByMs: number;
+  /** Configured success-case interval at the time of detection. */
+  intervalMs: number;
+}
+
 interface NotificationsFile {
   _meta?: unknown;
   notified: NotifiedFlagRecord[];
@@ -76,6 +101,12 @@ interface NotificationsFile {
    * state files keep loading; `readState` normalizes it to an array.
    */
   rearmHistory?: RearmAuditEntry[];
+  /**
+   * Bounded audit log of stalled-scheduler alerts dispatched by the
+   * watchdog. Optional on disk so older state files keep loading;
+   * `readState` normalizes it to an array.
+   */
+  schedulerStalls?: SchedulerStallRecord[];
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -98,6 +129,11 @@ const HISTORY_LIMIT = 500;
 // Bound for the re-arm audit log. 200 events covers a busy quarter
 // (~3 re-arms/day). Trimmed oldest-first.
 const REARM_HISTORY_LIMIT = 200;
+// Bound for the stalled-scheduler audit log. A wedged scheduler should
+// be a rare event (one entry per missed-tick window per replica), so
+// 100 entries covers years of normal operation while staying tiny on
+// disk. Trimmed oldest-first.
+const STALL_HISTORY_LIMIT = 100;
 
 let RESOLVED_PATH: string | null = null;
 
@@ -186,7 +222,7 @@ export function selectNewFlags(
 function readState(): NotificationsFile {
   const filePath = resolvePath();
   if (!existsSync(filePath)) {
-    return { notified: [], rearmHistory: [] };
+    return { notified: [], rearmHistory: [], schedulerStalls: [] };
   }
   try {
     const raw = readFileSync(filePath, "utf8");
@@ -242,17 +278,45 @@ function readState(): NotificationsFile {
         cleanedHistory.push(out);
       }
     }
+    // Pre-existing state files won't have a `schedulerStalls` block;
+    // treat that as an empty audit log so the read keeps working
+    // without forcing a one-shot migration.
+    const rawStalls = Array.isArray(parsed.schedulerStalls)
+      ? parsed.schedulerStalls
+      : [];
+    const cleanedStalls: SchedulerStallRecord[] = [];
+    for (const entry of rawStalls) {
+      if (
+        entry &&
+        typeof entry === "object" &&
+        typeof (entry as SchedulerStallRecord).key === "string" &&
+        typeof (entry as SchedulerStallRecord).detectedAt === "string" &&
+        typeof (entry as SchedulerStallRecord).expectedNextTickAt === "string" &&
+        typeof (entry as SchedulerStallRecord).overdueByMs === "number" &&
+        typeof (entry as SchedulerStallRecord).intervalMs === "number"
+      ) {
+        const e = entry as SchedulerStallRecord;
+        cleanedStalls.push({
+          key: e.key,
+          detectedAt: e.detectedAt,
+          expectedNextTickAt: e.expectedNextTickAt,
+          overdueByMs: e.overdueByMs,
+          intervalMs: e.intervalMs,
+        });
+      }
+    }
     return {
       _meta: parsed._meta,
       notified: cleaned,
       rearmHistory: cleanedHistory,
+      schedulerStalls: cleanedStalls,
     };
   } catch (err) {
     logger.warn(
       { err, path: filePath },
       "[avri-drift-notifications] Failed to read state file; starting from empty.",
     );
-    return { notified: [], rearmHistory: [] };
+    return { notified: [], rearmHistory: [], schedulerStalls: [] };
   }
 }
 
@@ -265,12 +329,14 @@ function writeState(file: NotificationsFile): void {
   // Trim oldest first so the most-recent HISTORY_LIMIT entries are kept.
   const trimmed = file.notified.slice(-HISTORY_LIMIT);
   const trimmedHistory = (file.rearmHistory ?? []).slice(-REARM_HISTORY_LIMIT);
+  const trimmedStalls = (file.schedulerStalls ?? []).slice(-STALL_HISTORY_LIMIT);
   const payload: NotificationsFile = {
     _meta:
       file._meta ??
-      "Persisted dedup state for AVRI drift notifications. `notified` records flags already dispatched to AVRI_DRIFT_WEBHOOK_URL (capped at 500). `rearmHistory` is a bounded audit log of reviewer-driven re-arm events (capped at 200).",
+      "Persisted dedup state for AVRI drift notifications. `notified` records flags already dispatched to AVRI_DRIFT_WEBHOOK_URL (capped at 500). `rearmHistory` is a bounded audit log of reviewer-driven re-arm events (capped at 200). `schedulerStalls` is a bounded audit log of stalled-scheduler alerts dispatched by the watchdog (capped at 100).",
     notified: trimmed,
     rearmHistory: trimmedHistory,
+    schedulerStalls: trimmedStalls,
   };
   writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
 }
@@ -501,6 +567,7 @@ export async function notifyDriftFlagsIfNew(
     _meta: fresh._meta,
     notified: mergedNotified,
     rearmHistory: fresh.rearmHistory ?? [],
+    schedulerStalls: fresh.schedulerStalls ?? [],
   });
 
   return {
@@ -787,6 +854,384 @@ export function startDriftNotificationScheduler(
 }
 
 // ---------------------------------------------------------------------------
+// Task #396 — Stalled-scheduler watchdog.
+//
+// Task #277 surfaced the scheduler heartbeat on the calibration page so a
+// reviewer can *see* whether the timer is still firing — but only if they
+// happen to look. The watchdog gives reviewers a passive signal even when
+// nobody is on the page: it periodically reads the in-memory scheduler
+// status, decides whether the next scheduled tick is significantly
+// overdue (Date.now() > nextTickAt + 2 * intervalMs), and dispatches a
+// one-off "scheduler appears wedged" payload through the same webhook
+// that drift flags use.
+//
+// Dedup matches the drift-flag pattern: each detected stall produces a
+// `SchedulerStallRecord` keyed by the missed `expectedNextTickAt`, and
+// the records are persisted to the same state file (`schedulerStalls`
+// array) so a process restart never re-pages reviewers for a stall
+// window that was already announced. A different stall window (i.e. the
+// scheduler resumed and later got stuck on a different expected tick)
+// produces a distinct key and a fresh alert.
+//
+// Like the drift dispatcher: a failed webhook does NOT mark the stall
+// as alerted, so transient outages auto-recover on the next watchdog
+// tick. When AVRI_DRIFT_WEBHOOK_URL is unset we still record the stall
+// locally so wiring up a webhook later does not produce a retroactive
+// flood of alerts for stalls that long since recovered.
+// ---------------------------------------------------------------------------
+
+/**
+ * Payload dispatched by the stalled-scheduler watchdog. Intentionally a
+ * separate shape (and event name) from `WebhookPayload` so consumers
+ * can branch on `event` to render an appropriate alert without parsing
+ * the rest of the body.
+ */
+export interface SchedulerStallPayload {
+  event: "avri_drift_scheduler_stalled";
+  detectedAt: string;
+  expectedNextTickAt: string;
+  overdueByMs: number;
+  intervalMs: number;
+  retryIntervalMs: number | null;
+  schedulerStartedAt: string | null;
+  lastTickAt: string | null;
+  lastTickOk: boolean | null;
+  ticksCompleted: number;
+  calibrationUrl: string;
+  runbookUrl: string;
+}
+
+export type SchedulerStallDispatcher = (
+  url: string,
+  payload: SchedulerStallPayload,
+) => Promise<{ ok: boolean; status?: number; error?: string }>;
+
+const defaultStallDispatcher: SchedulerStallDispatcher = async (url, payload) => {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "vulnrap-avri-drift-notifier/1.0",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      return { ok: false, status: res.status, error: `HTTP ${res.status}` };
+    }
+    return { ok: true, status: res.status };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+};
+
+/**
+ * Compute whether a scheduler status snapshot represents a stalled
+ * scheduler. A stall is defined as: scheduler started, has a known
+ * `nextTickAt` and `intervalMs`, and the wall clock is more than
+ * `2 * intervalMs` past the missed tick. The 2x buffer absorbs normal
+ * jitter (event-loop pauses, GC, etc.) so a tick that runs a few seconds
+ * late doesn't fire a false positive.
+ *
+ * Exported for the calibration UI / tests to share the exact same
+ * threshold the watchdog uses.
+ */
+export function isSchedulerStalled(
+  status: DriftSchedulerStatus,
+  nowMs: number,
+): boolean {
+  if (!status.schedulerStarted) return false;
+  if (status.nextTickAt == null) return false;
+  if (status.intervalMs == null) return false;
+  const nextTickMs = Date.parse(status.nextTickAt);
+  if (!Number.isFinite(nextTickMs)) return false;
+  return nowMs > nextTickMs + 2 * status.intervalMs;
+}
+
+export interface DetectStalledSchedulerOptions {
+  webhookUrl?: string;
+  publicUrl?: string;
+  runbookUrl?: string;
+  dispatch?: SchedulerStallDispatcher;
+  now?: () => Date;
+  /** Override the status read (used by tests to skip the in-memory state). */
+  status?: DriftSchedulerStatus;
+}
+
+export interface DetectStalledSchedulerResult {
+  /** True when the scheduler is overdue per `isSchedulerStalled`. */
+  stalled: boolean;
+  /**
+   * True when the stall was detected but a record for the same missed
+   * tick already exists in the persisted state file (so no webhook was
+   * dispatched and no record was appended).
+   */
+  alreadyAlerted: boolean;
+  /** True when a webhook URL was configured AND the dispatch succeeded. */
+  dispatched: boolean;
+  /** Status from the webhook attempt (only populated when dispatched). */
+  dispatchResult?: { ok: boolean; status?: number; error?: string };
+  /**
+   * True when the stall was new but no webhook URL was configured; we
+   * still record the stall locally so the reviewer doesn't get a retro
+   * flood the moment they wire up the webhook.
+   */
+  webhookSkipped: boolean;
+  /**
+   * The stall record that was persisted (or that would have been
+   * persisted on dispatch failure). Undefined when nothing was stalled
+   * or when the stall was already alerted.
+   */
+  record?: SchedulerStallRecord;
+  /** Calibration deep link included in the dispatched payload. */
+  calibrationUrl: string;
+  /** Runbook link included in the dispatched payload. */
+  runbookUrl: string;
+}
+
+/**
+ * Read the scheduler status, decide whether it's stalled, dispatch a
+ * one-off webhook if a fresh stall is detected, and persist the dedup
+ * record. Resolves on every call — never throws — so the watchdog (or
+ * any other caller) can swallow errors uniformly.
+ *
+ * Idempotent within a stall window: calling this repeatedly for the
+ * same missed tick produces exactly one webhook (the first call) and
+ * returns `alreadyAlerted: true` on subsequent calls.
+ */
+export async function detectAndNotifyStalledScheduler(
+  opts: DetectStalledSchedulerOptions = {},
+): Promise<DetectStalledSchedulerResult> {
+  const status = opts.status ?? getDriftSchedulerStatus();
+  const links = buildLinks(opts.publicUrl, opts.runbookUrl);
+  const baseResult: DetectStalledSchedulerResult = {
+    stalled: false,
+    alreadyAlerted: false,
+    dispatched: false,
+    webhookSkipped: false,
+    calibrationUrl: links.calibrationUrl,
+    runbookUrl: links.runbookUrl,
+  };
+  const now = (opts.now ?? (() => new Date()))();
+  if (!isSchedulerStalled(status, now.getTime())) {
+    return baseResult;
+  }
+  // Both fields are guaranteed non-null by isSchedulerStalled, but
+  // narrow them explicitly for the type checker.
+  const expectedNextTickAt = status.nextTickAt!;
+  const intervalMs = status.intervalMs!;
+  const overdueByMs = now.getTime() - Date.parse(expectedNextTickAt);
+
+  const dedupKey = `STALL|${expectedNextTickAt}`;
+  const state = readState();
+  const seenStalls = state.schedulerStalls ?? [];
+  if (seenStalls.some((s) => s.key === dedupKey)) {
+    return { ...baseResult, stalled: true, alreadyAlerted: true };
+  }
+
+  const record: SchedulerStallRecord = {
+    key: dedupKey,
+    detectedAt: now.toISOString(),
+    expectedNextTickAt,
+    overdueByMs,
+    intervalMs,
+  };
+
+  const webhookUrl =
+    (opts.webhookUrl ?? process.env.AVRI_DRIFT_WEBHOOK_URL ?? "").trim();
+  let dispatched = false;
+  let dispatchResult: DetectStalledSchedulerResult["dispatchResult"];
+  let webhookSkipped = false;
+
+  if (webhookUrl.length === 0) {
+    webhookSkipped = true;
+    logger.info(
+      { expectedNextTickAt, overdueByMs },
+      "[avri-drift-notifications] AVRI_DRIFT_WEBHOOK_URL not set; recording stalled-scheduler alert without dispatch.",
+    );
+  } else {
+    const payload: SchedulerStallPayload = {
+      event: "avri_drift_scheduler_stalled",
+      detectedAt: record.detectedAt,
+      expectedNextTickAt,
+      overdueByMs,
+      intervalMs,
+      retryIntervalMs: status.retryIntervalMs,
+      schedulerStartedAt: status.startedAt,
+      lastTickAt: status.lastTickAt,
+      lastTickOk: status.lastTickOk,
+      ticksCompleted: status.ticksCompleted,
+      calibrationUrl: links.calibrationUrl,
+      runbookUrl: links.runbookUrl,
+    };
+    const dispatch = opts.dispatch ?? defaultStallDispatcher;
+    dispatchResult = await dispatch(webhookUrl, payload);
+    dispatched = dispatchResult.ok;
+    if (!dispatchResult.ok) {
+      logger.warn(
+        { dispatchResult, expectedNextTickAt, overdueByMs },
+        "[avri-drift-notifications] Stalled-scheduler webhook dispatch failed; will retry on the next watchdog tick.",
+      );
+      // Do NOT persist — let the next watchdog call try again.
+      return {
+        ...baseResult,
+        stalled: true,
+        dispatched: false,
+        dispatchResult,
+        record,
+      };
+    }
+    logger.warn(
+      { expectedNextTickAt, overdueByMs, status: dispatchResult.status },
+      "[avri-drift-notifications] Stalled-scheduler webhook dispatched.",
+    );
+  }
+
+  // Re-read state right before writing so any concurrent writer (the
+  // drift dispatcher's `notified` append, a re-arm event, etc.) that
+  // landed during the awaited dispatch is preserved instead of being
+  // clobbered by the stale snapshot we read at the top of this function.
+  const fresh = readState();
+  const freshStalls = fresh.schedulerStalls ?? [];
+  // Guard against a race where another watchdog tick wrote the same key
+  // between our seenStalls check and the write.
+  const stallAlreadyPersisted = freshStalls.some((s) => s.key === dedupKey);
+  const mergedStalls = stallAlreadyPersisted
+    ? freshStalls
+    : [...freshStalls, record];
+  writeState({
+    _meta: fresh._meta,
+    notified: fresh.notified,
+    rearmHistory: fresh.rearmHistory ?? [],
+    schedulerStalls: mergedStalls,
+  });
+
+  return {
+    stalled: true,
+    alreadyAlerted: false,
+    dispatched,
+    dispatchResult,
+    webhookSkipped,
+    record,
+    calibrationUrl: links.calibrationUrl,
+    runbookUrl: links.runbookUrl,
+  };
+}
+
+/**
+ * Snapshot of the persisted stalled-scheduler audit log. Returns a
+ * fresh array on every call so callers can safely mutate the result.
+ */
+export function listSchedulerStalls(): SchedulerStallRecord[] {
+  return (readState().schedulerStalls ?? []).map((s) => ({ ...s }));
+}
+
+const DEFAULT_WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
+
+function autoWatchdogIntervalMs(): number {
+  return parseIntervalEnv(
+    process.env.AVRI_DRIFT_STALL_WATCHDOG_INTERVAL_MS,
+    DEFAULT_WATCHDOG_INTERVAL_MS,
+  );
+}
+
+export interface SchedulerWatchdogOptions
+  extends DetectStalledSchedulerOptions {
+  /**
+   * Cadence of the watchdog poll. Defaults to env
+   * AVRI_DRIFT_STALL_WATCHDOG_INTERVAL_MS, falling back to 5 minutes
+   * — short enough to detect a stall promptly even with a tight
+   * `intervalMs` override, and long enough to add negligible cost.
+   */
+  watchdogIntervalMs?: number;
+  /**
+   * Delay before the first watchdog poll. Defaults to the watchdog
+   * interval so we don't immediately page on a freshly-booted process
+   * that hasn't had a chance to run its first tick yet.
+   */
+  initialDelayMs?: number;
+}
+
+export interface SchedulerWatchdog {
+  stop(): void;
+  /** Poll count, useful for tests that want to await the next tick. */
+  ticksCompleted(): number;
+}
+
+/**
+ * Start a recurring watchdog that periodically checks the scheduler
+ * heartbeat and dispatches a one-off "scheduler appears wedged"
+ * webhook the first time a stall is detected. Independent of the main
+ * scheduler timer so a wedged scheduler can't suppress its own alarm.
+ *
+ * Returns a handle whose `stop()` cancels future polls.
+ */
+export function startStalledSchedulerWatchdog(
+  opts: SchedulerWatchdogOptions = {},
+): SchedulerWatchdog {
+  const intervalMs = opts.watchdogIntervalMs ?? autoWatchdogIntervalMs();
+  const initialDelayMs = opts.initialDelayMs ?? intervalMs;
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
+  let completed = 0;
+
+  async function tick(): Promise<void> {
+    if (stopped) return;
+    try {
+      await detectAndNotifyStalledScheduler({
+        webhookUrl: opts.webhookUrl,
+        publicUrl: opts.publicUrl,
+        runbookUrl: opts.runbookUrl,
+        dispatch: opts.dispatch,
+        now: opts.now,
+        status: opts.status,
+      });
+    } catch (err) {
+      // detectAndNotifyStalledScheduler is supposed to swallow its own
+      // errors, but defend against a misbehaving injected dispatcher
+      // so a single throw doesn't kill the watchdog.
+      logger.warn(
+        { err },
+        "[avri-drift-notifications] Stalled-scheduler watchdog tick threw unexpectedly (non-fatal).",
+      );
+    } finally {
+      completed += 1;
+    }
+    schedule(intervalMs);
+  }
+
+  function schedule(delayMs: number): void {
+    if (stopped) return;
+    timer = setTimeout(() => {
+      void tick();
+    }, delayMs);
+    if (typeof timer.unref === "function") timer.unref();
+  }
+
+  schedule(initialDelayMs);
+
+  logger.info(
+    { intervalMs, initialDelayMs },
+    "[avri-drift-notifications] Stalled-scheduler watchdog started.",
+  );
+
+  return {
+    stop(): void {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+    ticksCompleted: () => completed,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Task #196 — Reviewer-driven re-arm of previously-notified flags.
 //
 // `notifyDriftFlagsIfNew` records every dispatched flag in the dedup state
@@ -915,6 +1360,7 @@ export function removeNotifiedFlags(
       _meta: state._meta,
       notified: kept,
       rearmHistory: nextHistory,
+      schedulerStalls: state.schedulerStalls ?? [],
     });
   }
   // Echo back the newest-trimmed snapshot so callers see the same view
@@ -955,6 +1401,8 @@ export const __testing = {
   writeState,
   HISTORY_LIMIT,
   REARM_HISTORY_LIMIT,
+  STALL_HISTORY_LIMIT,
+  DEFAULT_WATCHDOG_INTERVAL_MS,
   DEFAULT_INTERVAL_MS,
   DEFAULT_RETRY_INTERVAL_MS,
   DEFAULT_INITIAL_DELAY_MS,
