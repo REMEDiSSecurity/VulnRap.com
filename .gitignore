@@ -79,3 +79,9 @@ artifacts/api-server/data/handwavy-phrases.json
 
 # Runtime state (per-IP cooldown timestamps for the calibration-auth brute-force alerter; safe to delete to clear cooldown)
 artifacts/api-server/data/calibration-auth-brute-force-state.json
+
+# Runtime state (per-replica scheduler heartbeats and dedup state for AVRI drift
+# notifications; rebuilt automatically by lib/avri-drift-notifications.ts on
+# every replica boot and during scheduler ticks). Tracking it causes endless
+# rebase conflicts as different replicas write their own heartbeat entries.
+artifacts/api-server/data/avri-drift-notifications.json
