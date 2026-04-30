@@ -139,7 +139,7 @@ async function openHistoryAndFindBatch(
   return group;
 }
 
-test.describe("FLAT hand-wavy phrase panel — bulk-reinstate thrash warning (Task #179)", () => {
+test.describe("FLAT hand-wavy phrase panel — bulk-reinstate thrash warning (Task #179, #366)", () => {
   test("batch group with a high-thrash inner phrase shows the summary banner and per-row badge", async ({
     page,
   }) => {
@@ -228,4 +228,68 @@ test.describe("FLAT hand-wavy phrase panel — bulk-reinstate thrash warning (Ta
       await apiCtx.dispose();
     }
   });
+
+  // Task #366 — auto-expand the per-phrase rows of a batch group when ≥1
+  // inner phrase is high-thrash; routine batches stay collapsed; manual
+  // collapse sticks for the session. Mirrors Task #257's bulk-REMOVE
+  // preview pattern.
+  test(
+    "high-thrash batch auto-expands per-phrase rows; routine batches collapsed; manual collapse sticks",
+    async ({ page }) => {
+      const apiCtx = await newApiContext();
+      const [thrashy, fresh] = uniquePhrases("auto-expand mixed", 2);
+      const cleanPhrases = uniquePhrases("auto-expand clean", 2);
+
+      try {
+        await seedCycles(apiCtx, thrashy, 2);
+        await addPhrase(apiCtx, fresh);
+        const mixedBatch = await batchRemove(apiCtx, [thrashy, fresh]);
+        const mixedRemovedAt = mixedBatch.historyEntry!.removedAt;
+
+        for (const p of cleanPhrases) await addPhrase(apiCtx, p);
+        const cleanBatch = await batchRemove(apiCtx, cleanPhrases);
+        const cleanRemovedAt = cleanBatch.historyEntry!.removedAt;
+
+        const mixedGroup = await openHistoryAndFindBatch(page, mixedRemovedAt);
+        const cleanGroup = page.locator(
+          `[data-testid="handwavy-history-batch-group"][data-batch-removed-at="${cleanRemovedAt}"]`,
+        );
+        await expect(cleanGroup).toHaveCount(1, { timeout: 15_000 });
+
+        const mixedDetails = mixedGroup.getByTestId(
+          "handwavy-history-batch-rows-details",
+        );
+        await expect(mixedDetails).toHaveAttribute("data-default-open", "true");
+        await expect(mixedDetails).toHaveAttribute("data-auto-expanded", "true");
+        await expect(mixedDetails).toHaveAttribute("open", /.*/);
+
+        const thrashyRow = mixedGroup
+          .getByTestId("handwavy-history-row")
+          .filter({ hasText: thrashy });
+        await expect(thrashyRow).toHaveCount(1);
+        await expect(
+          thrashyRow.getByTestId("handwavy-history-batch-thrash-badge"),
+        ).toBeVisible();
+
+        const cleanDetails = cleanGroup.getByTestId(
+          "handwavy-history-batch-rows-details",
+        );
+        await expect(cleanDetails).toHaveAttribute("data-default-open", "false");
+        await expect(cleanDetails).toHaveAttribute("data-auto-expanded", "false");
+        await expect(cleanDetails).not.toHaveAttribute("open", /.*/);
+
+        // Manual collapse must stick: explicit override flips
+        // data-auto-expanded to "false" so the auto-open won't re-fire.
+        await mixedGroup
+          .getByTestId("handwavy-history-batch-rows-summary")
+          .click();
+        await expect(mixedDetails).not.toHaveAttribute("open", /.*/);
+        await expect(mixedDetails).toHaveAttribute("data-default-open", "true");
+        await expect(mixedDetails).toHaveAttribute("data-auto-expanded", "false");
+      } finally {
+        await cleanup(apiCtx, [thrashy, fresh, ...cleanPhrases]);
+        await apiCtx.dispose();
+      }
+    },
+  );
 });

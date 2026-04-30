@@ -2920,6 +2920,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // so we can re-initialize `bulkPreviewOutcomesOpen` exactly once when
   // the panel transitions from closed → open.
   const [bulkPreviewWasOpen, setBulkPreviewWasOpen] = useState(false);
+  // Task #366 — per-batch <details> open-state overrides keyed by
+  // removedAtIso. Empty entry = use the default (auto-expand iff the
+  // batch has ≥1 high-thrash inner phrase); set entry = manual toggle
+  // wins for the session.
+  const [historyBatchRowsExplicit, setHistoryBatchRowsExplicit] = useState<
+    Map<string, boolean>
+  >(() => new Map());
   // Task #173 — single-phrase removal-impact preview state. The per-row
   // Trash button now first issues `DELETE {phrase, dryRun: true}` (Task
   // #155). When `validDetectionsLost === 0` we fire the live DELETE in
@@ -9259,11 +9266,53 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           </span>
                         </div>
                       )}
-                      <div className="divide-y divide-border/10">
-                        {group.rows.map((row, rIdx) =>
-                          renderRow(row, rIdx, { insideBatch: true }),
-                        )}
-                      </div>
+                      {/* Task #366 — collapsed-by-default <details>; auto-
+                          expands when the batch has ≥1 high-thrash phrase.
+                          Mirrors Task #257's bulk-REMOVE preview pattern. */}
+                      {(() => {
+                        const explicitOpen =
+                          historyBatchRowsExplicit.get(group.removedAtIso);
+                        const defaultOpen = remainingHighThrashCount > 0;
+                        const rowsOpen =
+                          explicitOpen !== undefined ? explicitOpen : defaultOpen;
+                        return (
+                          <details
+                            data-testid="handwavy-history-batch-rows-details"
+                            data-default-open={defaultOpen ? "true" : "false"}
+                            data-auto-expanded={
+                              defaultOpen && explicitOpen === undefined
+                                ? "true"
+                                : "false"
+                            }
+                            open={rowsOpen}
+                            onToggle={(e) => {
+                              const nextOpen = e.currentTarget.open;
+                              setHistoryBatchRowsExplicit((prev) => {
+                                const next = new Map(prev);
+                                next.set(group.removedAtIso, nextOpen);
+                                return next;
+                              });
+                            }}
+                          >
+                            <summary
+                              className="px-3 py-1.5 text-[11px] cursor-pointer select-none text-muted-foreground hover:text-foreground/80 list-none [&::-webkit-details-marker]:hidden flex items-center gap-1"
+                              data-testid="handwavy-history-batch-rows-summary"
+                            >
+                              {rowsOpen ? (
+                                <ChevronDown className="w-3 h-3" />
+                              ) : (
+                                <ChevronRight className="w-3 h-3" />
+                              )}
+                              Per-phrase rows ({group.rows.length})
+                            </summary>
+                            <div className="divide-y divide-border/10">
+                              {group.rows.map((row, rIdx) =>
+                                renderRow(row, rIdx, { insideBatch: true }),
+                              )}
+                            </div>
+                          </details>
+                        );
+                      })()}
                     </div>
                   );
                 })}

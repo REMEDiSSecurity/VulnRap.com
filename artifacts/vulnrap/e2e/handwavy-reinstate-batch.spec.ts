@@ -146,6 +146,13 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       const innerRows = group.getByTestId("handwavy-history-row");
       await expect(innerRows).toHaveCount(phrases.length);
 
+      // Task #366 — fresh batch defaults collapsed; expand to interact.
+      const rowsDetails = group.getByTestId("handwavy-history-batch-rows-details");
+      if (!(await rowsDetails.evaluate((el) => (el as HTMLDetailsElement).open))) {
+        await group.getByTestId("handwavy-history-batch-rows-summary").click();
+      }
+      await expect(rowsDetails).toHaveAttribute("open", /.*/);
+
       // Click the per-phrase reinstate on the first inner row only. Task #153
       // wraps this button in a confirmation dialog (mirroring the Revert
       // confirm), so we have to click through the dialog's Confirm button to
