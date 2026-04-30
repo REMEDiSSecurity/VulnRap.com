@@ -10291,6 +10291,50 @@ interface TestRunResponse {
 // the delta math and the warn threshold the UI uses to colour each tile.
 export const FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD = 5;
 
+// Task #363 — let reviewers pick the warn threshold from a small set rather
+// than hard-coding 5pt. Tighter values (3pt) are useful during a recalibration
+// sprint right after a fixture rewrite; looser values (8 / 10pt) reduce the
+// noise during steady-state monitoring. The 5pt default keeps prior behaviour.
+// The constant set is intentionally small — these aren't free-form numbers,
+// they're the granularities reviewers actually compare against the T1−T3 gap
+// target (≥15pt), so 3 / 5 / 8 / 10 covers ~⅕ … ⅔ of that gap.
+export const COHORT_DELTA_WARN_THRESHOLD_OPTIONS = [3, 5, 8, 10] as const;
+export type CohortDeltaWarnThreshold =
+  (typeof COHORT_DELTA_WARN_THRESHOLD_OPTIONS)[number];
+const COHORT_DELTA_WARN_THRESHOLD_DEFAULT: CohortDeltaWarnThreshold =
+  FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD as CohortDeltaWarnThreshold;
+const COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY = "cohortDeltaWarn";
+export const COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY =
+  "vulnrap.dataset.cohortDeltaWarn";
+
+export function isValidCohortDeltaWarnThreshold(
+  value: number,
+): value is CohortDeltaWarnThreshold {
+  return (COHORT_DELTA_WARN_THRESHOLD_OPTIONS as readonly number[]).includes(
+    value,
+  );
+}
+
+export function parseCohortDeltaWarnThreshold(
+  raw: string | null | undefined,
+): CohortDeltaWarnThreshold | null {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return isValidCohortDeltaWarnThreshold(n) ? n : null;
+}
+
+export function readStoredCohortDeltaWarnThreshold(): CohortDeltaWarnThreshold | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return parseCohortDeltaWarnThreshold(
+      window.localStorage.getItem(COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY),
+    );
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Task #256 — compute the per-tier delta between the curated dataset cohort
  * mean and the synthetic-fixture mean for the same tier, plus a flag for the
@@ -12042,6 +12086,84 @@ function DatasetCohortMeansSection() {
     });
   };
 
+  // Task #363 — reviewer-tunable warn threshold for the per-tier
+  // dataset-vs-fixture delta. Mirrors the AvriDriftSection lookback pattern:
+  //   - URL present + valid  -> use URL (a shared link wins).
+  //   - URL present + invalid -> fall back to the default (NOT storage) so a
+  //     bad/garbled link can't leak reviewer-specific behaviour into a share.
+  //   - URL absent           -> use stored value, else default.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawUrlWarn = searchParams.get(COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY);
+  const urlWarnPresent = rawUrlWarn !== null;
+  const urlWarn = urlWarnPresent ? parseCohortDeltaWarnThreshold(rawUrlWarn) : null;
+  const warnThreshold: CohortDeltaWarnThreshold = urlWarnPresent
+    ? (urlWarn ?? COHORT_DELTA_WARN_THRESHOLD_DEFAULT)
+    : (readStoredCohortDeltaWarnThreshold() ?? COHORT_DELTA_WARN_THRESHOLD_DEFAULT);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY,
+        String(warnThreshold),
+      );
+    } catch {
+      // Ignore quota / privacy-mode write errors — the URL param still works.
+    }
+  }, [warnThreshold]);
+
+  // Normalize the URL on first render so the address bar always matches the
+  // visible state and is safely shareable. Same precedence rules as the AVRI
+  // drift selector — strip a malformed value, or surface a non-default stored
+  // value so a copy/paste captures it.
+  useEffect(() => {
+    const urlInvalid = urlWarnPresent && urlWarn === null;
+    const shouldAddFromStorage =
+      !urlWarnPresent && warnThreshold !== COHORT_DELTA_WARN_THRESHOLD_DEFAULT;
+    if (!urlInvalid && !shouldAddFromStorage) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (urlInvalid) {
+          next.delete(COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY);
+        } else {
+          next.set(COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY, String(warnThreshold));
+        }
+        return next;
+      },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setWarnThreshold = (value: CohortDeltaWarnThreshold) => {
+    // Write storage synchronously so switching back to the default (which
+    // drops the query param) doesn't snap the chooser back to a stale stored
+    // value on the immediate re-render — same gotcha as setWeeks above.
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY,
+          String(value),
+        );
+      } catch {
+        // Ignore quota / privacy-mode write errors — URL handling still works.
+      }
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value === COHORT_DELTA_WARN_THRESHOLD_DEFAULT) {
+          next.delete(COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY);
+        } else {
+          next.set(COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY, String(value));
+        }
+        return next;
+      },
+      { replace: false },
+    );
+  };
+
   if (isLoading) return <Skeleton className="h-40 rounded-xl" />;
   // /api/test/run is dev-only; in production the endpoint 404s. Hide
   // the panel rather than surface a noisy error to reviewers.
@@ -12090,7 +12212,14 @@ function DatasetCohortMeansSection() {
   );
   const tierDeltas = orderedCohorts.map(c => {
     const fxMean = fixtureMeanByTier.get(c.tier) ?? null;
-    const { delta, isDivergent } = computeCohortFixtureDelta(c.compositeMean, fxMean);
+    // Task #363 — pass through the reviewer-chosen warn threshold so a tighter
+    // recalibration sprint (3pt) or a noisier steady-state run (8 / 10pt)
+    // recolours the tiles + rolled-up warning without a code change.
+    const { delta, isDivergent } = computeCohortFixtureDelta(
+      c.compositeMean,
+      fxMean,
+      warnThreshold,
+    );
     return { tier: c.tier, dsMean: c.compositeMean, fxMean, delta, isDivergent };
   });
   const divergentTiers = tierDeltas.filter(d => d.isDivergent && d.delta != null);
@@ -12120,10 +12249,51 @@ function DatasetCohortMeansSection() {
               slice {ds.sampleDateKey}
             </Badge>
           </CardTitle>
-          <Badge variant="outline" className={cn("text-[10px] gap-1 tabular-nums", gapColor)}>
-            <Shield className="w-3 h-3" />
-            T1−T3 gap {gapText} (target ≥{ds.gapTarget}pt)
-          </Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Task #363 — reviewer-tunable warn threshold for the per-tier
+                dataset-vs-fixture delta. Mirrors the AvriDriftSection lookback
+                radiogroup so the two selectors look and behave the same. The
+                chosen value persists across reloads via URL query
+                (?cohortDeltaWarn=8) + localStorage. */}
+            <div
+              role="radiogroup"
+              aria-label="Warn threshold for dataset-vs-fixture delta (pt)"
+              className="inline-flex items-center rounded-md border border-border/50 bg-muted/20 p-0.5"
+              data-testid="dataset-cohort-warn-threshold-chooser"
+            >
+              <span
+                className="px-1.5 text-[10px] text-muted-foreground/70 font-mono"
+                aria-hidden="true"
+              >
+                warn |Δ|&gt;
+              </span>
+              {COHORT_DELTA_WARN_THRESHOLD_OPTIONS.map(opt => {
+                const active = opt === warnThreshold;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setWarnThreshold(opt)}
+                    className={cn(
+                      "px-2 py-0.5 text-[10px] font-mono rounded-sm transition-colors tabular-nums",
+                      active
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                    )}
+                    data-testid={`dataset-cohort-warn-threshold-${opt}`}
+                  >
+                    {opt}pt
+                  </button>
+                );
+              })}
+            </div>
+            <Badge variant="outline" className={cn("text-[10px] gap-1 tabular-nums", gapColor)}>
+              <Shield className="w-3 h-3" />
+              T1−T3 gap {gapText} (target ≥{ds.gapTarget}pt)
+            </Badge>
+          </div>
         </div>
         <CardDescription>
           Per-cohort composite means and the T1−T3 gap from up to {ds.sampleSizeRequestedPerLabel} sampled
@@ -12239,7 +12409,7 @@ function DatasetCohortMeansSection() {
               {divergentTiers
                 .map(d => `${DATASET_COHORT_TIER_LABELS[d.tier] ?? d.tier} (Δ${d.delta! >= 0 ? "+" : ""}${d.delta!.toFixed(1)})`)
                 .join(", ")}{" "}
-              — |Δ| &gt; {FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD}pt means the 42-fixture sample no longer mirrors
+              — |Δ| &gt; {warnThreshold}pt means the 42-fixture sample no longer mirrors
               the curated dataset for that tier; review whether new fixtures are needed.
             </span>
           </div>

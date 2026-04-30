@@ -13,6 +13,11 @@ import {
   summarizeDatasetHistory,
   computeCohortFixtureDelta,
   FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
+  COHORT_DELTA_WARN_THRESHOLD_OPTIONS,
+  COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY,
+  isValidCohortDeltaWarnThreshold,
+  parseCohortDeltaWarnThreshold,
+  readStoredCohortDeltaWarnThreshold,
   sortDatasetSamplesByDistanceFromMean,
   type DatasetSampleRow,
   isValidDriftLookback,
@@ -920,6 +925,133 @@ describe("computeCohortFixtureDelta (Task #256 — surface synthetic-vs-dataset 
     // confirming the override travels through both the magnitude and the
     // boundary-strictness logic.
     expect(computeCohortFixtureDelta(75, 70, 10).isDivergent).toBe(false);
+  });
+
+  it("flips divergence as the reviewer-tunable threshold sweeps over the delta (Task #363)", () => {
+    // A fixed +6pt delta crosses the recalibration-tight 3pt and 5pt
+    // boundaries but sits under the steady-state 8pt and 10pt ones — exactly
+    // the use case the in-card chooser exists for.
+    const dataset = 76;
+    const fixture = 70;
+    expect(computeCohortFixtureDelta(dataset, fixture, 3).isDivergent).toBe(true);
+    expect(computeCohortFixtureDelta(dataset, fixture, 5).isDivergent).toBe(true);
+    expect(computeCohortFixtureDelta(dataset, fixture, 8).isDivergent).toBe(false);
+    expect(computeCohortFixtureDelta(dataset, fixture, 10).isDivergent).toBe(false);
+    // The signed delta itself never depends on the threshold.
+    for (const t of [3, 5, 8, 10]) {
+      expect(computeCohortFixtureDelta(dataset, fixture, t).delta).toBe(6);
+    }
+  });
+});
+
+describe("Cohort delta warn threshold persistence helpers (Task #363 — reviewer-tunable warn band)", () => {
+  describe("COHORT_DELTA_WARN_THRESHOLD_OPTIONS", () => {
+    it("exposes the four supported sensitivities and includes the legacy 5pt default", () => {
+      // Lock the option set so any future change is a deliberate choice the
+      // reviewers see in code review (the values map to ⅕ … ⅔ of the dataset
+      // T1−T3 gap target of ≥15pt, which is the granularity reviewers care
+      // about — see the comment in feedback-analytics.tsx).
+      expect([...COHORT_DELTA_WARN_THRESHOLD_OPTIONS]).toEqual([3, 5, 8, 10]);
+      // The pre-Task-#363 hard-coded threshold must remain a valid option so
+      // the panel keeps its original behaviour for reviewers who never touch
+      // the chooser.
+      expect(COHORT_DELTA_WARN_THRESHOLD_OPTIONS).toContain(
+        FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
+      );
+    });
+  });
+
+  describe("isValidCohortDeltaWarnThreshold", () => {
+    it("accepts each of the four supported numeric options", () => {
+      expect(isValidCohortDeltaWarnThreshold(3)).toBe(true);
+      expect(isValidCohortDeltaWarnThreshold(5)).toBe(true);
+      expect(isValidCohortDeltaWarnThreshold(8)).toBe(true);
+      expect(isValidCohortDeltaWarnThreshold(10)).toBe(true);
+    });
+
+    it("rejects neighbouring numbers, fractions, and NaN so a Number(...) parse can't sneak through", () => {
+      expect(isValidCohortDeltaWarnThreshold(0)).toBe(false);
+      expect(isValidCohortDeltaWarnThreshold(4)).toBe(false);
+      expect(isValidCohortDeltaWarnThreshold(6)).toBe(false);
+      expect(isValidCohortDeltaWarnThreshold(11)).toBe(false);
+      expect(isValidCohortDeltaWarnThreshold(99)).toBe(false);
+      expect(isValidCohortDeltaWarnThreshold(-5)).toBe(false);
+      // Fractions that round to an option are still rejected — exact equality.
+      expect(isValidCohortDeltaWarnThreshold(5.5)).toBe(false);
+      expect(isValidCohortDeltaWarnThreshold(Number.NaN)).toBe(false);
+    });
+  });
+
+  describe("parseCohortDeltaWarnThreshold", () => {
+    it("accepts the supported options expressed as decimal strings", () => {
+      expect(parseCohortDeltaWarnThreshold("3")).toBe(3);
+      expect(parseCohortDeltaWarnThreshold("5")).toBe(5);
+      expect(parseCohortDeltaWarnThreshold("8")).toBe(8);
+      expect(parseCohortDeltaWarnThreshold("10")).toBe(10);
+    });
+
+    it("treats null, undefined and the empty string as 'no value' (returns null)", () => {
+      // The empty-string case matters: useSearchParams returns "" for
+      // `?cohortDeltaWarn=` and we must NOT coerce that into 0.
+      expect(parseCohortDeltaWarnThreshold(null)).toBeNull();
+      expect(parseCohortDeltaWarnThreshold(undefined)).toBeNull();
+      expect(parseCohortDeltaWarnThreshold("")).toBeNull();
+    });
+
+    it("rejects malformed and out-of-range strings so the panel falls back to the default", () => {
+      expect(parseCohortDeltaWarnThreshold("abc")).toBeNull();
+      expect(parseCohortDeltaWarnThreshold("0")).toBeNull();
+      expect(parseCohortDeltaWarnThreshold("4")).toBeNull();
+      expect(parseCohortDeltaWarnThreshold("99")).toBeNull();
+      expect(parseCohortDeltaWarnThreshold("5.5")).toBeNull();
+      expect(parseCohortDeltaWarnThreshold("-5")).toBeNull();
+      expect(parseCohortDeltaWarnThreshold(" ")).toBeNull();
+    });
+  });
+
+  describe("readStoredCohortDeltaWarnThreshold", () => {
+    function clearStorage() {
+      window.localStorage.removeItem(COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY);
+    }
+
+    it("returns null when nothing has been stored yet", () => {
+      clearStorage();
+      expect(readStoredCohortDeltaWarnThreshold()).toBeNull();
+    });
+
+    it("round-trips each supported option through localStorage", () => {
+      // Persistence is the whole point of Task #363's URL+storage pattern —
+      // pin a write/read cycle for every option, not just one, so a future
+      // option-set tweak surfaces here instead of as a silent persistence
+      // regression in production.
+      for (const opt of COHORT_DELTA_WARN_THRESHOLD_OPTIONS) {
+        clearStorage();
+        window.localStorage.setItem(
+          COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY,
+          String(opt),
+        );
+        expect(readStoredCohortDeltaWarnThreshold()).toBe(opt);
+      }
+      clearStorage();
+    });
+
+    it("returns null for a stale/garbage stored value so the panel can fall back to the default", () => {
+      // Simulates a build that previously wrote a value the current code no
+      // longer accepts (e.g. someone hand-edited storage, or an old version
+      // stored "abc"). The reader must go through parseCohortDeltaWarnThreshold
+      // so a stale entry can't crash or skew the panel.
+      clearStorage();
+      window.localStorage.setItem(COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY, "abc");
+      expect(readStoredCohortDeltaWarnThreshold()).toBeNull();
+
+      window.localStorage.setItem(COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY, "99");
+      expect(readStoredCohortDeltaWarnThreshold()).toBeNull();
+
+      window.localStorage.setItem(COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY, "");
+      expect(readStoredCohortDeltaWarnThreshold()).toBeNull();
+
+      clearStorage();
+    });
   });
 });
 
