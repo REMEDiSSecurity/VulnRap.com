@@ -16,6 +16,12 @@
 //   E2E_FORCE_PROD_BUILD=1  force-rebuild even if dist looks fresh.
 //                           Useful when the freshness heuristic is suspect
 //                           and you want belt-and-braces.
+//   BUILD_IF_STALE_ALLOW_MISSING=1
+//                           Downgrade a missing watched source path from a
+//                           hard failure back to the legacy warn-and-continue
+//                           behavior. Intended as a one-off escape hatch for
+//                           local situations (e.g. a half-finished rename in
+//                           a working copy); do not set this in CI.
 //
 // On a stale or missing dist the configured build command is executed and
 // this script exits with that command's status. On a fresh dist it logs
@@ -165,6 +171,7 @@ async function main() {
 
   if (!force && markerMtime !== null) {
     const sources = await buildSourceList(target);
+    const allowMissing = process.env.BUILD_IF_STALE_ALLOW_MISSING === "1";
     let newest = 0;
     let newestPath = null;
     for (const rel of sources) {
@@ -172,14 +179,25 @@ async function main() {
       if (m === null) {
         // Drift detection: a watched path doesn't exist on disk, which
         // usually means a workspace lib was renamed/removed or doesn't
-        // follow the lib/<short-name>/src convention. Don't silently treat
-        // that as "fresh" -- log loudly so the operator notices.
-        log(
-          `WARN: watched source ${rel} does not exist; staleness check ` +
-            `will ignore it. If a workspace dep was renamed, update ` +
-            `scripts/build-if-stale.mjs to match.`,
-        );
-        continue;
+        // follow the lib/<short-name>/src convention. Treating that as
+        // "fresh" lets a stale dist get reused indefinitely, so by default
+        // we fail loudly. Operators can opt back into the legacy
+        // warn-and-continue with BUILD_IF_STALE_ALLOW_MISSING=1.
+        const detail =
+          `watched source ${rel} does not exist. This usually means a ` +
+          `@workspace/* lib was renamed or removed. Update the TARGETS ` +
+          `entry in scripts/build-if-stale.mjs (or fix the dep name in ` +
+          `the artifact's package.json) so the staleness check can find ` +
+          `it. To bypass this check for a one-off local run, set ` +
+          `BUILD_IF_STALE_ALLOW_MISSING=1.`;
+        if (allowMissing) {
+          log(
+            `WARN: ${detail} (BUILD_IF_STALE_ALLOW_MISSING=1; continuing)`,
+          );
+          continue;
+        }
+        log(`ERROR: rename detected — ${detail}`);
+        process.exit(3);
       }
       if (m > newest) {
         newest = m;

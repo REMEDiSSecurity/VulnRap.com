@@ -143,6 +143,121 @@ if (markerExists) {
   }
 }
 
+// --- Test 3: a missing watched source path (e.g. a renamed @workspace lib)
+// causes the script to fail loudly by default, but can be downgraded back to
+// the legacy warn-and-continue behavior with BUILD_IF_STALE_ALLOW_MISSING=1.
+//
+// We simulate a renamed lib by temporarily injecting a fake `@workspace/<x>`
+// dep into the api-server package.json -- the script will resolve it to
+// `lib/<x>/src`, which doesn't exist on disk, exercising the new branch.
+// The package.json is restored in a finally so a mid-test crash can't leave
+// the working copy dirty.
+
+async function withInjectedFakeDep(fakeDep, fn) {
+  const pkgRel = TARGETS["api-server"].pkg;
+  const pkgAbs = path.join(REPO_ROOT, pkgRel);
+  const original = await readFile(pkgAbs, "utf8");
+  // Capture the original atime/mtime so we can restore them after the test.
+  // build-if-stale.mjs uses package.json's mtime as a watched source, so a
+  // bumped mtime here would leak into Test 2 (and any future invocation of
+  // the freshness check) and falsely flag the artifact as stale.
+  const originalStat = await stat(pkgAbs);
+  try {
+    const parsed = JSON.parse(original);
+    parsed.dependencies = { ...(parsed.dependencies ?? {}), [fakeDep]: "workspace:*" };
+    // Preserve trailing newline if the original had one, to minimize churn.
+    const trailingNewline = original.endsWith("\n") ? "\n" : "";
+    await writeFile(
+      pkgAbs,
+      JSON.stringify(parsed, null, 2) + trailingNewline,
+    );
+    return await fn();
+  } finally {
+    await writeFile(pkgAbs, original);
+    await utimes(pkgAbs, originalStat.atime, originalStat.mtime);
+  }
+}
+
+if (markerExists) {
+  // The fake dep name must not collide with anything real in lib/. Use a
+  // sentinel that's obviously test-only.
+  const fakeDep = "@workspace/__renamed_for_test__";
+  const expectedMissingPath = "lib/__renamed_for_test__/src";
+
+  // Default: missing watched path -> hard failure with a clear rename hint.
+  const failResult = await withInjectedFakeDep(fakeDep, () =>
+    withPnpmStub(() =>
+      spawnSync(
+        process.execPath,
+        [path.join(__dirname, "build-if-stale.mjs"), "api-server"],
+        {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          // Ensure no stale env knob bleeds in from the parent shell.
+          env: { ...process.env, BUILD_IF_STALE_ALLOW_MISSING: "" },
+        },
+      ),
+    ),
+  );
+  const failStderr = failResult.stderr ?? "";
+  // Exit status 3 is the dedicated rename-detected code in build-if-stale.mjs;
+  // asserting it exactly catches the case where the script crashed for some
+  // unrelated reason and happened to produce a non-zero status.
+  check(
+    "missing watched source exits with the rename-detected status (3)",
+    failResult.status === 3,
+    `status=${failResult.status}\nstderr=${failStderr}`,
+  );
+  check(
+    "missing watched source error mentions rename + the missing path",
+    failStderr.includes("ERROR: rename detected") &&
+      failStderr.includes(expectedMissingPath),
+    `stderr=${failStderr}`,
+  );
+  check(
+    "missing watched source error points operator at BUILD_IF_STALE_ALLOW_MISSING",
+    failStderr.includes("BUILD_IF_STALE_ALLOW_MISSING=1"),
+    `stderr=${failStderr}`,
+  );
+
+  // Opt-out: BUILD_IF_STALE_ALLOW_MISSING=1 restores the legacy
+  // warn-and-continue behavior so the freshness check still completes.
+  const allowResult = await withInjectedFakeDep(fakeDep, () =>
+    withPnpmStub(() =>
+      spawnSync(
+        process.execPath,
+        [path.join(__dirname, "build-if-stale.mjs"), "api-server"],
+        {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          env: { ...process.env, BUILD_IF_STALE_ALLOW_MISSING: "1" },
+        },
+      ),
+    ),
+  );
+  const allowStderr = allowResult.stderr ?? "";
+  check(
+    "BUILD_IF_STALE_ALLOW_MISSING=1 still warns about the missing path",
+    allowStderr.includes("WARN:") && allowStderr.includes(expectedMissingPath),
+    `stderr=${allowStderr}`,
+  );
+  check(
+    "BUILD_IF_STALE_ALLOW_MISSING=1 continues past the missing path " +
+      "(reaches fresh/stale decision)",
+    allowStderr.includes("fresh —") || allowStderr.includes("stale —"),
+    `stderr=${allowStderr}`,
+  );
+  // With the stub pnpm in place both code paths (fresh, or stale-then-
+  // stub-build) finish with status 0, so we can assert exactly on that --
+  // a non-zero status here would mean the opt-out path itself broke or
+  // the script reached the rename-detected exit (3) anyway.
+  check(
+    "BUILD_IF_STALE_ALLOW_MISSING=1 exits 0 (freshness check completed)",
+    allowResult.status === 0,
+    `status=${allowResult.status}\nstderr=${allowStderr}`,
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);
