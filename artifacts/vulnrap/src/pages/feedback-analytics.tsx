@@ -1844,13 +1844,15 @@ function BulkRemovalImpactBlock({
   subtitle,
   impact,
   emptyHint,
-  // Task #245 — the per-row Trash preview now renders the same
-  // `sampleMatches` array inline (grouped by tier, with linkified
-  // production report IDs) directly underneath this block. Passing
-  // `hideSampleMatchesDetails` from that caller suppresses the
-  // collapsed `<details>` list here so the IDs don't appear twice.
-  // Defaults to `false` so the batch-confirm flow (the original caller)
-  // keeps its existing affordance unchanged.
+  // Task #245 / Task #344 — both the per-row Trash preview and the
+  // batch-confirm preview now render the same `sampleMatches` array
+  // inline (grouped by tier, with linkified production report IDs)
+  // directly underneath this block. Passing `hideSampleMatchesDetails`
+  // from those callers suppresses the collapsed `<details>` list here
+  // so the IDs don't appear twice. Defaults to `false` so the
+  // edit-rename preview (Task #247) and any future caller that hasn't
+  // wired the inline renderer in keep their existing affordance
+  // unchanged.
   hideSampleMatchesDetails = false,
   // Task #323 — the chosen production-scan window (from the dry-run
   // response's `dryRunImpact.productionLimit`). Combined with the response's
@@ -6133,6 +6135,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 subtitle={`${corpus.corpusSize} fixtures`}
                 impact={corpus}
                 emptyHint="No curated detections would be lost"
+                hideSampleMatchesDetails
               />
               {production ? (
                 <BulkRemovalImpactBlock
@@ -6145,6 +6148,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   }
                   impact={production}
                   emptyHint="No production detections would be lost"
+                  hideSampleMatchesDetails
                   productionLimit={productionLimit}
                 />
               ) : (
@@ -6163,6 +6167,38 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 </div>
               )}
             </div>
+            {/* Task #344 — render the per-tier `sampleMatches` inline so a
+                reviewer running a bulk retire sees the same affordance the
+                per-row Trash preview added in Task #245: curated fixture +
+                production report IDs grouped by tier with the production
+                IDs linkified to `/verify/:id` opened in a new tab. The
+                shared `HandwavyRemovePreviewMatches` renderer keeps the
+                two flows visually consistent. The block stays out of the
+                DOM entirely when the dry-run returned no samples on
+                either side, so zero-impact previews keep their lean
+                visual footprint. */}
+            {(corpus.sampleMatches.length > 0 ||
+              (production?.sampleMatches.length ?? 0) > 0) && (
+              <div
+                className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                data-testid="handwavy-bulk-preview-matches"
+              >
+                {corpus.sampleMatches.length > 0 && (
+                  <HandwavyRemovePreviewMatches
+                    kind="curated"
+                    title={`Curated fixtures that would lose their flag (${corpus.sampleMatches.length})`}
+                    matches={corpus.sampleMatches}
+                  />
+                )}
+                {production && production.sampleMatches.length > 0 && (
+                  <HandwavyRemovePreviewMatches
+                    kind="production"
+                    title={`Production reports that would lose their flag (${production.sampleMatches.length})`}
+                    matches={production.sampleMatches}
+                  />
+                )}
+              </div>
+            )}
             <details
               className="text-[11px]"
               data-testid="handwavy-bulk-preview-results-details"

@@ -247,6 +247,239 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     }
   });
 
+  // Task #344 — when the bulk dry-run reports a non-zero
+  // `validDetectionsLost`, the batch-confirm preview must render the
+  // curated and production `sampleMatches` arrays inline (not buried
+  // inside the closed `<details>` the shared `BulkRemovalImpactBlock`
+  // renders by default), grouped by tier, with the production report
+  // IDs linkified to the `/verify/:id` viewer route opened in a new
+  // tab — mirroring the per-row Trash preview affordance Task #245
+  // added so a reviewer running a bulk retire sees the same
+  // affordance.
+  test("Inline sample-match list renders curated + production IDs grouped by tier with production links to the report viewer", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task344 batch matches");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+
+      // Inject a synthetic dryRun response that includes per-tier
+      // `sampleMatches` on both the curated and production blocks so we
+      // can deterministically assert the inline rendering without
+      // depending on real corpus / production data overlapping these
+      // test-only phrases.
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrases?: string[] }
+            | undefined;
+          if (!body?.dryRun) {
+            await route.fallback();
+            return;
+          }
+          const requested = body.phrases ?? [];
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              dryRun: true,
+              wouldRemove: requested.length,
+              notFound: 0,
+              duplicateInBatch: 0,
+              total: 99,
+              projectedTotal: 99 - requested.length,
+              results: requested.map((raw: string) => ({
+                raw,
+                phrase: raw,
+                removed: true,
+              })),
+              dryRunImpact: {
+                corpus: {
+                  total: 4,
+                  validDetectionsLost: 2,
+                  falsePositivesDropped: 2,
+                  byTier: {
+                    t1Legit: 1,
+                    t2Borderline: 1,
+                    t3Slop: 1,
+                    t4Hallucinated: 1,
+                  },
+                  sampleMatches: [
+                    { id: "fixture-T1-alpha", tier: "T1_LEGIT" },
+                    { id: "fixture-T2-beta", tier: "T2_BORDERLINE" },
+                    { id: "fixture-T3-gamma", tier: "T3_SLOP" },
+                    { id: "fixture-T4-delta", tier: "T4_HALLUCINATED" },
+                  ],
+                  warning:
+                    "2 legitimate detections would be lost from the curated benchmark",
+                  corpusSize: 47,
+                  oldestCreatedAt: null,
+                  newestCreatedAt: null,
+                },
+                production: {
+                  total: 3,
+                  validDetectionsLost: 2,
+                  falsePositivesDropped: 1,
+                  byTier: {
+                    t1Legit: 1,
+                    t2Borderline: 0,
+                    t3Slop: 1,
+                    t4Hallucinated: 1,
+                  },
+                  sampleMatches: [
+                    { id: "9101", tier: "T1_LEGIT" },
+                    { id: "9102", tier: "T3_SLOP" },
+                    { id: "9103", tier: "T4_HALLUCINATED" },
+                  ],
+                  warning:
+                    "2 legitimate detections would be lost from the production archive",
+                  corpusSize: 200,
+                  oldestCreatedAt: "2026-04-01T00:00:00.000Z",
+                  newestCreatedAt: "2026-04-29T00:00:00.000Z",
+                },
+                productionError: null,
+                productionLimit: 200,
+              },
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, phrases);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Inline match section is in the DOM and not hidden behind a
+      // <details>/<summary> the reviewer would have to expand first.
+      const matches = panel.getByTestId("handwavy-bulk-preview-matches");
+      await expect(matches).toBeVisible();
+
+      // Curated block renders all four tier groups with their fixture
+      // IDs visible inline.
+      const curatedBlock = matches.getByTestId(
+        "handwavy-remove-preview-matches-curated",
+      );
+      await expect(curatedBlock).toBeVisible();
+      await expect(curatedBlock).toContainText("Curated fixtures");
+      await expect(
+        curatedBlock.getByTestId(
+          "handwavy-remove-preview-matches-curated-tier-T1_LEGIT",
+        ),
+      ).toContainText("fixture-T1-alpha");
+      await expect(
+        curatedBlock.getByTestId(
+          "handwavy-remove-preview-matches-curated-tier-T2_BORDERLINE",
+        ),
+      ).toContainText("fixture-T2-beta");
+      await expect(
+        curatedBlock.getByTestId(
+          "handwavy-remove-preview-matches-curated-tier-T3_SLOP",
+        ),
+      ).toContainText("fixture-T3-gamma");
+      await expect(
+        curatedBlock.getByTestId(
+          "handwavy-remove-preview-matches-curated-tier-T4_HALLUCINATED",
+        ),
+      ).toContainText("fixture-T4-delta");
+
+      // Production block renders its own tier groups with each report
+      // ID surfaced as a link to /verify/:id that opens in a new tab.
+      const productionBlock = matches.getByTestId(
+        "handwavy-remove-preview-matches-production",
+      );
+      await expect(productionBlock).toBeVisible();
+      await expect(productionBlock).toContainText("Production reports");
+
+      const t1Link = productionBlock.getByTestId(
+        "handwavy-remove-preview-matches-production-link-9101",
+      );
+      const t3Link = productionBlock.getByTestId(
+        "handwavy-remove-preview-matches-production-link-9102",
+      );
+      const t4Link = productionBlock.getByTestId(
+        "handwavy-remove-preview-matches-production-link-9103",
+      );
+      await expect(t1Link).toBeVisible();
+      await expect(t3Link).toBeVisible();
+      await expect(t4Link).toBeVisible();
+      await expect(t1Link).toHaveText(/report\s*#9101/);
+      await expect(t3Link).toHaveText(/report\s*#9102/);
+      await expect(t4Link).toHaveText(/report\s*#9103/);
+      await expect(t1Link).toHaveAttribute("target", "_blank");
+      await expect(t3Link).toHaveAttribute("target", "_blank");
+      await expect(t4Link).toHaveAttribute("target", "_blank");
+      await expect(t1Link).toHaveAttribute("href", /\/verify\/9101$/);
+      await expect(t3Link).toHaveAttribute("href", /\/verify\/9102$/);
+      await expect(t4Link).toHaveAttribute("href", /\/verify\/9103$/);
+
+      // The shared `BulkRemovalImpactBlock` renderer's collapsed
+      // <details> sample-match list MUST be suppressed on this flow so
+      // the same IDs don't appear twice — once inline above and once
+      // hidden behind a <summary> click below.
+      await expect(
+        panel
+          .getByTestId("handwavy-bulk-preview-curated")
+          .locator("details", {
+            hasText: "fixtures that would lose their flag",
+          }),
+      ).toHaveCount(0);
+      await expect(
+        panel
+          .getByTestId("handwavy-bulk-preview-production")
+          .locator("details", {
+            hasText: "reports that would lose their flag",
+          }),
+      ).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #344 — when the dry-run returned no `sampleMatches` on either
+  // side (e.g. the synthetic happy-path phrases used in the first spec
+  // here), the inline match block must stay out of the DOM entirely so
+  // zero-impact previews keep their lean visual footprint. Mirrors the
+  // companion guard that Task #245 added on the per-row Trash preview.
+  test("Inline sample-match list is not rendered when the dry-run returns no sampleMatches", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task344 batch nomatches");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, phrases);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+      // The synthetic test phrases do not overlap any curated or
+      // production samples, so the dry-run server response leaves both
+      // `sampleMatches` arrays empty and the inline block stays out of
+      // the DOM.
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-matches"),
+      ).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
   test("Preview surfaces notFound and duplicate-in-batch outcomes for phantom + repeated entries", async ({
     page,
   }) => {
