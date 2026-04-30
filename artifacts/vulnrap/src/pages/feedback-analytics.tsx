@@ -2850,10 +2850,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   //
   // Inputs come entirely from the existing GET
   // /feedback/calibration/handwavy-phrases payload (active list + full
-  // history with batch sub-entries), so no extra request is needed. The
-  // batch summary returned by the picker endpoint only carries up to 5
-  // sample phrases, so we pull the full inner phrase list from the matching
-  // history entry (matched by ISO `removedAt`).
+  // history with batch sub-entries), so no extra request is needed.
+  //
+  // Task #339 — the same memo also feeds the older "Removal & undo
+  // history" panel's batch-group headers (which can show batches that
+  // sit beyond the picker endpoint's recent-N cap). To make sure those
+  // headers also get a conflict entry, we iterate every batch-shape
+  // history entry — not just the recent ones returned by the picker.
+  // The picker rows still look up by ISO `removedAt` so they continue
+  // to find the same entries.
   const removalBatchConflicts = useMemo(() => {
     // Task #340 — alongside the count, capture the specific phrases that
     // are conflicting and *why* (currently active vs. removed again on a
@@ -2870,7 +2875,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       string,
       { conflictCount: number; total: number; conflicts: ConflictEntry[] }
     >();
-    if (removalBatches.length === 0 || history.length === 0) return result;
+    // Task #339 — iterate every batch-shape history entry (not just the
+    // recent ones returned by the picker endpoint), so the history-panel
+    // batch headers below the picker also get conflict entries even when
+    // the batch sits beyond the picker's recent-N cap.
+    if (history.length === 0) return result;
     const activePhrases = new Set(
       (phrases as Array<{ phrase: string }>).map((p) => p.phrase),
     );
@@ -2898,24 +2907,38 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         }
       }
     }
+    // Use the picker summaries to know which removedAts already have an
+    // explicit "whole batch reinstated" flag set on the server side, so we
+    // mirror the picker row's render behaviour (no chip on a fully-
+    // reinstated row).
+    const reinstatedFromPicker = new Set<string>();
     for (const batch of removalBatches) {
-      // Whole-batch already-reinstated rows render only the badge (no
-      // reinstate button), so a conflict warning would be moot — skip.
-      if (batch.reinstated === true) continue;
-      const removedAtIso = String(batch.removedAt);
-      const histEntry = (history as Array<{
-        removedAt?: string;
-        phrases?: Array<{ phrase: string }>;
-      }>).find(
-        (h) =>
-          h.removedAt === removedAtIso &&
-          Array.isArray(h.phrases) &&
-          (h.phrases?.length ?? 0) > 0,
-      );
-      const innerPhrases = histEntry?.phrases ?? [];
-      if (innerPhrases.length === 0) continue;
+      if (batch.reinstated === true) {
+        reinstatedFromPicker.add(String(batch.removedAt));
+      }
+    }
+    for (const h of history as Array<{
+      removedAt?: string;
+      reinstated?: boolean;
+      phrases?: Array<{ phrase: string; reinstated?: boolean }>;
+    }>) {
+      if (!Array.isArray(h.phrases) || h.phrases.length === 0) continue;
+      if (typeof h.removedAt !== "string") continue;
+      const removedAtIso = h.removedAt;
+      // Skip batches that are already wholly reinstated — both the picker
+      // row and the history-panel header collapse to a "(All)
+      // reinstated" badge with no reinstate button, so the warning chip
+      // would be moot.
+      const allInnerReinstated = h.phrases.every((p) => p.reinstated === true);
+      if (
+        h.reinstated === true ||
+        allInnerReinstated ||
+        reinstatedFromPicker.has(removedAtIso)
+      ) {
+        continue;
+      }
       const conflicts: ConflictEntry[] = [];
-      for (const inner of innerPhrases) {
+      for (const inner of h.phrases) {
         const isActive = activePhrases.has(inner.phrase);
         const removedAts = phraseRemovedAts.get(inner.phrase) ?? [];
         const newerRemovedAts = removedAts.filter((t) => t > removedAtIso);
@@ -2939,7 +2962,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       if (conflicts.length > 0) {
         result.set(removedAtIso, {
           conflictCount: conflicts.length,
-          total: innerPhrases.length,
+          total: h.phrases.length,
           conflicts,
         });
       }
@@ -7839,11 +7862,22 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                         : 0),
                     0,
                   );
+                  // Task #339 — re-use the same `removalBatchConflicts`
+                  // memo the "Recent batch removals" picker uses (keyed by
+                  // batch ISO `removedAt`) so the older history-panel batch
+                  // header surfaces the same "N of M may overwrite recent
+                  // edits" chip. The memo already skips fully-reinstated
+                  // batches and is computed from the same handwavy-phrases
+                  // payload, so no extra request is needed.
+                  const historyBatchConflict = group.allReinstated
+                    ? undefined
+                    : removalBatchConflicts.get(group.removedAtIso);
                   return (
                     <div
                       key={`batch-${group.removedAtIso}-${gIdx}`}
                       data-testid="handwavy-history-batch-group"
                       data-batch-removed-at={group.removedAtIso}
+                      data-batch-conflict-count={historyBatchConflict ? historyBatchConflict.conflictCount : 0}
                     >
                       <div
                         className="px-3 py-2 text-[11px] bg-primary/5 border-l-2 border-primary/40 flex items-center gap-2 flex-wrap"
@@ -7861,6 +7895,20 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                             </span>
                           )}
                         </span>
+                        {historyBatchConflict && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-amber-500/40 text-amber-300 gap-1"
+                            data-testid="handwavy-history-batch-conflict-chip"
+                            data-conflict-count={historyBatchConflict.conflictCount}
+                            data-conflict-total={historyBatchConflict.total}
+                            title={`${historyBatchConflict.conflictCount} of ${historyBatchConflict.total} phrase${historyBatchConflict.total === 1 ? "" : "s"} in this batch ${historyBatchConflict.conflictCount === 1 ? "is" : "are"} either back on the active list or have a newer removal entry — reinstating this batch will overwrite that newer state. Use the per-phrase rows below for a finer-grained decision.`}
+                            aria-label={`${historyBatchConflict.conflictCount} of ${historyBatchConflict.total} phrases in this batch may overwrite recent edits`}
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            {historyBatchConflict.conflictCount} of {historyBatchConflict.total} may overwrite recent edits
+                          </Badge>
+                        )}
                         {group.allReinstated ? (
                           <Badge
                             variant="outline"

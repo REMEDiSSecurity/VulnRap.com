@@ -37,6 +37,31 @@ async function openPanelAndFindBatch(
   return row;
 }
 
+// Task #339 — sibling helper for the OLDER "Removal & undo history" panel
+// below the picker. The history panel is collapsed by default behind a
+// toggle; once expanded each batch becomes a `handwavy-history-batch-group`
+// keyed by ISO `removedAt`.
+async function openHistoryAndFindBatchGroup(
+  page: Page,
+  removedAt: string,
+): Promise<Locator> {
+  await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+  const toggle = page.getByTestId("handwavy-history-toggle");
+  await expect(toggle).toBeVisible({ timeout: 15_000 });
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+  await expect(page.getByTestId("handwavy-history-list")).toBeVisible();
+  const group = page.locator(
+    `[data-testid="handwavy-history-batch-group"][data-batch-removed-at="${removedAt}"]`,
+  );
+  await expect(
+    group,
+    `expected to find a history batch group with data-batch-removed-at="${removedAt}"`,
+  ).toHaveCount(1, { timeout: 15_000 });
+  return group;
+}
+
 test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", () => {
   test("renders a row per batch with samples and reinstates from a single click", async ({
     page,
@@ -448,6 +473,143 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       });
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #339 — the same "N of M may overwrite recent edits" chip Task
+  // #242 added to the picker rows must also surface on the OLDER
+  // "Removal & undo history" panel's batch-group header (the row that
+  // carries its own "Reinstate all" button). A reviewer scrolling into
+  // the history panel should get the same warning before clicking the
+  // batch reinstate, not silently overwrite recent edits. A clean
+  // batch (no re-adds) shows no chip at all.
+  test("history-panel batch group header shows the same conflict chip when phrases were re-added since the removal", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3, "task339 history batch");
+
+    try {
+      // Add three, then remove all three as one batch — this is the
+      // batch group whose header we want the chip to appear on.
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
+      const removedAt = batch.historyEntry!.removedAt;
+
+      // Re-add two of the three so the active list once again contains
+      // them — reinstating the batch would silently merge the historical
+      // state on top of those edits.
+      await addPhrase(apiCtx, phrases[0], { reviewer: REVIEWER });
+      await addPhrase(apiCtx, phrases[1], { reviewer: REVIEWER });
+
+      const group = await openHistoryAndFindBatchGroup(page, removedAt);
+      const header = group.getByTestId("handwavy-history-batch-header");
+      await expect(header).toBeVisible();
+      const chip = header.getByTestId("handwavy-history-batch-conflict-chip");
+      await expect(chip).toBeVisible({ timeout: 15_000 });
+      await expect(chip).toContainText("2 of 3 may overwrite recent edits");
+      await expect(chip).toHaveAttribute("data-conflict-count", "2");
+      await expect(chip).toHaveAttribute("data-conflict-total", "3");
+      await expect(group).toHaveAttribute("data-batch-conflict-count", "2");
+
+      // The chip is purely informational — both the "Preview reinstate"
+      // and "Reinstate all" buttons are still present and enabled.
+      await expect(group.getByTestId("handwavy-reinstate-batch-preview")).toBeEnabled();
+      await expect(group.getByTestId("handwavy-reinstate-batch")).toBeEnabled();
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  test("history-panel batch group header omits the conflict chip for a clean batch", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task339 history batch");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
+      const removedAt = batch.historyEntry!.removedAt;
+
+      const group = await openHistoryAndFindBatchGroup(page, removedAt);
+      await expect(
+        group.getByTestId("handwavy-history-batch-conflict-chip"),
+      ).toHaveCount(0);
+      await expect(group).toHaveAttribute("data-batch-conflict-count", "0");
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #339 — the picker endpoint /removal-batches caps its response at
+  // the 10 most recent batches by default. The history panel below it has
+  // its own independent (much larger) cap and therefore commonly shows
+  // batches that don't appear in the picker. The conflict chip on the
+  // history panel header must NOT be silently dropped just because the
+  // batch fell off the picker — it has to keep working from the
+  // handwavy-phrases history payload alone.
+  test("history-panel batch group shows the conflict chip even when the batch is older than the picker's recent-N cap", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const targetPhrases = uniquePhrases(3, "task339 older batch");
+    // Pre-allocate the noise batches as 1-phrase batches so the picker fills
+    // up with unrelated newer entries and our target falls off the end.
+    // The default REMOVAL_BATCHES_DEFAULT_LIMIT is 10, so 11 newer batches
+    // is enough to guarantee the target is excluded from the picker.
+    const noiseBatches = Array.from({ length: 11 }, (_, i) =>
+      uniquePhrases(1, `task339 noise ${i}`),
+    );
+
+    try {
+      // 1) Set up the target batch — three phrases removed as one batch.
+      for (const p of targetPhrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      const targetBatch = await batchRemove(apiCtx, targetPhrases, { reviewer: REVIEWER });
+      const targetRemovedAt = targetBatch.historyEntry!.removedAt;
+
+      // 2) Re-add two of the three so the target batch carries a real
+      //    conflict count.
+      await addPhrase(apiCtx, targetPhrases[0], { reviewer: REVIEWER });
+      await addPhrase(apiCtx, targetPhrases[1], { reviewer: REVIEWER });
+
+      // 3) Push the target out of the picker by creating 11 newer
+      //    1-phrase batches.
+      for (const noise of noiseBatches) {
+        for (const p of noise) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+        await batchRemove(apiCtx, noise, { reviewer: REVIEWER });
+      }
+
+      // Sanity: the picker really does NOT include the target batch.
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      const pickerRow = page.locator(
+        `[data-testid="handwavy-removal-batches-row"][data-batch-removed-at="${targetRemovedAt}"]`,
+      );
+      await expect(
+        pickerRow,
+        "target batch should have fallen off the picker's recent-N cap",
+      ).toHaveCount(0, { timeout: 15_000 });
+
+      // The history panel is below the picker and should still show the
+      // group + the conflict chip.
+      const group = await openHistoryAndFindBatchGroup(page, targetRemovedAt);
+      const chip = group
+        .getByTestId("handwavy-history-batch-header")
+        .getByTestId("handwavy-history-batch-conflict-chip");
+      await expect(chip).toBeVisible({ timeout: 15_000 });
+      await expect(chip).toContainText("2 of 3 may overwrite recent edits");
+      await expect(chip).toHaveAttribute("data-conflict-count", "2");
+      await expect(chip).toHaveAttribute("data-conflict-total", "3");
+      await expect(group).toHaveAttribute("data-batch-conflict-count", "2");
+    } finally {
+      const everyPhrase = [
+        ...targetPhrases,
+        ...noiseBatches.flatMap((b) => b),
+      ];
+      await cleanup(apiCtx, everyPhrase, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
   });
