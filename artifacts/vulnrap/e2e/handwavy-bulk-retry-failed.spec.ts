@@ -1,5 +1,6 @@
-import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
+import { test, expect, request, type APIRequestContext } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 
 // Task #238 — End-to-end coverage for the "Retry failed" action that lives
 // on the bulk-remove and bulk-undo results banners. The reviewer kicks off
@@ -44,14 +45,6 @@ async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void>
       data: { phrases, reviewer: "e2e-task238-cleanup" },
     })
     .catch(() => undefined);
-}
-
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
 }
 
 test.describe("Retry failed on bulk results banner (Task #238)", () => {

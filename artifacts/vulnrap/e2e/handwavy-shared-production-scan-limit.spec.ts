@@ -1,5 +1,6 @@
 import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 
 // Task #230 — the production-scan window persisted in the calibration UI is
 // the same value across every tool that runs a production-archive scan, not
@@ -54,14 +55,6 @@ async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void>
       data: { phrases, reviewer: "e2e-task230-cleanup" },
     })
     .catch(() => undefined);
-}
-
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
 }
 
 // Pre-seed the limit key so the calibration page picks it up on first

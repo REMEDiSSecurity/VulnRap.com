@@ -1,5 +1,6 @@
-import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
+import { test, expect, request, type APIRequestContext } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 
 // Task #173 — End-to-end coverage for the per-row Trash button on the
 // curated FLAT hand-wavy phrase list. The Trash button now first issues
@@ -49,16 +50,6 @@ async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void>
       data: { phrases, reviewer: "e2e-task173-cleanup" },
     })
     .catch(() => undefined);
-}
-
-// Mirror what main.tsx does so authenticated GETs (active phrase list)
-// render in tests when the dev server wasn't started with the token.
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
 }
 
 test.describe("Single-phrase removal-impact preview (Task #173)", () => {

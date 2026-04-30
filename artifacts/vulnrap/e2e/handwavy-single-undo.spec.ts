@@ -1,5 +1,6 @@
 import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 
 // Task #237 / #332 — E2E coverage for the post-Trash Undo stack. Each
 // successful per-row Trash pushes onto a bounded stack so the reviewer
@@ -44,14 +45,6 @@ async function cleanup(api: APIRequestContext, phrase: string): Promise<void> {
       data: { phrase, reviewer: "e2e-task237-cleanup" },
     })
     .catch(() => undefined);
-}
-
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
 }
 
 async function trashRow(page: Page, phrase: string): Promise<void> {

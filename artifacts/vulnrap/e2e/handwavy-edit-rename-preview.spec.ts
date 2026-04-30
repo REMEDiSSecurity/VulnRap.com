@@ -1,5 +1,6 @@
-import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
+import { test, expect, request, type APIRequestContext } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 
 // Task #247 — End-to-end coverage for the per-row Edit-then-rename flow
 // in the curated FLAT hand-wavy phrase list. The Edit row used to only
@@ -54,14 +55,6 @@ async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void>
       data: { phrases, reviewer: "e2e-task247-cleanup" },
     })
     .catch(() => undefined);
-}
-
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
 }
 
 test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {

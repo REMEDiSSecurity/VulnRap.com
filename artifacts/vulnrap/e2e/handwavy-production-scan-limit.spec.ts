@@ -5,6 +5,7 @@ import {
   type Route,
 } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 
 // Task #231 — End-to-end coverage for the reviewer-tunable production-scan
 // window control added in Task #125. The control was previously only
@@ -28,12 +29,6 @@ import { randomUUID } from "node:crypto";
 // archive having any matching rows. The persistence test re-uses the
 // intercept so the third assertion is also deterministic.
 
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN ||
-  process.env.CALIBRATION_TOKEN ||
-  process.env.VITE_CALIBRATION_TOKEN ||
-  "e2e-calibration-token";
-
 // Mirrors the constants in feedback-analytics.tsx (Task #125). Kept as
 // literals here on purpose — the contract under test is that these exact
 // numbers govern the validator and warning, so a drift between the UI
@@ -42,18 +37,6 @@ const SCAN_LIMIT_DEFAULT = 2000;
 const SCAN_LIMIT_MIN = 100;
 const SCAN_LIMIT_MAX = 10000;
 const STORAGE_KEY = "vulnrap.handwavy.productionScanLimit";
-
-// The Vite bundle reads `import.meta.env.VITE_CALIBRATION_TOKEN` once at
-// startup. In dev modes where that wasn't set, the page's own POST/DELETE
-// would 401. We mirror the bundled-token path used by the other handwavy
-// specs so this test works against any dev mode.
-async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
-  if (!CALIBRATION_TOKEN) return;
-  await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
-  }, CALIBRATION_TOKEN);
-}
 
 interface CapturedDryRunRequest {
   productionScanLimit: number | undefined;
