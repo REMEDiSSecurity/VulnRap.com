@@ -325,6 +325,22 @@ describe("GET /api/test/run — Task #209 auditTelemetry contract", () => {
       expect(typeof r._audit!.gateShouldCall).toBe("boolean");
     }
   }, 90_000);
+
+  // Task #312 — the per-fixture `validityAudit` field is opt-in: it
+  // only appears on `results[]` rows when the caller passes
+  // `?withLlm=1` and the LLM actually produced a substance score.
+  // Default heuristic-only runs must keep the row clean so the
+  // dashboard never sees the internal `_audit` blob by accident.
+  it("does not expose per-fixture validityAudit on default heuristic-only runs", async () => {
+    const body = await fetchJson<{
+      results: Array<Record<string, unknown> & { id: string }>;
+    }>("/api/test/run");
+    expect(body.results.length).toBeGreaterThan(0);
+    for (const row of body.results) {
+      expect(row).not.toHaveProperty("validityAudit");
+      expect(row).not.toHaveProperty("_audit");
+    }
+  }, 60_000);
 });
 
 describe("GET /api/test/archetype-history — Sprint 13 trend persistence", () => {

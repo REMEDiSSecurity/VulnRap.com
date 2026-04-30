@@ -2952,10 +2952,22 @@ router.get("/test/run", async (req, res) => {
   // This is observation-only (no scores or thresholds change) and was the
   // mechanism used to capture the heuristic distribution that justified
   // *not* widening the cost-gate thresholds — see llm-slop.ts header.
+  // Task #312 — when ?withLlm=1 fires the live LLM, also surface the
+  // per-fixture validity-fusion audit on each row so reviewers can see
+  // *which* fixtures hit the disagreement floor (the aggregate counter
+  // collapses that detail). Both flags are independent; default runs
+  // still strip the entire `_audit` blob.
   const debugAudit = String(req.query.debug ?? "") === "1";
-  const sanitizedResults = results.map(({ _audit, ...rest }) =>
-    debugAudit ? { ...rest, _audit } : rest,
-  );
+  const sanitizedResults = results.map(({ _audit, ...rest }) => {
+    const row: Record<string, unknown> = { ...rest };
+    if (llmRequested && _audit?.validity) {
+      row.validityAudit = _audit.validity;
+    }
+    if (debugAudit) {
+      row._audit = _audit;
+    }
+    return row;
+  });
 
   res.json({
     fixtureCount: FIXTURES.length,

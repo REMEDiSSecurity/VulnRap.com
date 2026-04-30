@@ -375,8 +375,16 @@ export function fuseScores(
   );
 
   // Task #209 — disagreementThreshold is named so the audit telemetry can
-  // surface the same number the diagnostics panel renders. Don't change it
-  // here: the threshold tweak is a follow-up after the audit data lands.
+  // surface the same number the diagnostics panel renders. Keep this as
+  // the single source of truth.
+  //
+  // Task #312 — audited and kept at 30 with Math.min. The floor is
+  // asymmetric on purpose: the LLM is a cheap second opinion that can
+  // pull validity DOWN (it rarely invents low-substance signals from
+  // nothing) but should not single-handedly pull validity UP on
+  // well-formatted fakes. Calibration data, alternatives considered, and
+  // the next-audit recipe live in
+  // ../../docs/calibration/disagreement-floor-audit.md.
   const disagreementThreshold = 30;
   let conservativeFloorApplied = false;
   let finalValidityScore = validityResult.final;
