@@ -283,7 +283,7 @@ function VerificationPanel({ checks, summary }: { checks: VerificationCheck[]; s
   );
 }
 
-function MatrixInputsWidget({ inputs }: { inputs: TriageMatrixInputs }) {
+export function MatrixInputsWidget({ inputs }: { inputs: TriageMatrixInputs }) {
   const cells: Array<{ label: string; value: string; hint: string; tone: "good" | "warn" | "bad" | "neutral" }> = [
     {
       label: "Composite",
@@ -321,6 +321,13 @@ function MatrixInputsWidget({ inputs }: { inputs: TriageMatrixInputs }) {
         <Layers className="w-4 h-4 text-primary" />
         <h4 className="text-sm font-bold">Matrix Inputs</h4>
         <Hint text="The four v3.6.0 matrix inputs that drove this recommendation. Watch for values near a band boundary — that's where the matrix is most likely to flip on the next re-check." />
+        <Link
+          to="/changelog#triage-matrix-inputs"
+          className="ml-1 text-[11px] text-primary/80 hover:text-primary hover:underline normal-case font-sans"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Learn more &rarr;
+        </Link>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {cells.map((c) => (
@@ -337,7 +344,7 @@ function MatrixInputsWidget({ inputs }: { inputs: TriageMatrixInputs }) {
   );
 }
 
-function TriageCard({ triage, challengeQuestions, temporalSignals, templateMatch, revision, toast }: {
+export function TriageCard({ triage, challengeQuestions, temporalSignals, templateMatch, revision, toast }: {
   triage: TriageRecommendation;
   challengeQuestions: ChallengeQuestion[];
   temporalSignals: TemporalSignal[];
@@ -363,6 +370,13 @@ function TriageCard({ triage, challengeQuestions, temporalSignals, templateMatch
             {triage.action.replace(/_/g, " ")}
           </Badge>
           <Hint text="Automated triage action based on slop score, confidence, and active verification results. AUTO_CLOSE = high AI confidence, CHALLENGE_REPORTER = send questions, MANUAL_REVIEW = assign senior triager, PRIORITIZE = likely legitimate, STANDARD_TRIAGE = follow normal process." />
+          <Link
+            to="/changelog#triage-recommendation"
+            className="ml-1 text-[11px] text-primary/80 hover:text-primary hover:underline normal-case font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Learn more &rarr;
+          </Link>
         </CardTitle>
         <CardDescription>{triage.reason}</CardDescription>
       </CardHeader>

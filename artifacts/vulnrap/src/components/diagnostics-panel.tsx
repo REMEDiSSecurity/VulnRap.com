@@ -1,5 +1,6 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -642,8 +643,14 @@ function AvriFamilySection({
           <Separator className="bg-border/30" />
           <section className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                AVRI Family Rubric
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                <span>AVRI Family Rubric</span>
+                <Link
+                  to="/changelog#avri-family-rubric"
+                  className="text-[11px] text-primary/80 hover:text-primary hover:underline normal-case font-sans tracking-normal"
+                >
+                  Learn more &rarr;
+                </Link>
               </div>
               <Badge
                 variant="outline"
@@ -696,8 +703,14 @@ function AvriFamilySection({
       <Separator className="bg-border/30" />
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">
-            AVRI Family Rubric
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+            <span>AVRI Family Rubric</span>
+            <Link
+              to="/changelog#avri-family-rubric"
+              className="text-[11px] text-primary/80 hover:text-primary hover:underline normal-case font-sans tracking-normal"
+            >
+              Learn more &rarr;
+            </Link>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Badge

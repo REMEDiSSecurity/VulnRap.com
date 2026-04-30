@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   DiagnosticsPanel,
@@ -91,9 +92,11 @@ function renderWithClient() {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={client}>
-      <DiagnosticsPanel reportId={REPORT_ID} />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <DiagnosticsPanel reportId={REPORT_ID} />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -252,6 +255,17 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/AVRI Composite Overrides/i)).toBeInTheDocument();
     expect(screen.getByText(/No gold signals for family/i)).toBeInTheDocument();
     expect(screen.getByText(/Submission-velocity penalty/i)).toBeInTheDocument();
+
+    // Task 374: AVRI Family Rubric heading carries a "Learn more"
+    // link that resolves to the matching changelog anchor so the
+    // in-app panel mirrors the markdown export's docs pointer.
+    const rubricLinks = screen
+      .getAllByRole("link", { name: /learn more/i })
+      .filter(
+        (a) =>
+          a.getAttribute("href") === "/changelog#avri-family-rubric",
+      );
+    expect(rubricLinks.length).toBeGreaterThan(0);
   });
 
   it("renders the STRIPPED_CRASH_TRACE block with reason, frame counts, and revoked trace gold signals", async () => {
