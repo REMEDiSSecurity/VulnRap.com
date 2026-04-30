@@ -80,6 +80,10 @@ import {
   getCategoryFlips,
 } from "@/components/handwavy-category-flip-badge";
 import {
+  HandwavyRenameBadge,
+  getRenameEdits,
+} from "@/components/handwavy-rename-badge";
+import {
   useCalibrationTokenRejection,
   type CalibrationTokenRejectionState,
 } from "@/lib/calibration-token-rejection";
@@ -2549,7 +2553,32 @@ export function renderHandwavyEditEntries({
                   }
                 />
               )}
-              {showHistoryTestIds && !entry.category && !entry.rationale && (
+              {/* Task #357 — render rename entries (recorded as `phrase: { from, to }`)
+                  alongside the existing category/rationale diffs. The audit log
+                  previously rendered only the latter two so reviewers couldn't
+                  tell from this panel that a phrase used to be called something
+                  else. The visual style mirrors the category pill swap so the
+                  three change kinds look like siblings. */}
+              {entry.phrase && entry.phrase.from !== entry.phrase.to && (
+                <div
+                  className="flex items-start gap-1 flex-wrap"
+                  data-testid={
+                    showHistoryTestIds ? "handwavy-edit-history-rename" : "handwavy-edit-rename"
+                  }
+                >
+                  <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px] font-semibold mr-1 mt-0.5">
+                    renamed
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-muted/40 text-foreground/70 font-mono text-[10px] break-all">
+                    &ldquo;{entry.phrase.from}&rdquo;
+                  </span>
+                  <ArrowRight className="w-3 h-3 text-muted-foreground/60 mt-1" />
+                  <span className="px-1.5 py-0.5 rounded bg-primary/15 text-primary font-mono text-[10px] break-all">
+                    &ldquo;{entry.phrase.to}&rdquo;
+                  </span>
+                </div>
+              )}
+              {showHistoryTestIds && !entry.category && !entry.rationale && !entry.phrase && (
                 <div className="italic">No tracked field changes recorded.</div>
               )}
             </div>
@@ -7716,6 +7745,12 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               // the removed-history list always agree on what counts as a
               // "flip" and how the badge looks.
               const categoryFlips = getCategoryFlips(editsList);
+              // Task #357 — list of rename entries on the in-row edit history
+              // so a sibling badge can sit next to the category-flip / thrash
+              // badges. The filter + render lives in `HandwavyRenameBadge` so
+              // this list and the removed-history list always agree on what
+              // counts as a rename and how the badge looks.
+              const renameEdits = getRenameEdits(editsList);
               // Task #220 — when a reviewer clicks an entry name in the
               // pre-preview overlap hint we set `highlightedPhrase` to that
               // phrase for ~2.5s so the matching row pulses amber. The
@@ -7856,6 +7891,17 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                        threshold so a one-off correction stays clean. */}
                     <HandwavyCategoryFlipBadge
                       flips={categoryFlips}
+                      testIdPrefix="handwavy"
+                      formatTimestamp={formatAuditTimestamp}
+                    />
+                    {/* Task #357 — rename badge sits next to the
+                       category-flip badge so the audit-trail signal "this
+                       phrase used to be called X" is visible at row level
+                       too, not only inside the per-edit history rows. The
+                       shared `HandwavyRenameBadge` handles the empty-list
+                       guard and tooltip rendering. */}
+                    <HandwavyRenameBadge
+                      renames={renameEdits}
                       testIdPrefix="handwavy"
                       formatTimestamp={formatAuditTimestamp}
                     />
@@ -8521,6 +8567,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     // aggregated, so a partial reinstate still sees
                     // per-phrase churn.
                     const historyCategoryFlips = getCategoryFlips(h.edits);
+                    // Task #357 — same idea for renames: the removed-history
+                    // row mirrors the active-row rename badge so a reviewer
+                    // about to Reinstate sees that the phrase previously had
+                    // a different name. For batch entries this is per-inner-
+                    // phrase (not aggregated across the batch), matching how
+                    // category flips are surfaced.
+                    const historyRenameEdits = getRenameEdits(h.edits);
                     return (
                       <div
                         key={`${h.phrase}-${removedAtKey}-${rowIdx}`}
@@ -8555,6 +8608,18 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                               (not aggregated). */}
                           <HandwavyCategoryFlipBadge
                             flips={historyCategoryFlips}
+                            testIdPrefix="handwavy-history"
+                            formatTimestamp={formatAuditTimestamp}
+                          />
+                          {/* Task #357 — rename badge mirrors the active-row
+                              badge so a reviewer about to Reinstate sees the
+                              "this phrase used to be called X" signal here
+                              too. Render lives in the shared
+                              `HandwavyRenameBadge`; the component handles the
+                              empty-list guard. For batch rows this is per-
+                              inner-phrase (not aggregated). */}
+                          <HandwavyRenameBadge
+                            renames={historyRenameEdits}
                             testIdPrefix="handwavy-history"
                             formatTimestamp={formatAuditTimestamp}
                           />

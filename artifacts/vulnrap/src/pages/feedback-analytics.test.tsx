@@ -300,6 +300,144 @@ describe("renderHandwavyEditEntries — visible no-op hint (Task #241)", () => {
   });
 });
 
+describe("renderHandwavyEditEntries — rename block (Task #357)", () => {
+  // Task #357 surfaces rename entries (recorded as `phrase: { from, to }` on
+  // the per-marker edit log) in the audit panel alongside the existing
+  // category/rationale diffs. These tests pin the visible wording, the test
+  // hooks the E2E spec latches onto, and the "no tracked changes" fallback
+  // so future refactors can't silently drop the rename block.
+
+  function renderEntries(args: Parameters<typeof renderHandwavyEditEntries>[0]) {
+    return render(<ul>{renderHandwavyEditEntries(args)}</ul>);
+  }
+
+  const renameOnlyEntry: HandwavyEditEntry = {
+    editedAt: "2026-04-25T10:00:00.000Z",
+    editedBy: "alice@team.com",
+    phrase: { from: "we plan to look", to: "we plan to investigate" },
+  };
+
+  const combinedRenameEntry: HandwavyEditEntry = {
+    editedAt: "2026-04-26T10:00:00.000Z",
+    editedBy: "bob@team.com",
+    phrase: { from: "we plan to investigate", to: "we plan to dig in" },
+    category: { from: "absence", to: "hedging" },
+  };
+
+  it("renders the previous phrase text and the renamer in the in-row affordance", () => {
+    renderEntries({
+      editsList: [renameOnlyEntry],
+      phrase: "we plan to investigate",
+      currentCategory: "absence",
+      currentRationale: undefined,
+      editing: null,
+      busy: null,
+      onRevertClick: () => {},
+      mutationsAllowed: true,
+    });
+
+    const block = screen.getByTestId("handwavy-edit-rename");
+    expect(block).toBeVisible();
+    // The "from" value (the previous phrase text) MUST be visible so a
+    // reviewer can answer "what was this called before?" without opening
+    // the JSON.
+    expect(block).toHaveTextContent("we plan to look");
+    expect(block).toHaveTextContent("we plan to investigate");
+    expect(block).toHaveTextContent(/renamed/i);
+    // The renamer is surfaced via the existing per-row "By <editedBy>"
+    // header that the renderer already builds for every entry, so the
+    // audit answer "who renamed it?" is visible right next to the rename
+    // block without the renderer having to duplicate the field.
+    const row = block.closest("li");
+    expect(row, "rename block must live in an <li> row").not.toBeNull();
+    expect(within(row!).getByText("alice@team.com")).toBeVisible();
+  });
+
+  it("uses the history-panel test id when showHistoryTestIds is set so the full-history view selector works", () => {
+    // The single-edit <details> uses `handwavy-edit-rename`; the full
+    // chronological history panel uses `handwavy-edit-history-rename`.
+    // Both must surface the rename block, but with their own selectors so
+    // E2E specs can target the expanded view without ambiguity.
+    renderEntries({
+      editsList: [renameOnlyEntry],
+      phrase: "we plan to investigate",
+      currentCategory: "absence",
+      currentRationale: undefined,
+      editing: null,
+      busy: null,
+      onRevertClick: () => {},
+      mutationsAllowed: true,
+      showHistoryTestIds: true,
+    });
+
+    expect(screen.queryByTestId("handwavy-edit-rename")).toBeNull();
+    expect(screen.getByTestId("handwavy-edit-history-rename")).toBeVisible();
+  });
+
+  it("renders the rename block alongside other change kinds when an entry recorded both a rename and a category change", () => {
+    renderEntries({
+      editsList: [combinedRenameEntry],
+      phrase: "we plan to dig in",
+      currentCategory: "hedging",
+      currentRationale: undefined,
+      editing: null,
+      busy: null,
+      onRevertClick: () => {},
+      mutationsAllowed: true,
+    });
+
+    // Both blocks must be present so the reviewer sees the full audit
+    // story for that single edit (renames don't hide category diffs and
+    // vice versa).
+    expect(screen.getByTestId("handwavy-edit-rename")).toBeVisible();
+    expect(screen.getByTestId("handwavy-edit-category")).toBeVisible();
+  });
+
+  it("does NOT render the rename block when only category or rationale changed (the audit log omits `phrase` for those edits)", () => {
+    const noRenameEntry: HandwavyEditEntry = {
+      editedAt: "2026-04-22T10:00:00.000Z",
+      editedBy: "carol@team.com",
+      category: { from: "absence", to: "buzzword" },
+    };
+    renderEntries({
+      editsList: [noRenameEntry],
+      phrase: "we plan to investigate",
+      currentCategory: "buzzword",
+      currentRationale: undefined,
+      editing: null,
+      busy: null,
+      onRevertClick: () => {},
+      mutationsAllowed: true,
+    });
+
+    expect(screen.queryByTestId("handwavy-edit-rename")).toBeNull();
+    expect(screen.queryByTestId("handwavy-edit-history-rename")).toBeNull();
+  });
+
+  it("treats a rename-only entry as a tracked change so the 'No tracked field changes recorded' fallback is suppressed in the history view", () => {
+    // Pre-Task #357 a rename-only entry would have rendered the
+    // "No tracked field changes recorded" fallback (since the renderer
+    // only knew about category and rationale). The new fallback must
+    // also account for `entry.phrase` so a real rename never shows up
+    // as an empty audit row.
+    renderEntries({
+      editsList: [renameOnlyEntry],
+      phrase: "we plan to investigate",
+      currentCategory: "absence",
+      currentRationale: undefined,
+      editing: null,
+      busy: null,
+      onRevertClick: () => {},
+      mutationsAllowed: true,
+      showHistoryTestIds: true,
+    });
+
+    expect(
+      screen.queryByText(/No tracked field changes recorded\./),
+    ).toBeNull();
+  });
+});
+
 describe("computeHandwavyActiveListVersion (Task #246 — invalidation key for the per-row dry-run preview cache)", () => {
   it("returns a stable string for the empty list so callers don't have to special-case undefined", () => {
     expect(computeHandwavyActiveListVersion([])).toBe("0:");
