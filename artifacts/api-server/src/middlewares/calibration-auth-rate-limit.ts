@@ -1,5 +1,6 @@
 import rateLimit, { type RateLimitRequestHandler } from "express-rate-limit";
 import { logger } from "../lib/logger";
+import { reportCalibrationAuthRejection } from "./calibration-auth-brute-force-alert";
 
 // Task #116 — throttle wrong-token attempts on the calibration mutation
 // endpoints. Task #113 added a shared-token gate (require-calibration-auth.ts)
@@ -80,6 +81,13 @@ export function createCalibrationAuthLimiter(
         },
         "calibration auth: wrong-token throttle triggered (429)",
       );
+      reportCalibrationAuthRejection({
+        status: 429,
+        gate: "mutation",
+        route: req.originalUrl,
+        method: req.method,
+        ip: req.ip ?? null,
+      });
       res.status(429).json(throttledMessage);
     },
   });

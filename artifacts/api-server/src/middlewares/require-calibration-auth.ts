@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import type { RateLimitRequestHandler } from "express-rate-limit";
 import { createCalibrationAuthLimiter } from "./calibration-auth-rate-limit";
+import { reportCalibrationAuthRejection } from "./calibration-auth-brute-force-alert";
 import { logger } from "../lib/logger";
 
 // Task #113 — gate every mutation under /feedback/calibration/* behind a
@@ -103,26 +104,11 @@ export function __setCalibrationAuthLimiterForTests(
 const WRONG_TOKEN_MESSAGE =
   "Calibration mutations require a reviewer token. Send the configured token via the X-Calibration-Token header or Authorization: Bearer <token>.";
 
-// Task #213 — emit a structured warn-level log every time the calibration
-// auth gate rejects a request with 401, so an operator can see sustained
-// brute-force probes in the standard pino log stream. The log NEVER
-// includes the presented (wrong) token value — only the request IP, the
-// route, the HTTP method, and which gate variant fired ("mutation" or
-// "strict-read"). The companion 429 log lives in the limiter itself
-// (calibration-auth-rate-limit.ts) so the bucket window/limit can be
-// included in that record.
-//
-// Runbook — to investigate a possible brute-force attempt in production:
-//   1. Filter pino output by the message:
-//        kubectl logs ... | jq 'select(.msg=="calibration auth: wrong-token attempt rejected (401)")'
-//      or for the throttled bucket:
-//        kubectl logs ... | jq 'select(.msg=="calibration auth: wrong-token throttle triggered (429)")'
-//   2. Group by the `ip` field to find the offending source.
-//   3. If the rate is sustained, rotate CALIBRATION_TOKEN and/or block the
-//      IP at the proxy. The 429 records also expose the configured
-//      `windowMs`/`max` so you can confirm the throttle is doing what
-//      you expect before tightening it via
-//      CALIBRATION_AUTH_RATE_LIMIT_{WINDOW_MS,MAX_FAILURES}.
+// Emit a structured warn-level log on every 401 so log-based detection
+// (and the in-process counter in calibration-auth-brute-force-alert.ts)
+// see brute-force probes. The companion 429 log lives in the limiter.
+// See docs/calibration-reviewer-token.md (Brute-force alerts) for the
+// production log-aggregator queries that page on these messages.
 function logWrongTokenRejection(
   req: Request,
   gate: "mutation" | "strict-read",
@@ -140,6 +126,13 @@ function logWrongTokenRejection(
     },
     "calibration auth: wrong-token attempt rejected (401)",
   );
+  reportCalibrationAuthRejection({
+    status: 401,
+    gate,
+    route: req.originalUrl,
+    method: req.method,
+    ip: req.ip ?? null,
+  });
 }
 
 export function requireCalibrationAuth(
