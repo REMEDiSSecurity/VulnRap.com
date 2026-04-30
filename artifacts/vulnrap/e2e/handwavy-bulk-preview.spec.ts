@@ -633,4 +633,174 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       await apiCtx.dispose();
     }
   });
+
+  // Task #258 — when a reviewer drops a phrase from the bulk-remove
+  // preview the corpus + production `validDetectionsLost` figures (and
+  // the red-bordered acknowledgement gate) used to stay frozen at the
+  // ORIGINAL batch's totals. A reviewer who dropped the only high-thrash
+  // phrase from a 2-phrase batch still saw the scary projected-impact
+  // numbers — which trains people to ignore the banner. The drop now
+  // schedules a debounced (~250ms) dry-run re-fetch against the
+  // surviving phrases list; once it lands, the impact figures and the
+  // ack checkbox both refresh. This spec asserts the end-to-end
+  // behaviour: the warning panel demotes from "ack required" to "safe to
+  // proceed" once the only at-risk phrase is dropped, and the per-row
+  // high-thrash badge disappears in the same tick the local
+  // thrashByPhrase map drops the phrase.
+  test("Dropping the only high-thrash phrase re-fetches the dry-run; the impact-warning banner clears and the ack checkbox is no longer required", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const id = randomUUID().replace(/-/g, "").slice(0, 12);
+    const thrashy = `task258 thrashy ${id}`;
+    const fresh = `task258 fresh ${id}`;
+    const phrases = [thrashy, fresh];
+
+    try {
+      // Make `thrashy` carry 2 reinstated history rows so the local
+      // thrashByPhrase map flags it (HIGH_THRASH_MIN = 2). `fresh` is
+      // added once and never cycled.
+      await seedCycles(apiCtx, thrashy, 2, { reviewer: REVIEWER });
+      await addPhrase(apiCtx, fresh, { reviewer: REVIEWER });
+
+      // Mock the dry-run DELETE so we can deterministically control the
+      // before/after `validDetectionsLost` numbers without depending on
+      // real corpus matches for these synthetic phrases. Critical: the
+      // mock branches on the request body's `phrases` length so the
+      // initial 2-phrase preview reports a positive `validDetectionsLost`
+      // (ack required, red banner) and the post-drop 1-phrase re-fetch
+      // reports zero (ack section disappears, panel demotes to amber).
+      // Track every dry-run hit so we can assert the second call really
+      // fired after the drop (otherwise the panel could be hiding the ack
+      // section purely because of an unrelated client-side bug).
+      const dryRunBodies: Array<{ phrases: string[] }> = [];
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrases?: string[] }
+            | undefined;
+          if (!body?.dryRun) {
+            await route.fallback();
+            return;
+          }
+          const requested = body.phrases ?? [];
+          dryRunBodies.push({ phrases: [...requested] });
+          const validLost = requested.length >= 2 ? 3 : 0;
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              dryRun: true,
+              wouldRemove: requested.length,
+              notFound: 0,
+              duplicateInBatch: 0,
+              total: 99,
+              projectedTotal: 99 - requested.length,
+              results: requested.map((raw: string) => ({
+                raw,
+                phrase: raw,
+                removed: true,
+              })),
+              dryRunImpact: {
+                corpus: {
+                  total: validLost > 0 ? 5 : 0,
+                  validDetectionsLost: validLost,
+                  falsePositivesDropped: validLost > 0 ? 2 : 0,
+                  byTier: {
+                    t1Legit: validLost > 0 ? 2 : 0,
+                    t2Borderline: 0,
+                    t3Slop: validLost > 0 ? 1 : 0,
+                    t4Hallucinated: 0,
+                  },
+                  sampleMatches: [],
+                  warning:
+                    validLost > 0
+                      ? "3 legitimate detections would be lost from the curated benchmark"
+                      : null,
+                  corpusSize: 47,
+                },
+                production: null,
+                productionError:
+                  "Production scan unavailable in this synthetic fixture",
+              },
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, phrases);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Pre-conditions for the drop: the high-thrash summary banner
+      // renders (because `thrashy` carries >=2 cycles in the audit log)
+      // AND the validDetectionsLost-driven ack section renders (because
+      // the mocked dry-run reports 3 valid detections lost for the
+      // 2-phrase batch).
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-thrash-summary"),
+      ).toBeVisible();
+      const ack = panel.getByTestId("handwavy-bulk-preview-ack");
+      await expect(ack).toBeVisible();
+      const confirmBtn = panel.getByTestId("handwavy-bulk-preview-confirm");
+      await expect(confirmBtn).toHaveText(/Remove .* anyway/);
+      await expect(confirmBtn).toBeDisabled();
+
+      // The first dry-run was the one fired when the reviewer clicked
+      // "Remove selected" — it carries both phrases in any order.
+      expect(dryRunBodies).toHaveLength(1);
+      expect([...dryRunBodies[0].phrases].sort()).toEqual([...phrases].sort());
+
+      // Open the per-phrase outcomes list and dismiss the only
+      // high-thrash row. The `dropPhraseFromBulkPreview` helper schedules
+      // a ~250ms debounced re-fetch with the surviving 1-phrase list.
+      await panel
+        .getByTestId("handwavy-bulk-preview-results-details")
+        .locator("summary")
+        .click();
+      await panel
+        .locator(
+          `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${thrashy}"]`,
+        )
+        .click();
+
+      // The high-thrash summary banner clears immediately (it's keyed
+      // off the local thrashByPhrase map, not the dry-run response).
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-thrash-summary"),
+      ).toHaveCount(0);
+
+      // After the debounce, the re-fetch hits the mocked DELETE with the
+      // surviving single phrase. Once that response lands the ack
+      // checkbox stops rendering (validDetectionsLost is now 0), the red
+      // ack section is replaced by the green "safe to proceed" copy, and
+      // the confirm button is enabled without any acknowledgement.
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-ack"),
+      ).toHaveCount(0, { timeout: 5_000 });
+      await expect(panel).toContainText(
+        "No legitimate hand-wavy detections would be lost",
+      );
+      await expect(confirmBtn).toBeEnabled();
+      await expect(confirmBtn).toHaveText(/Remove 1 phrase/);
+
+      // The dry-run was actually re-fired with the surviving list — not
+      // simply hidden behind a stale-data check.
+      expect(dryRunBodies.length).toBeGreaterThanOrEqual(2);
+      const lastBody = dryRunBodies[dryRunBodies.length - 1];
+      expect(lastBody.phrases).toEqual([fresh]);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
 });

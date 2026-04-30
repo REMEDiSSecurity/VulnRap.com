@@ -3510,7 +3510,117 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     }
   };
 
+  // Task #258 — track the in-flight debounced re-fetch for the bulk-remove
+  // preview so a per-phrase drop (see `dropPhraseFromBulkPreview` below)
+  // can issue a fresh dry-run against the SURVIVING `requestedPhrases`
+  // list and refresh the corpus / production impact figures shown in the
+  // preview panel. Without this, the `validDetectionsLost` count and the
+  // `requiresAck` red-banner gating both stay frozen at the original
+  // batch's totals — so a reviewer who drops the only high-thrash phrase
+  // from a 5-phrase batch still sees the scary projected-impact warning
+  // and is conditioned to ignore the banner. The ref carries both the
+  // pending debounce timer and the AbortController for the in-flight
+  // request so a fast-typing reviewer dropping multiple phrases (or one
+  // who closes the panel mid-flight) cancels stale requests cleanly.
+  const bulkPreviewRefetchRef = useRef<{
+    timer: ReturnType<typeof setTimeout> | null;
+    controller: AbortController | null;
+  }>({ timer: null, controller: null });
+
+  const cancelBulkPreviewRefetch = () => {
+    const cur = bulkPreviewRefetchRef.current;
+    if (cur.timer) {
+      clearTimeout(cur.timer);
+      cur.timer = null;
+    }
+    if (cur.controller) {
+      cur.controller.abort();
+      cur.controller = null;
+    }
+  };
+
+  // Debounced (~250ms) re-fetch of the bulk-remove dry-run for the given
+  // surviving `phrases` list. Only applies the response if the panel is
+  // still open AND the panel's `requestedPhrases` still matches what we
+  // sent (otherwise a slower in-flight response would clobber a newer
+  // drop). When the dry-run reports zero valid detections lost we also
+  // clear `acknowledged` — the ack checkbox stops rendering anyway, but
+  // resetting the boolean avoids surprise if a future drop re-introduces
+  // an at-risk phrase (today drops only shrink the list, but the explicit
+  // reset documents intent).
+  const scheduleBulkPreviewRefetch = (phrases: string[]) => {
+    cancelBulkPreviewRefetch();
+    const limitOverride =
+      effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ? { productionScanLimit: effectiveProductionScanLimit }
+        : {};
+    bulkPreviewRefetchRef.current.timer = setTimeout(() => {
+      const controller = new AbortController();
+      bulkPreviewRefetchRef.current.timer = null;
+      bulkPreviewRefetchRef.current.controller = controller;
+      removeHandwavyPhrase(
+        { phrases, dryRun: true, ...limitOverride },
+        { signal: controller.signal },
+      )
+        .then((resp) => {
+          if (controller.signal.aborted) return;
+          if (
+            !("dryRun" in resp) ||
+            resp.dryRun !== true ||
+            !("dryRunImpact" in resp)
+          ) {
+            return;
+          }
+          setBulkPreview((prev) => {
+            if (!prev) return prev;
+            // Discard the response if the reviewer dropped (or
+            // re-previewed) a different phrase set after we fired —
+            // applying it would silently re-introduce stale impact
+            // numbers. The next drop's debounce will fire its own
+            // refetch with the correct list.
+            if (
+              prev.requestedPhrases.length !== phrases.length ||
+              !phrases.every((p) => prev.requestedPhrases.includes(p))
+            ) {
+              return prev;
+            }
+            const corpusLost = resp.dryRunImpact.corpus.validDetectionsLost;
+            const productionLost =
+              resp.dryRunImpact.production?.validDetectionsLost ?? 0;
+            const stillRequiresAck = corpusLost + productionLost > 0;
+            return {
+              ...prev,
+              data: resp,
+              acknowledged: stillRequiresAck ? prev.acknowledged : false,
+            };
+          });
+        })
+        .catch((err) => {
+          // Aborts (the reviewer dropped another phrase or closed the
+          // panel) are expected — silently ignore. Leaving the previous
+          // (possibly over-warning) numbers in place on a real network
+          // failure is the safe direction.
+          if (err && (err as { name?: string }).name === "AbortError") return;
+          if (controller.signal.aborted) return;
+        })
+        .finally(() => {
+          if (bulkPreviewRefetchRef.current.controller === controller) {
+            bulkPreviewRefetchRef.current.controller = null;
+          }
+        });
+    }, 250);
+  };
+
+  // Cancel any pending re-fetch on unmount so a stale response can't try
+  // to update state after the page is gone.
+  useEffect(() => {
+    return () => {
+      cancelBulkPreviewRefetch();
+    };
+  }, []);
+
   const cancelBulkPreview = () => {
+    cancelBulkPreviewRefetch();
     setBulkPreview(null);
   };
 
@@ -3530,6 +3640,13 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   // the "selection has changed since this preview was generated" stale
   // warning doesn't fire from the drop itself). Dropping the last phrase
   // closes the panel — same end state as Back out.
+  //
+  // Task #258 — every drop that leaves at least one phrase behind also
+  // schedules a debounced dry-run re-fetch so the corpus and production
+  // `validDetectionsLost` figures (and the red-bordered ack gate) stay
+  // honest. Dropping the last phrase closes the panel; we cancel any
+  // in-flight refetch in that case so a late response can't try to
+  // resurrect it.
   const dropPhraseFromBulkPreview = (phrase: string) => {
     setSelected((prev) => {
       if (!prev.has(phrase)) return prev;
@@ -3537,13 +3654,22 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       next.delete(phrase);
       return next;
     });
+    let scheduledForRefetch: string[] | null = null;
     setBulkPreview((prev) => {
       if (!prev) return prev;
       const remaining = prev.requestedPhrases.filter((p) => p !== phrase);
       if (remaining.length === 0) return null;
       if (remaining.length === prev.requestedPhrases.length) return prev;
+      scheduledForRefetch = remaining;
       return { ...prev, requestedPhrases: remaining };
     });
+    if (scheduledForRefetch) {
+      scheduleBulkPreviewRefetch(scheduledForRefetch);
+    } else {
+      // Either nothing changed, or the panel just closed — make sure no
+      // stale refetch is left in flight either way.
+      cancelBulkPreviewRefetch();
+    }
   };
 
   // Task #154 — confirm the destructive removal straight from the preview
@@ -3554,10 +3680,12 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     if (!bulkPreview) return;
     const phrasesToRemove = bulkPreview.requestedPhrases;
     if (phrasesToRemove.length === 0) {
+      cancelBulkPreviewRefetch();
       setBulkPreview(null);
       return;
     }
     if (bailOnCooldown("Bulk removal")) return;
+    cancelBulkPreviewRefetch();
     setBulkPreview(null);
     await confirmBulkRemove(phrasesToRemove);
   };
@@ -4970,10 +5098,16 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
           // ("Removal preview for N", "X would be removed", the Remove
           // button label, etc.) MUST be recomputed against the current
           // `requestedPhrases` instead of the original dry-run totals.
-          // We don't re-run the dry-run on every drop — the corpus and
-          // production impact figures stay as-shown (worst case, the
-          // ack warning over-warns by counting reports the dropped
-          // phrase contributed to; that's a safe direction to err in).
+          // Task #258 — the corpus + production impact figures (and the
+          // `requiresAck` red-banner gate) are kept honest by a
+          // debounced re-fetch in `dropPhraseFromBulkPreview` that
+          // replaces `bulkPreview.data` with a fresh dry-run scored
+          // against the surviving list, so once a refetch lands the
+          // values below already reflect the current selection. While
+          // the refetch is in flight the counts are recomputed
+          // optimistically from `requestedPhrases` (counts only) and
+          // the dry-run impact stays as the previous response — over-
+          // warning is the safe direction.
           const requestedSet = new Set(bulkPreview.requestedPhrases);
           const visibleResults: HandwavyPhraseBatchRemoveResultEntry[] =
             data.results.filter((r: HandwavyPhraseBatchRemoveResultEntry) =>
