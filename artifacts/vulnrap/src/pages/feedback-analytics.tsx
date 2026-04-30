@@ -1996,6 +1996,19 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     rows: BulkResultRow[];
   };
   const [bulkResults, setBulkResults] = useState<BulkResultsState | null>(null);
+  // Task #237 — symmetric to the per-batch "Undo this batch" affordance
+  // (Task #142), the per-row Trash button now surfaces a one-click "Undo"
+  // banner anchored to the just-removed phrase. We capture the
+  // server-assigned `removedAt` from the single-phrase DELETE response and
+  // hand it back to the existing /reinstate endpoint so the reviewer
+  // doesn't have to scroll into the removal-history panel for a single-
+  // click mistake. The banner replaces itself on each subsequent per-row
+  // remove and clears on successful reinstate or explicit dismiss so it
+  // can't be clicked twice against the same history identifier.
+  const [singleUndo, setSingleUndo] = useState<{
+    phrase: string;
+    removedAt: string;
+  } | null>(null);
   // Task #154 — bulk-removal preview state. Mirrors the CLI `--dry-run` flow:
   // before the destructive DELETE fires we ask the server for a per-phrase
   // outcome breakdown plus the corpus + production impact, so the reviewer
@@ -2507,7 +2520,10 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
     if (bailOnCooldown("Remove phrase")) return;
     setBusy(`rm:${phrase}`);
     try {
-      await removeHandwavyPhrase({ phrase, reviewer: reviewer.trim() || undefined });
+      const resp = await removeHandwavyPhrase({
+        phrase,
+        reviewer: reviewer.trim() || undefined,
+      });
       toast({ title: "Phrase removed", description: `"${phrase}" will no longer trigger the FLAT haircut.` });
       // Drop the now-removed phrase from the selection so the bulk button
       // doesn't carry stale entries forward.
@@ -2517,6 +2533,22 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
         next.delete(phrase);
         return next;
       });
+      // Task #237 — surface the post-Trash Undo banner anchored to the
+      // server-assigned history-row identifier (`historyEntry.removedAt`)
+      // so the reviewer can roll a single mistaken Trash click back without
+      // hunting through the removal-history panel. Mirrors the way Task
+      // #142's "Undo this batch" reads `removedAt` off each per-phrase
+      // DELETE response. Defensive: if the response somehow lacks the
+      // identifier we clear any prior undo state rather than offer a click
+      // that would 404.
+      const removedAtRaw =
+        ("historyEntry" in resp && resp.historyEntry?.removedAt) || undefined;
+      const removedAt = removedAtRaw ? String(removedAtRaw) : undefined;
+      if (removedAt) {
+        setSingleUndo({ phrase, removedAt });
+      } else {
+        setSingleUndo(null);
+      }
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to remove phrase.";
@@ -2525,6 +2557,93 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
       setBusy(null);
     }
   };
+
+  // Task #237 — one-click Undo for the just-completed per-row Trash. Calls
+  // the existing single-phrase reinstate endpoint with the captured
+  // `removedAt` so it behaves identically to the per-row Reinstate button
+  // in the removal-history panel (server pulls the original category and
+  // rationale from the matched history row, no retyping required). On a
+  // 404 we treat the row as already-reinstated elsewhere and clear the
+  // banner — the affordance must not be clickable twice against the same
+  // history identifier.
+  const handleUndoSingleRemove = async () => {
+    if (!singleUndo) return;
+    if (bailOnCooldown("Undo remove")) return;
+    setBusy("single-undo");
+    try {
+      await reinstateHandwavyPhrase({
+        phrase: singleUndo.phrase,
+        removedAt: singleUndo.removedAt,
+        reviewer: reviewer.trim() || undefined,
+      });
+      toast({
+        title: "Phrase reinstated",
+        description: `"${singleUndo.phrase}" is back on the active list.`,
+      });
+      setSingleUndo(null);
+      refresh();
+    } catch (err) {
+      const status = (err as { status?: number } | null)?.status;
+      if (status === 404) {
+        // Already reinstated through some other path (history panel,
+        // batch undo, etc.) — drop the banner so the reviewer doesn't
+        // keep clicking a button that will 404 again.
+        setSingleUndo(null);
+        toast({
+          title: "Already reinstated",
+          description: `"${singleUndo.phrase}" was already reinstated elsewhere.`,
+        });
+        refresh();
+      } else {
+        const msg = err instanceof Error ? err.message : "Failed to reinstate phrase.";
+        toast({ title: "Undo failed", description: msg, variant: "destructive" });
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const dismissSingleUndo = () => {
+    setSingleUndo(null);
+  };
+
+  // Task #237 — defense-in-depth for the post-Trash Undo banner. The
+  // explicit clears (success / dismiss / 404) cover the in-component
+  // paths, but the same phrase can also be reinstated externally — for
+  // example through the per-row Reinstate button in the history panel,
+  // through "Undo this batch" if the row was also part of a bulk
+  // result, or via the CLI in another tab. Once the active-list
+  // refresh shows the phrase is already back, the undo affordance has
+  // nothing left to do, so we drop the banner so it can't be clicked
+  // into a 404. Keyed on the phrase string (not removedAt) because the
+  // active list doesn't carry per-removal identifiers, which is fine:
+  // if the phrase is active, ANY pending undo for it is a no-op.
+  //
+  // Two-phase guard: `handleRemove`'s `refresh()` is asynchronous, so
+  // the very first render after `setSingleUndo({ phrase })` still sees
+  // `phrases` from the pre-removal snapshot (which still contains the
+  // phrase). A naive "clear if active" check would fire that frame
+  // and the banner would never appear. Instead we wait until the
+  // refetch lands and `phrases` confirms the removal (`isActive ===
+  // false`) before arming the auto-clear. After that, any subsequent
+  // re-appearance of the phrase in the active list means an external
+  // reinstate happened and we drop the banner.
+  const undoAbsenceConfirmed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!singleUndo) {
+      undoAbsenceConfirmed.current = null;
+      return;
+    }
+    const isActive = phrases.some((p) => p.phrase === singleUndo.phrase);
+    if (!isActive) {
+      undoAbsenceConfirmed.current = singleUndo.removedAt;
+      return;
+    }
+    if (undoAbsenceConfirmed.current === singleUndo.removedAt) {
+      setSingleUndo(null);
+      undoAbsenceConfirmed.current = null;
+    }
+  }, [phrases, singleUndo]);
 
   // Task #173 — single-phrase removal-impact preview. Issues a
   // `DELETE {phrase, dryRun: true}` (Task #155) and either fires the live
@@ -4579,6 +4698,55 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   Remove anyway
                 </Button>
               </div>
+            </div>
+          );
+        })()}
+        {/* Task #237 — post-Trash Undo banner. Symmetric to Task #142's
+            "Undo this batch" but for a single per-row removal: instead of
+            forcing the reviewer to scroll into the removal-history panel
+            for one mistaken click, we anchor the just-recorded
+            `historyEntry.removedAt` here and let the existing
+            single-phrase reinstate endpoint do the rollback. The banner
+            replaces itself on each subsequent per-row remove and clears
+            on successful reinstate / explicit dismiss / 404 from the
+            server (already-reinstated elsewhere) so it can never be
+            clicked twice against the same history identifier. */}
+        {singleUndo && (() => {
+          const undoBusy = busy === "single-undo";
+          return (
+            <div
+              className="rounded-md border border-border/40 bg-background/40 p-3 flex items-center gap-2 flex-wrap text-xs"
+              data-testid="handwavy-single-undo"
+              data-phrase={singleUndo.phrase}
+              data-removed-at={singleUndo.removedAt}
+            >
+              <span className="font-semibold text-foreground">Phrase removed</span>
+              <span className="font-mono text-foreground/80 break-all flex-1 min-w-[8rem]">
+                {singleUndo.phrase}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-[11px]"
+                onClick={handleUndoSingleRemove}
+                disabled={undoBusy || !mutationsAllowed}
+                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                data-testid="handwavy-single-undo-button"
+                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+              >
+                <Undo2 className="w-3 h-3 mr-1" />
+                {undoBusy ? "Undoing…" : "Undo"}
+              </Button>
+              <button
+                type="button"
+                className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                onClick={dismissSingleUndo}
+                disabled={undoBusy}
+                data-testid="handwavy-single-undo-dismiss"
+              >
+                Dismiss
+              </button>
             </div>
           );
         })()}
