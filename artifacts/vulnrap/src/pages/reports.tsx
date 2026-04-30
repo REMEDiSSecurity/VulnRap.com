@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
+import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { Activity, ArrowUpDown, ChevronDown, Database, ExternalLink, Filter, Search, TrendingUp, X } from "lucide-react";
 
 const PAGE_SIZE = 20;
@@ -203,6 +204,7 @@ export default function Reports() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <DriftFlagsBanner />
       <div className="pb-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl sm:text-3xl font-bold uppercase tracking-tight flex items-center gap-2 glow-text">
