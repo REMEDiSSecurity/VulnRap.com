@@ -117,6 +117,67 @@ describe("appendDatasetCohortSnapshots", () => {
     expect(newRow.sampleDateKey).toBe("2026-04-22");
   });
 
+  // Task #362 — fixtureMean persistence so the dashboard can chart the
+  // (datasetMean − fixtureMean) trend without losing the synthetic side
+  // of the comparison once the run-time summary moves on.
+  it("round-trips the per-tier synthetic-fixture mean alongside the cohort mean", async () => {
+    const ts = "2026-04-22T12:00:00.000Z";
+    await appendDatasetCohortSnapshots(
+      [
+        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 78.3, fixtureMean: 82.1, gap: 24.1 },
+        { tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 58.0, fixtureMean: 61.5, gap: 24.1 },
+        { tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 54.2, fixtureMean: 50.4, gap: 24.1 },
+      ],
+      ts,
+    );
+
+    const file = await readDatasetHistory();
+    const byTier = new Map(file.snapshots.map(s => [s.tier, s] as const));
+    expect(byTier.get("T1_LEGIT")!.fixtureMean).toBe(82.1);
+    expect(byTier.get("T2_BORDERLINE")!.fixtureMean).toBe(61.5);
+    expect(byTier.get("T3_SLOP")!.fixtureMean).toBe(50.4);
+  });
+
+  // The synthetic summary may not include every tier (e.g. T4 is
+  // hallucinated and not part of the dataset cohorts). The route passes
+  // null for those tiers and that null must round-trip cleanly so the
+  // dashboard can treat it as "no delta point" instead of charting a
+  // bogus zero.
+  it("preserves a null fixtureMean (and `undefined` legacy rows) on read", async () => {
+    const ts = "2026-04-22T12:00:00.000Z";
+    await appendDatasetCohortSnapshots(
+      [
+        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 78, fixtureMean: null, gap: 18 },
+      ],
+      ts,
+    );
+    // Simulate a row persisted before the field existed by writing a
+    // legacy-shaped row directly to the file and reading it back.
+    const legacyTs = "2025-01-01T00:00:00.000Z";
+    const legacyRow = {
+      timestamp: legacyTs,
+      tier: "T2_BORDERLINE",
+      label: "borderline",
+      count: 25,
+      compositeMean: 60,
+      gap: 18,
+      // no fixtureMean key at all
+    };
+    const onDisk = await readDatasetHistory();
+    onDisk.snapshots.push(legacyRow as DatasetCohortSnapshot);
+    await fs.writeFile(
+      process.env.DATASET_HISTORY_PATH!,
+      JSON.stringify(onDisk, null, 2),
+      "utf-8",
+    );
+
+    const file = await readDatasetHistory();
+    const t1 = file.snapshots.find(s => s.tier === "T1_LEGIT" && s.timestamp === ts)!;
+    const legacy = file.snapshots.find(s => s.tier === "T2_BORDERLINE")!;
+    expect(t1.fixtureMean).toBeNull();
+    expect(legacy.fixtureMean).toBeUndefined();
+  });
+
   it("caps the persisted history at MAX_SNAPSHOTS rows", async () => {
     // Disable compaction for this test so the seeded "ancient" timestamps
     // don't get rolled into a single daily row before the cap kicks in —
@@ -222,6 +283,36 @@ describe("compactSnapshots", () => {
     // Output is chronologically ordered (aggregated days first, then recent).
     const ts = out.map(s => Date.parse(s.timestamp));
     expect(ts).toEqual([...ts].sort((a, b) => a - b));
+  });
+
+  // Task #362 — fixtureMean rolls up the same way as compositeMean so
+  // the dashboard can chart the dataset-vs-fixture delta on aggregated
+  // (older-than-window) rows too.
+  it("weighted-means fixtureMean across the day's runs and propagates a missing-on-all rows null", () => {
+    const now = new Date("2026-04-22T12:00:00.000Z");
+    const oldDay = new Date(now.getTime() - 60 * DAY_MS);
+    const oldIso = (h: number) =>
+      new Date(Date.UTC(
+        oldDay.getUTCFullYear(), oldDay.getUTCMonth(), oldDay.getUTCDate(), h,
+      )).toISOString();
+
+    const snaps: DatasetCohortSnapshot[] = [
+      // Two T1 runs on the same UTC day with different fixture means but
+      // equal sample counts — straight unweighted mean of the fixture
+      // means.
+      { timestamp: oldIso(2),  tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, fixtureMean: 80, gap: 18 },
+      { timestamp: oldIso(20), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 74, fixtureMean: 84, gap: 18 },
+      // Two T2 runs that lack fixtureMean entirely — stays null on the
+      // rolled-up row instead of being silently turned into 0.
+      { timestamp: oldIso(2),  tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 58, gap: 18 },
+      { timestamp: oldIso(20), tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 60, gap: 18 },
+    ];
+
+    const out = compactSnapshots(snaps, now, 30);
+    const t1 = out.find(s => s.tier === "T1_LEGIT")!;
+    const t2 = out.find(s => s.tier === "T2_BORDERLINE")!;
+    expect(t1.fixtureMean).toBeCloseTo(82, 5);
+    expect(t2.fixtureMean).toBeNull();
   });
 
   it("propagates null compositeMean and gap when no contributing row has a finite value", () => {

@@ -714,6 +714,11 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
     label: string;
     count: number;
     compositeMean: number | null;
+    /**
+     * Task #362 — synthetic-fixture composite mean for the same tier on
+     * the same run, persisted so the dashboard can chart drift over time.
+     */
+    fixtureMean?: number | null;
     gap: number | null;
     sampleDateKey?: string;
   }
@@ -809,6 +814,12 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
         // numeric.
         expect(typeof last.compositeMean).toBe("number");
         expect(last.sampleDateKey).toBe(liveSampleDateKey);
+        // Task #362 — fixtureMean is persisted on every appended row so
+        // the dashboard can reconstruct the (datasetMean − fixtureMean)
+        // delta series over time. Synthetic fixtures always cover the
+        // T1/T2/T3 tiers so this run is guaranteed to produce numeric
+        // values for each cohort.
+        expect(typeof last.fixtureMean).toBe("number");
       }
       // The gap must match across cohort rows of the same run, since it's
       // a per-run statistic repeated on every cohort row.

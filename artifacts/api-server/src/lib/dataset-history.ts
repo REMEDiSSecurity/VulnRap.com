@@ -39,6 +39,17 @@ export interface DatasetCohortSnapshot {
   /** Cohort composite mean (null when the cohort had no samples that run). */
   compositeMean: number | null;
   /**
+   * Task #362 — synthetic-fixture composite mean for the same tier on
+   * the same run. Persisted alongside `compositeMean` so the dashboard
+   * can reconstruct the per-tier dataset-vs-fixture delta series
+   * (datasetMean − fixtureMean) over time without having to join
+   * back into the live /api/test/run summary. Null when the run
+   * didn't produce a synthetic mean for this tier (older deploys may
+   * also leave it `undefined` on rows persisted before this field
+   * existed; consumers must treat both as "no fixture mean").
+   */
+  fixtureMean?: number | null;
+  /**
    * T1−T3 composite mean gap for the run that produced this snapshot.
    * Repeated on every cohort row of that run so the dashboard can chart
    * the gap directly without joining rows. Null when either side is
@@ -226,6 +237,13 @@ export function compactSnapshots(
         // per-run snapshot this stays equal to the original count.
         count: bucket.reduce((a, b) => a + b.count, 0),
         compositeMean: weightedMean(bucket, b => b.compositeMean),
+        // Task #362 — fold the per-tier synthetic-fixture mean across
+        // the day's runs the same way as compositeMean so the dashboard
+        // can reconstruct (datasetMean − fixtureMean) on aggregated
+        // rows. Buckets containing only legacy rows that lack a
+        // fixtureMean produce a null aggregated value (treated as "no
+        // delta point" by the consumer).
+        fixtureMean: weightedMean(bucket, b => b.fixtureMean ?? null),
         // The gap is repeated across cohort rows of the same run, so
         // averaging it weighted by count gives a representative
         // run-day value while still folding multi-run days correctly.

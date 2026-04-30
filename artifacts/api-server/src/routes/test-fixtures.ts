@@ -2923,6 +2923,18 @@ router.get("/test/run", async (req, res) => {
       // the "no rows when dataset isn't mounted" behavior the endpoint
       // promises). Wrapped so a write failure can't break the smoke
       // endpoint, mirroring the archetype-history persistence above.
+      //
+      // Task #362 — also persist the synthetic-fixture composite mean for
+      // each tier so the dashboard can reconstruct the per-tier
+      // dataset-vs-fixture delta series (datasetMean − fixtureMean) over
+      // time. Without this the delta sparkline would only have today's
+      // fixture mean to work with and trends would silently drop the
+      // history side. The synthetic mean is null for tiers the live
+      // summary doesn't include (e.g. T4_HALLUCINATED isn't in the
+      // dataset cohorts so we never persist it here).
+      const fixtureMeanByTier = new Map<string, number>(
+        summary.map(s => [s.tier, s.compositeMean]),
+      );
       try {
         await appendDatasetCohortSnapshots(
           // Task #358 — also persist the live block's `sampleDateKey`
@@ -2933,6 +2945,7 @@ router.get("/test/run", async (req, res) => {
             label: c.label,
             count: c.count,
             compositeMean: c.compositeMean,
+            fixtureMean: fixtureMeanByTier.get(c.tier) ?? null,
             gap: dsGap,
             sampleDateKey: dsDateKey,
           })),

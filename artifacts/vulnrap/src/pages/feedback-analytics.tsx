@@ -12121,6 +12121,27 @@ function DatasetCohortMeansSection() {
     retry: false,
   });
 
+  // Task #362 — pull the persisted cohort-history alongside the live
+  // /api/test/run snapshot so each tile can render a small sparkline of
+  // (datasetMean − fixtureMean) over the last N runs. Reuses the same
+  // query key the standalone DatasetCohortDriftSection does so the two
+  // panels share a single fetch (react-query dedupes by key) and stay
+  // in lock-step on refetch / invalidation. The endpoint 404s in
+  // production and is purely informational, so a fetch error just
+  // means we render the tile without the sparkline (the existing
+  // numeric Δ line is unaffected).
+  const { data: historyData } = useQuery<DatasetHistoryResponse>({
+    queryKey: DATASET_HISTORY_QUERY_KEY,
+    queryFn: async () => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/test/dataset-history`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 300_000,
+    retry: false,
+  });
+
   // Task #255 — track which cohort tiles are expanded so reviewers can
   // drill into the underlying dataset reports behind each cohort mean.
   // Stored as a Set keyed by tier so multiple cohorts can be open at
@@ -12272,6 +12293,18 @@ function DatasetCohortMeansSection() {
     return { tier: c.tier, dsMean: c.compositeMean, fxMean, delta, isDivergent };
   });
   const divergentTiers = tierDeltas.filter(d => d.isDivergent && d.delta != null);
+
+  // Task #362 — index the persisted per-tier delta series so each tile
+  // can render its own sparkline. summarizeDatasetHistory does the
+  // null/legacy-row filtering and (datasetMean − fixtureMean) math, so
+  // the tile rendering stays purely presentational. When the history
+  // endpoint hasn't loaded (or returned no rows for a tier yet), the
+  // tile gets an empty point list and falls back to the "no delta
+  // history" hint inside the sparkline component.
+  const historySummary = summarizeDatasetHistory(historyData);
+  const deltaPointsByTier = new Map<string, DatasetHistorySeriesPoint[]>(
+    historySummary.tiers.map(t => [t.tier, t.deltaPoints]),
+  );
 
   const gapText = ds.gap != null ? `${ds.gap.toFixed(1)}pt` : "n/a";
   const gapColor = ds.gap == null
@@ -12425,6 +12458,24 @@ function DatasetCohortMeansSection() {
                     fixtures {fxMean != null ? fxMean.toFixed(1) : "—"} · {deltaText}
                   </span>
                 </div>
+                {/* Task #362 — per-tier (datasetMean − fixtureMean) trend
+                    sparkline drawn from the persisted dataset-history
+                    file. Sits directly under the numeric Δ line so the
+                    "current" number and the "trend" share one column,
+                    and reuses the warn-threshold colour so the latest
+                    point matches the orange/muted treatment of the line
+                    above. Lets reviewers spot slow drift before |Δ|
+                    crosses the warn threshold without flipping between
+                    runs. */}
+                <div
+                  className="mt-1"
+                  data-testid={`dataset-cohort-fixture-delta-trend-${c.tier}`}
+                >
+                  <DatasetCohortFixtureDeltaSparkline
+                    points={deltaPointsByTier.get(c.tier) ?? []}
+                    isDivergent={isDivergent}
+                  />
+                </div>
                 <div className="mt-0.5 text-[10px] text-muted-foreground/70 tabular-nums">
                   {c.compositeMin != null && c.compositeMax != null
                     ? <>range {c.compositeMin.toFixed(1)}–{c.compositeMax.toFixed(1)}</>
@@ -12501,6 +12552,14 @@ export interface DatasetHistorySnapshot {
   label: string;
   count: number;
   compositeMean: number | null;
+  /**
+   * Task #362 — synthetic-fixture composite mean for the same tier on
+   * the same run, persisted so the dashboard can reconstruct the
+   * dataset-vs-fixture delta over time. Optional because rows
+   * persisted before the field existed (and any future API response
+   * that omits it) must still parse cleanly.
+   */
+  fixtureMean?: number | null;
   gap: number | null;
   /**
    * Task #358 — UTC slice key (YYYY-MM-DD) of the curated cohort that
@@ -12555,6 +12614,15 @@ export interface DatasetHistorySeries {
    * sparkline header with "N rotations" when present.
    */
   rotationCount: number;
+  /**
+   * Task #362 — per-snapshot (datasetMean − fixtureMean) values in
+   * chronological order, filtered to entries where both sides are
+   * finite. Powers the per-tile delta sparkline so reviewers can spot
+   * whether the gap to the synthetic fixtures is widening across runs.
+   */
+  deltaPoints: DatasetHistorySeriesPoint[];
+  /** Latest delta value if any (the rightmost delta point). */
+  latestDelta: number | null;
 }
 
 export interface DatasetHistorySummary {
@@ -12590,6 +12658,15 @@ export function summarizeDatasetHistory(
   const tiers: DatasetHistorySeries[] = DATASET_COHORT_ORDER.map(tier => {
     const snaps = cohortByTier.get(tier) ?? [];
     const points: DatasetHistorySeriesPoint[] = [];
+    // Task #362 — build the per-tier (datasetMean − fixtureMean) series
+    // alongside the composite-mean series. Rows persisted before the
+    // fixtureMean field existed (or runs where the synthetic summary
+    // didn't include the tier) leave fixtureMean null/undefined and we
+    // simply skip them — no delta point is emitted, mirroring how
+    // `points` skips null compositeMean rows. This keeps a sparkline
+    // with mixed legacy + new history honest about how many delta
+    // observations actually exist.
+    const deltaPoints: DatasetHistorySeriesPoint[] = [];
     for (const s of snaps) {
       if (s.compositeMean != null && Number.isFinite(s.compositeMean)) {
         const point: DatasetHistorySeriesPoint = { timestamp: s.timestamp, value: s.compositeMean };
@@ -12597,6 +12674,18 @@ export function summarizeDatasetHistory(
           point.sampleDateKey = s.sampleDateKey;
         }
         points.push(point);
+        // Task #362 — emit a delta point alongside the mean point when
+        // the persisted snapshot carries a finite fixtureMean. Rows
+        // from before the field existed (or runs where the synthetic
+        // summary didn't include the tier) are silently skipped here so
+        // the delta series only contains real observations.
+        const fx = s.fixtureMean;
+        if (fx != null && Number.isFinite(fx)) {
+          deltaPoints.push({
+            timestamp: s.timestamp,
+            value: Number((s.compositeMean - fx).toFixed(1)),
+          });
+        }
       }
     }
     // Task #358 — count adjacent pairs of plottable points whose slice
@@ -12621,6 +12710,8 @@ export function summarizeDatasetHistory(
       latest: points.length > 0 ? points[points.length - 1]!.value : null,
       latestSampleDateKey,
       rotationCount,
+      deltaPoints,
+      latestDelta: deltaPoints.length > 0 ? deltaPoints[deltaPoints.length - 1]!.value : null,
     };
   });
 
@@ -12838,6 +12929,121 @@ function DatasetHistoryMeanSparkline({
         fill={lastFlagged ? "#ef4444" : "#06b6d4"}
         data-testid={lastFlagged ? "dataset-cohort-drift-gap-breach-point" : undefined}
       />
+    </svg>
+  );
+}
+
+/**
+ * Task #362 — compact per-tier (datasetMean − fixtureMean) sparkline that
+ * sits inside each Curated Dataset Cohort Means tile. Shades the band of
+ * "acceptable" deltas (|Δ| ≤ warnThreshold) so reviewers can see a trend
+ * crossing the warn line at a glance, and colours the latest point with
+ * the same orange the tile uses for `isDivergent` so the sparkline reads
+ * consistently with the per-tier delta number above it. Empty / single-
+ * point series fall back to the same italic hint as the cohort-mean
+ * sparkline so the tile layout doesn't shift around.
+ */
+export function DatasetCohortFixtureDeltaSparkline({
+  points,
+  isDivergent,
+  warnThreshold = FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
+}: {
+  points: DatasetHistorySeriesPoint[];
+  isDivergent: boolean;
+  warnThreshold?: number;
+}) {
+  if (points.length === 0) {
+    return (
+      <span
+        className="text-[10px] text-muted-foreground/50 italic"
+        data-testid="dataset-cohort-fixture-delta-sparkline-empty"
+      >
+        no delta history
+      </span>
+    );
+  }
+  if (points.length === 1) {
+    const only = points[0]!.value;
+    return (
+      <span
+        className="text-[10px] text-muted-foreground/50 italic"
+        data-testid="dataset-cohort-fixture-delta-sparkline-single"
+      >
+        1 snapshot · Δ{only >= 0 ? "+" : ""}{only.toFixed(1)}
+      </span>
+    );
+  }
+  const W = 120;
+  const H = 28;
+  const PAD = 3;
+  const ys = points.map(p => p.value);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  // Anchor the y-axis on 0 and keep the warn band visible even when every
+  // observed delta sits inside it. We extend to ±warnThreshold * 1.15 so
+  // the band edges aren't right at the chart edges, then expand further
+  // if any observed delta sits outside that range.
+  const minBand = warnThreshold * 1.15;
+  const yAbs = Math.max(minBand, Math.abs(minY), Math.abs(maxY));
+  const yMin = -yAbs;
+  const yMax = yAbs;
+  const yRange = yMax - yMin;
+  const yFor = (v: number) => PAD + (1 - (v - yMin) / yRange) * (H - 2 * PAD);
+  const xFor = (i: number) => PAD + (i / (points.length - 1)) * (W - 2 * PAD);
+  const coords = points.map((p, i) => `${xFor(i).toFixed(1)},${yFor(p.value).toFixed(1)}`);
+  const lastPt = points[points.length - 1]!;
+  const lastX = xFor(points.length - 1);
+  const lastY = yFor(lastPt.value);
+  // Warn-band rectangle covers ±warnThreshold around the zero line, so
+  // any spike outside that band is visually obvious. Subtle muted fill
+  // so the polyline still reads as the primary signal.
+  const bandTopY = yFor(warnThreshold);
+  const bandBottomY = yFor(-warnThreshold);
+  const zeroY = yFor(0);
+  // Reuse the same orange/muted treatment the tile applies to the
+  // numeric Δ line so the sparkline highlight tracks the warn state.
+  const lastColor = isDivergent ? "#fb923c" : "rgba(148,163,184,0.8)";
+  const lineColor = "rgba(148,163,184,0.6)";
+  const tooltip =
+    `${points.length} snapshots: Δ${ys[0]! >= 0 ? "+" : ""}${ys[0]!.toFixed(1)}`
+    + ` → Δ${lastPt.value >= 0 ? "+" : ""}${lastPt.value.toFixed(1)}`
+    + ` (warn band ±${warnThreshold})`;
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full h-7"
+      role="img"
+      aria-label={tooltip}
+      data-testid="dataset-cohort-fixture-delta-sparkline"
+    >
+      <title>{tooltip}</title>
+      {/* Warn band — shaded ±warnThreshold around zero. */}
+      <rect
+        x={PAD}
+        y={bandTopY}
+        width={W - 2 * PAD}
+        height={Math.max(0, bandBottomY - bandTopY)}
+        fill="rgba(148,163,184,0.10)"
+      />
+      {/* Zero baseline so reviewers can read sign at a glance. */}
+      <line
+        x1={PAD}
+        y1={zeroY}
+        x2={W - PAD}
+        y2={zeroY}
+        stroke="rgba(148,163,184,0.35)"
+        strokeWidth={0.5}
+        strokeDasharray="2 2"
+      />
+      <polyline
+        fill="none"
+        stroke={lineColor}
+        strokeWidth={1.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={coords.join(" ")}
+      />
+      <circle cx={lastX} cy={lastY} r={2} fill={lastColor} />
     </svg>
   );
 }

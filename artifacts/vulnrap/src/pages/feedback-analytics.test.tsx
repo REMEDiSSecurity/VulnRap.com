@@ -12,6 +12,7 @@ import {
   formatRemovePreviewScannedAgo,
   summarizeDatasetHistory,
   computeCohortFixtureDelta,
+  DatasetCohortFixtureDeltaSparkline,
   FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
   COHORT_DELTA_WARN_THRESHOLD_OPTIONS,
   COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY,
@@ -780,6 +781,84 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
     expect(summary.latestGap).toBe(11);
   });
 
+  // Task #362 — per-tier dataset-vs-fixture delta series powering the
+  // new sparkline inside each Curated Dataset Cohort Means tile.
+  it("computes a per-tier deltaPoints series (datasetMean − fixtureMean) chronologically", () => {
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 4,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            // Run 1: dataset 78.3, fixtures 82.1 → Δ −3.8 (rounded to 1dp)
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 78.3, fixtureMean: 82.1, gap: 24 },
+            // Run 2: dataset 80.0, fixtures 79.5 → Δ +0.5
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 80.0, fixtureMean: 79.5, gap: 25 },
+          ],
+        },
+      ],
+    });
+    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    expect(t1.deltaPoints.map(p => p.value)).toEqual([-3.8, 0.5]);
+    expect(t1.deltaPoints.map(p => p.timestamp)).toEqual([
+      "2026-04-22T00:00:00.000Z",
+      "2026-04-23T00:00:00.000Z",
+    ]);
+    expect(t1.latestDelta).toBe(0.5);
+  });
+
+  it("skips delta points when either side is missing or non-finite (legacy/empty rows)", () => {
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 4,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            // Legacy row predating fixtureMean — fixtureMean undefined.
+            { timestamp: "2026-04-20T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 75, gap: 22 },
+            // Run with explicit null fixtureMean (e.g. T4 absent in summary).
+            { timestamp: "2026-04-21T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 76, fixtureMean: null, gap: 22 },
+            // Empty cohort that run — compositeMean null filters it out
+            // before fixtureMean is even consulted.
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 0, compositeMean: null, fixtureMean: 80, gap: null },
+            // NaN fixture mean is treated as missing.
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 77, fixtureMean: Number.NaN, gap: 22 },
+            // Valid pair — only this row produces a delta point.
+            { timestamp: "2026-04-24T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 78, fixtureMean: 80, gap: 22 },
+          ],
+        },
+      ],
+    });
+    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    expect(t1.deltaPoints.map(p => p.value)).toEqual([-2]);
+    expect(t1.latestDelta).toBe(-2);
+    // Mean snapshot count still reflects every row so the "N pts" chip
+    // doesn't lie about the underlying history size.
+    expect(t1.snapshotCount).toBe(5);
+  });
+
+  it("returns empty deltaPoints (and null latestDelta) for tiers with no fixture-mean coverage", () => {
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 1,
+      cohorts: [
+        {
+          tier: "T2_BORDERLINE",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 60, gap: 18 },
+          ],
+        },
+      ],
+    });
+    const t2 = summary.tiers.find(t => t.tier === "T2_BORDERLINE")!;
+    expect(t2.deltaPoints).toEqual([]);
+    expect(t2.latestDelta).toBeNull();
+    // A tier we have no rows for at all also reports no delta points
+    // rather than blowing up.
+    const t3 = summary.tiers.find(t => t.tier === "T3_SLOP")!;
+    expect(t3.deltaPoints).toEqual([]);
+    expect(t3.latestDelta).toBeNull();
+  });
+
   it("sorts the deduped gap series chronologically even when cohorts are received out of order", () => {
     // Defensive: the API sorts cohorts alphabetically (T1, T2, T3) but if
     // a future change ever returned snapshots in a different order, the
@@ -881,6 +960,92 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
     expect(t1.latestSampleDateKey).toBeNull();
     expect(t1.rotationCount).toBe(0);
     expect(summary.latestSampleDateKey).toBeNull();
+  });
+});
+
+describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-fixture drift sparkline)", () => {
+  it("renders the empty-history hint when no points are supplied", () => {
+    render(<DatasetCohortFixtureDeltaSparkline points={[]} isDivergent={false} />);
+    expect(screen.getByTestId("dataset-cohort-fixture-delta-sparkline-empty")).toHaveTextContent(
+      /no delta history/i,
+    );
+  });
+
+  it("renders the single-snapshot hint with a signed delta when only one point is supplied", () => {
+    render(
+      <DatasetCohortFixtureDeltaSparkline
+        points={[{ timestamp: "2026-04-22T00:00:00.000Z", value: -3.8 }]}
+        isDivergent={false}
+      />,
+    );
+    expect(screen.getByTestId("dataset-cohort-fixture-delta-sparkline-single")).toHaveTextContent(
+      /1 snapshot · Δ-3\.8/,
+    );
+  });
+
+  it("draws the sparkline svg with the warn band, polyline, and current point when 2+ points are supplied", () => {
+    render(
+      <DatasetCohortFixtureDeltaSparkline
+        points={[
+          { timestamp: "2026-04-22T00:00:00.000Z", value: -3.8 },
+          { timestamp: "2026-04-23T00:00:00.000Z", value: -1.2 },
+          { timestamp: "2026-04-24T00:00:00.000Z", value: 0.5 },
+        ]}
+        isDivergent={false}
+      />,
+    );
+    const svg = screen.getByTestId("dataset-cohort-fixture-delta-sparkline");
+    // Tooltip exposes the first→last summary so screen-reader users
+    // and hover users get the same actionable info.
+    expect(svg).toHaveAttribute(
+      "aria-label",
+      expect.stringContaining("3 snapshots: Δ-3.8 → Δ+0.5"),
+    );
+    expect(svg).toHaveAttribute("aria-label", expect.stringContaining("warn band ±5"));
+    // Warn band rect + zero baseline + polyline + current-point circle
+    // all need to be present so the visual contract from the task spec
+    // ("shades the band around 0 and highlights the current point") is
+    // covered by a structural assertion.
+    expect(svg.querySelector("rect")).not.toBeNull();
+    expect(svg.querySelectorAll("line").length).toBeGreaterThanOrEqual(1);
+    const polyline = svg.querySelector("polyline");
+    expect(polyline).not.toBeNull();
+    // Polyline should have one coordinate pair per supplied point.
+    expect(polyline!.getAttribute("points")!.trim().split(/\s+/).length).toBe(3);
+    expect(svg.querySelector("circle")).not.toBeNull();
+  });
+
+  it("colours the current point with the divergent treatment when the tile is in warn state", () => {
+    const { rerender } = render(
+      <DatasetCohortFixtureDeltaSparkline
+        points={[
+          { timestamp: "2026-04-22T00:00:00.000Z", value: 1 },
+          { timestamp: "2026-04-23T00:00:00.000Z", value: 6.5 },
+        ]}
+        isDivergent={true}
+      />,
+    );
+    const divergentSvg = screen.getByTestId("dataset-cohort-fixture-delta-sparkline");
+    const divergentFill = divergentSvg.querySelector("circle")!.getAttribute("fill");
+    rerender(
+      <DatasetCohortFixtureDeltaSparkline
+        points={[
+          { timestamp: "2026-04-22T00:00:00.000Z", value: 1 },
+          { timestamp: "2026-04-23T00:00:00.000Z", value: 2 },
+        ]}
+        isDivergent={false}
+      />,
+    );
+    const calmFill = screen
+      .getByTestId("dataset-cohort-fixture-delta-sparkline")
+      .querySelector("circle")!
+      .getAttribute("fill");
+    // The actual colour values are an implementation detail; what
+    // matters is that the divergent and calm states render different
+    // fills so the sparkline tracks the same warn treatment as the
+    // tile's numeric Δ line above it.
+    expect(divergentFill).not.toBe(calmFill);
+    expect(divergentFill).toBeTruthy();
   });
 });
 
