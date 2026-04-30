@@ -5,7 +5,12 @@
 import { describe, it, expect } from "vitest";
 import { __testing } from "./calibration";
 
-const { scoreProductionRows, productionLabelToTier, PRODUCTION_PREVIEW_LIMIT } = __testing;
+const {
+  scoreProductionRows,
+  productionLabelToTier,
+  PRODUCTION_PREVIEW_LIMIT,
+  computeRemovalImpactOnRows,
+} = __testing;
 
 describe("productionLabelToTier", () => {
   it("maps STRONG/PROMISING to T1_LEGIT", () => {
@@ -163,5 +168,54 @@ describe("scoreProductionRows", () => {
 
   it("PRODUCTION_PREVIEW_LIMIT is set to a bounded value so the route stays fast", () => {
     expect(PRODUCTION_PREVIEW_LIMIT).toBe(2000);
+  });
+});
+
+// Task #323 — verify the addressable-archive total threads through the
+// shared removal-impact computer untouched. The route handler counts the
+// label-bearing archive separately from the limited recent slice, then
+// passes the total in via the new `archiveTotal` parameter so the UI can
+// surface a coverage-gap banner. Curated callers omit it (the corpus IS
+// the full fixture set, not a sample), so the field stays null there.
+describe("computeRemovalImpactOnRows archiveTotal threading", () => {
+  const rows = [
+    { id: "1", tier: "T3_SLOP" as const, text: "obvious slop phrase" },
+    { id: "2", tier: "T1_LEGIT" as const, text: "alpha beta" },
+  ];
+
+  it("propagates the supplied archiveTotal verbatim to the production block", () => {
+    const out = computeRemovalImpactOnRows(
+      ["obvious slop"],
+      [],
+      rows,
+      "the most recent 2 production reports",
+      8400,
+    );
+    expect(out.archiveTotal).toBe(8400);
+    // Sanity: the existing fields are unaffected by the new parameter.
+    expect(out.corpusSize).toBe(2);
+    expect(out.validDetectionsLost).toBe(1);
+  });
+
+  it("defaults archiveTotal to null when omitted (curated benchmark caller)", () => {
+    const out = computeRemovalImpactOnRows(
+      ["obvious slop"],
+      [],
+      rows,
+      "the curated benchmark corpus",
+    );
+    expect(out.archiveTotal).toBeNull();
+  });
+
+  it("preserves archiveTotal even on a no-op removal (nothing to remove)", () => {
+    const out = computeRemovalImpactOnRows(
+      [],
+      ["alpha"],
+      rows,
+      "the most recent 2 production reports",
+      100,
+    );
+    expect(out.archiveTotal).toBe(100);
+    expect(out.validDetectionsLost).toBe(0);
   });
 });

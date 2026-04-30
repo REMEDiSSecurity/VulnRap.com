@@ -6626,6 +6626,12 @@ export const RemoveHandwavyPhraseResponse = zod.union([
               .describe(
                 "Task #218 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
               ),
+            archiveTotal: zod
+              .number()
+              .nullable()
+              .describe(
+                'Task #323 — For production scans, the total number of label-bearing\narchived reports (i.e. the addressable population the chosen scan\nwindow is applied to, NOT just the `corpusSize` returned by the\ntier-filter). Reported alongside the response\'s `productionLimit`\nso the bulk-removal preview can warn when a reviewer-tightened\nscan window covers only a small slice of the archive (e.g.\n\"scanning 100 of ~8,400 archived reports — recent reporter\nbehavior only\"). Null on the curated benchmark block (the corpus\nis the full fixture set, not a sample) and when the production\nscan was skipped because nothing would be removed.\n',
+              ),
           })
           .describe(
             "Task #145 — projected impact of a bulk removal against a single\ncorpus (curated benchmark fixtures or recent production reports).\n`total` counts fixtures that are flagged today but would NOT be\nflagged after the removal, broken down by tier. `validDetectionsLost`\nis `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).\n`falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`\n(informational good news). `warning` is set when valid detections\nwould be lost; null otherwise.\n",
@@ -6667,6 +6673,12 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                   .nullable()
                   .describe(
                     "Task #218 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+                  ),
+                archiveTotal: zod
+                  .number()
+                  .nullable()
+                  .describe(
+                    'Task #323 — For production scans, the total number of label-bearing\narchived reports (i.e. the addressable population the chosen scan\nwindow is applied to, NOT just the `corpusSize` returned by the\ntier-filter). Reported alongside the response\'s `productionLimit`\nso the bulk-removal preview can warn when a reviewer-tightened\nscan window covers only a small slice of the archive (e.g.\n\"scanning 100 of ~8,400 archived reports — recent reporter\nbehavior only\"). Null on the curated benchmark block (the corpus\nis the full fixture set, not a sample) and when the production\nscan was skipped because nothing would be removed.\n',
                   ),
               })
               .describe(
@@ -6858,6 +6870,12 @@ export const RemoveHandwavyPhraseResponse = zod.union([
               .describe(
                 "Task #218 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
               ),
+            archiveTotal: zod
+              .number()
+              .nullable()
+              .describe(
+                'Task #323 — For production scans, the total number of label-bearing\narchived reports (i.e. the addressable population the chosen scan\nwindow is applied to, NOT just the `corpusSize` returned by the\ntier-filter). Reported alongside the response\'s `productionLimit`\nso the bulk-removal preview can warn when a reviewer-tightened\nscan window covers only a small slice of the archive (e.g.\n\"scanning 100 of ~8,400 archived reports — recent reporter\nbehavior only\"). Null on the curated benchmark block (the corpus\nis the full fixture set, not a sample) and when the production\nscan was skipped because nothing would be removed.\n',
+              ),
           })
           .describe(
             "Task #145 — projected impact of a bulk removal against a single\ncorpus (curated benchmark fixtures or recent production reports).\n`total` counts fixtures that are flagged today but would NOT be\nflagged after the removal, broken down by tier. `validDetectionsLost`\nis `byTier.t3Slop + byTier.t4Hallucinated` (the worrying number).\n`falsePositivesDropped` is `byTier.t1Legit + byTier.t2Borderline`\n(informational good news). `warning` is set when valid detections\nwould be lost; null otherwise.\n",
@@ -6899,6 +6917,12 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                   .nullable()
                   .describe(
                     "Task #218 — For production scans, the most recent `createdAt` among the\nrows actually included in the scanned sample. See `oldestCreatedAt` for\ndetails. Null on the curated benchmark block and when the scan was empty.\n",
+                  ),
+                archiveTotal: zod
+                  .number()
+                  .nullable()
+                  .describe(
+                    'Task #323 — For production scans, the total number of label-bearing\narchived reports (i.e. the addressable population the chosen scan\nwindow is applied to, NOT just the `corpusSize` returned by the\ntier-filter). Reported alongside the response\'s `productionLimit`\nso the bulk-removal preview can warn when a reviewer-tightened\nscan window covers only a small slice of the archive (e.g.\n\"scanning 100 of ~8,400 archived reports — recent reporter\nbehavior only\"). Null on the curated benchmark block (the corpus\nis the full fixture set, not a sample) and when the production\nscan was skipped because nothing would be removed.\n',
                   ),
               })
               .describe(

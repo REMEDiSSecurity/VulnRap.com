@@ -342,6 +342,15 @@ interface RemovalImpact {
   // a wall-clock timestamp).
   oldestCreatedAt: string | null;
   newestCreatedAt: string | null;
+  // Task #323 — for production scans, the total number of label-bearing
+  // archived reports (i.e. the addressable population the scan limit is
+  // applied to). Reported alongside the chosen `productionLimit` so the UI
+  // can surface a coverage-gap warning when a reviewer-tightened scan window
+  // covers only a small slice of the archive (e.g. "scanning 100 of ~8,400
+  // archived reports — recent reporter behavior only"). Null on the curated
+  // benchmark block (the corpus is the full fixture set, not a sample) and
+  // when the production scan was skipped because nothing would be removed.
+  archiveTotal: number | null;
 }
 
 function fixtureMatchesAny(haystackNormalized: string, phrases: Iterable<string>): boolean {
@@ -367,6 +376,12 @@ function computeRemovalImpactOnRows(
     createdAt?: Date | string | null;
   }>,
   contextLabel: string,
+  // Task #323 — for production callers, the total number of label-bearing
+  // archived reports (the addressable population, not just the scanned
+  // window). Threaded through unchanged when supplied so the response can
+  // expose a "scanning N of ~M" coverage figure for the UI banner. Null for
+  // the curated benchmark caller (the corpus is the full fixture set).
+  archiveTotal: number | null = null,
 ): RemovalImpact {
   const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
   const sampleMatches: Array<{ id: string; tier: CorpusTier }> = [];
@@ -419,6 +434,7 @@ function computeRemovalImpactOnRows(
     warning,
     oldestCreatedAt: oldestMs === null ? null : new Date(oldestMs).toISOString(),
     newestCreatedAt: newestMs === null ? null : new Date(newestMs).toISOString(),
+    archiveTotal,
   };
 }
 
@@ -444,24 +460,37 @@ async function previewRemovalAgainstProduction(
   remainingPhrases: string[],
   limit: number = PRODUCTION_PREVIEW_LIMIT,
 ): Promise<RemovalImpact> {
-  const rows = await db
-    .select({
-      id: reportsTable.id,
-      label: reportsTable.vulnrapCompositeLabel,
-      contentText: reportsTable.contentText,
-      // Task #218 — pull createdAt so the bulk-removal preview can surface
-      // the same date range as the add-time preview (Task #124).
-      createdAt: reportsTable.createdAt,
-    })
-    .from(reportsTable)
-    .where(
-      and(
-        isNotNull(reportsTable.vulnrapCompositeLabel),
-        isNotNull(reportsTable.contentText),
-      ),
-    )
-    .orderBy(sql`${reportsTable.createdAt} DESC`)
-    .limit(limit);
+  // Task #323 — fetch the limited recent slice and the total addressable
+  // archive size (rows matching the same label+content filter, no limit) in
+  // parallel. The total is surfaced through `archiveTotal` so the UI can
+  // warn when a reviewer-tightened scan window covers only a small slice of
+  // the archive (e.g. 100 of ~8,400). One round-trip cost added per
+  // dry-run; the count uses the same WHERE clause so any future filter
+  // changes stay in lockstep.
+  const archiveFilter = and(
+    isNotNull(reportsTable.vulnrapCompositeLabel),
+    isNotNull(reportsTable.contentText),
+  );
+  const [rows, archiveCountRows] = await Promise.all([
+    db
+      .select({
+        id: reportsTable.id,
+        label: reportsTable.vulnrapCompositeLabel,
+        contentText: reportsTable.contentText,
+        // Task #218 — pull createdAt so the bulk-removal preview can surface
+        // the same date range as the add-time preview (Task #124).
+        createdAt: reportsTable.createdAt,
+      })
+      .from(reportsTable)
+      .where(archiveFilter)
+      .orderBy(sql`${reportsTable.createdAt} DESC`)
+      .limit(limit),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reportsTable)
+      .where(archiveFilter),
+  ]);
+  const archiveTotal = Number(archiveCountRows[0]?.count ?? 0);
   const tiered: Array<{
     id: string;
     tier: CorpusTier;
@@ -483,6 +512,7 @@ async function previewRemovalAgainstProduction(
     remainingPhrases,
     tiered,
     `the most recent ${tiered.length} production reports`,
+    archiveTotal,
   );
 }
 
@@ -1805,6 +1835,10 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
             // report; mirrors `scoreProductionRows` for a zero-row scan.
             oldestCreatedAt: null,
             newestCreatedAt: null,
+            // Task #323 — same rationale: a skipped scan has no archive count
+            // to report, and there is no impact for the coverage banner to
+            // qualify anyway.
+            archiveTotal: null,
           };
         } else {
           try {
@@ -1905,6 +1939,10 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
           // report; mirrors `scoreProductionRows` for a zero-row scan.
           oldestCreatedAt: null,
           newestCreatedAt: null,
+          // Task #323 — same rationale: a skipped scan has no archive count
+          // to report, and there is no impact for the coverage banner to
+          // qualify anyway.
+          archiveTotal: null,
         };
       } else {
         try {

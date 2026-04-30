@@ -1776,6 +1776,15 @@ function BulkRemovalImpactBlock({
   // Defaults to `false` so the batch-confirm flow (the original caller)
   // keeps its existing affordance unchanged.
   hideSampleMatchesDetails = false,
+  // Task #323 — the chosen production-scan window (from the dry-run
+  // response's `dryRunImpact.productionLimit`). Combined with the response's
+  // `archiveTotal` it powers the coverage-gap banner: when a reviewer
+  // tightens the window so far that the scan covers only a small slice of
+  // the addressable archive, we surface a subtle inline note inside the
+  // production block warning that the un-flag count below is built on a
+  // weaker recent-only signal. Only consulted on the production block;
+  // the curated benchmark caller can omit it.
+  productionLimit,
 }: {
   kind: "curated" | "production";
   title: string;
@@ -1783,6 +1792,7 @@ function BulkRemovalImpactBlock({
   impact: HandwavyPhraseBatchRemoveDryRunImpact;
   emptyHint: string;
   hideSampleMatchesDetails?: boolean;
+  productionLimit?: number | null;
 }) {
   const lost = impact.validDetectionsLost;
   const dropped = impact.falsePositivesDropped;
@@ -1795,6 +1805,24 @@ function BulkRemovalImpactBlock({
     impact.oldestCreatedAt,
     impact.newestCreatedAt,
   );
+  // Task #323 — coverage-gap notice. The bulk-removal toolbar lets reviewers
+  // pick any production-scan window between 100 and 10,000. A reviewer who
+  // tightens the window to 100 to "see fewer matches" may not realize they
+  // are looking at a much weaker signal: the un-flag tally below only
+  // reflects the most recent N reports, not the ~M-strong archive a
+  // proceed-to-delete would actually touch. We surface a subtle banner
+  // when the chosen window covers MATERIALLY less than the archive (≤50%)
+  // so the trade-off is explicit right next to the production count it
+  // qualifies. Only rendered on the production block, only when the
+  // server returned both an `archiveTotal` and a `productionLimit`, and
+  // only when the gap is large enough to matter (skipping the noise on
+  // small installs whose archive fits inside the chosen window).
+  const showCoverageGap =
+    kind === "production" &&
+    impact.archiveTotal != null &&
+    productionLimit != null &&
+    impact.archiveTotal > productionLimit &&
+    productionLimit * 2 <= impact.archiveTotal;
   return (
     <div
       className={cn(
@@ -1820,6 +1848,20 @@ function BulkRemovalImpactBlock({
         >
           Scanned {impact.corpusSize} {sourceNoun}
           {impact.corpusSize === 1 ? "" : "s"} {scanRange}
+        </div>
+      )}
+      {showCoverageGap && (
+        <div
+          className="flex items-start gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200"
+          data-testid="handwavy-bulk-preview-production-coverage-gap"
+        >
+          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
+          <span>
+            Scanning {productionLimit!.toLocaleString()} of ~
+            {impact.archiveTotal!.toLocaleString()} archived reports — recent
+            reporter behavior only. Older reports are not in this preview and
+            could still be un-flagged by the bulk removal.
+          </span>
         </div>
       )}
       {impact.warning ? (
@@ -5772,6 +5814,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   }
                   impact={production}
                   emptyHint="No production detections would be lost"
+                  productionLimit={productionLimit}
                 />
               ) : (
                 <div
@@ -6107,6 +6150,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     impact={production}
                     emptyHint="No production detections would be lost"
                     hideSampleMatchesDetails
+                    productionLimit={productionLimit}
                   />
                 ) : (
                   <div
@@ -6327,6 +6371,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     }
                     impact={production}
                     emptyHint="No production detections would be lost"
+                    productionLimit={productionLimit}
                   />
                 ) : (
                   <div

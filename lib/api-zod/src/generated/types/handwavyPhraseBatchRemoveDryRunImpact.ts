@@ -43,4 +43,16 @@ rows actually included in the scanned sample. See `oldestCreatedAt` for
 details. Null on the curated benchmark block and when the scan was empty.
  */
   newestCreatedAt: Date | null;
+  /** Task #323 — For production scans, the total number of label-bearing
+archived reports (i.e. the addressable population the chosen scan
+window is applied to, NOT just the `corpusSize` returned by the
+tier-filter). Reported alongside the response's `productionLimit`
+so the bulk-removal preview can warn when a reviewer-tightened
+scan window covers only a small slice of the archive (e.g.
+"scanning 100 of ~8,400 archived reports — recent reporter
+behavior only"). Null on the curated benchmark block (the corpus
+is the full fixture set, not a sample) and when the production
+scan was skipped because nothing would be removed.
+ */
+  archiveTotal: number | null;
 }
