@@ -5338,6 +5338,39 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               </span>
             )}
           </div>
+          {/* Task #326 — reviewer cheat-sheet for the shared production-scan
+              window: shared scope across all production-archive previews,
+              the {MIN}..{MAX} bounds with a {DEFAULT} fallback, and the
+              one-time migration from the pre-#230 legacy localStorage key. */}
+          <div
+            className="rounded-md border border-border/40 bg-background/30 p-2 text-[11px] text-muted-foreground/80 space-y-1"
+            data-testid="handwavy-production-scan-limit-help"
+          >
+            <div className="font-semibold text-muted-foreground">
+              About the production scan window
+            </div>
+            <ul className="list-disc list-outside pl-4 space-y-0.5">
+              <li>
+                One shared preference — the number you pick here is reused by
+                every production-archive preview on this page (add-phrase,
+                single-phrase removal, and bulk-removal). Changing it in one
+                place re-tunes them all.
+              </li>
+              <li>
+                Accepts {CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
+                {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX} reports. Leaving the
+                field blank or out of range falls back to the default of{" "}
+                {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT}.
+              </li>
+              <li>
+                Migrated from the pre-#230 per-tool key — any value you saved
+                under the old <code className="font-mono text-[10px]">vulnrap.handwavy.productionScanLimit</code>{" "}
+                localStorage entry is copied over to{" "}
+                <code className="font-mono text-[10px]">vulnrap.calibration.productionScanLimit</code>{" "}
+                on first load, so no re-entry is needed.
+              </li>
+            </ul>
+          </div>
         </form>
         {/* Task #129 — pre-preview overlap hint. Surfaces inline as the
             reviewer types the candidate, *before* they click "Preview impact",
