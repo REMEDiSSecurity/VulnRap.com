@@ -76,3 +76,6 @@ artifacts/api-server/artifacts/
 
 # Runtime state (curated defaults live in DEFAULT_MARKERS in code; reviewers mutate this at runtime via /feedback/calibration/handwavy-phrases)
 artifacts/api-server/data/handwavy-phrases.json
+
+# Runtime state (per-IP cooldown timestamps for the calibration-auth brute-force alerter; safe to delete to clear cooldown)
+artifacts/api-server/data/calibration-auth-brute-force-state.json
