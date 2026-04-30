@@ -73,7 +73,10 @@ export default function Transparency() {
   });
 
   const { data: visitors, isLoading: visitorsLoading } = useGetVisitorStats({
-    query: { queryKey: getGetVisitorStatsQueryKey(), refetchInterval: 60_000 },
+    query: {
+      queryKey: getGetVisitorStatsQueryKey(),
+      refetchInterval: import.meta.env.DEV ? false : 60_000,
+    },
   });
 
   const loading = trendsLoading || statsLoading;
