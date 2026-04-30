@@ -682,6 +682,11 @@ function AvriFamilySection({
   const goldTotalCount = e2Avri?.goldTotalCount ?? goldHits.length + goldMisses.length;
   const crashTrace = e2Avri?.crashTrace ?? null;
   const rawHttp = e2Avri?.rawHttp ?? null;
+  // Task #428 — surface the Task #300 AI self-disclosure detector output
+  // (matched phrases + applied penalty) so reviewers can see *which* phrase
+  // fired without dropping into the JSON. Optional on the Engine 2 block —
+  // legacy reports analyzed before the detector shipped won't carry it.
+  const aiSelfDisclosure = e2Avri?.aiSelfDisclosure ?? null;
   // Sprint 11 / Task 85: the same stripped-trace validator runs for both
   // MEMORY_CORRUPTION (crash traces) and RACE_CONCURRENCY (TSan/Helgrind/DRD
   // tool traces). Pick wording that reads naturally for whichever family
@@ -1103,6 +1108,58 @@ function AvriFamilySection({
               </div>
             )}
           </>
+        )}
+
+        {/*
+          Task #428 — surface the Task #300 AI self-disclosure detector
+          output (e.g. "prepared using an AI security assistant") inline in
+          the AVRI rubric block. Reviewers previously could only see the
+          deduction in the engine note; now each matched phrase, its
+          detector id, and the applied penalty render alongside the other
+          out-of-cap penalty rows. Lives OUTSIDE the FLAT/non-FLAT ternary
+          so a FLAT report (no specific CWE family detected) that openly
+          attributes itself to an AI assistant still surfaces the evidence;
+          the detector runs against the whole body irrespective of family.
+          Renders only when `aiSelfDisclosure?.detected` is true so
+          legitimate reports stay uncluttered.
+        */}
+        {aiSelfDisclosure?.detected && (
+          <div
+            className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 space-y-2"
+            data-testid="ai-self-disclosure-block"
+          >
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 h-5 font-mono text-amber-400 border-amber-500/40"
+              >
+                AI_SELF_DISCLOSURE
+              </Badge>
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                AI self-disclosure penalty ({aiSelfDisclosure.penalty})
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-300/90 leading-relaxed">
+              {aiSelfDisclosure.matches.length} phrase
+              {aiSelfDisclosure.matches.length === 1 ? "" : "s"} openly
+              attributing this report to an AI assistant fired against the
+              body. The penalty is bounded — see the engine note for the
+              applied amount.
+            </p>
+            <ul className="space-y-1.5">
+              {aiSelfDisclosure.matches.map((m, i) => (
+                <li
+                  key={`${m.id}-${i}`}
+                  className="text-[11px] font-mono space-y-0.5"
+                >
+                  <div className="text-foreground/80 leading-snug">
+                    “{m.excerpt}”
+                  </div>
+                  <div className="text-muted-foreground">({m.id})</div>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {(matchingOverrides.length > 0 ||
