@@ -10772,6 +10772,67 @@ function HeadroomSparkline({ snapshots, ceiling }: {
   );
 }
 
+// Task #405 — tiny inline bar sparkline for the recent compaction-pass
+// removed-counts. Caller already gates on >= 2 runs (matching the comma
+// list this sits next to / replaces visually), but we double-check
+// internally so it can't render an empty/degenerate <svg>. The exact
+// values stay reachable via the parent <span>'s `title` tooltip — see
+// the call site for that wiring. Bars are preferred over a polyline
+// here because most runs remove zero snapshots and only the occasional
+// pass has a spike; bars make those spikes pop without drawing a
+// misleading "trend line" through the floor.
+export function CompactionRollupsSparkline({
+  runs,
+}: {
+  runs: { at: string; removed: number }[];
+}) {
+  if (runs.length < 2) return null;
+  const W = 80;
+  const H = 14;
+  const PAD = 1;
+  const innerW = W - 2 * PAD;
+  const innerH = H - 2 * PAD;
+  const max = Math.max(...runs.map(r => r.removed), 0);
+  // gap is a fixed 1px sliver between bars; bar width fills the rest.
+  const gap = runs.length > 1 ? 1 : 0;
+  const barW = Math.max(0.75, (innerW - gap * (runs.length - 1)) / runs.length);
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="inline-block w-20 h-3.5 align-[-2px]"
+      aria-hidden="true"
+      preserveAspectRatio="none"
+    >
+      <line
+        x1={PAD}
+        y1={H - PAD}
+        x2={W - PAD}
+        y2={H - PAD}
+        stroke="rgba(255,255,255,0.08)"
+        strokeWidth={0.5}
+      />
+      {runs.map((r, i) => {
+        const x = PAD + i * (barW + gap);
+        // When every run removed 0, render a 1px floor tick per slot so
+        // reviewers can still see the sample count rather than a blank
+        // strip. When max > 0 but this bar is 0, render the same tick.
+        const h = max === 0 ? 1 : Math.max(1, (r.removed / max) * innerH);
+        const y = PAD + (innerH - h);
+        return (
+          <rect
+            key={`${r.at}-${i}`}
+            x={x}
+            y={y}
+            width={barW}
+            height={h}
+            fill={r.removed === 0 ? "rgba(148,163,184,0.35)" : "rgb(148,163,184)"}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
 const ARCHETYPE_LABELS: Record<string, string> = {
   fabricated_diff: "Fabricated diff",
   paraphrased_cve: "Paraphrased CVE",
@@ -12466,19 +12527,21 @@ function EmergingArchetypesSection() {
               </span>
             )}
             {/* Task #289 — recent compaction-pass cadence, oldest -> newest.
-                Hidden when there's only one entry (the line above covers it). */}
+                Hidden when there's only one entry (the line above covers it).
+                Task #405 — render the cadence as a tiny inline bar
+                sparkline so trend pops at a glance; the exact removed
+                counts stay reachable via the parent span's `title`
+                tooltip (same gating as the prior comma list). */}
             {configData.lastCompaction
               && configData.lastCompaction.recentRuns.length >= 2 && (
                 <span
-                  className="basis-full text-muted-foreground/60"
-                  title={`Removed counts from the last ${configData.lastCompaction.recentRuns.length} compaction passes (oldest first).`}
+                  className="basis-full text-muted-foreground/60 inline-flex items-center gap-2"
+                  title={`Removed counts from the last ${configData.lastCompaction.recentRuns.length} compaction passes (oldest first): ${configData.lastCompaction.recentRuns.map(r => r.removed).join(", ")}`}
                 >
-                  Recent rollups:{" "}
-                  <span className="font-mono text-foreground/70 tabular-nums">
-                    {configData.lastCompaction.recentRuns
-                      .map(r => r.removed)
-                      .join(", ")}
-                  </span>
+                  Recent rollups:
+                  <CompactionRollupsSparkline
+                    runs={configData.lastCompaction.recentRuns}
+                  />
                 </span>
               )}
             {/* Task #288 — surface the persisted history file's on-disk
