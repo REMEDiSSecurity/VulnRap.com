@@ -10137,7 +10137,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   );
 }
 
-interface ArchetypeFixture {
+export interface ArchetypeFixture {
   id: string;
   tier: string;
   composite: number;
@@ -10148,7 +10148,7 @@ interface ArchetypeFixture {
   passed: boolean;
 }
 
-interface ArchetypeRow {
+export interface ArchetypeRow {
   archetype: string;
   count: number;
   avriOnMean: number;
@@ -10359,7 +10359,7 @@ const ARCHETYPE_LABELS: Record<string, string> = {
   prose_poc: "Prose PoC",
 };
 
-function ArchetypeRowView({
+export function ArchetypeRowView({
   row,
   threshold,
   history,
