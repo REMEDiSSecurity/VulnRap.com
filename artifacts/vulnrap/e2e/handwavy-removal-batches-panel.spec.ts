@@ -167,4 +167,105 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       await apiCtx.dispose();
     }
   });
+
+  // Task #242 — when one or more phrases in a batch were re-added (or have
+  // a newer removal entry) since the batch was first removed, the row
+  // surfaces a small "N of M may overwrite recent edits" chip so the
+  // reviewer is warned BEFORE clicking "Reinstate this batch". A clean
+  // batch (no re-adds, no newer removals) shows no chip at all.
+  test("surfaces a conflict chip when batch phrases were re-added since the removal", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3);
+
+    try {
+      // Add three, then remove all three as one batch. This is the row we
+      // want the chip to appear on later.
+      for (const p of phrases) await addPhrase(apiCtx, p);
+      const batch = await batchRemove(apiCtx, phrases);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      // Re-add two of the three phrases AFTER the batch removal so the
+      // active list now once again contains them. Reinstating the batch
+      // would silently merge the historical state on top of these edits.
+      await addPhrase(apiCtx, phrases[0]);
+      await addPhrase(apiCtx, phrases[1]);
+
+      const row = await openPanelAndFindBatch(page, removedAt);
+      const chip = row.getByTestId("handwavy-removal-batches-conflict-chip");
+      await expect(chip).toBeVisible({ timeout: 15_000 });
+      await expect(chip).toContainText("2 of 3 may overwrite recent edits");
+      await expect(chip).toHaveAttribute("data-conflict-count", "2");
+      await expect(chip).toHaveAttribute("data-conflict-total", "3");
+
+      // The chip is purely informational — the "Reinstate this batch"
+      // button is still present and enabled.
+      const btn = row.getByTestId("handwavy-removal-batches-reinstate");
+      await expect(btn).toBeVisible();
+      await expect(btn).toBeEnabled();
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
+
+  test("counts a phrase as conflicting when it has a newer removal entry than the batch", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2);
+
+    try {
+      // Add both phrases and remove them as one batch — this is the
+      // "older" batch the chip should warn about.
+      for (const p of phrases) await addPhrase(apiCtx, p);
+      const batch = await batchRemove(apiCtx, phrases);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      // Now exercise the "newer history entry" branch (no re-adds left
+      // on the active list at the moment of inspection): re-add ONE of
+      // the two phrases and immediately remove it again. After this the
+      // active list contains neither phrase, but one of them owns a
+      // removal-history row whose removedAt is strictly newer than the
+      // batch's removedAt — so it should still be flagged as a conflict.
+      await addPhrase(apiCtx, phrases[0]);
+      const followUp = await batchRemove(apiCtx, [phrases[0]]);
+      expect(followUp.historyEntry!.removedAt > removedAt).toBe(true);
+
+      const row = await openPanelAndFindBatch(page, removedAt);
+      const chip = row.getByTestId("handwavy-removal-batches-conflict-chip");
+      await expect(chip).toBeVisible({ timeout: 15_000 });
+      await expect(chip).toContainText("1 of 2 may overwrite recent edits");
+      await expect(chip).toHaveAttribute("data-conflict-count", "1");
+      await expect(chip).toHaveAttribute("data-conflict-total", "2");
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
+
+  test("does not show a conflict chip when no phrases have been touched since the batch", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2);
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p);
+      const batch = await batchRemove(apiCtx, phrases);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      const row = await openPanelAndFindBatch(page, removedAt);
+      // The chip is omitted entirely (not just hidden) when the conflict
+      // count is zero.
+      await expect(
+        row.getByTestId("handwavy-removal-batches-conflict-chip"),
+      ).toHaveCount(0);
+      await expect(row).toHaveAttribute("data-batch-conflict-count", "0");
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
 });

@@ -2118,6 +2118,82 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
 
   const phrases = data?.phrases ?? [];
   const history = data?.history ?? [];
+  // Task #242 — per-batch conflict count for the "Recent batch removals"
+  // picker. Reinstating a batch (handleReinstateBatch) silently merges the
+  // batch's historical phrase set onto the current active list. If a phrase
+  // from the batch was re-added (and possibly re-edited or re-removed) since
+  // the batch was first removed, the click overwrites those newer edits
+  // without warning. We compute, for each batch row, how many of its
+  // phrases would land on top of "newer" state — i.e. the phrase is
+  // currently in the active list, OR a history entry for that phrase exists
+  // with a `removedAt` strictly newer than the batch's own `removedAt`.
+  // The chip itself is rendered in the row JSX below.
+  //
+  // Inputs come entirely from the existing GET
+  // /feedback/calibration/handwavy-phrases payload (active list + full
+  // history with batch sub-entries), so no extra request is needed. The
+  // batch summary returned by the picker endpoint only carries up to 5
+  // sample phrases, so we pull the full inner phrase list from the matching
+  // history entry (matched by ISO `removedAt`).
+  const removalBatchConflicts = useMemo(() => {
+    const result = new Map<string, { conflictCount: number; total: number }>();
+    if (removalBatches.length === 0 || history.length === 0) return result;
+    const activePhrases = new Set(
+      (phrases as Array<{ phrase: string }>).map((p) => p.phrase),
+    );
+    // Map each phrase to the set of removedAt timestamps it has in the
+    // history log so "is there a newer history entry?" is an O(1) lookup
+    // per (phrase, batch) pair instead of an O(history) scan.
+    const phraseRemovedAts = new Map<string, string[]>();
+    for (const h of history as Array<{
+      removedAt?: string;
+      phrase?: string;
+      phrases?: Array<{ phrase: string }>;
+    }>) {
+      if (typeof h.removedAt !== "string") continue;
+      if (typeof h.phrase === "string" && h.phrase.length > 0) {
+        const arr = phraseRemovedAts.get(h.phrase) ?? [];
+        arr.push(h.removedAt);
+        phraseRemovedAts.set(h.phrase, arr);
+      }
+      if (Array.isArray(h.phrases)) {
+        for (const p of h.phrases) {
+          if (typeof p.phrase !== "string" || p.phrase.length === 0) continue;
+          const arr = phraseRemovedAts.get(p.phrase) ?? [];
+          arr.push(h.removedAt);
+          phraseRemovedAts.set(p.phrase, arr);
+        }
+      }
+    }
+    for (const batch of removalBatches) {
+      // Whole-batch already-reinstated rows render only the badge (no
+      // reinstate button), so a conflict warning would be moot — skip.
+      if (batch.reinstated === true) continue;
+      const removedAtIso = String(batch.removedAt);
+      const histEntry = (history as Array<{
+        removedAt?: string;
+        phrases?: Array<{ phrase: string }>;
+      }>).find(
+        (h) =>
+          h.removedAt === removedAtIso &&
+          Array.isArray(h.phrases) &&
+          (h.phrases?.length ?? 0) > 0,
+      );
+      const innerPhrases = histEntry?.phrases ?? [];
+      if (innerPhrases.length === 0) continue;
+      let conflictCount = 0;
+      for (const inner of innerPhrases) {
+        const isActive = activePhrases.has(inner.phrase);
+        const removedAts = phraseRemovedAts.get(inner.phrase) ?? [];
+        const hasNewerHistory = removedAts.some((t) => t > removedAtIso);
+        if (isActive || hasNewerHistory) conflictCount++;
+      }
+      if (conflictCount > 0) {
+        result.set(removedAtIso, { conflictCount, total: innerPhrases.length });
+      }
+    }
+    return result;
+  }, [removalBatches, history, phrases]);
   const [draftCategory, setDraftCategory] = useState<"absence" | "hedging" | "buzzword">("absence");
   // Task #129 — pre-preview overlap hint. Recompute every render against the
   // current draft + active phrase list so the reviewer sees the warning the
@@ -5287,12 +5363,19 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                   const phraseCount = b.phraseCount ?? 0;
                   const samples = Array.isArray(b.samplePhrases) ? b.samplePhrases : [];
                   const hiddenSampleCount = Math.max(0, phraseCount - samples.length);
+                  // Task #242 — conflict count computed above from the
+                  // current active list + history. Only present when at
+                  // least one inner phrase has been re-added or has a
+                  // newer history entry than this batch's removedAt; the
+                  // memo also skips already-reinstated whole batches.
+                  const conflict = removalBatchConflicts.get(removedAtIso);
                   return (
                     <div
                       key={removedAtIso}
                       className="px-3 py-2 text-[11px] space-y-1"
                       data-testid="handwavy-removal-batches-row"
                       data-batch-removed-at={removedAtIso}
+                      data-batch-conflict-count={conflict ? conflict.conflictCount : 0}
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-foreground/80 flex-1 min-w-0">
@@ -5302,6 +5385,20 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                           {" • "}
                           {formatAuditTimestamp(b.removedAt) ?? "unknown date"}
                         </span>
+                        {conflict && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-amber-500/40 text-amber-300 gap-1"
+                            data-testid="handwavy-removal-batches-conflict-chip"
+                            data-conflict-count={conflict.conflictCount}
+                            data-conflict-total={conflict.total}
+                            title={`${conflict.conflictCount} of ${conflict.total} phrase${conflict.total === 1 ? "" : "s"} in this batch ${conflict.conflictCount === 1 ? "is" : "are"} either back on the active list or have a newer removal entry — reinstating this batch will overwrite that newer state. Use the full removal-history panel below for a per-phrase decision.`}
+                            aria-label={`${conflict.conflictCount} of ${conflict.total} phrases in this batch may overwrite recent edits`}
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            {conflict.conflictCount} of {conflict.total} may overwrite recent edits
+                          </Badge>
+                        )}
                         {b.reinstated ? (
                           <Badge
                             variant="outline"
