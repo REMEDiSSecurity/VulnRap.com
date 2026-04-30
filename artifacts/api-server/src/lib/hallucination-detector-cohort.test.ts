@@ -1,6 +1,17 @@
 // Task #267 — lock the per-fixture hallucination detector totalWeight
 // across the full TEST_FIXTURE_COHORTS battery.
 //
+// Task #382 — also lock the sorted set of signal types that fire per
+// fixture. Pinning only the running total leaves a "compensating drift"
+// hole: a regex shuffle that drops one signal and adds another with
+// the same weight (e.g. -10 fabricated_addresses + +10 phantom_functions)
+// keeps the totalWeight snapshot green even though the *reason* the
+// detector condemns the fixture has silently swapped. The current T4
+// snapshot already shows several fixtures sitting on the same total via
+// different signal mixes, so the risk is real. The new per-fixture
+// `signals` snapshot — sorted, deduplicated signal-type list — surfaces
+// those swaps in the diff as soon as they happen.
+//
 // Task #192 tightened `incomplete_asan` and `fabricated_pid` so that the
 // canonical legit fixtures (T1-01-uaf-libfoo, T1-AVRI-firefox-uaf,
 // T1-AVRI-cve-2025-0725-curl) accumulate **0** hallucination weight while
@@ -13,9 +24,11 @@
 // fail.
 //
 // This file pins the per-fixture `detectHallucinationSignals(text).totalWeight`
-// itself so any regex tweak that re-introduces a false positive on a legit
-// report (or stops firing on a known-fabricated one) is caught immediately,
-// not after a downstream calibration sweep.
+// **and** the sorted list of fired signal types so any regex tweak that
+// re-introduces a false positive on a legit report, stops firing on a
+// known-fabricated one, or quietly swaps one signal for another with the
+// same weight, is caught immediately — not after a downstream calibration
+// sweep.
 //
 // Two layers of guard:
 //   1. Tier-floor invariants (always-on, do NOT require a snapshot update):
@@ -27,10 +40,11 @@
 //     (see HALLUCINATION_DETECTOR_NOT_APPLICABLE_T4 below). Their weights
 //     are still pinned by the snapshot in (2), so any drift is still
 //     caught — they just aren't required to clear the moderate floor.
-//   2. Per-fixture exact-weight snapshot: a maintainer can intentionally
-//      update the snapshot with `pnpm --filter @workspace/api-server test -u`
-//      (or `pnpm test -u` from the api-server directory). Accidental drift
-//      fails CI.
+//   2. Per-fixture exact-weight + sorted-signal-type snapshot: a maintainer
+//      can intentionally update the snapshot with
+//      `pnpm --filter @workspace/api-server test -u` (or `pnpm test -u`
+//      from the api-server directory). Accidental drift in *either* the
+//      total weight OR the fired-signal mix fails CI.
 
 import { describe, it, expect } from "vitest";
 import { detectHallucinationSignals } from "./hallucination-detector";
@@ -72,14 +86,27 @@ describe("Task #267: per-fixture hallucination detector totalWeight is pinned", 
     }
   });
 
-  describe("per-fixture totalWeight snapshot (update with `pnpm test -u`)", () => {
+  describe("per-fixture totalWeight + signal-type snapshot (update with `pnpm test -u`)", () => {
     for (const cohort of COHORTS) {
-      it(`${cohort} cohort totalWeights match snapshot`, () => {
-        const weights: Record<string, number> = {};
+      it(`${cohort} cohort totalWeight + sorted signal types match snapshot`, () => {
+        // Per fixture, snapshot both the running total weight and the
+        // sorted/deduplicated list of signal types that fired. The
+        // sorted-list shape — rather than the raw `signals[]` array —
+        // is intentional: it's stable under regex re-orderings inside
+        // the detector, so the diff only flips when the *set* of rules
+        // that condemned the fixture actually changes.
+        const fixtures: Record<
+          string,
+          { totalWeight: number; signals: string[] }
+        > = {};
         for (const f of TEST_FIXTURE_COHORTS[cohort]) {
-          weights[f.id] = detectHallucinationSignals(f.text).totalWeight;
+          const r = detectHallucinationSignals(f.text);
+          fixtures[f.id] = {
+            totalWeight: r.totalWeight,
+            signals: [...new Set(r.signals.map((s) => s.type))].sort(),
+          };
         }
-        expect(weights).toMatchSnapshot();
+        expect(fixtures).toMatchSnapshot();
       });
     }
   });

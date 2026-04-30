@@ -1,93 +1,361 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight snapshot (update with \`pnpm test -u\`) > T1 cohort totalWeights match snapshot 1`] = `
+exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight + signal-type snapshot (update with \`pnpm test -u\`) > T1 cohort totalWeight + sorted signal types match snapshot 1`] = `
 {
-  "T1-01-uaf-libfoo": 0,
-  "T1-02-sqli-django": 0,
-  "T1-03-ssrf-aws": 0,
-  "T1-04-pathtraversal-flask": 0,
-  "T1-05-xxe-libxml": 0,
-  "T1-06-prototype-pollution": 0,
-  "T1-07-jwt-none": 0,
-  "T1-08-redis-cmdinj": 0,
-  "T1-09-ssrf-graphql": 0,
-  "T1-10-rce-deserialize": 0,
-  "T1-11-toctou-symlink": 0,
-  "T1-12-cors-credentials": 0,
-  "T1-AVRI-curl-hsts-bypass": 0,
-  "T1-AVRI-cve-2025-0725-curl": 0,
-  "T1-AVRI-firefox-uaf": 0,
+  "T1-01-uaf-libfoo": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-02-sqli-django": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-03-ssrf-aws": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-04-pathtraversal-flask": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-05-xxe-libxml": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-06-prototype-pollution": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-07-jwt-none": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-08-redis-cmdinj": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-09-ssrf-graphql": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-10-rce-deserialize": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-11-toctou-symlink": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-12-cors-credentials": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-AVRI-curl-hsts-bypass": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-AVRI-cve-2025-0725-curl": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T1-AVRI-firefox-uaf": {
+    "signals": [],
+    "totalWeight": 0,
+  },
 }
 `;
 
-exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight snapshot (update with \`pnpm test -u\`) > T2 cohort totalWeights match snapshot 1`] = `
+exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight + signal-type snapshot (update with \`pnpm test -u\`) > T2 cohort totalWeight + sorted signal types match snapshot 1`] = `
 {
-  "T2-01-xss-unconfirmed": 8,
-  "T2-02-csrf-noproof": 0,
-  "T2-03-info-disclosure-headers": 0,
-  "T2-04-rate-limit-missing": 0,
-  "T2-05-clickjack-noframeguard": 0,
-  "T2-06-mixed-content": 0,
-  "T2-07-idor-suspicion": 0,
-  "T2-08-weak-jwt-secret": 0,
-  "T2-09-stack-trace-on-error": 0,
-  "T2-10-open-redirect": 0,
+  "T2-01-xss-unconfirmed": {
+    "signals": [
+      "impact_escalation",
+    ],
+    "totalWeight": 8,
+  },
+  "T2-02-csrf-noproof": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T2-03-info-disclosure-headers": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T2-04-rate-limit-missing": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T2-05-clickjack-noframeguard": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T2-06-mixed-content": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T2-07-idor-suspicion": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T2-08-weak-jwt-secret": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T2-09-stack-trace-on-error": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T2-10-open-redirect": {
+    "signals": [],
+    "totalWeight": 0,
+  },
 }
 `;
 
-exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight snapshot (update with \`pnpm test -u\`) > T3 cohort totalWeights match snapshot 1`] = `
+exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight + signal-type snapshot (update with \`pnpm test -u\`) > T3 cohort totalWeight + sorted signal types match snapshot 1`] = `
 {
-  "T3-01-generic-letter": 8,
-  "T3-02-marketing-tone": 0,
-  "T3-03-checklist-no-evidence": 0,
-  "T3-04-buzzword-soup": 0,
-  "T3-05-no-target": 0,
-  "T3-06-vague-xss": 0,
-  "T3-07-handwave-rce": 0,
-  "T3-08-checklist": 0,
-  "T3-09-ssrf-handwave": 0,
-  "T3-10-empty-shell": 0,
-  "T3-11-fabricated-diff-no-proof": 0,
-  "T3-12-paraphrased-cve-renamed-fn": 10,
-  "T3-13-narrated-curl-no-evidence": 0,
-  "T3-14-pseudo-asan-symbolless": 0,
-  "T3-15-prose-poc-no-payload": 0,
-  "T3-16-fabricated-diff-injection": 0,
-  "T3-17-fabricated-diff-web-client": 0,
-  "T3-18-fabricated-diff-memory-corruption": 12,
-  "T3-19-no-gold-injection": 0,
-  "T3-20-no-gold-web-client": 0,
-  "T3-21-no-gold-memory-corruption": 0,
-  "T3-22-no-gold-authn-authz": 0,
-  "T3-23-contradiction-injection": 0,
-  "T3-24-contradiction-web-client": 0,
-  "T3-25-contradiction-memory-corruption": 0,
-  "T3-26-contradiction-authn-authz": 0,
-  "T3-27-flat-slop-no-poc": 0,
-  "T3-28-flat-slop-structural-only": 0,
-  "T3-29-flat-slop-buzzword-soup": 0,
-  "T3-AVRI-generic-xss": 8,
-  "T3-AVRI-http3-dos": 0,
-  "T3-AVRI-ipfs-traversal": 0,
-  "T3-AVRI-ssrf-template": 0,
+  "T3-01-generic-letter": {
+    "signals": [
+      "impact_escalation",
+    ],
+    "totalWeight": 8,
+  },
+  "T3-02-marketing-tone": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-03-checklist-no-evidence": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-04-buzzword-soup": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-05-no-target": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-06-vague-xss": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-07-handwave-rce": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-08-checklist": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-09-ssrf-handwave": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-10-empty-shell": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-11-fabricated-diff-no-proof": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-12-paraphrased-cve-renamed-fn": {
+    "signals": [
+      "phantom_functions",
+    ],
+    "totalWeight": 10,
+  },
+  "T3-13-narrated-curl-no-evidence": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-14-pseudo-asan-symbolless": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-15-prose-poc-no-payload": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-16-fabricated-diff-injection": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-17-fabricated-diff-web-client": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-18-fabricated-diff-memory-corruption": {
+    "signals": [
+      "incomplete_asan",
+    ],
+    "totalWeight": 12,
+  },
+  "T3-19-no-gold-injection": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-20-no-gold-web-client": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-21-no-gold-memory-corruption": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-22-no-gold-authn-authz": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-23-contradiction-injection": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-24-contradiction-web-client": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-25-contradiction-memory-corruption": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-26-contradiction-authn-authz": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-27-flat-slop-no-poc": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-28-flat-slop-structural-only": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-29-flat-slop-buzzword-soup": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-AVRI-generic-xss": {
+    "signals": [
+      "impact_escalation",
+    ],
+    "totalWeight": 8,
+  },
+  "T3-AVRI-http3-dos": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-AVRI-ipfs-traversal": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T3-AVRI-ssrf-template": {
+    "signals": [],
+    "totalWeight": 0,
+  },
 }
 `;
 
-exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight snapshot (update with \`pnpm test -u\`) > T4 cohort totalWeights match snapshot 1`] = `
+exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight + signal-type snapshot (update with \`pnpm test -u\`) > T4 cohort totalWeight + sorted signal types match snapshot 1`] = `
 {
-  "T4-01-fake-cve-fake-fn": 24,
-  "T4-02-round-addresses": 18,
-  "T4-03-plagiarized-nvd": 5,
-  "T4-04-fake-asan-no-summary": 13,
-  "T4-05-fake-cwe-mismatch": 0,
-  "T4-06-fake-stacktrace-repeat": 18,
-  "T4-07-fake-pid-fake-fn": 14,
-  "T4-08-fake-cve-id": 13,
-  "T4-09-ai-tool-curl-uaf": 16,
-  "T4-10-fake-openssl-regression": 13,
-  "T4-11-impossible-http-shape": 48,
-  "T4-12-fake-prologue-offsets": 38,
-  "T4-13-fake-thread-id-out-of-range": 43,
-  "T4-14-fake-region-vs-access": 38,
+  "T4-01-fake-cve-fake-fn": {
+    "signals": [
+      "fabricated_addresses",
+      "fabricated_pid",
+      "phantom_exploit_script",
+    ],
+    "totalWeight": 24,
+  },
+  "T4-02-round-addresses": {
+    "signals": [
+      "fabricated_addresses",
+      "phantom_exploit_script",
+    ],
+    "totalWeight": 18,
+  },
+  "T4-03-plagiarized-nvd": {
+    "signals": [
+      "empty_disclosure_claim",
+    ],
+    "totalWeight": 5,
+  },
+  "T4-04-fake-asan-no-summary": {
+    "signals": [
+      "empty_disclosure_claim",
+      "phantom_exploit_script",
+    ],
+    "totalWeight": 13,
+  },
+  "T4-05-fake-cwe-mismatch": {
+    "signals": [],
+    "totalWeight": 0,
+  },
+  "T4-06-fake-stacktrace-repeat": {
+    "signals": [
+      "fabricated_addresses",
+      "phantom_exploit_script",
+    ],
+    "totalWeight": 18,
+  },
+  "T4-07-fake-pid-fake-fn": {
+    "signals": [
+      "fabricated_pid",
+      "phantom_exploit_script",
+    ],
+    "totalWeight": 14,
+  },
+  "T4-08-fake-cve-id": {
+    "signals": [
+      "empty_disclosure_claim",
+      "phantom_exploit_script",
+    ],
+    "totalWeight": 13,
+  },
+  "T4-09-ai-tool-curl-uaf": {
+    "signals": [
+      "fabricated_addresses",
+      "fabricated_pid",
+    ],
+    "totalWeight": 16,
+  },
+  "T4-10-fake-openssl-regression": {
+    "signals": [
+      "implausible_version",
+      "phantom_exploit_script",
+    ],
+    "totalWeight": 13,
+  },
+  "T4-11-impossible-http-shape": {
+    "signals": [
+      "impossible_http_response",
+    ],
+    "totalWeight": 48,
+  },
+  "T4-12-fake-prologue-offsets": {
+    "signals": [
+      "fabricated_pid",
+      "phantom_exploit_script",
+      "structural_fabrication",
+    ],
+    "totalWeight": 38,
+  },
+  "T4-13-fake-thread-id-out-of-range": {
+    "signals": [
+      "empty_disclosure_claim",
+      "fabricated_pid",
+      "phantom_exploit_script",
+      "structural_fabrication",
+    ],
+    "totalWeight": 43,
+  },
+  "T4-14-fake-region-vs-access": {
+    "signals": [
+      "fabricated_pid",
+      "phantom_exploit_script",
+      "structural_fabrication",
+    ],
+    "totalWeight": 38,
+  },
 }
 `;
