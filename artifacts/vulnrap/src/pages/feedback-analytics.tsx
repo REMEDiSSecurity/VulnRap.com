@@ -11950,14 +11950,58 @@ function NotifiedFlagsPanel({
   // build is shipping a valid token; everything else gets a static
   // explainer instead of a load error.
   const enabled = authState.kind === "valid";
-  const { data, isLoading, isError, refetch } = useGetAvriDriftNotifications({
-    query: {
-      queryKey: notificationsQueryKey,
-      refetchInterval: 300_000,
-      enabled,
-      retry: 1,
-    },
-  });
+  const { data: liveData, isLoading, isError, refetch } =
+    useGetAvriDriftNotifications({
+      query: {
+        queryKey: notificationsQueryKey,
+        // Pause polling while the cooldown is ticking so a refetch can't
+        // race the per-second countdown re-render and flash the rows empty.
+        refetchInterval: cooldownActive ? false : 300_000,
+        enabled,
+        retry: 1,
+      },
+    });
+
+  // Hold the last successful payload so the rows the reviewer was looking
+  // at stay on screen for the duration of any active cooldown, even if a
+  // refetch lands a transient empty/error response in the meantime. Drop
+  // the pin if auth becomes invalid (logout / token cleared) so a stale
+  // snapshot can't outlive the reviewer's session.
+  const lastDataRef = useRef<typeof liveData>(undefined);
+  useEffect(() => {
+    if (!enabled) {
+      lastDataRef.current = undefined;
+      return;
+    }
+    if (liveData && !cooldownActive) lastDataRef.current = liveData;
+  }, [liveData, cooldownActive, enabled]);
+
+  // When the cooldown clears, kick off one refetch and keep the pinned
+  // snapshot visible until the response settles — that way an empty
+  // payload that landed during the cooldown can't briefly paint the
+  // empty placeholder right at the moment the cooldown ends.
+  const [postCooldownRefetching, setPostCooldownRefetching] =
+    useState(false);
+  const prevCooldownActiveRef = useRef(cooldownActive);
+  useEffect(() => {
+    if (prevCooldownActiveRef.current && !cooldownActive && enabled) {
+      setPostCooldownRefetching(true);
+      void refetch().finally(() => setPostCooldownRefetching(false));
+    }
+    prevCooldownActiveRef.current = cooldownActive;
+  }, [cooldownActive, enabled, refetch]);
+
+  // The render that observes cooldown flipping false runs *before* the
+  // post-cooldown useEffect sets `postCooldownRefetching = true`; treat
+  // that single render as still-pinned so the panel can't briefly paint
+  // an empty payload that landed during the cooldown right at the edge.
+  const cooldownJustCleared =
+    prevCooldownActiveRef.current && !cooldownActive;
+  const useFallback =
+    (cooldownActive || cooldownJustCleared || postCooldownRefetching) &&
+    Boolean(lastDataRef.current);
+  const pinnedData = useFallback ? lastDataRef.current : undefined;
+  const data = pinnedData ?? liveData;
 
   // Drop popover state for keys that have left the dedup list so we don't
   // dangle a hidden form / draft string against an entry the reviewer can
@@ -12010,15 +12054,20 @@ function NotifiedFlagsPanel({
     );
   }
 
-  if (isLoading) {
+  // Loading / error states are suppressed when a pinned snapshot is
+  // available so the rows stay on screen across cooldown re-renders.
+  if (isLoading && !pinnedData) {
     return <Skeleton className="h-16 rounded-md" />;
   }
-  if (isError || !data) {
+  if ((isError || !data) && !pinnedData) {
     return (
       <p className="text-[11px] text-red-400/80 italic leading-relaxed">
         Could not load the AVRI drift notification dedup state.
       </p>
     );
+  }
+  if (!data) {
+    return <Skeleton className="h-16 rounded-md" />;
   }
   const notified: AvriDriftNotificationRecord[] = data.notified ?? [];
   if (notified.length === 0) {
