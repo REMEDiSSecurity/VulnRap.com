@@ -1,0 +1,241 @@
+// Task #429 — route-level integration test for the reviewer-curated AI
+// self-disclosure phrase endpoints. Mounts the calibration router on an
+// isolated express app and exercises GET / POST end-to-end so any regression
+// in the JSON wiring (status codes, body shape, list refresh) surfaces here
+// instead of at runtime in production.
+import http from "node:http";
+import path from "node:path";
+import os from "node:os";
+import { promises as fs } from "node:fs";
+import type { AddressInfo } from "node:net";
+import express from "express";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+
+const TEST_TOKEN = "ai-self-disclosure-route-test-token";
+
+let server: http.Server;
+let baseUrl: string;
+let tmpDir: string;
+let phrasesPath: string;
+let __resetForTests: () => void;
+let __restoreDefaults: () => void;
+let detectFn: (text: string) => { detected: boolean; matches: Array<{ id: string }>; penalty: number };
+
+beforeAll(async () => {
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ai-self-disclosure-route-"));
+  phrasesPath = path.join(tmpDir, "ai-self-disclosure-phrases.json");
+
+  // Pin the loader to our tmpdir copy so the test cannot accidentally
+  // mutate the real shipped phrase list.
+  process.env.AI_SELF_DISCLOSURE_PHRASES_PATH = phrasesPath;
+  process.env.CALIBRATION_TOKEN = TEST_TOKEN;
+
+  const calibrationRouter = (await import("./calibration")).default;
+  const mod = await import("../lib/engines/avri/ai-self-disclosure");
+  __resetForTests = mod.__resetAiSelfDisclosurePhrasesForTests;
+  __restoreDefaults = mod.__restoreAiSelfDisclosureDefaultsForTests;
+  detectFn = mod.detectAiSelfDisclosure as typeof detectFn;
+
+  const app = express();
+  app.use(express.json());
+  app.use(calibrationRouter);
+  await new Promise<void>((resolve) => {
+    server = app.listen(0, "127.0.0.1", () => resolve());
+  });
+  const addr = server.address() as AddressInfo;
+  baseUrl = `http://127.0.0.1:${addr.port}`;
+});
+
+afterAll(async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  delete process.env.CALIBRATION_TOKEN;
+  delete process.env.AI_SELF_DISCLOSURE_PHRASES_PATH;
+  try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+});
+
+beforeEach(() => {
+  __resetForTests();
+  __restoreDefaults();
+});
+
+interface HttpResponse<T> {
+  status: number;
+  body: T;
+}
+
+function request<T>(method: string, urlPath: string, body?: unknown, headers: Record<string, string> = {}): Promise<HttpResponse<T>> {
+  return new Promise((resolve, reject) => {
+    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const url = new URL(`${baseUrl}${urlPath}`);
+    const req = http.request(
+      {
+        method,
+        hostname: url.hostname,
+        port: url.port,
+        path: `${url.pathname}${url.search}`,
+        headers: {
+          ...(data ? { "Content-Type": "application/json", "Content-Length": String(data.length) } : {}),
+          "X-Calibration-Token": TEST_TOKEN,
+          ...headers,
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          try {
+            const text = Buffer.concat(chunks).toString("utf8");
+            const parsed = text.length > 0 ? JSON.parse(text) : {};
+            resolve({ status: res.statusCode ?? 0, body: parsed as T });
+          } catch (err) {
+            reject(err);
+          }
+        });
+      },
+    );
+    req.on("error", reject);
+    if (data) req.write(data);
+    req.end();
+  });
+}
+
+interface PhraseRow {
+  id: string;
+  pattern: string;
+  flags?: string;
+  addedBy?: string;
+  addedAt?: string;
+  rationale?: string;
+}
+
+interface ListBody {
+  phrases: PhraseRow[];
+  total: number;
+  penalty: number;
+}
+
+interface AddBody {
+  added: boolean;
+  phrase: PhraseRow;
+  total: number;
+  penalty: number;
+  phrases: PhraseRow[];
+}
+
+interface ErrBody {
+  error: string;
+}
+
+describe("/feedback/calibration/ai-self-disclosure-phrases", () => {
+  it("GET returns the active list and the bounded-penalty constant", async () => {
+    const r = await request<ListBody>("GET", "/feedback/calibration/ai-self-disclosure-phrases");
+    expect(r.status).toBe(200);
+    expect(r.body.total).toBe(r.body.phrases.length);
+    expect(r.body.total).toBeGreaterThanOrEqual(7);
+    expect(r.body.penalty).toBe(15);
+    const ids = r.body.phrases.map((p) => p.id);
+    expect(ids).toContain("prepared_using_ai");
+    expect(ids).toContain("ai_generated_adjective");
+  });
+
+  it("GET requires the calibration token", async () => {
+    const r = await request<ErrBody>(
+      "GET",
+      "/feedback/calibration/ai-self-disclosure-phrases",
+      undefined,
+      { "X-Calibration-Token": "" },
+    );
+    expect([401, 403]).toContain(r.status);
+  });
+
+  it("POST appends a new pattern and returns 201 with the refreshed list", async () => {
+    const r = await request<AddBody>("POST", "/feedback/calibration/ai-self-disclosure-phrases", {
+      id: "mistral_generated",
+      pattern: "\\bgenerated\\s+by\\s+mistral",
+      reviewer: "reviewer@example.com",
+      rationale: "Spotted in 4 recent slop reports referencing Mistral.",
+    });
+    expect(r.status).toBe(201);
+    expect(r.body.added).toBe(true);
+    expect(r.body.phrase.id).toBe("mistral_generated");
+    expect(r.body.phrase.addedBy).toBe("reviewer@example.com");
+    expect(r.body.phrase.addedAt).toBeDefined();
+    expect(r.body.phrases.map((p) => p.id)).toContain("mistral_generated");
+    // The detector starts firing on the new pattern immediately.
+    const det = detectFn("This report was generated by Mistral-7B via tooling.");
+    expect(det.detected).toBe(true);
+    expect(det.matches.map((m) => m.id)).toContain("mistral_generated");
+    expect(det.penalty).toBe(15);
+  });
+
+  it("POST is idempotent on id: re-posting the same id returns 200 added=false", async () => {
+    const first = await request<AddBody>("POST", "/feedback/calibration/ai-self-disclosure-phrases", {
+      id: "dup_pattern",
+      pattern: "\\bfoobar\\b",
+    });
+    expect(first.status).toBe(201);
+    const second = await request<AddBody>("POST", "/feedback/calibration/ai-self-disclosure-phrases", {
+      id: "dup_pattern",
+      pattern: "\\bsomething-else\\b",
+    });
+    expect(second.status).toBe(200);
+    expect(second.body.added).toBe(false);
+    // Active pattern is the original (first wins).
+    const dup = second.body.phrases.find((p) => p.id === "dup_pattern");
+    expect(dup?.pattern).toBe("\\bfoobar\\b");
+  });
+
+  it("POST rejects malformed input with 400 + a field-prefixed error", async () => {
+    const cases: Array<{ body: Record<string, unknown>; field: RegExp }> = [
+      { body: { id: "", pattern: "\\bfoo\\b" }, field: /^id / },
+      { body: { id: "spaces in id", pattern: "\\bfoo\\b" }, field: /^id / },
+      { body: { id: "ok_id", pattern: "" }, field: /^pattern / },
+      { body: { id: "ok_id", pattern: "(unbalanced" }, field: /^pattern / },
+      { body: { id: "ok_id", pattern: "\\bfoo\\b", flags: "Z" }, field: /^flags / },
+      { body: { id: "ok_id", pattern: "\\bfoo\\b", rationale: "ab" }, field: /^rationale / },
+    ];
+    for (const c of cases) {
+      const r = await request<ErrBody>("POST", "/feedback/calibration/ai-self-disclosure-phrases", c.body);
+      expect(r.status, `case=${JSON.stringify(c.body)}`).toBe(400);
+      expect(r.body.error).toMatch(c.field);
+    }
+  });
+
+  it("POST preserves the bounded-penalty contract after the list grows (Task #429)", async () => {
+    await request<AddBody>("POST", "/feedback/calibration/ai-self-disclosure-phrases", {
+      id: "extra_one",
+      pattern: "\\bfirst-extra-marker\\b",
+    });
+    await request<AddBody>("POST", "/feedback/calibration/ai-self-disclosure-phrases", {
+      id: "extra_two",
+      pattern: "\\bsecond-extra-marker\\b",
+    });
+    await request<AddBody>("POST", "/feedback/calibration/ai-self-disclosure-phrases", {
+      id: "extra_three",
+      pattern: "\\bthird-extra-marker\\b",
+    });
+    // A report that hits both the original defaults AND the three new
+    // patterns must still be docked exactly once.
+    const det = detectFn(
+      `This report was prepared using an AI security assistant.
+This is AI-generated. ChatGPT-assisted summary follows.
+first-extra-marker second-extra-marker third-extra-marker.`,
+    );
+    expect(det.detected).toBe(true);
+    expect(det.matches.length).toBeGreaterThanOrEqual(5);
+    expect(det.penalty).toBe(15);
+  });
+
+  it("POST requires the calibration token (mutation gate)", async () => {
+    const r = await request<ErrBody>(
+      "POST",
+      "/feedback/calibration/ai-self-disclosure-phrases",
+      { id: "should_not_be_added", pattern: "\\bnope\\b" },
+      { "X-Calibration-Token": "wrong-token" },
+    );
+    expect([401, 403]).toContain(r.status);
+    // Confirm the bad request did not slip a phrase into the active list.
+    const list = await request<ListBody>("GET", "/feedback/calibration/ai-self-disclosure-phrases");
+    expect(list.body.phrases.find((p) => p.id === "should_not_be_added")).toBeUndefined();
+  });
+});

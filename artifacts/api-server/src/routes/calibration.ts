@@ -28,6 +28,11 @@ import {
   type HandwavyCategory,
   type HandwavyMarker,
 } from "../lib/engines/avri/handwavy-phrases";
+import {
+  AI_SELF_DISCLOSURE_PENALTY,
+  getAiSelfDisclosurePhrases,
+  addAiSelfDisclosurePhrase,
+} from "../lib/engines/avri/ai-self-disclosure";
 import { TEST_FIXTURE_COHORTS } from "./test-fixtures";
 import {
   requireCalibrationAuth,
@@ -2250,5 +2255,80 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
     res.status(500).json({ error: "Failed to remove hand-wavy phrase." });
   }
 });
+
+// Task #429 — Reviewer-curated AI self-disclosure phrase patterns. The list
+// lives in data/ai-self-disclosure-phrases.json and is loaded by the AVRI
+// Engine 2 detector at startup. GET surfaces the active list (auth-strict);
+// POST appends a new pattern (auth, append-only — there is no remove path
+// because the bounded-penalty contract means a stale pattern that no longer
+// fires costs nothing). Mirrors the calibration token gate and JSON shape of
+// the curated hand-wavy phrase list.
+router.get(
+  "/feedback/calibration/ai-self-disclosure-phrases",
+  requireCalibrationAuthStrict,
+  (_req, res) => {
+    try {
+      const phrases = getAiSelfDisclosurePhrases();
+      res.json({
+        phrases,
+        total: phrases.length,
+        // Echo the bounded-penalty constant so reviewers can sanity-check
+        // it from the calibration UI without grepping the source.
+        penalty: AI_SELF_DISCLOSURE_PENALTY,
+      });
+    } catch (err) {
+      _req.log?.error(err, "Failed to read AI self-disclosure phrases");
+      res.status(500).json({ error: "Failed to read AI self-disclosure phrases." });
+    }
+  },
+);
+
+router.post(
+  "/feedback/calibration/ai-self-disclosure-phrases",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { id, pattern, flags, reviewer, rationale } = (req.body ?? {}) as {
+        id?: unknown;
+        pattern?: unknown;
+        flags?: unknown;
+        reviewer?: unknown;
+        rationale?: unknown;
+      };
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res.status(400).json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      if (rationale !== undefined && typeof rationale !== "string") {
+        res.status(400).json({ error: "rationale must be a string when provided." });
+        return;
+      }
+      const result = addAiSelfDisclosurePhrase(id, pattern, flags, {
+        reviewer: typeof reviewer === "string" ? reviewer : undefined,
+        rationale: typeof rationale === "string" ? rationale : undefined,
+      });
+      res.status(result.added ? 201 : 200).json({
+        added: result.added,
+        phrase: result.phrase,
+        total: result.total,
+        penalty: AI_SELF_DISCLOSURE_PENALTY,
+        phrases: getAiSelfDisclosurePhrases(),
+      });
+    } catch (err) {
+      // Validation errors from addAiSelfDisclosurePhrase are prefixed by the
+      // offending field name so we can surface them as 400s without leaking
+      // unrelated exceptions.
+      if (
+        err instanceof Error &&
+        /^(?:id|pattern|flags|rationale) /.test(err.message)
+      ) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      req.log?.error(err, "Failed to add AI self-disclosure phrase");
+      res.status(500).json({ error: "Failed to add AI self-disclosure phrase." });
+    }
+  },
+);
 
 export default router;

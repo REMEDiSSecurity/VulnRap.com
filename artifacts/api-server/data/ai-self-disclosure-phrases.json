@@ -1,0 +1,42 @@
+{
+  "_meta": {
+    "description": "Curated list of AI self-disclosure phrase patterns. Loaded by lib/engines/avri/ai-self-disclosure.ts at startup. Each entry compiles to a RegExp matched (case-insensitively) against a whitespace-collapsed copy of the report text. Reviewers can append new patterns through POST /feedback/calibration/ai-self-disclosure-phrases without a redeploy. The detector enforces a SINGLE fixed penalty (AI_SELF_DISCLOSURE_PENALTY) per report regardless of how many patterns match — the bounded-penalty contract is independent of list size."
+  },
+  "phrases": [
+    {
+      "id": "prepared_using_ai",
+      "pattern": "\\bprepared\\s+(?:using|with)\\s+(?:an?\\s+)?(?:ai|artificial intelligence|llm)\\b",
+      "flags": "i"
+    },
+    {
+      "id": "generated_with_ai",
+      "pattern": "\\b(?:generated|produced|written|drafted|authored|composed|created|compiled)\\s+(?:by|with|using|via)\\s+(?:the\\s+(?:help|assistance)\\s+of\\s+)?(?:an?\\s+)?(?:ai|artificial intelligence|llm|chatgpt|claude|copilot|gemini|bard|gpt-?\\d?)\\b",
+      "flags": "i"
+    },
+    {
+      "id": "with_ai_help",
+      "pattern": "\\bwith\\s+(?:the\\s+)?(?:help|assistance)\\s+(?:of|from)\\s+(?:an?\\s+)?(?:ai|artificial intelligence|llm|chatgpt|claude|copilot|gemini|bard)\\b",
+      "flags": "i"
+    },
+    {
+      "id": "this_report_ai",
+      "pattern": "\\bthis\\s+(?:report|analysis|writeup|write[-\\s]?up|submission)\\s+(?:was|is|has\\s+been)\\s+(?:assisted|generated|written|drafted|authored|prepared|created|produced)\\s+(?:by|with|using)\\b[^.]{0,80}\\b(?:ai|artificial intelligence|llm|chatgpt|claude|copilot|gemini|bard|gpt-?\\d?)\\b",
+      "flags": "i"
+    },
+    {
+      "id": "ai_generated_adjective",
+      "pattern": "\\bai[-\\s](?:generated|written|drafted|authored|assisted|produced|composed)\\b",
+      "flags": "i"
+    },
+    {
+      "id": "named_llm_assisted",
+      "pattern": "\\b(?:chatgpt|claude|copilot|gemini|bard|gpt-?\\d?)[-\\s](?:assisted|generated|written|drafted|authored|produced)\\b",
+      "flags": "i"
+    },
+    {
+      "id": "used_llm_to_draft",
+      "pattern": "\\b(?:i|we)\\s+(?:used|asked|leveraged|relied\\s+on)\\s+(?:chatgpt|claude|copilot|gemini|bard|gpt-?\\d?|an?\\s+(?:ai|llm))\\b[^.]{0,80}\\b(?:draft|write|generate|prepare|produce|author|compose|create|summarize|analy[sz]e)\\b",
+      "flags": "i"
+    }
+  ]
+}
