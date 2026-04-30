@@ -2073,8 +2073,11 @@ describe("runEngine2Avri — WEB_CLIENT fabricated-response integration", () => 
     // The prose "reflected in the response" still survives stripping,
     // so the signal stays. We only test that FAKE_RAW_HTTP fired and
     // the response sub-block is populated.
-    const rawHttp = result.engine.signalBreakdown?.avri?.rawHttp;
+    const avri = result.engine.signalBreakdown?.avri as
+      | { rawHttp?: { response?: { isFake?: boolean; responsesFlagged?: number } } }
+      | undefined;
+    const rawHttp = avri?.rawHttp;
     expect(rawHttp?.response?.isFake).toBe(true);
-    expect(rawHttp?.response?.responsesFlagged).toBeGreaterThanOrEqual(1);
+    expect(rawHttp?.response?.responsesFlagged ?? 0).toBeGreaterThanOrEqual(1);
   });
 });

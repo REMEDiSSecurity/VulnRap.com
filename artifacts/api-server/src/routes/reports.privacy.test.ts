@@ -170,13 +170,14 @@ vi.mock("@workspace/db", async () => {
     return rows;
   }
 
-  type TableKey = "reports" | "feedback" | "hashes" | "similarities" | "unknown";
+  type TableKey = "reports" | "feedback" | "hashes" | "similarities" | "stats" | "unknown";
 
   function tableKey(table: unknown): TableKey {
     if (table === schema.reportsTable) return "reports";
     if (table === schema.userFeedbackTable) return "feedback";
     if (table === schema.reportHashesTable) return "hashes";
     if (table === schema.similarityResultsTable) return "similarities";
+    if (table === schema.reportStatsTable) return "stats";
     return "unknown";
   }
 

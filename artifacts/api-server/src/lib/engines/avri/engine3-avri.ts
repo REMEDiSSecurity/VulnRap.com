@@ -107,8 +107,10 @@ export function runEngine3Avri(
   // SAME_FAMILY now compares the *selected* rubric family to the evidence
   // family, so reports whose CWE doesn't map to any rubric (e.g. CWE-190 for
   // an integer overflow → MEMORY_CORRUPTION via keyword fallback) still earn
-  // the same-family floor when content agrees with the chosen family.
-  const sameFamily = selectedFamily !== "FLAT" && evidenceFamily !== null && evidenceFamily === selectedFamily;
+  // the same-family floor when content agrees with the chosen family. The
+  // FLAT family is handled by the early return above, so by this point
+  // selectedFamily is always one of the concrete rubric families.
+  const sameFamily = evidenceFamily !== null && evidenceFamily === selectedFamily;
   // Sprint 13C (Task #205) — soft citation lookup. When the report names a
   // recognised vulnerability class (XSS, SQLi, SSRF, …) but doesn't include
   // an explicit CWE-XX token, AVRI's "no CWE cited" path lifts from 38 to 60

@@ -6,7 +6,7 @@ import { performActiveVerification } from "./active-verification.js";
 // HTTP status returned is mostly irrelevant — we just need a deterministic
 // response that drives the same code paths regardless of network state.
 function mockFetch(handler: (url: string) => { ok: boolean; status: number; body?: unknown }) {
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+  vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
     const url = typeof input === "string" ? input : input.toString();
     const r = handler(url);
     return {

@@ -167,13 +167,17 @@ describe("notifyDriftFlagsIfNew", () => {
     response: { ok: boolean; status?: number; error?: string };
   } {
     const calls: Array<{ url: string; payload: WebhookPayload }> = [];
-    const handle = {
+    const handle: {
+      dispatch: WebhookDispatcher;
+      calls: Array<{ url: string; payload: WebhookPayload }>;
+      response: { ok: boolean; status?: number; error?: string };
+    } = {
       dispatch: (async (url: string, payload: WebhookPayload) => {
         calls.push({ url, payload });
         return handle.response;
       }) as WebhookDispatcher,
       calls,
-      response: { ok: true, status: 200 } as { ok: boolean; status?: number; error?: string },
+      response: { ok: true, status: 200 },
     };
     return handle;
   }
@@ -805,6 +809,9 @@ describe("getDriftSchedulerStatus", () => {
           alreadyNotified: [],
           dispatched: true,
           dispatchResult: { ok: true },
+          webhookSkipped: false,
+          calibrationUrl: "",
+          runbookUrl: "",
         },
       }),
     });
