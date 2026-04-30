@@ -9,6 +9,8 @@ import {
   computeHandwavyActiveListVersion,
   createSingleRemoveDryRunPreviewCache,
   summarizeDatasetHistory,
+  computeCohortFixtureDelta,
+  FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
 } from "./feedback-analytics";
 import type {
   HandwavyEditEntry,
@@ -559,5 +561,49 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
     });
     expect(summary.gapPoints.map(p => p.value)).toEqual([10, 11]);
     expect(summary.latestGap).toBe(11);
+  });
+});
+
+describe("computeCohortFixtureDelta (Task #256 — surface synthetic-vs-dataset cohort drift)", () => {
+  it("computes a signed dataset-minus-fixture delta rounded to 1 decimal", () => {
+    // Dataset cohort hotter than the synthetic fixture mean — positive delta.
+    const hotter = computeCohortFixtureDelta(78.3, 70.1);
+    expect(hotter.delta).toBe(8.2);
+    // Dataset cohort cooler than the synthetic fixture mean — negative delta.
+    const cooler = computeCohortFixtureDelta(20.0, 28.5);
+    expect(cooler.delta).toBe(-8.5);
+    // Floating point math gets rounded to the same precision the UI prints.
+    const rounded = computeCohortFixtureDelta(78.34, 70.12);
+    expect(rounded.delta).toBe(8.2);
+  });
+
+  it("flags |delta| above the warn threshold as divergent and leaves smaller deltas alone", () => {
+    // Right at the threshold (5.0) is intentionally NOT flagged — only
+    // strictly-greater jumps trip the warning to avoid noise on the boundary.
+    expect(computeCohortFixtureDelta(75, 70).isDivergent).toBe(false);
+    expect(computeCohortFixtureDelta(70, 75).isDivergent).toBe(false);
+    // Just past the threshold in either direction is flagged.
+    expect(computeCohortFixtureDelta(75.2, 70).isDivergent).toBe(true);
+    expect(computeCohortFixtureDelta(70, 75.2).isDivergent).toBe(true);
+    // Sanity-check the actual constant the UI surfaces in its hint.
+    expect(FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD).toBe(5);
+  });
+
+  it("returns null delta and no divergence flag when either mean is missing", () => {
+    // Cohort had no samples — can't compute a delta, so we don't warn.
+    expect(computeCohortFixtureDelta(null, 70)).toEqual({ delta: null, isDivergent: false });
+    // Synthetic summary didn't include this tier (e.g. T2 missing).
+    expect(computeCohortFixtureDelta(70, null)).toEqual({ delta: null, isDivergent: false });
+    // Both missing — same: silent.
+    expect(computeCohortFixtureDelta(null, null)).toEqual({ delta: null, isDivergent: false });
+  });
+
+  it("supports an explicit warn threshold override for callers that need a tighter band", () => {
+    // A 3pt delta should be flagged once the threshold is tightened to 2pt.
+    expect(computeCohortFixtureDelta(73, 70, 2).isDivergent).toBe(true);
+    // A 5pt delta should be ignored once the threshold is widened to 10pt,
+    // confirming the override travels through both the magnitude and the
+    // boundary-strictness logic.
+    expect(computeCohortFixtureDelta(75, 70, 10).isDivergent).toBe(false);
   });
 });

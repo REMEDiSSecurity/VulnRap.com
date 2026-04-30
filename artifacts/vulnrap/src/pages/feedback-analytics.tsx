@@ -8079,9 +8079,50 @@ type DatasetSamples =
       gapMeetsTarget: boolean;
     };
 
+// Task #256 — per-tier synthetic-fixture summary block from /api/test/run.
+// Only the fields the dashboard reads are typed; the response carries more
+// (count, min/max, engine2Mean, passRate) but the cohort-mean delta panel
+// only needs the per-tier composite mean.
+export interface FixtureTierSummaryRow {
+  tier: string;
+  count: number;
+  compositeMean: number;
+}
+
 interface TestRunResponse {
   archetypes?: ArchetypeRow[];
   datasetSamples?: DatasetSamples;
+  summary?: FixtureTierSummaryRow[];
+}
+
+// Task #256 — 5pt is roughly a third of the dataset T1−T3 gap target (15pt)
+// and matches the granularity reviewers care about: smaller deltas are
+// noise-floor composite jitter, larger deltas mean the synthetic battery has
+// drifted away from the real-report distribution it's supposed to anchor.
+// Exported alongside `computeCohortFixtureDelta` so the unit tests pin both
+// the delta math and the warn threshold the UI uses to colour each tile.
+export const FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD = 5;
+
+/**
+ * Task #256 — compute the per-tier delta between the curated dataset cohort
+ * mean and the synthetic-fixture mean for the same tier, plus a flag for the
+ * "synthetic battery has drifted" warning treatment.
+ *
+ * Returns `delta: null` when either side is missing the mean (e.g. the
+ * synthetic summary doesn't include the tier, or the cohort had no samples).
+ * In that case `isDivergent` is also false — we never warn on missing data,
+ * because the absence of one side isn't itself a calibration drift signal.
+ */
+export function computeCohortFixtureDelta(
+  datasetMean: number | null,
+  fixtureMean: number | null,
+  warnThreshold: number = FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
+): { delta: number | null; isDivergent: boolean } {
+  if (datasetMean == null || fixtureMean == null) {
+    return { delta: null, isDivergent: false };
+  }
+  const delta = Number((datasetMean - fixtureMean).toFixed(1));
+  return { delta, isDivergent: Math.abs(delta) > warnThreshold };
 }
 
 export interface ArchetypeHistorySnapshot {
@@ -9162,6 +9203,21 @@ function DatasetCohortMeansSection() {
     .map(t => cohortByTier.get(t))
     .filter((c): c is DatasetCohort => c != null);
 
+  // Task #256 — index the synthetic-fixture summary so each dataset cohort
+  // tile can render the per-tier delta against its hand-written counterpart.
+  // The summary block is populated whenever the smoke endpoint succeeds; we
+  // still defend against `undefined` because the typed shape is optional and
+  // older deploys / partial failures could omit it.
+  const fixtureMeanByTier = new Map<string, number>(
+    (data.summary ?? []).map(s => [s.tier, s.compositeMean]),
+  );
+  const tierDeltas = orderedCohorts.map(c => {
+    const fxMean = fixtureMeanByTier.get(c.tier) ?? null;
+    const { delta, isDivergent } = computeCohortFixtureDelta(c.compositeMean, fxMean);
+    return { tier: c.tier, dsMean: c.compositeMean, fxMean, delta, isDivergent };
+  });
+  const divergentTiers = tierDeltas.filter(d => d.isDivergent && d.delta != null);
+
   const gapText = ds.gap != null ? `${ds.gap.toFixed(1)}pt` : "n/a";
   const gapColor = ds.gap == null
     ? "text-muted-foreground bg-muted/20 border-border/40"
@@ -9202,32 +9258,89 @@ function DatasetCohortMeansSection() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {orderedCohorts.map(c => (
-            <div
-              key={c.tier}
-              className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2"
-            >
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span className="font-mono">{DATASET_COHORT_TIER_LABELS[c.tier] ?? c.tier}</span>
-                <span className="tabular-nums text-muted-foreground/60">n={c.count}</span>
+          {orderedCohorts.map(c => {
+            const tierDelta = tierDeltas.find(d => d.tier === c.tier);
+            const delta = tierDelta?.delta ?? null;
+            const fxMean = tierDelta?.fxMean ?? null;
+            const isDivergent = tierDelta?.isDivergent ?? false;
+            const deltaColor = delta == null
+              ? "text-muted-foreground/60"
+              : isDivergent
+                ? "text-orange-400"
+                : "text-muted-foreground/80";
+            // Format the delta with an explicit sign so reviewers don't have
+            // to read it as "is the synthetic mean higher or lower?". Δ+ means
+            // the dataset cohort is hotter than the synthetic fixtures.
+            const deltaText = delta == null
+              ? "Δ —"
+              : `Δ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`;
+            return (
+              <div
+                key={c.tier}
+                data-testid={`dataset-cohort-tile-${c.tier}`}
+                className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2"
+              >
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span className="font-mono">{DATASET_COHORT_TIER_LABELS[c.tier] ?? c.tier}</span>
+                  <span className="tabular-nums text-muted-foreground/60">n={c.count}</span>
+                </div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-lg font-semibold tabular-nums text-foreground">
+                    {c.compositeMean != null ? c.compositeMean.toFixed(1) : "—"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">composite mean</span>
+                </div>
+                {/* Task #256 — surface the per-tier dataset-vs-fixture
+                    composite delta. When the synthetic battery agrees with
+                    the real-report cohort the delta sits near 0; once it
+                    drifts past the warn threshold the tile flips to the
+                    orange "divergent" treatment so reviewers can spot it
+                    without comparing the two cards by eye. */}
+                <div
+                  className={cn(
+                    "mt-1 text-[10px] tabular-nums flex items-center gap-1",
+                    deltaColor,
+                  )}
+                  data-testid={`dataset-cohort-fixture-delta-${c.tier}`}
+                >
+                  {isDivergent && <AlertTriangle className="w-3 h-3 shrink-0" />}
+                  <span>
+                    fixtures {fxMean != null ? fxMean.toFixed(1) : "—"} · {deltaText}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground/70 tabular-nums">
+                  {c.compositeMin != null && c.compositeMax != null
+                    ? <>range {c.compositeMin.toFixed(1)}–{c.compositeMax.toFixed(1)}</>
+                    : "no samples"}
+                  {c.engine2Mean != null && (
+                    <> · E2 mean {c.engine2Mean.toFixed(1)}</>
+                  )}
+                </div>
               </div>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-lg font-semibold tabular-nums text-foreground">
-                  {c.compositeMean != null ? c.compositeMean.toFixed(1) : "—"}
-                </span>
-                <span className="text-[10px] text-muted-foreground">composite mean</span>
-              </div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground/70 tabular-nums">
-                {c.compositeMin != null && c.compositeMax != null
-                  ? <>range {c.compositeMin.toFixed(1)}–{c.compositeMax.toFixed(1)}</>
-                  : "no samples"}
-                {c.engine2Mean != null && (
-                  <> · E2 mean {c.engine2Mean.toFixed(1)}</>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+        {/* Task #256 — once any tier's delta exceeds the warn threshold,
+            surface a single rolled-up hint at the bottom of the card so a
+            reviewer skimming the dashboard doesn't miss the per-tile
+            highlight. We list the offending tiers + signed deltas inline so
+            the warning is actionable without expanding anything. */}
+        {divergentTiers.length > 0 && (
+          <div
+            className="flex items-start gap-2 rounded-md border border-orange-400/30 bg-orange-400/[0.06] px-3 py-2 text-[11px] text-orange-300"
+            data-testid="dataset-cohort-fixture-divergence-warning"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span>
+              Synthetic battery has drifted from the real-report cohorts on{" "}
+              {divergentTiers
+                .map(d => `${DATASET_COHORT_TIER_LABELS[d.tier] ?? d.tier} (Δ${d.delta! >= 0 ? "+" : ""}${d.delta!.toFixed(1)})`)
+                .join(", ")}{" "}
+              — |Δ| &gt; {FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD}pt means the 42-fixture sample no longer mirrors
+              the curated dataset for that tier; review whether new fixtures are needed.
+            </span>
+          </div>
+        )}
         <div className="text-[10px] text-muted-foreground/70 font-mono break-all">
           source: {ds.sourcePath}
         </div>
