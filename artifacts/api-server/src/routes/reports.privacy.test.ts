@@ -1470,3 +1470,76 @@ describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", ()
     expect(res.body).not.toContain("- **Absence penalties applied**");
   });
 });
+
+// Task #367: the /.well-known/security.txt response must build its Canonical
+// and Policy lines through the shared buildPublicUrl helper so self-hosted
+// installs that set PUBLIC_URL — or that don't configure it at all — get a
+// security.txt that points researchers back at *their* origin instead of the
+// canonical vulnrap.com. Mirrors the docs-link tests in this file.
+describe("GET /.well-known/security.txt — public URL resolution", () => {
+  async function getText(path: string): Promise<{ status: number; body: string }> {
+    const r = await fetch(`${baseUrl}${path}`);
+    return { status: r.status, body: await r.text() };
+  }
+
+  it("uses PUBLIC_URL for the Canonical and Policy lines when set", async () => {
+    // Use a non-default origin (i.e. not the canonical vulnrap.com fallback)
+    // so this test would still fail if the route ever regressed back to
+    // hard-coding the Canonical / Policy lines.
+    const previousPublicUrl = process.env.PUBLIC_URL;
+    process.env.PUBLIC_URL = "https://self-hosted.example";
+    try {
+      const res = await getText("/.well-known/security.txt");
+      expect(res.status).toBe(200);
+      expect(res.body).toContain(
+        "Canonical: https://self-hosted.example/.well-known/security.txt",
+      );
+      expect(res.body).toContain("Policy: https://self-hosted.example/privacy");
+      expect(res.body).not.toContain("https://vulnrap.com/");
+    } finally {
+      if (previousPublicUrl === undefined) delete process.env.PUBLIC_URL;
+      else process.env.PUBLIC_URL = previousPublicUrl;
+    }
+  });
+
+  it("falls back to the request-derived origin when PUBLIC_URL is unset", async () => {
+    // Self-hosted installs that do not configure PUBLIC_URL should still get
+    // a security.txt pointing back at the same origin researchers reached
+    // — not a hard-coded vulnrap.com.
+    const previousPublicUrl = process.env.PUBLIC_URL;
+    delete process.env.PUBLIC_URL;
+    try {
+      const res = await getText("/.well-known/security.txt");
+      expect(res.status).toBe(200);
+      // The test server binds to 127.0.0.1; the Canonical / Policy lines
+      // must use that request origin.
+      expect(res.body).toMatch(
+        /Canonical: http:\/\/127\.0\.0\.1:\d+\/\.well-known\/security\.txt/,
+      );
+      expect(res.body).toMatch(/Policy: http:\/\/127\.0\.0\.1:\d+\/privacy/);
+      // And must *not* fall through to the canonical vulnrap.com domain.
+      expect(res.body).not.toContain("https://vulnrap.com/");
+    } finally {
+      if (previousPublicUrl === undefined) delete process.env.PUBLIC_URL;
+      else process.env.PUBLIC_URL = previousPublicUrl;
+    }
+  });
+
+  it("serves the same body shape on the legacy /security.txt path", async () => {
+    // Both the RFC 9116 well-known path and the legacy root alias should
+    // resolve through the same helper so the two responses stay in sync.
+    const previousPublicUrl = process.env.PUBLIC_URL;
+    process.env.PUBLIC_URL = "https://example.test";
+    try {
+      const res = await getText("/security.txt");
+      expect(res.status).toBe(200);
+      expect(res.body).toContain(
+        "Canonical: https://example.test/.well-known/security.txt",
+      );
+      expect(res.body).toContain("Policy: https://example.test/privacy");
+    } finally {
+      if (previousPublicUrl === undefined) delete process.env.PUBLIC_URL;
+      else process.env.PUBLIC_URL = previousPublicUrl;
+    }
+  });
+});

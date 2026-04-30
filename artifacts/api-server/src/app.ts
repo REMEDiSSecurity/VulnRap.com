@@ -10,6 +10,7 @@ import fs from "fs";
 import path from "path";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { buildPublicUrl } from "./lib/public-url";
 
 const app: Express = express();
 
@@ -156,19 +157,26 @@ if (swaggerDocument) {
   }));
 }
 
-const SECURITY_TXT = `Contact: mailto:remedisllc@gmail.com
+// Build the security.txt body per-request so Canonical / Policy resolve
+// through the shared buildPublicUrl helper (PUBLIC_URL → request origin →
+// vulnrap.com fallback) instead of being hard-coded.
+function buildSecurityTxt(req: Request): string {
+  const canonical = buildPublicUrl({ req, path: "/.well-known/security.txt" });
+  const policy = buildPublicUrl({ req, path: "/privacy" });
+  return `Contact: mailto:remedisllc@gmail.com
 Expires: 2027-12-31T23:59:00.000Z
 Preferred-Languages: en
-Canonical: https://vulnrap.com/.well-known/security.txt
-Policy: https://vulnrap.com/privacy
+Canonical: ${canonical}
+Policy: ${policy}
 `;
+}
 
-app.get("/.well-known/security.txt", (_req, res) => {
-  res.type("text/plain").send(SECURITY_TXT);
+app.get("/.well-known/security.txt", (req, res) => {
+  res.type("text/plain").send(buildSecurityTxt(req));
 });
 
-app.get("/security.txt", (_req, res) => {
-  res.type("text/plain").send(SECURITY_TXT);
+app.get("/security.txt", (req, res) => {
+  res.type("text/plain").send(buildSecurityTxt(req));
 });
 
 app.use("/api", router);
