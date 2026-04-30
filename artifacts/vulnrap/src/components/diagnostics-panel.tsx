@@ -7,9 +7,13 @@ import { Separator } from "@/components/ui/separator";
 import { ChevronDown, ChevronUp, Activity, AlertCircle, Download, ClipboardCopy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
+  AVRI_OVERRIDE_LABELS,
   buildAvriRubricMarkdown,
+  HANDWAVY_CATEGORY_LABELS,
+  HANDWAVY_CATEGORY_ORDER,
   type AvriCompositeBlock,
   type AvriEngine2Block,
+  type AvriHandwavyCategory,
 } from "@workspace/avri-rubric";
 
 // Task 62: keep in sync with VerificationMode in
@@ -539,23 +543,21 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
   );
 }
 
-// Task 107: theme buckets for FLAT-family hand-wavy phrase markers. Mirrors
-// HandwavyCategory in artifacts/api-server/src/lib/engines/avri/engine2-avri.ts.
-type HandwavyCategoryUI = "absence" | "hedging" | "buzzword";
-
-const HANDWAVY_CATEGORY_LABELS: Record<HandwavyCategoryUI, string> = {
-  absence: "Self-admitted absence of evidence",
-  hedging: "Generic hedging (\"may / appears\")",
-  buzzword: "Buzzword-soup framings",
-};
+// Task 107: theme buckets for FLAT-family hand-wavy phrase markers. The
+// category type, label table, and ordering are imported from
+// `@workspace/avri-rubric` so the on-screen panel and the markdown export
+// stay in sync (Task 272). Mirrors HandwavyCategory in
+// artifacts/api-server/src/lib/engines/avri/engine2-avri.ts via that
+// shared package.
 
 // Task 111: one-line legend per theme so a reviewer seeing these buckets for
 // the first time can tell at a glance what the group signals about the
 // report. Wording mirrors the comments in
 // `api-server/src/lib/engines/avri/engine2-avri.ts` next to the FLAT
 // hand-wavy marker list (absence-of-evidence vs. generic hedging vs.
-// buzzword-soup framings).
-const HANDWAVY_CATEGORY_HELP: Record<HandwavyCategoryUI | "other", string> = {
+// buzzword-soup framings). UI-only — the markdown export doesn't carry the
+// inline legend, so this stays local to the panel.
+const HANDWAVY_CATEGORY_HELP: Record<AvriHandwavyCategory | "other", string> = {
   absence:
     "Reporter explicitly admits they have no runnable reproducer, PoC, or enumeration — the bug is asserted, not observed.",
   hedging:
@@ -565,8 +567,6 @@ const HANDWAVY_CATEGORY_HELP: Record<HandwavyCategoryUI | "other", string> = {
   other:
     "Hand-wavy phrases that don't carry a theme tag (older cached payloads).",
 };
-
-const HANDWAVY_CATEGORY_ORDER: HandwavyCategoryUI[] = ["absence", "hedging", "buzzword"];
 
 // Sprint 11 / Task 60: Render the AVRI family rubric used for this report —
 // detected family + classification confidence, expected vs found gold signals,
@@ -583,7 +583,7 @@ interface AvriEngine2Breakdown {
   goldHits?: Array<{ id: string; description: string; points: number }>;
   goldMisses?: Array<{ id: string; description: string; points: number }>;
   absencePenalty?: number;
-  absencePenalties?: Array<{ id: string; description: string; points: number; flatHandwavyCategory?: HandwavyCategoryUI }>;
+  absencePenalties?: Array<{ id: string; description: string; points: number; flatHandwavyCategory?: AvriHandwavyCategory }>;
   contradictions?: string[];
   contradictionPenalty?: number;
   // Sprint 11 / Task 78: stripped-crash-trace block written by Engine 2
@@ -637,12 +637,17 @@ interface AvriEngine2Breakdown {
   blendedScore?: number;
 }
 
-const AVRI_OVERRIDE_LABELS: Array<{ token: string; label: string; tone: string }> = [
-  { token: "AVRI_NO_GOLD_SIGNALS", label: "No gold signals for family", tone: "text-red-400" },
-  { token: "AVRI_FAMILY_CONTRADICTION", label: "Report contradicts claimed family", tone: "text-red-400" },
-  { token: "AVRI_VELOCITY", label: "Submission-velocity penalty", tone: "text-orange-400" },
-  { token: "AVRI_TEMPLATE_CAMPAIGN", label: "Template fingerprint reused", tone: "text-orange-400" },
-];
+// Task 272: token+label come from `@workspace/avri-rubric`
+// (`AVRI_OVERRIDE_LABELS`) so the panel and the markdown export agree on
+// which override tokens are surfaced and what they're called. Tone is a
+// UI-only concern (red = composite-killer, orange = behavioural haircut),
+// so it stays here, keyed by the same token table.
+const AVRI_OVERRIDE_TONES: Record<string, string> = {
+  AVRI_NO_GOLD_SIGNALS: "text-red-400",
+  AVRI_FAMILY_CONTRADICTION: "text-red-400",
+  AVRI_VELOCITY: "text-orange-400",
+  AVRI_TEMPLATE_CAMPAIGN: "text-orange-400",
+};
 
 function AvriFamilySection({
   avri,
@@ -717,7 +722,9 @@ function AvriFamilySection({
   const matchingOverrides = overrides
     .map((rule) => {
       const meta = AVRI_OVERRIDE_LABELS.find((m) => rule.startsWith(m.token));
-      return meta ? { rule, ...meta } : null;
+      if (!meta) return null;
+      const tone = AVRI_OVERRIDE_TONES[meta.token] ?? "text-orange-400";
+      return { rule, token: meta.token, label: meta.label, tone };
     })
     .filter((x): x is { rule: string; token: string; label: string; tone: string } => x !== null);
 
@@ -770,14 +777,14 @@ function AvriFamilySection({
                   // hedging / buzzword) rather than one flat scroll. Markers
                   // missing a category (e.g. older cached payloads) fall back
                   // into an "Other" bucket rendered last.
-                  const groups = new Map<HandwavyCategoryUI | "other", typeof absencePenalties>();
+                  const groups = new Map<AvriHandwavyCategory | "other", typeof absencePenalties>();
                   for (const a of absencePenalties) {
-                    const key: HandwavyCategoryUI | "other" = a.flatHandwavyCategory ?? "other";
+                    const key: AvriHandwavyCategory | "other" = a.flatHandwavyCategory ?? "other";
                     const arr = groups.get(key) ?? [];
                     arr.push(a);
                     groups.set(key, arr);
                   }
-                  const orderedKeys: Array<HandwavyCategoryUI | "other"> = [
+                  const orderedKeys: Array<AvriHandwavyCategory | "other"> = [
                     ...HANDWAVY_CATEGORY_ORDER.filter((k) => groups.has(k)),
                     ...(groups.has("other") ? (["other"] as const) : []),
                   ];

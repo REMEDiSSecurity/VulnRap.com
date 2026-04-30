@@ -107,19 +107,26 @@ export interface AvriRubricInput {
   overridesApplied?: string[];
 }
 
-const HANDWAVY_LABELS: Record<AvriHandwavyCategory, string> = {
+// Task 272: also exported for the on-screen `AvriFamilySection` React
+// component in `artifacts/vulnrap/src/components/diagnostics-panel.tsx` so
+// the panel groups absence-penalty buckets in the same order and with the
+// same wording as the markdown export.
+export const HANDWAVY_CATEGORY_LABELS: Record<AvriHandwavyCategory, string> = {
   absence: "Self-admitted absence of evidence",
   hedging: 'Generic hedging ("may / appears")',
   buzzword: "Buzzword-soup framings",
 };
 
-const HANDWAVY_ORDER: AvriHandwavyCategory[] = [
+export const HANDWAVY_CATEGORY_ORDER: AvriHandwavyCategory[] = [
   "absence",
   "hedging",
   "buzzword",
 ];
 
-const AVRI_OVERRIDE_LABELS: Array<{ token: string; label: string }> = [
+// Task 272: also exported so the on-screen panel's "AVRI Composite
+// Overrides" section reads label wording (and the set of recognised
+// tokens) from the same table the markdown export uses.
+export const AVRI_OVERRIDE_LABELS: Array<{ token: string; label: string }> = [
   { token: "AVRI_NO_GOLD_SIGNALS", label: "No gold signals for family" },
   {
     token: "AVRI_FAMILY_CONTRADICTION",
@@ -216,12 +223,12 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
         arr.push(a);
         groups.set(key, arr);
       }
-      for (const key of HANDWAVY_ORDER) {
+      for (const key of HANDWAVY_CATEGORY_ORDER) {
         const items = groups.get(key);
         if (!items || items.length === 0) continue;
         const subtotal = items.reduce((s, a) => s + a.points, 0);
         lines.push(
-          `  - ${HANDWAVY_LABELS[key]} (${items.length} phrase${items.length === 1 ? "" : "s"}, −${subtotal} raw):`,
+          `  - ${HANDWAVY_CATEGORY_LABELS[key]} (${items.length} phrase${items.length === 1 ? "" : "s"}, −${subtotal} raw):`,
         );
         for (const a of items) {
           lines.push(`    - −${a.points} ${a.description} (${a.id})`);
