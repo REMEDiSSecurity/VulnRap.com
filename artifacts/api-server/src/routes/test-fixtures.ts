@@ -17,6 +17,7 @@ import { analyzeSlopWithLLM, evaluateLlmGate, isLLMAvailable, type LlmGateReason
 import { fuseScores, type ValidityFusionAudit } from "../lib/score-fusion";
 import {
   appendArchetypeSnapshots,
+  MAX_SNAPSHOTS as ARCHETYPE_HISTORY_MAX_SNAPSHOTS,
   readArchetypeHistory,
   readArchetypeHistoryFileStats,
 } from "../lib/archetype-history";
@@ -3208,10 +3209,14 @@ router.get("/test/archetype-history/config", async (_req, res) => {
   // /api/test/run calls have triggered an append yet).
   // Task #288 — also expose the persisted history file's on-disk size +
   // snapshot count for storage-sizing decisions. `null` until the file exists.
+  // Task #403 — expose the hard MAX_SNAPSHOTS row cap so the dashboard can
+  // render an "approaching the cap" badge against snapshotCount without
+  // hard-coding the number on the client.
   res.json({
     ...getCompactAfterDaysSetting(),
     lastCompaction: readCompactionStats(),
     historyFile: await readArchetypeHistoryFileStats(),
+    maxSnapshots: ARCHETYPE_HISTORY_MAX_SNAPSHOTS,
   });
 });
 
@@ -3228,14 +3233,16 @@ router.put(
         (req.body as { compactAfterDays?: unknown } | null | undefined)
           ?.compactAfterDays,
       );
-      // Mirror the GET shape (Task #211, Task #288) so the dashboard can
-      // drop the PUT response straight into its query cache without a
-      // follow-up GET to learn the most recent compaction outcome and
-      // the on-disk size of the persisted history file.
+      // Mirror the GET shape (Task #211, Task #288, Task #403) so the
+      // dashboard can drop the PUT response straight into its query
+      // cache without a follow-up GET to learn the most recent
+      // compaction outcome, the on-disk size of the persisted history
+      // file, and the hard row cap.
       res.json({
         ...next,
         lastCompaction: readCompactionStats(),
         historyFile: await readArchetypeHistoryFileStats(),
+        maxSnapshots: ARCHETYPE_HISTORY_MAX_SNAPSHOTS,
       });
     } catch (err) {
       if (err instanceof CompactWindowValidationError) {

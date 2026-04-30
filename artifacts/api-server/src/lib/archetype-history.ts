@@ -56,7 +56,13 @@ export interface ArchetypeHistoryFile {
   snapshots: ArchetypeSnapshot[];
 }
 
-const MAX_SNAPSHOTS = 2_000;
+// Hard cap on the number of rows persisted to disk. Once a write would
+// push past this, the oldest rows are silently evicted (after the
+// daily-rollup compaction pass has had a chance to collapse them). The
+// constant is exported so the calibration dashboard can render a
+// "approaching the cap" badge without hard-coding the number on the
+// client (Task #403).
+export const MAX_SNAPSHOTS = 2_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_PATH = path.resolve(
   process.cwd(),

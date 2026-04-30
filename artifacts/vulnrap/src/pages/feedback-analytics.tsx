@@ -10916,6 +10916,68 @@ interface ArchetypeHistoryConfigResponse {
   max: number;
   lastCompaction: ArchetypeHistoryCompactionStats | null;
   historyFile: ArchetypeHistoryFileStats | null;
+  // Task #403 — hard row cap enforced by the writer. Reviewers need
+  // to know how close `historyFile.snapshotCount` is to this number
+  // before raw rows start being silently evicted; the dashboard reads
+  // it from the server so it doesn't drift out of sync if the writer
+  // ever bumps the cap. Optional so an older API response (pre-#403)
+  // still parses and the badge simply hides until the field shows up.
+  maxSnapshots?: number;
+}
+
+// Task #403 — thresholds at which the snapshot-cap badge transitions
+// from hidden -> amber -> red. Tuned so reviewers get a heads-up while
+// they still have several runs of slack to widen the compaction window
+// before raw rows actually start being evicted.
+const SNAPSHOT_CAP_AMBER_THRESHOLD = 0.8;
+const SNAPSHOT_CAP_RED_THRESHOLD = 0.95;
+
+// Task #403 — small color-coded "approaching the cap" badge rendered
+// next to the existing "History file: N KB · N snapshots" line. Stays
+// hidden until usage crosses the amber threshold so the dashboard isn't
+// noisy at low volumes; flips to red once raw-row eviction is imminent.
+// Renders nothing when the server didn't surface a cap (older API) or
+// when the cap is non-positive — both leave us without a meaningful
+// percentage to report.
+function SnapshotCapBadge({
+  snapshotCount,
+  maxSnapshots,
+}: {
+  snapshotCount: number;
+  maxSnapshots: number | undefined;
+}) {
+  if (
+    !Number.isFinite(snapshotCount)
+    || snapshotCount < 0
+    || maxSnapshots === undefined
+    || !Number.isFinite(maxSnapshots)
+    || maxSnapshots <= 0
+  ) {
+    return null;
+  }
+  const ratio = snapshotCount / maxSnapshots;
+  if (ratio < SNAPSHOT_CAP_AMBER_THRESHOLD) return null;
+  const isRed = ratio >= SNAPSHOT_CAP_RED_THRESHOLD;
+  // Round towards the user-visible reality: at 92.4% we want to show
+  // "92%", not "93%", so a reviewer doesn't think they're over a
+  // threshold they're actually under.
+  const pct = Math.floor(ratio * 100);
+  const label = `at ${pct}% of the snapshot cap — tighten the compaction window or oldest rows will be evicted`;
+  return (
+    <span
+      data-testid="archetype-history-snapshot-cap-badge"
+      data-severity={isRed ? "red" : "amber"}
+      className={
+        "ml-1.5 inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-medium align-baseline "
+        + (isRed
+          ? "border-red-500/40 bg-red-500/10 text-red-200"
+          : "border-amber-500/40 bg-amber-500/10 text-amber-200")
+      }
+      title={`${snapshotCount} of ${maxSnapshots} snapshots used (${(ratio * 100).toFixed(1)}%)`}
+    >
+      {label}
+    </span>
+  );
 }
 
 // Task #288 — format an on-disk byte count using base-1024 units so the
@@ -12269,6 +12331,17 @@ function EmergingArchetypesSection() {
                   {configData.historyFile.snapshotCount}
                 </span>{" "}
                 snapshot{configData.historyFile.snapshotCount === 1 ? "" : "s"}
+                {/* Task #403 — color-coded heads-up when snapshotCount
+                    is closing in on the writer's hard MAX_SNAPSHOTS row
+                    cap. Hidden when usage is comfortably under the
+                    amber threshold or when the server didn't surface a
+                    cap (older API). Reviewers can act on the hint by
+                    tightening the compaction window above before raw
+                    rows start being evicted. */}
+                <SnapshotCapBadge
+                  snapshotCount={configData.historyFile.snapshotCount}
+                  maxSnapshots={configData.maxSnapshots}
+                />
               </span>
             )}
           </div>

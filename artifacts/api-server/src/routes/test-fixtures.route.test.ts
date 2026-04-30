@@ -497,6 +497,10 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     // Task #288 — on-disk size of the persisted history file plus the
     // snapshot count it currently holds, or null until the file exists.
     historyFile: { sizeBytes: number; snapshotCount: number } | null;
+    // Task #403 — hard MAX_SNAPSHOTS row cap enforced by the writer,
+    // surfaced so the dashboard can render an "approaching the cap"
+    // badge against snapshotCount without hard-coding the number.
+    maxSnapshots: number;
   }
 
   function deleteJson<T>(urlPath: string): Promise<{ status: number; body: T }> {
@@ -714,6 +718,31 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     expect(put.body.historyFile).not.toBeNull();
     expect(put.body.historyFile!.sizeBytes).toBeGreaterThan(0);
     expect(put.body.historyFile!.snapshotCount).toBeGreaterThan(0);
+  });
+
+  // Task #403 — both GET and PUT surface the writer's hard
+  // MAX_SNAPSHOTS row cap so the calibration dashboard can render an
+  // "approaching the cap" badge against snapshotCount without
+  // hard-coding the number on the client.
+  it("GET and PUT surface the writer's MAX_SNAPSHOTS row cap so the dashboard can render an approaching-cap badge", async () => {
+    const get = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    expect(typeof get.maxSnapshots).toBe("number");
+    expect(Number.isInteger(get.maxSnapshots)).toBe(true);
+    expect(get.maxSnapshots).toBeGreaterThan(0);
+    // The cap must comfortably exceed the current snapshot count
+    // (otherwise raw rows would already be evicted in the test bed),
+    // and must be large enough that the badge isn't permanently stuck
+    // in the "amber" band on a fresh deploy.
+    if (get.historyFile) {
+      expect(get.maxSnapshots).toBeGreaterThan(get.historyFile.snapshotCount);
+    }
+
+    const put = await putJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+      { compactAfterDays: 50 },
+    );
+    expect(put.status).toBe(200);
+    expect(put.body.maxSnapshots).toBe(get.maxSnapshots);
   });
 });
 
