@@ -136,6 +136,38 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
         "aria-label",
         new RegExp(`Revert unavailable for ${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
       );
+
+      // Task #241 — the disabled row also renders a visible inline hint
+      // explaining why Revert is greyed out, so reviewers on touch devices
+      // (and screen-reader users who don't focus the button) don't have to
+      // hover to discover the reason. The hint sits inside the SAME
+      // edit-history row as the disabled button and is wired to it via
+      // aria-describedby.
+      const olderRow = historyList
+        .getByTestId("handwavy-edit-history-row")
+        .filter({ has: page.locator('[data-testid="handwavy-revert-edit"][data-noop="true"]') });
+      await expect(olderRow).toHaveCount(1);
+      const noopHint = olderRow.getByTestId("handwavy-revert-noop-hint");
+      await expect(noopHint, "disabled row must show a visible non-hover-only hint").toBeVisible();
+      await expect(noopHint).toContainText(/already matches/i);
+      await expect(noopHint).toContainText(/nothing to undo/i);
+      const hintId = await noopHint.getAttribute("id");
+      expect(hintId, "hint must have a stable id for aria-describedby wiring").toBeTruthy();
+      // The id MUST be whitespace-free — aria-describedby is an IDREF list
+      // split on whitespace, and the seed phrases here contain spaces, so a
+      // raw-phrase id would silently break the screen-reader association.
+      expect(hintId!).not.toMatch(/\s/);
+      expect(hintId!).toMatch(/^[A-Za-z][A-Za-z0-9_:.-]*$/);
+      await expect(olderRevert).toHaveAttribute("aria-describedby", hintId!);
+
+      // The other (enabled) row must NOT render a hint — Task #241 only
+      // explains the disabled state and leaves working rows untouched.
+      const enabledRow = historyList
+        .getByTestId("handwavy-edit-history-row")
+        .filter({ has: page.locator('[data-testid="handwavy-revert-edit"][data-noop="false"]') });
+      await expect(enabledRow).toHaveCount(1);
+      await expect(enabledRow.getByTestId("handwavy-revert-noop-hint")).toHaveCount(0);
+      await expect(newestRevert).not.toHaveAttribute("aria-describedby", /.+/);
     } finally {
       await cleanup(apiCtx, phrase);
       await apiCtx.dispose();

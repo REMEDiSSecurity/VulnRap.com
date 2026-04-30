@@ -1697,7 +1697,7 @@ export function revertWouldBeNoop(
 // Task #147 — category and rationale render as visually distinct blocks
 // (pill swap for category, word-level inline diff for rationale) so
 // reviewers can tell at a glance which fields changed.
-function renderHandwavyEditEntries({
+export function renderHandwavyEditEntries({
   editsList,
   phrase,
   currentCategory,
@@ -1739,91 +1739,122 @@ function renderHandwavyEditEntries({
       // explanatory tooltip instead of a "nothing to undo" toast they only
       // discover after firing.
       const isNoop = revertWouldBeNoop(entry, currentCategory, currentRationale);
+      // Task #241 — when Revert is greyed out for the no-op case, render a
+      // visible inline caption beneath the row so the reason is obvious
+      // without hovering the button. The existing aria-label/title were the
+      // only explanation, which is invisible to touch users and to screen-
+      // reader users who never focus the disabled button. The hint is also
+      // wired to the button via aria-describedby so AT users who DO land on
+      // the button hear the same wording the visible caption shows.
+      // Build a whitespace-safe DOM id. `aria-describedby` is an IDREF list
+      // split on whitespace, so embedding the raw phrase (which routinely
+      // contains spaces, e.g. "we plan to investigate") would silently break
+      // the screen-reader link. We slugify the phrase (alphanumerics only,
+      // collapsed) and combine it with the entry timestamp + index — together
+      // these are unique within the panel without leaking unsafe characters.
+      const phraseSlug = phrase.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "phrase";
+      const editedAtSlug = editedAtKey.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "entry";
+      const hintId = isNoop ? `handwavy-revert-noop-${phraseSlug}-${editedAtSlug}-${idx}` : undefined;
       return (
         <li
           key={`${editedAtKey}-${idx}`}
-          className="flex items-start gap-2 text-[10px] text-muted-foreground"
+          className="flex flex-col gap-1 text-[10px] text-muted-foreground"
           data-testid={showHistoryTestIds ? "handwavy-edit-history-row" : "handwavy-edit-entry"}
         >
-          <div className="flex-1 space-y-1">
-            <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-              <span>
-                {showHistoryTestIds ? "By " : ""}
-                <span className="text-foreground/80">
-                  {entry.editedBy || "anonymous"}
+          <div className="flex items-start gap-2">
+            <div className="flex-1 space-y-1">
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                <span>
+                  {showHistoryTestIds ? "By " : ""}
+                  <span className="text-foreground/80">
+                    {entry.editedBy || "anonymous"}
+                  </span>
                 </span>
-              </span>
-              {editedAtLabel && <span>{showHistoryTestIds ? editedAtLabel : `• ${editedAtLabel}`}</span>}
-            </div>
-            {entry.category && (
-              <div
-                className="flex items-center gap-1 flex-wrap"
-                data-testid={
-                  showHistoryTestIds ? "handwavy-edit-history-category" : "handwavy-edit-category"
-                }
-              >
-                <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px] font-semibold mr-1">
-                  category
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-muted/40 text-foreground/70 capitalize">
-                  {entry.category.from}
-                </span>
-                <ArrowRight className="w-3 h-3 text-muted-foreground/60" />
-                <span className="px-1.5 py-0.5 rounded bg-primary/15 text-primary capitalize">
-                  {entry.category.to}
-                </span>
+                {editedAtLabel && <span>{showHistoryTestIds ? editedAtLabel : `• ${editedAtLabel}`}</span>}
               </div>
-            )}
-            {entry.rationale && (
-              <RationaleDiff
-                from={entry.rationale.from ?? ""}
-                to={entry.rationale.to ?? ""}
-                wrapperTestId={
-                  showHistoryTestIds ? "handwavy-edit-history-rationale" : "handwavy-edit-rationale"
-                }
-              />
-            )}
-            {showHistoryTestIds && !entry.category && !entry.rationale && (
-              <div className="italic">No tracked field changes recorded.</div>
-            )}
+              {entry.category && (
+                <div
+                  className="flex items-center gap-1 flex-wrap"
+                  data-testid={
+                    showHistoryTestIds ? "handwavy-edit-history-category" : "handwavy-edit-category"
+                  }
+                >
+                  <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px] font-semibold mr-1">
+                    category
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-muted/40 text-foreground/70 capitalize">
+                    {entry.category.from}
+                  </span>
+                  <ArrowRight className="w-3 h-3 text-muted-foreground/60" />
+                  <span className="px-1.5 py-0.5 rounded bg-primary/15 text-primary capitalize">
+                    {entry.category.to}
+                  </span>
+                </div>
+              )}
+              {entry.rationale && (
+                <RationaleDiff
+                  from={entry.rationale.from ?? ""}
+                  to={entry.rationale.to ?? ""}
+                  wrapperTestId={
+                    showHistoryTestIds ? "handwavy-edit-history-rationale" : "handwavy-edit-rationale"
+                  }
+                />
+              )}
+              {showHistoryTestIds && !entry.category && !entry.rationale && (
+                <div className="italic">No tracked field changes recorded.</div>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-[10px] text-amber-300 hover:text-amber-200 shrink-0 disabled:text-muted-foreground/60"
+              disabled={
+                editing !== null ||
+                busy === revertKey ||
+                busy === `rm:${phrase}` ||
+                isNoop ||
+                !mutationsAllowed
+              }
+              onClick={() => onRevertClick(entry)}
+              data-testid="handwavy-revert-edit"
+              data-noop={isNoop ? "true" : "false"}
+              data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+              aria-describedby={hintId}
+              aria-label={
+                !mutationsAllowed
+                  ? `Revert blocked for ${phrase}: reviewer token missing or invalid.`
+                  : isNoop
+                    ? `Revert unavailable for ${phrase}: the marker already matches this edit's prior state.`
+                    : `Revert edit on ${phrase} from ${editedAtLabel ?? entry.editedAt}`
+              }
+              title={
+                !mutationsAllowed
+                  ? MUTATIONS_BLOCKED_TITLE
+                  : isNoop
+                    ? "Already at this state — nothing to revert."
+                    : "Restore the values from before this edit (recorded as a new audit entry)."
+              }
+            >
+              <Undo2 className="w-3 h-3 mr-1" />
+              {busy === revertKey
+                ? "Reverting…"
+                : isNoop
+                  ? "At this state"
+                  : "Revert"}
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1.5 text-[10px] text-amber-300 hover:text-amber-200 shrink-0 disabled:text-muted-foreground/60"
-            disabled={
-              editing !== null ||
-              busy === revertKey ||
-              busy === `rm:${phrase}` ||
-              isNoop ||
-              !mutationsAllowed
-            }
-            onClick={() => onRevertClick(entry)}
-            data-testid="handwavy-revert-edit"
-            data-noop={isNoop ? "true" : "false"}
-            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-            aria-label={
-              !mutationsAllowed
-                ? `Revert blocked for ${phrase}: reviewer token missing or invalid.`
-                : isNoop
-                  ? `Revert unavailable for ${phrase}: the marker already matches this edit's prior state.`
-                  : `Revert edit on ${phrase} from ${editedAtLabel ?? entry.editedAt}`
-            }
-            title={
-              !mutationsAllowed
-                ? MUTATIONS_BLOCKED_TITLE
-                : isNoop
-                  ? "Already at this state — nothing to revert."
-                  : "Restore the values from before this edit (recorded as a new audit entry)."
-            }
-          >
-            <Undo2 className="w-3 h-3 mr-1" />
-            {busy === revertKey
-              ? "Reverting…"
-              : isNoop
-                ? "At this state"
-                : "Revert"}
-          </Button>
+          {isNoop && (
+            <div
+              id={hintId}
+              className="flex items-start gap-1 text-[10px] text-muted-foreground/80 pl-0.5"
+              data-testid="handwavy-revert-noop-hint"
+            >
+              <Info className="w-3 h-3 mt-0.5 shrink-0" aria-hidden="true" />
+              <span>
+                Revert is unavailable because the marker already matches this edit's prior values — there's nothing to undo.
+              </span>
+            </div>
+          )}
         </li>
       );
     });
