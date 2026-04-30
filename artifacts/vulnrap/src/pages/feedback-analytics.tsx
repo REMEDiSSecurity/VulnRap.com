@@ -13166,7 +13166,27 @@ export function DatasetCohortFixtureDeltaSparkline({
   );
 }
 
+// Task #378 — shape returned by GET /api/test/dataset-history/config.
+// Mirrors ArchetypeHistoryConfigResponse but doesn't include the
+// archetype-specific lastCompaction / historyFile blocks (those live on
+// the archetype config endpoint). Reused by the compaction-window
+// editor inside DatasetCohortDriftSection so reviewers can adjust the
+// rollup window from the same panel that renders the trend.
+interface DatasetHistoryConfigResponse {
+  effectiveDays: number;
+  source: "env" | "persisted" | "default";
+  envOverride: number | null;
+  persistedDays: number | null;
+  defaultDays: number;
+  min: number;
+  max: number;
+}
+
+const DATASET_HISTORY_CONFIG_QUERY_KEY = ["test-dataset-history-config"] as const;
+
 function DatasetCohortDriftSection() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data, isLoading, isError } = useQuery<DatasetHistoryResponse>({
     queryKey: DATASET_HISTORY_QUERY_KEY,
     queryFn: async () => {
@@ -13178,6 +13198,115 @@ function DatasetCohortDriftSection() {
     refetchInterval: 300_000,
     retry: false,
   });
+
+  // Task #378 — read the effective dataset-history compaction window so
+  // the reviewer can both see what's in force (env override / persisted
+  // setting / default) and edit the persisted value inline. The
+  // endpoint is dev-only (404s in production); we tolerate failures
+  // silently because the surrounding panel must still render the
+  // trend.
+  const { data: configData } = useQuery<DatasetHistoryConfigResponse>({
+    queryKey: DATASET_HISTORY_CONFIG_QUERY_KEY,
+    queryFn: async () => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/test/dataset-history/config`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 300_000,
+    retry: false,
+  });
+
+  // Local draft so a reviewer can type without firing a PUT on every
+  // keystroke. We sync it with the server-reported effective value
+  // whenever that changes (mirrors the archetype-history editor above).
+  const [compactDraft, setCompactDraft] = useState<string>("");
+  const [compactSaving, setCompactSaving] = useState(false);
+  const [compactResetting, setCompactResetting] = useState(false);
+  useEffect(() => {
+    if (configData) setCompactDraft(String(configData.effectiveDays));
+  }, [configData?.effectiveDays]);
+
+  const compactMin = configData?.min ?? 7;
+  const compactMax = configData?.max ?? 365;
+  const compactDraftNum = Number(compactDraft);
+  const compactDraftValid =
+    Number.isFinite(compactDraftNum)
+    && Number.isInteger(compactDraftNum)
+    && compactDraftNum >= compactMin
+    && compactDraftNum <= compactMax;
+  const compactDraftDirty =
+    configData != null && compactDraftValid && compactDraftNum !== configData.effectiveDays;
+  const envLocked = configData?.envOverride != null;
+
+  async function saveCompactWindow() {
+    if (!compactDraftValid || compactSaving || compactResetting || envLocked) return;
+    setCompactSaving(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      const tok = getCalibrationToken();
+      if (tok) headers["x-calibration-token"] = tok;
+      const res = await fetch(`${baseUrl}/api/test/dataset-history/config`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ compactAfterDays: compactDraftNum }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        effectiveDays?: number;
+      };
+      if (!res.ok) {
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
+      toast({
+        title: "Dataset trend rollup window updated",
+        description: `Snapshots older than ${body.effectiveDays}d will be rolled up to one row per day on the next /api/test/run.`,
+      });
+      queryClient.invalidateQueries({ queryKey: DATASET_HISTORY_CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: DATASET_HISTORY_QUERY_KEY });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to update the rollup window.";
+      toast({ title: "Could not save", description: msg, variant: "destructive" });
+    } finally {
+      setCompactSaving(false);
+    }
+  }
+
+  async function resetCompactWindow() {
+    if (compactResetting || compactSaving || envLocked) return;
+    if (configData?.persistedDays == null) return;
+    setCompactResetting(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const headers: Record<string, string> = {};
+      const tok = getCalibrationToken();
+      if (tok) headers["x-calibration-token"] = tok;
+      const res = await fetch(`${baseUrl}/api/test/dataset-history/config`, {
+        method: "DELETE",
+        headers,
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        effectiveDays?: number;
+        defaultDays?: number;
+      };
+      if (!res.ok) {
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
+      toast({
+        title: "Dataset trend rollup window reset",
+        description: `Reverted to the built-in default (${body.effectiveDays ?? body.defaultDays}d).`,
+      });
+      queryClient.invalidateQueries({ queryKey: DATASET_HISTORY_CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: DATASET_HISTORY_QUERY_KEY });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to reset the rollup window.";
+      toast({ title: "Could not reset", description: msg, variant: "destructive" });
+    } finally {
+      setCompactResetting(false);
+    }
+  }
 
   // Task #370 — pull the calibration `gapTarget` from /api/test/run's
   // datasetSamples so the T1−T3 gap sparkline below can draw a dashed
@@ -13247,6 +13376,95 @@ function DatasetCohortDriftSection() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/*
+          Task #378 — reviewer-tunable rollup window. Mirrors the
+          archetype-history compaction editor so the same controls feel
+          familiar across both panels. Only rendered when the GET
+          succeeded (the endpoint 404s in production); failure is
+          tolerated silently because the surrounding trend must still
+          render.
+        */}
+        {configData && (
+          <div
+            className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 text-[11px] text-muted-foreground"
+            data-testid="dataset-history-compact-config"
+          >
+            <span className="font-mono text-muted-foreground/80">Trend rollup window:</span>
+            <span
+              className="tabular-nums text-foreground/80"
+              data-testid="dataset-history-compact-effective"
+              title={
+                configData.source === "env"
+                  ? `Pinned by DATASET_HISTORY_COMPACT_DAYS=${configData.envOverride}. Persisted reviewer setting (if any) is ignored while the env var is set.`
+                  : configData.source === "persisted"
+                    ? `Persisted reviewer setting. Default is ${configData.defaultDays}d.`
+                    : `Built-in default. Allowed range: ${configData.min}–${configData.max}d.`
+              }
+            >
+              {configData.effectiveDays}d
+            </span>
+            <Badge
+              variant="outline"
+              className="text-[10px] tabular-nums font-mono"
+              data-testid="dataset-history-compact-source"
+            >
+              {configData.source}
+            </Badge>
+            <input
+              type="number"
+              min={configData.min}
+              max={configData.max}
+              step={1}
+              value={compactDraft}
+              onChange={e => setCompactDraft(e.target.value)}
+              disabled={envLocked || compactSaving || compactResetting}
+              className={cn(
+                "ml-auto w-16 rounded border bg-background px-2 py-0.5 text-[11px] tabular-nums",
+                compactDraft !== "" && !compactDraftValid
+                  ? "border-red-500/60"
+                  : "border-border/60",
+                envLocked && "opacity-50 cursor-not-allowed",
+              )}
+              data-testid="dataset-history-compact-input"
+              aria-label="Dataset trend rollup window in days"
+              title={
+                envLocked
+                  ? "Cleared by the DATASET_HISTORY_COMPACT_DAYS env var. Unset it to re-enable reviewer edits."
+                  : `Allowed range: ${configData.min}–${configData.max}d.`
+              }
+            />
+            <span className="text-muted-foreground/60">d</span>
+            <button
+              type="button"
+              onClick={saveCompactWindow}
+              disabled={
+                envLocked
+                || !compactDraftDirty
+                || compactSaving
+                || compactResetting
+              }
+              className="rounded border border-border/60 bg-background px-2 py-0.5 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              data-testid="dataset-history-compact-save"
+            >
+              {compactSaving ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={resetCompactWindow}
+              disabled={
+                envLocked
+                || configData.persistedDays == null
+                || compactSaving
+                || compactResetting
+              }
+              className="rounded border border-border/60 bg-background px-2 py-0.5 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              data-testid="dataset-history-compact-reset"
+              title="Clear the persisted reviewer setting and fall back to the built-in default."
+            >
+              {compactResetting ? "Resetting…" : "Reset"}
+            </button>
+          </div>
+        )}
         {summary.isEmpty ? (
           <div
             className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 text-[11px] text-muted-foreground"

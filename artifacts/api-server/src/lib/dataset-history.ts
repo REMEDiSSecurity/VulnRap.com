@@ -16,16 +16,26 @@
 // dashboard reuse the same sparkline rendering pattern.
 //
 // Task #264 — to keep the trend window growing without ballooning the
-// file, snapshots older than COMPACT_AFTER_DAYS (default 30, override
-// via DATASET_HISTORY_COMPACT_DAYS) are down-sampled to one row per
-// (UTC day, tier) on every append. Aggregated rows carry
+// file, snapshots older than COMPACT_AFTER_DAYS are down-sampled to one
+// row per (UTC day, tier) on every append. Aggregated rows carry
 // `aggregated: true` so the dashboard can render them with a different
 // stroke than the raw recent points. Without this pass the 2 000-row
 // MAX_SNAPSHOTS cap would just truncate the oldest detail abruptly
 // after several months of runs instead of preserving the long-tail
 // trend at coarser resolution.
+//
+// Task #378 — the effective window now resolves through
+// dataset-history-config.ts (env var > persisted JSON > built-in
+// default) so reviewers can tune the trend-resolution / storage
+// tradeoff from the calibration dashboard without a redeploy. The
+// DATASET_HISTORY_COMPACT_DAYS env var still wins so deploy-time
+// policy can pin the value when it needs to.
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import {
+  DEFAULT_COMPACT_AFTER_DAYS as CONFIG_DEFAULT_COMPACT_AFTER_DAYS,
+  getEffectiveCompactAfterDays,
+} from "./dataset-history-config";
 
 export interface DatasetCohortSnapshot {
   /** ISO-8601 timestamp of the test run that produced this snapshot. */
@@ -88,7 +98,10 @@ export interface DatasetHistoryFile {
 
 const MAX_SNAPSHOTS = 2_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_COMPACT_AFTER_DAYS = 30;
+// Re-exported under the local name so the existing __testing surface
+// (and any external consumers that compare against it) keep working
+// even though the resolution itself moved into dataset-history-config.
+const DEFAULT_COMPACT_AFTER_DAYS = CONFIG_DEFAULT_COMPACT_AFTER_DAYS;
 const DEFAULT_PATH = path.resolve(
   process.cwd(),
   "artifacts/api-server/data/dataset-history.json",
@@ -98,12 +111,12 @@ function historyPath(): string {
   return process.env.DATASET_HISTORY_PATH ?? DEFAULT_PATH;
 }
 
+// Task #378 — kept as a thin pass-through so the existing __testing
+// surface continues to work and any in-tree caller that imported the
+// helper directly still gets the effective value (env > persisted >
+// default) instead of the bare env-var read.
 function compactAfterDays(): number {
-  const raw = process.env.DATASET_HISTORY_COMPACT_DAYS;
-  if (raw === undefined) return DEFAULT_COMPACT_AFTER_DAYS;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return DEFAULT_COMPACT_AFTER_DAYS;
-  return n;
+  return getEffectiveCompactAfterDays();
 }
 
 async function readFromDisk(p: string): Promise<DatasetHistoryFile> {

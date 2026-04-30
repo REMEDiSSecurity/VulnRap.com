@@ -30,6 +30,12 @@ import {
   getCompactAfterDaysSetting,
   setPersistedCompactAfterDays,
 } from "../lib/archetype-history-config";
+import {
+  clearPersistedCompactAfterDays as clearPersistedDatasetCompactAfterDays,
+  CompactWindowValidationError as DatasetCompactWindowValidationError,
+  getCompactAfterDaysSetting as getDatasetCompactAfterDaysSetting,
+  setPersistedCompactAfterDays as setPersistedDatasetCompactAfterDays,
+} from "../lib/dataset-history-config";
 import { readCompactionStats } from "../lib/archetype-history-stats";
 import { requireCalibrationAuth } from "../middlewares/require-calibration-auth";
 import {
@@ -3060,6 +3066,68 @@ router.get("/test/dataset-history", async (_req, res) => {
     cohorts,
   });
 });
+
+// Task #378 — reviewer-tunable compaction window for the persisted
+// dataset-history.json trend. Mirrors the archetype-history/config
+// endpoint shape (Task #99) so the calibration dashboard can reuse the
+// same input + reset UI for both knobs. Resolution order is env var >
+// persisted JSON > built-in default; the dashboard surfaces all three
+// so reviewers can see why the effective window is what it is. Both
+// endpoints 404 in production (the surrounding /test/* surface is
+// dev-only) and the mutating endpoints share the calibration token
+// gate for parity with archetype-history.
+router.get("/test/dataset-history/config", async (_req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not available in production." });
+    return;
+  }
+  res.json(getDatasetCompactAfterDaysSetting());
+});
+
+router.put(
+  "/test/dataset-history/config",
+  requireCalibrationAuth,
+  async (req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      res.status(404).json({ error: "Not available in production." });
+      return;
+    }
+    try {
+      const next = await setPersistedDatasetCompactAfterDays(
+        (req.body as { compactAfterDays?: unknown } | null | undefined)
+          ?.compactAfterDays,
+      );
+      res.json(next);
+    } catch (err) {
+      if (err instanceof DatasetCompactWindowValidationError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      res
+        .status(500)
+        .json({ error: (err as Error)?.message ?? "Failed to update compaction window." });
+    }
+  },
+);
+
+router.delete(
+  "/test/dataset-history/config",
+  requireCalibrationAuth,
+  async (_req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      res.status(404).json({ error: "Not available in production." });
+      return;
+    }
+    try {
+      const next = await clearPersistedDatasetCompactAfterDays();
+      res.json(next);
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: (err as Error)?.message ?? "Failed to reset compaction window." });
+    }
+  },
+);
 
 // Task #99 — reviewer-tunable compaction window. The dashboard reads
 // the GET to render the current effective value (and *why* it's that

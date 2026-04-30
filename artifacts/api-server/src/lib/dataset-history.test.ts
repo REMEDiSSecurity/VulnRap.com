@@ -16,18 +16,27 @@ import {
   readDatasetHistory,
   type DatasetCohortSnapshot,
 } from "./dataset-history";
+import { __testing as configTesting } from "./dataset-history-config";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 let tmpDir: string;
 let prevPath: string | undefined;
 let prevDays: string | undefined;
+let prevConfigPath: string | undefined;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "dataset-history-"));
   prevPath = process.env.DATASET_HISTORY_PATH;
   prevDays = process.env.DATASET_HISTORY_COMPACT_DAYS;
+  prevConfigPath = process.env.DATASET_HISTORY_CONFIG_PATH;
   process.env.DATASET_HISTORY_PATH = path.join(tmpDir, "dataset-history.json");
+  // Task #378 — point the persisted-config path at the per-test tmpdir
+  // so the cached reviewer setting from one test (or a stray real file
+  // in the repo's data dir) cannot leak into another and shift the
+  // effective compaction window.
+  process.env.DATASET_HISTORY_CONFIG_PATH = path.join(tmpDir, "dataset-history-config.json");
+  configTesting.resetCache();
 });
 
 afterEach(async () => {
@@ -35,6 +44,9 @@ afterEach(async () => {
   else process.env.DATASET_HISTORY_PATH = prevPath;
   if (prevDays === undefined) delete process.env.DATASET_HISTORY_COMPACT_DAYS;
   else process.env.DATASET_HISTORY_COMPACT_DAYS = prevDays;
+  if (prevConfigPath === undefined) delete process.env.DATASET_HISTORY_CONFIG_PATH;
+  else process.env.DATASET_HISTORY_CONFIG_PATH = prevConfigPath;
+  configTesting.resetCache();
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -499,5 +511,32 @@ describe("compactAfterDays env override", () => {
   it("honors a positive override", () => {
     process.env.DATASET_HISTORY_COMPACT_DAYS = "14";
     expect(__testing.compactAfterDays()).toBe(14);
+  });
+
+  // Task #378 — when the env var is unset, the persisted reviewer setting
+  // takes effect, and the env var still wins over a persisted value when
+  // both are present (so deploy-time policy can pin the window).
+  it("falls back to the persisted reviewer setting when no env var is set", async () => {
+    delete process.env.DATASET_HISTORY_COMPACT_DAYS;
+    const cfgPath = process.env.DATASET_HISTORY_CONFIG_PATH!;
+    await fs.writeFile(
+      cfgPath,
+      JSON.stringify({ version: 1, compactAfterDays: 90 }),
+      "utf-8",
+    );
+    configTesting.resetCache();
+    expect(__testing.compactAfterDays()).toBe(90);
+  });
+
+  it("env var still wins over a persisted reviewer setting", async () => {
+    const cfgPath = process.env.DATASET_HISTORY_CONFIG_PATH!;
+    await fs.writeFile(
+      cfgPath,
+      JSON.stringify({ version: 1, compactAfterDays: 90 }),
+      "utf-8",
+    );
+    configTesting.resetCache();
+    process.env.DATASET_HISTORY_COMPACT_DAYS = "21";
+    expect(__testing.compactAfterDays()).toBe(21);
   });
 });

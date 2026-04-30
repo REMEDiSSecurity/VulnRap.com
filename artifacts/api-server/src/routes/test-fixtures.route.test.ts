@@ -46,6 +46,7 @@ const previousHistoryPath = process.env.ARCHETYPE_HISTORY_PATH;
 const previousHistoryConfigPath = process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
 const previousHistoryStatsPath = process.env.ARCHETYPE_HISTORY_STATS_PATH;
 const previousDatasetHistoryPath = process.env.DATASET_HISTORY_PATH;
+const previousDatasetHistoryConfigPath = process.env.DATASET_HISTORY_CONFIG_PATH;
 const previousDatasetsDir = process.env.VULNRAP_DATASETS_DIR;
 const previousCalibrationToken = process.env.CALIBRATION_TOKEN;
 
@@ -60,6 +61,11 @@ beforeAll(async () => {
   // pollute the repo's data directory.
   process.env.ARCHETYPE_HISTORY_STATS_PATH = path.join(tmpDir, "archetype-history-stats.json");
   process.env.DATASET_HISTORY_PATH = path.join(tmpDir, "dataset-history.json");
+  // Task #378 — pin the persisted dataset-history compaction-window
+  // config at a per-suite tmpdir so the new GET/PUT/DELETE endpoint
+  // tests don't pollute the repo's data directory and can rely on a
+  // clean "no persisted setting" starting state.
+  process.env.DATASET_HISTORY_CONFIG_PATH = path.join(tmpDir, "dataset-history-config.json");
   // Task #187 — point the dataset-loader at a tmpdir that we'll *only*
   // populate inside the positive Task #187 test. The dataset-loader
   // captures DATA_ROOTS at import time, so the env var must be set
@@ -93,6 +99,8 @@ afterAll(async () => {
   else process.env.ARCHETYPE_HISTORY_STATS_PATH = previousHistoryStatsPath;
   if (previousDatasetHistoryPath === undefined) delete process.env.DATASET_HISTORY_PATH;
   else process.env.DATASET_HISTORY_PATH = previousDatasetHistoryPath;
+  if (previousDatasetHistoryConfigPath === undefined) delete process.env.DATASET_HISTORY_CONFIG_PATH;
+  else process.env.DATASET_HISTORY_CONFIG_PATH = previousDatasetHistoryConfigPath;
   if (previousDatasetsDir === undefined) delete process.env.VULNRAP_DATASETS_DIR;
   else process.env.VULNRAP_DATASETS_DIR = previousDatasetsDir;
   if (previousCalibrationToken === undefined) delete process.env.CALIBRATION_TOKEN;
@@ -838,4 +846,160 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
       await fs.rm(datasetFile, { force: true });
     }
   }, 60_000);
+});
+
+// Task #378 — reviewer-tunable dataset-history compaction window.
+// Mirrors the archetype-history/config coverage above so the dashboard
+// can rely on the same GET/PUT/DELETE shape and validation behaviour
+// for both knobs.
+describe("/api/test/dataset-history/config — reviewer-tunable compaction window", () => {
+  interface CompactWindow {
+    effectiveDays: number;
+    source: "env" | "persisted" | "default";
+    envOverride: number | null;
+    persistedDays: number | null;
+    defaultDays: number;
+    min: number;
+    max: number;
+  }
+
+  function deleteJson<T>(urlPath: string): Promise<{ status: number; body: T }> {
+    return new Promise((resolve, reject) => {
+      const url = new URL(`${baseUrl}${urlPath}`);
+      const req = http.request(
+        {
+          method: "DELETE",
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+        },
+        res => {
+          const chunks: Buffer[] = [];
+          res.on("data", c => chunks.push(c));
+          res.on("end", () => {
+            try {
+              const parsed = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+              resolve({ status: res.statusCode ?? 0, body: parsed as T });
+            } catch (err) {
+              reject(err);
+            }
+          });
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
+  function putJson<T>(urlPath: string, body: unknown): Promise<{ status: number; body: T }> {
+    return new Promise((resolve, reject) => {
+      const data = Buffer.from(JSON.stringify(body), "utf-8");
+      const url = new URL(`${baseUrl}${urlPath}`);
+      const req = http.request(
+        {
+          method: "PUT",
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+          headers: {
+            "content-type": "application/json",
+            "content-length": String(data.length),
+          },
+        },
+        res => {
+          const chunks: Buffer[] = [];
+          res.on("data", c => chunks.push(c));
+          res.on("end", () => {
+            try {
+              const parsed = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+              resolve({ status: res.statusCode ?? 0, body: parsed as T });
+            } catch (err) {
+              reject(err);
+            }
+          });
+        },
+      );
+      req.on("error", reject);
+      req.write(data);
+      req.end();
+    });
+  }
+
+  it("GET reports the default window when nothing is configured", async () => {
+    // Sibling specs have only persisted via PUT below, and afterEach DELETEs
+    // them again, so when this test runs first the source must be "default".
+    const cfg = await fetchJson<CompactWindow>("/api/test/dataset-history/config");
+    expect(cfg.source).toBe("default");
+    expect(cfg.effectiveDays).toBe(cfg.defaultDays);
+    expect(cfg.envOverride).toBeNull();
+    expect(cfg.persistedDays).toBeNull();
+    expect(cfg.min).toBeGreaterThan(0);
+    expect(cfg.max).toBeGreaterThan(cfg.min);
+  });
+
+  it("PUT persists a reviewer-supplied window and GET reflects it", async () => {
+    const put = await putJson<CompactWindow>(
+      "/api/test/dataset-history/config",
+      { compactAfterDays: 60 },
+    );
+    expect(put.status).toBe(200);
+    expect(put.body.effectiveDays).toBe(60);
+    expect(put.body.source).toBe("persisted");
+    expect(put.body.persistedDays).toBe(60);
+
+    const get = await fetchJson<CompactWindow>("/api/test/dataset-history/config");
+    expect(get.effectiveDays).toBe(60);
+    expect(get.source).toBe("persisted");
+
+    // Clean up so the "GET reports the default" test order isn't load-bearing
+    // and downstream specs in this file don't see a non-default starting state.
+    await deleteJson<CompactWindow>("/api/test/dataset-history/config");
+  });
+
+  it("DELETE clears the persisted window so the source falls back to default", async () => {
+    const seeded = await putJson<CompactWindow>(
+      "/api/test/dataset-history/config",
+      { compactAfterDays: 90 },
+    );
+    expect(seeded.status).toBe(200);
+    expect(seeded.body.persistedDays).toBe(90);
+    expect(seeded.body.source).toBe("persisted");
+
+    const del = await deleteJson<CompactWindow>("/api/test/dataset-history/config");
+    expect(del.status).toBe(200);
+    expect(del.body.persistedDays).toBeNull();
+    expect(del.body.source).toBe("default");
+    expect(del.body.effectiveDays).toBe(del.body.defaultDays);
+
+    const get = await fetchJson<CompactWindow>("/api/test/dataset-history/config");
+    expect(get.persistedDays).toBeNull();
+    expect(get.source).toBe("default");
+
+    // A second DELETE on an already-cleared config is a no-op (no ENOENT
+    // bleeding through to the response).
+    const delAgain = await deleteJson<CompactWindow>("/api/test/dataset-history/config");
+    expect(delAgain.status).toBe(200);
+    expect(delAgain.body.source).toBe("default");
+  });
+
+  it("PUT rejects out-of-range values with a 400 and a helpful error message", async () => {
+    const tooLow = await putJson<{ error: string }>(
+      "/api/test/dataset-history/config",
+      { compactAfterDays: 1 },
+    );
+    expect(tooLow.status).toBe(400);
+    expect(tooLow.body.error).toMatch(/between/i);
+
+    const tooHigh = await putJson<{ error: string }>(
+      "/api/test/dataset-history/config",
+      { compactAfterDays: 10_000 },
+    );
+    expect(tooHigh.status).toBe(400);
+
+    const notNumber = await putJson<{ error: string }>(
+      "/api/test/dataset-history/config",
+      { compactAfterDays: "abc" },
+    );
+    expect(notNumber.status).toBe(400);
+  });
 });
