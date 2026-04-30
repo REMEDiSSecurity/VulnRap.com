@@ -336,3 +336,241 @@ test.describe("Task #230 shared production-scan window", () => {
     }
   });
 });
+
+// Task #327 — every dry-run preview that runs a production scan already
+// surfaces the limit subtitle ("last N of up to LIMIT reports"), but the
+// reviewer also needs to see the actual createdAt window of the rows that
+// were scanned so they can verify they're scoring against the period they
+// think they are. The bulk-remove preview's `BulkRemovalImpactBlock` has
+// rendered the "Scanned N reports from <oldest> to <newest>" line since
+// Task #218 (locked in for the per-row Trash flow by Task #293), and the
+// add-phrase preview's `PreviewMatchBlock` has rendered the same line
+// since Task #124. This describe block locks both consumers' visible
+// behavior in one place so a future refactor that drops either renderer's
+// scan-range subtitle (or breaks the graceful degradation when the
+// dry-run returns null timestamps) fails here loudly.
+test.describe("Task #327 production-scan timestamp range surfaced on every preview", () => {
+  // Distinct calendar days so `formatProductionScanRange` returns the
+  // "from <…> to <…>" branch rather than collapsing to "on <date>". Both
+  // ISO strings are UTC midnight so the rendered date may shift one day
+  // in negative-offset locales — the assertions below match the
+  // structural shape and the year, both of which are locale-stable.
+  const OLDEST_ISO = "2026-04-01T00:00:00.000Z";
+  const NEWEST_ISO = "2026-04-29T00:00:00.000Z";
+
+  test("add-phrase preview production block renders the 'Scanned N reports from … to …' line", async ({
+    page,
+  }) => {
+    const phrase = uniquePhrase("addrange");
+
+    // Intercept the add-phrase dryRun POST and synthesize a preview whose
+    // production block carries an explicit createdAt window. We don't add
+    // the phrase to the live list — the preview opens off the dry-run
+    // POST alone, so a stubbed response is sufficient and avoids the
+    // real-server dependency on archive timestamps.
+    await page.route(
+      "**/api/feedback/calibration/handwavy-phrases",
+      async (route) => {
+        const req = route.request();
+        if (req.method() !== "POST") {
+          await route.fallback();
+          return;
+        }
+        const body = req.postDataJSON() as
+          | { dryRun?: boolean; phrase?: string; category?: string }
+          | undefined;
+        if (!body?.dryRun || body.phrase !== phrase) {
+          await route.fallback();
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            dryRun: true,
+            added: false,
+            phrase,
+            category: body.category ?? "absence",
+            total: 42,
+            phrases: [],
+            // Curated block intentionally has null timestamps — the
+            // graceful-degradation half of the contract: the range
+            // subtitle MUST stay out of the DOM here.
+            dryRunMatches: {
+              total: 0,
+              byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+              falsePositives: 0,
+              corpusSize: 50,
+              sampleMatches: [],
+              warning: null,
+              oldestCreatedAt: null,
+              newestCreatedAt: null,
+            },
+            // Production block carries the createdAt window — the range
+            // subtitle MUST render with the corpus size, plural noun
+            // ("reports"), and the "from <…> to <…>" date pair.
+            dryRunMatchesProduction: {
+              total: 0,
+              byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+              falsePositives: 0,
+              corpusSize: 273,
+              sampleMatches: [],
+              warning: null,
+              oldestCreatedAt: OLDEST_ISO,
+              newestCreatedAt: NEWEST_ISO,
+            },
+            dryRunMatchesProductionError: null,
+            dryRunMatchesProductionLimit: 2000,
+            dryRunOverlaps: { total: 0, matches: [] },
+          }),
+        });
+      },
+    );
+
+    await injectCalibrationTokenIntoPage(page);
+    await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+    await page.getByTestId("handwavy-input").fill(phrase);
+    await page.getByTestId("handwavy-add").click();
+
+    const panel = page.getByTestId("handwavy-preview");
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+
+    const productionBlock = panel.getByTestId("handwavy-preview-production");
+    await expect(productionBlock).toBeVisible();
+
+    const productionRange = productionBlock.getByTestId(
+      "handwavy-preview-production-range",
+    );
+    await expect(productionRange).toBeVisible();
+    // Corpus size + pluralised noun ("reports") + the "from … to …"
+    // structural shape produced by `formatProductionScanRange` for
+    // distinct calendar days. Year-stable across locales.
+    await expect(productionRange).toContainText("Scanned 273 reports");
+    await expect(productionRange).toContainText(/from .+ to .+/);
+    await expect(productionRange).toContainText("2026");
+
+    // Graceful degradation: the curated block's null timestamps must
+    // not produce a range subtitle in the DOM at all. Asserted at the
+    // panel scope so a regression that accidentally rendered the line
+    // on the curated half would also fail here.
+    await expect(
+      panel.getByTestId("handwavy-preview-curated-range"),
+    ).toHaveCount(0);
+  });
+
+  test("single-remove preview production block renders the 'Scanned N reports from … to …' line", async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const phrase = uniquePhrase("rmrange");
+
+    try {
+      // Need a real row in the active list so the per-row Trash button
+      // is mounted; the dryRun DELETE is intercepted below so the
+      // synthesized impact (with timestamps) drives the rendered panel.
+      await addPhrase(apiCtx, phrase);
+
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrase?: string }
+            | undefined;
+          if (!body?.dryRun || body.phrase !== phrase) {
+            await route.fallback();
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              dryRun: true,
+              batch: false,
+              wouldRemove: 1,
+              notFound: 0,
+              duplicateInBatch: 0,
+              phrase,
+              raw: phrase,
+              removed: true,
+              reason: null,
+              total: 99,
+              projectedTotal: 98,
+              results: [{ raw: phrase, phrase, removed: true }],
+              dryRunImpact: {
+                // Curated half: validDetectionsLost > 0 forces the
+                // preview panel to mount (zero-impact removals skip
+                // the panel and fire directly), and null timestamps
+                // exercise the graceful-degradation branch.
+                corpus: {
+                  total: 1,
+                  validDetectionsLost: 1,
+                  falsePositivesDropped: 0,
+                  byTier: { t1Legit: 1, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+                  sampleMatches: [],
+                  warning: "1 legitimate detection would be lost from the curated benchmark",
+                  corpusSize: 47,
+                  oldestCreatedAt: null,
+                  newestCreatedAt: null,
+                },
+                production: {
+                  total: 0,
+                  validDetectionsLost: 0,
+                  falsePositivesDropped: 0,
+                  byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+                  sampleMatches: [],
+                  warning: null,
+                  corpusSize: 412,
+                  oldestCreatedAt: OLDEST_ISO,
+                  newestCreatedAt: NEWEST_ISO,
+                },
+                productionError: null,
+                productionLimit: 2000,
+              },
+              phrases: [],
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const row = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      await expect(row).toHaveCount(1, { timeout: 15_000 });
+      await row.getByTestId("handwavy-remove").click();
+
+      const panel = page.getByTestId("handwavy-remove-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Per-row Trash uses the shared `BulkRemovalImpactBlock`, which
+      // tags its scan-range subtitle with the kind-suffixed testid. The
+      // production block must render the same "Scanned N reports from
+      // … to …" shape that the bulk-preview block does.
+      const productionRange = panel.getByTestId(
+        "handwavy-bulk-preview-production-range",
+      );
+      await expect(productionRange).toBeVisible();
+      await expect(productionRange).toContainText("Scanned 412 reports");
+      await expect(productionRange).toContainText(/from .+ to .+/);
+      await expect(productionRange).toContainText("2026");
+
+      // Graceful degradation: the curated block returned null
+      // timestamps, so its kind-suffixed range testid must not exist
+      // anywhere in the panel.
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-curated-range"),
+      ).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, [phrase]);
+      await apiCtx.dispose();
+    }
+  });
+});
