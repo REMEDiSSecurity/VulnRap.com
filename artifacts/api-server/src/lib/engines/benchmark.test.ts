@@ -536,24 +536,22 @@ Reject any message containing both Transfer-Encoding and Content-Length with HTT
 ## Impact
 Cache poisoning, request hijacking, auth bypass. CVSS 9.0.`,
     // Task #299 — investigated the E2 substance score for this fixture under
-    // the AVRI REQUEST_SMUGGLING rubric:
-    //   • Only `te_or_cl_conflict` (+14) fires from gold signals — the printf
-    //     reproduction uses shell-escaped \r\n bytes (literal backslashes,
-    //     not CRLFs) so REQUEST_LINE_RE legitimately doesn't match the
-    //     pasted block, which keeps `raw_http_request` (+18) and
-    //     `smuggled_second_request` (+12) silent. `acme-proxy` isn't on the
-    //     recognized-product list so `specific_proxy_or_server` (+8) stays
-    //     silent too. That yields gold=14 / calibratedMax=31 → baseScore=45,
-    //     -6 absence (no_proxy_named) → rawAvriScore=39, blended with
-    //     legacy=50 → E2=45.
-    //   • E2=45 sits just above the E3_SUBSTANCE_GATE cutoff (gate fires at
-    //     E2<45), so E3 keeps its raw 77, the 5/60/35 composite lands at
-    //     ~57.4, and BEHAVIORAL_MATCH_REWARD adds +6 for a final composite
-    //     of ~63 (REASONABLE). The threshold of 50 stays well inside the
-    //     REASONABLE band and continues to distinguish this fixture from
-    //     the slop cohort (all ≤ 35), without requiring rubric changes that
-    //     would risk rescuing genuine slop.
-    expectMinScore: 50,
+    // the AVRI REQUEST_SMUGGLING rubric and noted that `acme-proxy 2.4.1`
+    // didn't qualify as a recognized product, costing the report +8 gold
+    // and +6 absence (net 14 raw points).
+    //
+    // Task #426 — relaxed `specific_proxy_or_server` to accept versioned
+    // `<vendor>-proxy <semver>` strings (and `<name>/<semver>` server-
+    // header shapes), and added Caddy/Pound/OpenResty/Kong to the
+    // recognized open-source list. The legit-03 `acme-proxy 2.4.1 - 2.6.3`
+    // mention now fires the gold signal (+8) and silences `no_proxy_named`
+    // (+6 absence avoided), pushing rawAvriScore from 39 → ~53, E2 from
+    // 45 → 60, and composite from ~63 (REASONABLE) → 73 (PROMISING). The
+    // threshold below is bumped from 50 to 65 to lock in the gain while
+    // keeping a small headroom for blend-noise. The slop cohort (none of
+    // which claim CWE-444) is unaffected because the REQUEST_SMUGGLING
+    // rubric only runs for that family.
+    expectMinScore: 65,
   },
 ];
 

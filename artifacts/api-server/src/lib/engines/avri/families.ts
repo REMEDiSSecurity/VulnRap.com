@@ -242,12 +242,25 @@ const REQUEST_SMUGGLING: FamilyRubric = {
     { id: "raw_http_request", description: "Raw HTTP/1.1 request bytes with explicit headers", pattern: /post\s+\/[^\s]*\s+http\/1\.[01]\r?\n[\s\S]*?(?:host:|content-length:|transfer-encoding:)/i, points: 18 },
     { id: "te_or_cl_conflict", description: "Both Transfer-Encoding and Content-Length present (TE.CL/CL.TE)", pattern: /(transfer-encoding\s*:[^\n]*\bchunked\b[\s\S]*?content-length\s*:|content-length\s*:[^\n]*\d[\s\S]*?transfer-encoding\s*:[^\n]*\bchunked\b)/i, points: 14 },
     { id: "smuggled_second_request", description: "Shows the smuggled second request (e.g. GPOST / on a new pipeline)", pattern: /\b(?:gpost|smuggled|pipelined|second request|hidden request|prefix)\s+(?:request|attack)|0\r?\n\r?\n[A-Z]+\s+\/[^\s]*\s+http/i, points: 12 },
-    { id: "specific_proxy_or_server", description: "Names the specific proxy/server combo", pattern: /\b(haproxy|nginx|envoy|apache|aws elb|cloudfront|fastly|cloudflare|varnish|squid|traefik|f5\b|netscaler|node\.?js|gunicorn|uvicorn|tomcat|jetty|undertow|lighttpd|h2o)\b/i, points: 8 },
+    // Names a specific proxy/server. Matches one of three shapes:
+    //   1. A bare product name from the recognized open-source list
+    //      (haproxy, nginx, envoy, traefik, varnish, caddy, pound, ...).
+    //   2. A `<vendor>-proxy v?X.Y[.Z]` (optionally a version range
+    //      `... - X.Y[.Z]`) pattern — lets legit reports about lesser-
+    //      known but real proxies (e.g. `acme-proxy 2.4.1 - 2.6.3`)
+    //      earn the gold signal without us hard-coding every vendor.
+    //   3. A `<name>/<semver>` pattern (the canonical HTTP `Server`
+    //      header shape, e.g. `nginx/1.21.0`, `envoy/1.27.3`).
+    { id: "specific_proxy_or_server", description: "Names the specific proxy/server combo", pattern: /\b(haproxy|nginx|envoy|apache|aws elb|cloudfront|fastly|cloudflare|varnish|squid|traefik|caddy|pound|openresty|kong|f5\b|netscaler|node\.?js|gunicorn|uvicorn|tomcat|jetty|undertow|lighttpd|h2o)\b|\b[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*[-_]proxy\s+v?\d+\.\d+(?:\.\d+)?(?:\s*[-–]\s*v?\d+\.\d+(?:\.\d+)?)?\b|\b[a-z][a-z0-9_-]+\/\d+\.\d+(?:\.\d+)?\b/i, points: 8 },
     { id: "cwe_correct_class", description: "Mentions CWE-444/436/116", pattern: /cwe-(444|436|116|113|115)/i, points: 4 },
   ],
   absencePenalties: [
     { id: "no_raw_request", description: "No raw HTTP request bytes provided", pattern: /\bhttp\/1\.[01]\b|content-length\s*:|transfer-encoding\s*:/i, points: 10 },
-    { id: "no_proxy_named", description: "No specific proxy/server identified", pattern: /(haproxy|nginx|envoy|apache|cloudflare|varnish|squid|tomcat|jetty|node|gunicorn|uvicorn|undertow|h2o)/i, points: 6 },
+    // Mirror the gold signal's recognized-product list and versioned-
+    // product shapes so reports that only earn the relaxed forms (e.g.
+    // `acme-proxy 2.4.1`, `envoy/1.27.3`) don't get penalised again
+    // for "no proxy named" after the gold signal already credited them.
+    { id: "no_proxy_named", description: "No specific proxy/server identified", pattern: /(haproxy|nginx|envoy|apache|cloudflare|varnish|squid|traefik|caddy|pound|openresty|kong|tomcat|jetty|node|gunicorn|uvicorn|undertow|h2o)|\b[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*[-_]proxy\s+v?\d+\.\d+|\b[a-z][a-z0-9_-]+\/\d+\.\d+/i, points: 6 },
   ],
   contradictionPhrases: [
     "<script>", "alert(1)", "innerhtml",
