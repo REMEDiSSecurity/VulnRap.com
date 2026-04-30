@@ -6,10 +6,12 @@ import {
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   useGetAvriDriftNotifications, getGetAvriDriftNotificationsQueryKey,
   useGetAvriDriftSchedulerStatus, getGetAvriDriftSchedulerStatusQueryKey,
+  useGetAvriDriftRearmHistory, getGetAvriDriftRearmHistoryQueryKey,
   rearmAvriDriftNotifications,
   ApiError,
   type AvriDriftNotificationRecord,
   type AvriDriftSchedulerStatus,
+  type AvriDriftRearmAuditEntry,
   useGetCalibrationAuthStatus, getGetCalibrationAuthStatusQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
   useListHandwavyPhraseRemovalBatches, getListHandwavyPhraseRemovalBatchesQueryKey,
@@ -8991,20 +8993,26 @@ function NotifiedFlagsPanel({
   authState,
   notificationsQueryKey,
   driftReportQueryKey,
-  // Task #296 — when the per-IP wrong-token throttle is tripped, the
-  // re-arm button on each row renders disabled with a "Cooldown — Ns"
-  // label so reviewers can't keep firing rejected requests at the
-  // limiter (which would just extend the bucket). Mirrors the gating
-  // SuggestionCard / handwavy-admin already do for their mutating
-  // controls. Passed in by AvriDriftSection so a single
-  // `useCalibrationCooldown` subscription drives both the banner above
-  // the card and these per-row buttons.
+  rearmHistoryQueryKey,
+  reviewer,
+  rationale,
+  onRationaleChange,
   cooldownActive,
   cooldownSecondsRemaining,
 }: {
   authState: CalibrationAuthState;
   notificationsQueryKey: ReturnType<typeof getGetAvriDriftNotificationsQueryKey>;
   driftReportQueryKey: ReturnType<typeof getGetAvriDriftReportQueryKey>;
+  // Invalidated alongside the dedup snapshot whenever a re-arm
+  // completes so the "Recently re-armed" sibling panel updates
+  // immediately.
+  rearmHistoryQueryKey: ReturnType<typeof getGetAvriDriftRearmHistoryQueryKey>;
+  // Reviewer + rationale lifted into the parent so they're shared with
+  // sibling controls. Reviewer is persisted in localStorage by the
+  // parent; rationale is per-action and cleared after a successful submit.
+  reviewer: string;
+  rationale: string;
+  onRationaleChange: (value: string) => void;
   cooldownActive: boolean;
   cooldownSecondsRemaining: number;
 }) {
@@ -9131,7 +9139,18 @@ function NotifiedFlagsPanel({
     }
     setBusyKey(key);
     try {
-      const resp = await rearmAvriDriftNotifications({ keys: [key] });
+      // Forward reviewer/rationale audit context to the backend; both
+      // are optional and only sent when non-empty.
+      const body: {
+        keys: string[];
+        reviewer?: string;
+        rationale?: string;
+      } = { keys: [key] };
+      const trimmedReviewer = reviewer.trim();
+      if (trimmedReviewer.length > 0) body.reviewer = trimmedReviewer;
+      const trimmedRationale = rationale.trim();
+      if (trimmedRationale.length > 0) body.rationale = trimmedRationale;
+      const resp = await rearmAvriDriftNotifications(body);
       toast({
         title: "Drift flag re-armed",
         description: `"${record.detail}" will fire again on the next dispatch run.`,
@@ -9151,7 +9170,13 @@ function NotifiedFlagsPanel({
       });
       queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
       queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
+      // Refresh the audit log too so the new entry appears in the
+      // "Recently re-armed" sibling panel without polling lag.
+      queryClient.invalidateQueries({ queryKey: rearmHistoryQueryKey });
       await refetch();
+      // Clear the rationale after a successful re-arm so the next
+      // action starts from a blank slate.
+      onRationaleChange("");
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         toast({
@@ -9167,6 +9192,7 @@ function NotifiedFlagsPanel({
         });
         queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
         queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
+        queryClient.invalidateQueries({ queryKey: rearmHistoryQueryKey });
         await refetch();
       } else {
         const msg = err instanceof Error ? err.message : "Failed to re-arm flag.";
@@ -9389,6 +9415,117 @@ function NotifiedFlagsPanel({
         })}
       </ul>
     </div>
+  );
+}
+
+// Read-only "Recently re-armed" subsection. Renders the bounded
+// re-arm audit log so reviewers can see who re-armed which dedup
+// entry and why. Strict-auth gated; when the reviewer doesn't have
+// a valid token we surface a static explainer instead of a load error.
+function RearmHistoryPanel({
+  authState,
+  rearmHistoryQueryKey,
+}: {
+  authState: CalibrationAuthState;
+  rearmHistoryQueryKey: ReturnType<typeof getGetAvriDriftRearmHistoryQueryKey>;
+}) {
+  const enabled = authState.kind === "valid";
+  const { data, isLoading, isError } = useGetAvriDriftRearmHistory({
+    query: {
+      queryKey: rearmHistoryQueryKey,
+      refetchInterval: 300_000,
+      enabled,
+      retry: 1,
+    },
+  });
+
+  if (!enabled) {
+    return (
+      <p className="text-[11px] text-muted-foreground/60 italic leading-relaxed">
+        A valid reviewer token is required to view the re-arm audit log.
+      </p>
+    );
+  }
+  if (isLoading) return <Skeleton className="h-12 rounded-md" />;
+  if (isError || !data) {
+    return (
+      <p className="text-[11px] text-red-400/80 italic leading-relaxed">
+        Could not load the re-arm audit log.
+      </p>
+    );
+  }
+  const history: AvriDriftRearmAuditEntry[] = data.history ?? [];
+  if (history.length === 0) {
+    return (
+      <p className="text-[11px] text-muted-foreground/60 italic">
+        No flags have been re-armed yet — the audit log is empty.
+      </p>
+    );
+  }
+  // Newest-first: backend persists oldest-first (so trim drops oldest)
+  // but the panel reads top-to-bottom.
+  const sorted = [...history].sort((a, b) => {
+    const ta = new Date(a.rearmedAt).getTime();
+    const tb = new Date(b.rearmedAt).getTime();
+    if (Number.isFinite(ta) && Number.isFinite(tb)) return tb - ta;
+    return 0;
+  });
+
+  return (
+    <ul className="space-y-1.5">
+      {sorted.map((entry, idx) => {
+        const rearmedAt = new Date(entry.rearmedAt);
+        const rearmedAtLabel = Number.isFinite(rearmedAt.getTime())
+          ? rearmedAt.toISOString().replace("T", " ").slice(0, 16) + "Z"
+          : entry.rearmedAt;
+        const kindLabel =
+          entry.kind === "GAP_BELOW_45" ? "Gap < threshold" : "Family shift";
+        const kindColor =
+          entry.kind === "GAP_BELOW_45"
+            ? "text-red-400/80 bg-red-400/5 border-red-400/20"
+            : "text-orange-400/80 bg-orange-400/5 border-orange-400/20";
+        return (
+          <li
+            // The audit log can in principle hold duplicate (key,rearmedAt)
+            // pairs (a reviewer rapidly re-arming the same key after a
+            // re-fire), so include the index in the React key to stay safe.
+            key={`${entry.key}|${entry.rearmedAt}|${idx}`}
+            className="flex items-start gap-2 text-xs p-2 rounded-md border border-border/30 bg-muted/[0.02]"
+          >
+            <Badge
+              variant="outline"
+              className={cn("text-[10px] gap-1 font-mono shrink-0", kindColor)}
+            >
+              <RotateCcw className="w-3 h-3" /> {kindLabel}
+            </Badge>
+            <div className="flex-1 min-w-0 space-y-0.5">
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono flex-wrap">
+                <span title={entry.rearmedAt}>re-armed {rearmedAtLabel}</span>
+                <span className="text-muted-foreground/40">·</span>
+                <span>week {entry.weekStart}</span>
+                {entry.rearmedBy && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span className="text-foreground/70">by {entry.rearmedBy}</span>
+                  </>
+                )}
+              </div>
+              <div className="text-foreground/70 leading-relaxed break-words text-[11px]">
+                {entry.originalDetail}
+              </div>
+              {entry.rationale && (
+                <div className="text-[11px] text-muted-foreground/80 italic leading-relaxed break-words">
+                  “{entry.rationale}”
+                </div>
+              )}
+              <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
+                key: {entry.key}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -10590,16 +10727,41 @@ function AvriDriftSection() {
   const params = { weeks };
   const driftReportQueryKey = getGetAvriDriftReportQueryKey(params);
   const notificationsQueryKey = getGetAvriDriftNotificationsQueryKey();
+  const rearmHistoryQueryKey = getGetAvriDriftRearmHistoryQueryKey();
   const authState = useCalibrationAuthState();
-  // Task #296 — observe the per-IP wrong-token throttle so the AVRI drift
-  // admin (re-arm-notifications today, future drift-only tweaks tomorrow)
-  // shows the same friendly cooldown banner the calibration dashboard and
-  // handwavy admin already render, instead of falling through to the raw
-  // "HTTP 429" toast. The drift section can be rendered standalone (e.g.
-  // a future deep-link route, or a reviewer scrolling past the calibration
-  // card without lingering) so we mount the banner inside this section
-  // rather than relying on a parent to do it.
+  // Observe the per-IP wrong-token throttle so the AVRI drift admin
+  // shows the same friendly cooldown banner the calibration dashboard
+  // and handwavy admin already render, instead of falling through to
+  // the raw "HTTP 429" toast.
   const cooldown = useCalibrationCooldown();
+
+  // Reviewer + rationale audit context for the next re-arm click.
+  // Reviewer is persisted in localStorage (shared with HANDWAVY_REVIEWER_KEY)
+  // so it doesn't have to be retyped; rationale is per-action and reset
+  // after each successful POST.
+  const [rearmReviewer, setRearmReviewerState] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return window.localStorage.getItem(HANDWAVY_REVIEWER_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const setRearmReviewer = (value: string) => {
+    setRearmReviewerState(value);
+    if (typeof window === "undefined") return;
+    try {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        window.localStorage.setItem(HANDWAVY_REVIEWER_KEY, trimmed);
+      } else {
+        window.localStorage.removeItem(HANDWAVY_REVIEWER_KEY);
+      }
+    } catch {
+      // Ignore quota / privacy-mode write errors — the input still works.
+    }
+  };
+  const [rearmRationale, setRearmRationale] = useState<string>("");
   const { data, isLoading, isFetching, error } = useGetAvriDriftReport(params, {
     query: {
       queryKey: driftReportQueryKey,
@@ -10833,12 +10995,60 @@ function AvriDriftSection() {
               re-arm to re-fire on the next dispatch run
             </span>
           </div>
+          {/* Reviewer + rationale audit context the re-arm button
+              forwards to the backend. Only shown when the reviewer
+              has a valid token (mutations are gated there). */}
+          {authState.kind === "valid" && (
+            <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2 mb-2">
+              <input
+                type="text"
+                value={rearmReviewer}
+                onChange={(e) => setRearmReviewer(e.target.value)}
+                placeholder="Reviewer (optional)"
+                maxLength={200}
+                className="h-7 px-2 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
+                aria-label="Reviewer name for the re-arm audit log"
+                title="Recorded in the re-arm audit log alongside the next re-arm click."
+                data-testid="avri-drift-rearm-reviewer"
+              />
+              <input
+                type="text"
+                value={rearmRationale}
+                onChange={(e) => setRearmRationale(e.target.value)}
+                placeholder="Rationale (optional, e.g. 'fix-by date passed')"
+                maxLength={500}
+                className="h-7 px-2 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
+                aria-label="Rationale for the next re-arm action"
+                title="Recorded in the re-arm audit log alongside the next re-arm click; cleared after a successful re-arm."
+                data-testid="avri-drift-rearm-rationale"
+              />
+            </div>
+          )}
           <NotifiedFlagsPanel
             authState={authState}
             notificationsQueryKey={notificationsQueryKey}
             driftReportQueryKey={driftReportQueryKey}
+            rearmHistoryQueryKey={rearmHistoryQueryKey}
+            reviewer={rearmReviewer}
+            rationale={rearmRationale}
+            onRationaleChange={setRearmRationale}
             cooldownActive={cooldown.active}
             cooldownSecondsRemaining={cooldown.secondsRemaining}
+          />
+        </div>
+
+        {/* Audit trail of who re-armed which dedup entry and when —
+            a sibling read-only log alongside the notified-flags panel. */}
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+            <span>Recently re-armed</span>
+            <span className="text-muted-foreground/40 normal-case font-normal italic">
+              audit trail (last 200, newest first)
+            </span>
+          </div>
+          <RearmHistoryPanel
+            authState={authState}
+            rearmHistoryQueryKey={rearmHistoryQueryKey}
           />
         </div>
 

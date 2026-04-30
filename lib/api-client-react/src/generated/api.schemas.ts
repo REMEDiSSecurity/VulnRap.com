@@ -1625,6 +1625,66 @@ export interface AvriDriftRearmBody {
    * @maxItems 200
    */
   keys: string[];
+  /**
+   * Optional reviewer name recorded in the re-arm audit log.
+Empty/whitespace-only values are treated as absent.
+
+   * @maxLength 200
+   */
+  reviewer?: string;
+  /**
+   * Optional free-form rationale recorded in the re-arm audit
+log so reviewers can explain why a flag was re-armed.
+Empty/whitespace-only values are treated as absent.
+
+   * @maxLength 500
+   */
+  rationale?: string;
+}
+
+export type AvriDriftRearmAuditEntryKind =
+  (typeof AvriDriftRearmAuditEntryKind)[keyof typeof AvriDriftRearmAuditEntryKind];
+
+export const AvriDriftRearmAuditEntryKind = {
+  GAP_BELOW_45: "GAP_BELOW_45",
+  FAMILY_MEAN_SHIFT: "FAMILY_MEAN_SHIFT",
+} as const;
+
+/**
+ * Single entry in the re-arm audit log. Preserves the original
+notification metadata of the dedup record that was removed
+plus the wall-clock + reviewer context for the re-arm action
+itself, so the log stays useful even after the matching dedup
+record is gone.
+
+ */
+export interface AvriDriftRearmAuditEntry {
+  /** Dedup key that was re-armed. */
+  key: string;
+  /** ISO date (YYYY-MM-DD) for the Monday that started the flag's week. */
+  weekStart: string;
+  kind: AvriDriftRearmAuditEntryKind;
+  /** ISO timestamp when the original notification first dispatched. */
+  originalNotifiedAt: string;
+  /** Original flag detail string at the time of the first notification. */
+  originalDetail: string;
+  /** ISO timestamp when the entry was re-armed. */
+  rearmedAt: string;
+  /** Reviewer name supplied with the re-arm call (omitted when not provided). */
+  rearmedBy?: string;
+  /** Free-form rationale supplied with the re-arm call (omitted when not provided). */
+  rationale?: string;
+}
+
+/**
+ * Snapshot of the persisted re-arm audit log. Capped at 200
+entries (oldest trimmed first); newest entries are at the END
+of the array (callers reverse for newest-first display).
+
+ */
+export interface AvriDriftRearmHistoryList {
+  history: AvriDriftRearmAuditEntry[];
+  total: number;
 }
 
 export interface AvriDriftRearmResponse {
@@ -1638,6 +1698,15 @@ export interface AvriDriftRearmResponse {
   removed: AvriDriftNotificationRecord[];
   /** Refreshed dedup state snapshot after the re-arm so the UI can update without an extra GET. */
   notified: AvriDriftNotificationRecord[];
+  /** Audit entries appended to the persisted log for this call
+(one per matched key). Empty when nothing matched.
+ */
+  auditEntries: AvriDriftRearmAuditEntry[];
+  /** Refreshed re-arm audit log after this call so the UI can
+render the "Recently re-armed" panel without an extra
+GET. Capped at 200 entries.
+ */
+  rearmHistory: AvriDriftRearmAuditEntry[];
 }
 
 /**

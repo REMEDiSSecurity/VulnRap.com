@@ -2411,10 +2411,18 @@ Unknown keys are reported back via `notFound` (mirroring the
 per-phrase removal pattern); the request returns 200 when at least
 one entry was re-armed and 404 only when nothing matched.
 
+The optional `reviewer` and `rationale` body fields feed the
+bounded re-arm audit log persisted alongside the dedup state
+so multi-reviewer teams can see who re-armed which flag and why.
+
  * @summary Re-arm one or more previously-notified AVRI drift flags
  */
 
 export const rearmAvriDriftNotificationsBodyKeysMax = 200;
+
+export const rearmAvriDriftNotificationsBodyReviewerMax = 200;
+
+export const rearmAvriDriftNotificationsBodyRationaleMax = 500;
 
 export const RearmAvriDriftNotificationsBody = zod.object({
   keys: zod
@@ -2422,6 +2430,20 @@ export const RearmAvriDriftNotificationsBody = zod.object({
     .min(1)
     .max(rearmAvriDriftNotificationsBodyKeysMax)
     .describe("Dedup keys (from AvriDriftNotificationRecord.key) to re-arm."),
+  reviewer: zod
+    .string()
+    .max(rearmAvriDriftNotificationsBodyReviewerMax)
+    .optional()
+    .describe(
+      "Optional reviewer name recorded in the re-arm audit log.\nEmpty\/whitespace-only values are treated as absent.\n",
+    ),
+  rationale: zod
+    .string()
+    .max(rearmAvriDriftNotificationsBodyRationaleMax)
+    .optional()
+    .describe(
+      "Optional free-form rationale recorded in the re-arm audit\nlog so reviewers can explain why a flag was re-armed.\nEmpty\/whitespace-only values are treated as absent.\n",
+    ),
 });
 
 export const RearmAvriDriftNotificationsResponse = zod.object({
@@ -2497,6 +2519,94 @@ export const RearmAvriDriftNotificationsResponse = zod.object({
     )
     .describe(
       "Refreshed dedup state snapshot after the re-arm so the UI can update without an extra GET.",
+    ),
+  auditEntries: zod
+    .array(
+      zod
+        .object({
+          key: zod.string().describe("Dedup key that was re-armed."),
+          weekStart: zod
+            .string()
+            .describe(
+              "ISO date (YYYY-MM-DD) for the Monday that started the flag's week.",
+            ),
+          kind: zod.enum(["GAP_BELOW_45", "FAMILY_MEAN_SHIFT"]),
+          originalNotifiedAt: zod.coerce
+            .date()
+            .describe(
+              "ISO timestamp when the original notification first dispatched.",
+            ),
+          originalDetail: zod
+            .string()
+            .describe(
+              "Original flag detail string at the time of the first notification.",
+            ),
+          rearmedAt: zod.coerce
+            .date()
+            .describe("ISO timestamp when the entry was re-armed."),
+          rearmedBy: zod
+            .string()
+            .optional()
+            .describe(
+              "Reviewer name supplied with the re-arm call (omitted when not provided).",
+            ),
+          rationale: zod
+            .string()
+            .optional()
+            .describe(
+              "Free-form rationale supplied with the re-arm call (omitted when not provided).",
+            ),
+        })
+        .describe(
+          "Single entry in the re-arm audit log. Preserves the original\nnotification metadata of the dedup record that was removed\nplus the wall-clock + reviewer context for the re-arm action\nitself, so the log stays useful even after the matching dedup\nrecord is gone.\n",
+        ),
+    )
+    .describe(
+      "Audit entries appended to the persisted log for this call\n(one per matched key). Empty when nothing matched.\n",
+    ),
+  rearmHistory: zod
+    .array(
+      zod
+        .object({
+          key: zod.string().describe("Dedup key that was re-armed."),
+          weekStart: zod
+            .string()
+            .describe(
+              "ISO date (YYYY-MM-DD) for the Monday that started the flag's week.",
+            ),
+          kind: zod.enum(["GAP_BELOW_45", "FAMILY_MEAN_SHIFT"]),
+          originalNotifiedAt: zod.coerce
+            .date()
+            .describe(
+              "ISO timestamp when the original notification first dispatched.",
+            ),
+          originalDetail: zod
+            .string()
+            .describe(
+              "Original flag detail string at the time of the first notification.",
+            ),
+          rearmedAt: zod.coerce
+            .date()
+            .describe("ISO timestamp when the entry was re-armed."),
+          rearmedBy: zod
+            .string()
+            .optional()
+            .describe(
+              "Reviewer name supplied with the re-arm call (omitted when not provided).",
+            ),
+          rationale: zod
+            .string()
+            .optional()
+            .describe(
+              "Free-form rationale supplied with the re-arm call (omitted when not provided).",
+            ),
+        })
+        .describe(
+          "Single entry in the re-arm audit log. Preserves the original\nnotification metadata of the dedup record that was removed\nplus the wall-clock + reviewer context for the re-arm action\nitself, so the log stays useful even after the matching dedup\nrecord is gone.\n",
+        ),
+    )
+    .describe(
+      'Refreshed re-arm audit log after this call so the UI can\nrender the \"Recently re-armed\" panel without an extra\nGET. Capped at 200 entries.\n',
     ),
 });
 
@@ -2585,6 +2695,64 @@ export const GetAvriDriftSchedulerStatusResponse = zod
   })
   .describe(
     "In-process status of the AVRI drift-notification scheduler.\nTimestamps are ISO 8601; `null` is used wherever the field is\nnot yet meaningful (e.g. `lastTickAt` before the first tick,\n`nextTickAt` while the scheduler is stopped).\n",
+  );
+
+/**
+ * Returns the bounded audit log of every reviewer-driven re-arm
+event recorded by
+`POST /feedback/calibration/avri-drift/notifications/rearm`. The
+log is capped at 200 entries (oldest trimmed first). Strict-auth
+because the entries include the original flag `detail` plus
+reviewer/rationale context.
+
+ * @summary List the persisted AVRI drift re-arm audit log
+ */
+export const GetAvriDriftRearmHistoryResponse = zod
+  .object({
+    history: zod.array(
+      zod
+        .object({
+          key: zod.string().describe("Dedup key that was re-armed."),
+          weekStart: zod
+            .string()
+            .describe(
+              "ISO date (YYYY-MM-DD) for the Monday that started the flag's week.",
+            ),
+          kind: zod.enum(["GAP_BELOW_45", "FAMILY_MEAN_SHIFT"]),
+          originalNotifiedAt: zod.coerce
+            .date()
+            .describe(
+              "ISO timestamp when the original notification first dispatched.",
+            ),
+          originalDetail: zod
+            .string()
+            .describe(
+              "Original flag detail string at the time of the first notification.",
+            ),
+          rearmedAt: zod.coerce
+            .date()
+            .describe("ISO timestamp when the entry was re-armed."),
+          rearmedBy: zod
+            .string()
+            .optional()
+            .describe(
+              "Reviewer name supplied with the re-arm call (omitted when not provided).",
+            ),
+          rationale: zod
+            .string()
+            .optional()
+            .describe(
+              "Free-form rationale supplied with the re-arm call (omitted when not provided).",
+            ),
+        })
+        .describe(
+          "Single entry in the re-arm audit log. Preserves the original\nnotification metadata of the dedup record that was removed\nplus the wall-clock + reviewer context for the re-arm action\nitself, so the log stays useful even after the matching dedup\nrecord is gone.\n",
+        ),
+    ),
+    total: zod.number(),
+  })
+  .describe(
+    "Snapshot of the persisted re-arm audit log. Capped at 200\nentries (oldest trimmed first); newest entries are at the END\nof the array (callers reverse for newest-first display).\n",
   );
 
 /**

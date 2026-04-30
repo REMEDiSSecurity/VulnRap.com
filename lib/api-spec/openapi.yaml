@@ -537,6 +537,10 @@ paths:
         Unknown keys are reported back via `notFound` (mirroring the
         per-phrase removal pattern); the request returns 200 when at least
         one entry was re-armed and 404 only when nothing matched.
+
+        The optional `reviewer` and `rationale` body fields feed the
+        bounded re-arm audit log persisted alongside the dedup state
+        so multi-reviewer teams can see who re-armed which flag and why.
       requestBody:
         required: true
         content:
@@ -591,6 +595,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AvriDriftSchedulerStatus"
+
+  /feedback/calibration/avri-drift/notifications/rearm-history:
+    get:
+      operationId: getAvriDriftRearmHistory
+      tags: [feedback]
+      summary: List the persisted AVRI drift re-arm audit log
+      description: |
+        Returns the bounded audit log of every reviewer-driven re-arm
+        event recorded by
+        `POST /feedback/calibration/avri-drift/notifications/rearm`. The
+        log is capped at 200 entries (oldest trimmed first). Strict-auth
+        because the entries include the original flag `detail` plus
+        reviewer/rationale context.
+      responses:
+        "200":
+          description: Persisted re-arm audit log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvriDriftRearmHistoryList"
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /feedback/calibration/config:
     get:
@@ -3389,7 +3419,72 @@ components:
             type: string
             minLength: 1
           description: Dedup keys (from AvriDriftNotificationRecord.key) to re-arm.
+        reviewer:
+          type: string
+          maxLength: 200
+          description: |
+            Optional reviewer name recorded in the re-arm audit log.
+            Empty/whitespace-only values are treated as absent.
+        rationale:
+          type: string
+          maxLength: 500
+          description: |
+            Optional free-form rationale recorded in the re-arm audit
+            log so reviewers can explain why a flag was re-armed.
+            Empty/whitespace-only values are treated as absent.
       required: [keys]
+
+    AvriDriftRearmAuditEntry:
+      type: object
+      description: |
+        Single entry in the re-arm audit log. Preserves the original
+        notification metadata of the dedup record that was removed
+        plus the wall-clock + reviewer context for the re-arm action
+        itself, so the log stays useful even after the matching dedup
+        record is gone.
+      properties:
+        key:
+          type: string
+          description: Dedup key that was re-armed.
+        weekStart:
+          type: string
+          description: ISO date (YYYY-MM-DD) for the Monday that started the flag's week.
+        kind:
+          type: string
+          enum: [GAP_BELOW_45, FAMILY_MEAN_SHIFT]
+        originalNotifiedAt:
+          type: string
+          format: date-time
+          description: ISO timestamp when the original notification first dispatched.
+        originalDetail:
+          type: string
+          description: Original flag detail string at the time of the first notification.
+        rearmedAt:
+          type: string
+          format: date-time
+          description: ISO timestamp when the entry was re-armed.
+        rearmedBy:
+          type: string
+          description: Reviewer name supplied with the re-arm call (omitted when not provided).
+        rationale:
+          type: string
+          description: Free-form rationale supplied with the re-arm call (omitted when not provided).
+      required: [key, weekStart, kind, originalNotifiedAt, originalDetail, rearmedAt]
+
+    AvriDriftRearmHistoryList:
+      type: object
+      description: |
+        Snapshot of the persisted re-arm audit log. Capped at 200
+        entries (oldest trimmed first); newest entries are at the END
+        of the array (callers reverse for newest-first display).
+      properties:
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftRearmAuditEntry"
+        total:
+          type: integer
+      required: [history, total]
 
     AvriDriftRearmResponse:
       type: object
@@ -3415,7 +3510,22 @@ components:
           items:
             $ref: "#/components/schemas/AvriDriftNotificationRecord"
           description: Refreshed dedup state snapshot after the re-arm so the UI can update without an extra GET.
-      required: [rearmed, notFound, remaining, removed, notified]
+        auditEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftRearmAuditEntry"
+          description: |
+            Audit entries appended to the persisted log for this call
+            (one per matched key). Empty when nothing matched.
+        rearmHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvriDriftRearmAuditEntry"
+          description: |
+            Refreshed re-arm audit log after this call so the UI can
+            render the "Recently re-armed" panel without an extra
+            GET. Capped at 200 entries.
+      required: [rearmed, notFound, remaining, removed, notified, auditEntries, rearmHistory]
 
     AvriDriftSchedulerStatus:
       type: object

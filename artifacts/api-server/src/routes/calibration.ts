@@ -9,6 +9,7 @@ import {
   listNotifiedFlags,
   removeNotifiedFlags,
   getDriftSchedulerStatus,
+  listRearmHistory,
 } from "../lib/avri-drift-notifications";
 import {
   getHandwavyPhrases,
@@ -658,16 +659,24 @@ router.get(
 // Mutation gate (`requireCalibrationAuth`) so reviewers can't be re-paged
 // by an unauthenticated caller; the same gate also lets the existing
 // per-IP throttle catch wrong-token bursts. Body shape is
-// `{ keys: string[] }`. Unknown keys are reported back via `notFound`
-// (mirroring the per-phrase removal pattern) instead of failing the
-// whole request — partial success is the common case when the file has
-// already been pruned by a teammate.
+// `{ keys: string[], reviewer?: string, rationale?: string }`. Unknown
+// keys are reported back via `notFound` (mirroring the per-phrase removal
+// pattern) instead of failing the whole request — partial success is the
+// common case when the file has already been pruned by a teammate.
+//
+// Optional `reviewer` and `rationale` body fields feed the bounded
+// re-arm audit log persisted alongside the dedup state. Both fields
+// are length-bounded to keep the persisted JSON file small.
 router.post(
   "/feedback/calibration/avri-drift/notifications/rearm",
   requireCalibrationAuth,
   (req, res) => {
     try {
-      const body = (req.body ?? {}) as { keys?: unknown };
+      const body = (req.body ?? {}) as {
+        keys?: unknown;
+        reviewer?: unknown;
+        rationale?: unknown;
+      };
       const rawKeys = body.keys;
       if (!Array.isArray(rawKeys) || rawKeys.length === 0) {
         res
@@ -691,7 +700,43 @@ router.post(
         }
         cleaned.push(k);
       }
-      const result = removeNotifiedFlags(cleaned);
+      // Validate reviewer/rationale up-front so a malformed audit field
+      // doesn't silently strip itself in the lib layer.
+      let reviewer: string | undefined;
+      if (body.reviewer !== undefined) {
+        if (typeof body.reviewer !== "string") {
+          res
+            .status(400)
+            .json({ error: "'reviewer' must be a string when provided." });
+          return;
+        }
+        const trimmed = body.reviewer.trim();
+        if (trimmed.length > 200) {
+          res
+            .status(400)
+            .json({ error: "'reviewer' must be 200 characters or fewer." });
+          return;
+        }
+        if (trimmed.length > 0) reviewer = trimmed;
+      }
+      let rationale: string | undefined;
+      if (body.rationale !== undefined) {
+        if (typeof body.rationale !== "string") {
+          res
+            .status(400)
+            .json({ error: "'rationale' must be a string when provided." });
+          return;
+        }
+        const trimmed = body.rationale.trim();
+        if (trimmed.length > 500) {
+          res
+            .status(400)
+            .json({ error: "'rationale' must be 500 characters or fewer." });
+          return;
+        }
+        if (trimmed.length > 0) rationale = trimmed;
+      }
+      const result = removeNotifiedFlags(cleaned, { reviewer, rationale });
       // 200 when at least one entry was re-armed (even if some keys
       // were unknown); 404 only when nothing matched at all so the
       // reviewer's UI can distinguish "stale picker — refresh" from
@@ -703,6 +748,10 @@ router.post(
         remaining: result.remaining,
         removed: result.removed,
         notified: listNotifiedFlags(),
+        // Return audit context inline so the UI can append the new
+        // entries to its "Recently re-armed" panel without an extra GET.
+        auditEntries: result.auditEntries,
+        rearmHistory: result.rearmHistory,
       });
     } catch (err) {
       req.log?.error(err, "Failed to re-arm AVRI drift notifications");
@@ -728,6 +777,26 @@ router.get("/feedback/calibration/avri-drift/scheduler-status", (_req, res) => {
       .json({ error: "Failed to read AVRI drift scheduler status." });
   }
 });
+
+// Surface the persisted re-arm audit log so the calibration UI can
+// render a "Recently re-armed" subsection. Strict-auth because the
+// records include the original flag `detail` plus reviewer/rationale
+// context (same policy as the dedup-state list endpoint).
+router.get(
+  "/feedback/calibration/avri-drift/notifications/rearm-history",
+  requireCalibrationAuthStrict,
+  (req, res) => {
+    try {
+      const history = listRearmHistory();
+      res.json({ history, total: history.length });
+    } catch (err) {
+      req.log?.error(err, "Failed to read AVRI drift re-arm audit log");
+      res
+        .status(500)
+        .json({ error: "Failed to read AVRI drift re-arm audit log." });
+    }
+  },
+);
 
 router.get("/feedback/calibration/config", (_req, res) => {
   try {

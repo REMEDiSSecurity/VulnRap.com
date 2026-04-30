@@ -129,13 +129,31 @@ interface NotificationsList {
   total: number;
 }
 
+interface RearmAuditEntryShape {
+  key: string;
+  weekStart: string;
+  kind: string;
+  originalNotifiedAt: string;
+  originalDetail: string;
+  rearmedAt: string;
+  rearmedBy?: string;
+  rationale?: string;
+}
+
 interface RearmResponse {
   rearmed: number;
   notFound: string[];
   remaining: number;
   removed: Array<{ key: string }>;
   notified: Array<{ key: string }>;
+  auditEntries: RearmAuditEntryShape[];
+  rearmHistory: RearmAuditEntryShape[];
   error?: string;
+}
+
+interface RearmHistoryList {
+  history: RearmAuditEntryShape[];
+  total: number;
 }
 
 describe("GET /feedback/calibration/avri-drift/notifications", () => {
@@ -285,5 +303,119 @@ describe("POST /feedback/calibration/avri-drift/notifications/rearm", () => {
     );
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/200/);
+  });
+
+  it("records reviewer + rationale in the audit log when supplied", async () => {
+    const r = await request<RearmResponse>(
+      "POST",
+      "/feedback/calibration/avri-drift/notifications/rearm",
+      {
+        keys: ["2026-04-20|GAP_BELOW_45"],
+        reviewer: "alice",
+        rationale: "fix-by date passed",
+      },
+      AUTH,
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.auditEntries).toHaveLength(1);
+    expect(r.body.auditEntries[0]!.rearmedBy).toBe("alice");
+    expect(r.body.auditEntries[0]!.rationale).toBe("fix-by date passed");
+    expect(r.body.auditEntries[0]!.originalDetail).toBe(
+      "T1−T3 gap dropped to 41.2pt",
+    );
+    expect(r.body.rearmHistory.length).toBeGreaterThanOrEqual(1);
+    // Audit log must be persisted to disk.
+    const persisted = JSON.parse(await fs.readFile(statePath, "utf8")) as {
+      rearmHistory: RearmAuditEntryShape[];
+    };
+    expect(persisted.rearmHistory).toHaveLength(1);
+    expect(persisted.rearmHistory[0]!.rearmedBy).toBe("alice");
+  });
+
+  it("rejects an over-long reviewer field with 400", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/avri-drift/notifications/rearm",
+      {
+        keys: ["2026-04-20|GAP_BELOW_45"],
+        reviewer: "x".repeat(201),
+      },
+      AUTH,
+    );
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/reviewer/i);
+  });
+
+  it("rejects an over-long rationale field with 400", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/avri-drift/notifications/rearm",
+      {
+        keys: ["2026-04-20|GAP_BELOW_45"],
+        rationale: "x".repeat(501),
+      },
+      AUTH,
+    );
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/rationale/i);
+  });
+
+  it("rejects a non-string reviewer with 400", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/avri-drift/notifications/rearm",
+      {
+        keys: ["2026-04-20|GAP_BELOW_45"],
+        reviewer: 42,
+      },
+      AUTH,
+    );
+    expect(r.status).toBe(400);
+  });
+});
+
+describe("GET /feedback/calibration/avri-drift/notifications/rearm-history", () => {
+  it("rejects unauthenticated reads with 401 (strict-auth audit endpoint)", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/avri-drift/notifications/rearm-history",
+    );
+    expect(r.status).toBe(401);
+  });
+
+  it("returns an empty list when no re-arm has occurred yet", async () => {
+    const r = await request<RearmHistoryList>(
+      "GET",
+      "/feedback/calibration/avri-drift/notifications/rearm-history",
+      undefined,
+      AUTH,
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.history).toEqual([]);
+    expect(r.body.total).toBe(0);
+  });
+
+  it("surfaces audit entries appended by a prior re-arm call", async () => {
+    await request<RearmResponse>(
+      "POST",
+      "/feedback/calibration/avri-drift/notifications/rearm",
+      {
+        keys: ["2026-04-20|GAP_BELOW_45"],
+        reviewer: "bob",
+        rationale: "manual re-page",
+      },
+      AUTH,
+    );
+    const r = await request<RearmHistoryList>(
+      "GET",
+      "/feedback/calibration/avri-drift/notifications/rearm-history",
+      undefined,
+      AUTH,
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.total).toBe(1);
+    expect(r.body.history[0]!.key).toBe("2026-04-20|GAP_BELOW_45");
+    expect(r.body.history[0]!.rearmedBy).toBe("bob");
+    expect(r.body.history[0]!.rationale).toBe("manual re-page");
   });
 });

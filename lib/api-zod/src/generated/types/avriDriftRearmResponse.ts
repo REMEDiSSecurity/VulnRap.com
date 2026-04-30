@@ -6,6 +6,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { AvriDriftNotificationRecord } from "./avriDriftNotificationRecord";
+import type { AvriDriftRearmAuditEntry } from "./avriDriftRearmAuditEntry";
 
 export interface AvriDriftRearmResponse {
   /** Number of dedup entries that were re-armed (i.e. removed from the dedup state). */
@@ -18,4 +19,13 @@ export interface AvriDriftRearmResponse {
   removed: AvriDriftNotificationRecord[];
   /** Refreshed dedup state snapshot after the re-arm so the UI can update without an extra GET. */
   notified: AvriDriftNotificationRecord[];
+  /** Audit entries appended to the persisted log for this call
+(one per matched key). Empty when nothing matched.
+ */
+  auditEntries: AvriDriftRearmAuditEntry[];
+  /** Refreshed re-arm audit log after this call so the UI can
+render the "Recently re-armed" panel without an extra
+GET. Capped at 200 entries.
+ */
+  rearmHistory: AvriDriftRearmAuditEntry[];
 }

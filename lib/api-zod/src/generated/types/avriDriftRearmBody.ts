@@ -13,4 +13,19 @@ export interface AvriDriftRearmBody {
    * @maxItems 200
    */
   keys: string[];
+  /**
+   * Optional reviewer name recorded in the re-arm audit log.
+Empty/whitespace-only values are treated as absent.
+
+   * @maxLength 200
+   */
+  reviewer?: string;
+  /**
+   * Optional free-form rationale recorded in the re-arm audit
+log so reviewers can explain why a flag was re-armed.
+Empty/whitespace-only values are treated as absent.
+
+   * @maxLength 500
+   */
+  rationale?: string;
 }

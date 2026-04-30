@@ -44,9 +44,38 @@ export interface NotifiedFlagRecord {
   detail: string;
 }
 
+/**
+ * Audit entry recorded every time `removeNotifiedFlags` re-arms a
+ * previously-notified flag. Preserves the original notification
+ * metadata plus the wall-clock + reviewer context for the re-arm.
+ */
+export interface RearmAuditEntry {
+  /** Stable per-flag dedup key that was re-armed. */
+  key: string;
+  /** Week the flag was scoped to (preserved from the dedup record). */
+  weekStart: string;
+  /** Flag kind (preserved from the dedup record). */
+  kind: DriftFlag["kind"];
+  /** ISO timestamp when the original notification first dispatched. */
+  originalNotifiedAt: string;
+  /** Original detail string at the time of the first notification. */
+  originalDetail: string;
+  /** ISO timestamp when the entry was re-armed. */
+  rearmedAt: string;
+  /** Optional reviewer name supplied by the calibration UI. */
+  rearmedBy?: string;
+  /** Optional free-form rationale supplied by the reviewer. */
+  rationale?: string;
+}
+
 interface NotificationsFile {
   _meta?: unknown;
   notified: NotifiedFlagRecord[];
+  /**
+   * Bounded audit log of re-arm events. Optional on disk so older
+   * state files keep loading; `readState` normalizes it to an array.
+   */
+  rearmHistory?: RearmAuditEntry[];
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -66,6 +95,9 @@ const CANDIDATE_PATHS = [
 // is well above what a busy 26-week window with ~10 family shifts/week
 // would produce, and small enough to keep the JSON file trivially diffable.
 const HISTORY_LIMIT = 500;
+// Bound for the re-arm audit log. 200 events covers a busy quarter
+// (~3 re-arms/day). Trimmed oldest-first.
+const REARM_HISTORY_LIMIT = 200;
 
 let RESOLVED_PATH: string | null = null;
 
@@ -154,7 +186,7 @@ export function selectNewFlags(
 function readState(): NotificationsFile {
   const filePath = resolvePath();
   if (!existsSync(filePath)) {
-    return { notified: [] };
+    return { notified: [], rearmHistory: [] };
   }
   try {
     const raw = readFileSync(filePath, "utf8");
@@ -174,13 +206,53 @@ function readState(): NotificationsFile {
         cleaned.push(entry as NotifiedFlagRecord);
       }
     }
-    return { _meta: parsed._meta, notified: cleaned };
+    // Pre-existing state files won't have a `rearmHistory` block; treat
+    // that as an empty audit log so the read keeps working without
+    // forcing a one-shot migration.
+    const rawHistory = Array.isArray(parsed.rearmHistory)
+      ? parsed.rearmHistory
+      : [];
+    const cleanedHistory: RearmAuditEntry[] = [];
+    for (const entry of rawHistory) {
+      if (
+        entry &&
+        typeof entry === "object" &&
+        typeof (entry as RearmAuditEntry).key === "string" &&
+        typeof (entry as RearmAuditEntry).weekStart === "string" &&
+        typeof (entry as RearmAuditEntry).kind === "string" &&
+        typeof (entry as RearmAuditEntry).originalNotifiedAt === "string" &&
+        typeof (entry as RearmAuditEntry).originalDetail === "string" &&
+        typeof (entry as RearmAuditEntry).rearmedAt === "string"
+      ) {
+        const e = entry as RearmAuditEntry;
+        const out: RearmAuditEntry = {
+          key: e.key,
+          weekStart: e.weekStart,
+          kind: e.kind,
+          originalNotifiedAt: e.originalNotifiedAt,
+          originalDetail: e.originalDetail,
+          rearmedAt: e.rearmedAt,
+        };
+        if (typeof e.rearmedBy === "string" && e.rearmedBy.length > 0) {
+          out.rearmedBy = e.rearmedBy;
+        }
+        if (typeof e.rationale === "string" && e.rationale.length > 0) {
+          out.rationale = e.rationale;
+        }
+        cleanedHistory.push(out);
+      }
+    }
+    return {
+      _meta: parsed._meta,
+      notified: cleaned,
+      rearmHistory: cleanedHistory,
+    };
   } catch (err) {
     logger.warn(
       { err, path: filePath },
       "[avri-drift-notifications] Failed to read state file; starting from empty.",
     );
-    return { notified: [] };
+    return { notified: [], rearmHistory: [] };
   }
 }
 
@@ -192,11 +264,13 @@ function writeState(file: NotificationsFile): void {
   }
   // Trim oldest first so the most-recent HISTORY_LIMIT entries are kept.
   const trimmed = file.notified.slice(-HISTORY_LIMIT);
+  const trimmedHistory = (file.rearmHistory ?? []).slice(-REARM_HISTORY_LIMIT);
   const payload: NotificationsFile = {
     _meta:
       file._meta ??
-      "Persisted dedup state for AVRI drift notifications (Task #83). Each entry records a flag that has already been dispatched to AVRI_DRIFT_WEBHOOK_URL so the same flag for the same week never re-notifies reviewers. Capped at 500 entries.",
+      "Persisted dedup state for AVRI drift notifications. `notified` records flags already dispatched to AVRI_DRIFT_WEBHOOK_URL (capped at 500). `rearmHistory` is a bounded audit log of reviewer-driven re-arm events (capped at 200).",
     notified: trimmed,
+    rearmHistory: trimmedHistory,
   };
   writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
 }
@@ -410,9 +484,23 @@ export async function notifyDriftFlagsIfNew(
     notifiedAt: now.toISOString(),
     detail: f.detail,
   }));
+  // Re-read fresh state right before writing so that any concurrent
+  // removeNotifiedFlags() call that landed during the awaited dispatch
+  // (its `rearmHistory` append, plus its `notified` removals) is
+  // preserved instead of being clobbered by the stale snapshot we read
+  // at the top of this function.
+  const fresh = readState();
+  const freshNotifiedKeys = new Set(fresh.notified.map((n) => n.key));
+  const mergedNotified = [
+    ...fresh.notified,
+    // Only append records that aren't already present (e.g. another
+    // dispatcher run or a fast re-arm+re-fire could have raced in).
+    ...newRecords.filter((r) => !freshNotifiedKeys.has(r.key)),
+  ];
   writeState({
-    _meta: state._meta,
-    notified: [...state.notified, ...newRecords],
+    _meta: fresh._meta,
+    notified: mergedNotified,
+    rearmHistory: fresh.rearmHistory ?? [],
   });
 
   return {
@@ -734,6 +822,27 @@ export interface RemoveNotifiedFlagsResult {
   notFound: string[];
   /** Total entries remaining in the dedup state after the removal. */
   remaining: number;
+  /**
+   * Audit entries appended to the persisted re-arm history for this
+   * call (one per matched key). Empty when nothing matched.
+   */
+  auditEntries: RearmAuditEntry[];
+  /**
+   * Snapshot of the persisted re-arm history AFTER this call so callers
+   * can render the updated audit log without an extra read.
+   */
+  rearmHistory: RearmAuditEntry[];
+}
+
+/**
+ * Optional reviewer context for `removeNotifiedFlags`. `reviewer` is a
+ * free-form display name (auth is enforced separately) and `rationale`
+ * is a short note. `now` is overridable for deterministic tests.
+ */
+export interface RemoveNotifiedFlagsOptions {
+  reviewer?: string;
+  rationale?: string;
+  now?: () => Date;
 }
 
 /**
@@ -743,8 +852,16 @@ export interface RemoveNotifiedFlagsResult {
  *
  * Duplicate keys in the input are de-duped before lookup, so passing the
  * same key twice still only counts as one removal.
+ *
+ * Each successful removal also appends an entry to the persisted
+ * `rearmHistory` audit log (capped at REARM_HISTORY_LIMIT) preserving
+ * the original notification metadata plus the supplied reviewer /
+ * rationale context.
  */
-export function removeNotifiedFlags(keys: string[]): RemoveNotifiedFlagsResult {
+export function removeNotifiedFlags(
+  keys: string[],
+  options: RemoveNotifiedFlagsOptions = {},
+): RemoveNotifiedFlagsResult {
   const requested = new Set<string>();
   for (const k of keys) {
     if (typeof k === "string" && k.trim().length > 0) {
@@ -766,10 +883,59 @@ export function removeNotifiedFlags(keys: string[]): RemoveNotifiedFlagsResult {
   for (const k of requested) {
     if (!matchedKeys.has(k)) notFound.push(k);
   }
+  // Build audit entries up-front so the same wall-clock timestamp is
+  // shared across a batch (a single reviewer click that re-arms 5 keys
+  // produces 5 entries with the same `rearmedAt`, which is what the
+  // calibration UI groups on).
+  const reviewer =
+    typeof options.reviewer === "string" ? options.reviewer.trim() : "";
+  const rationale =
+    typeof options.rationale === "string" ? options.rationale.trim() : "";
+  const now = (options.now ?? (() => new Date()))();
+  const rearmedAt = now.toISOString();
+  const auditEntries: RearmAuditEntry[] = removed.map((r) => {
+    const entry: RearmAuditEntry = {
+      key: r.key,
+      weekStart: r.weekStart,
+      kind: r.kind,
+      originalNotifiedAt: r.notifiedAt,
+      originalDetail: r.detail,
+      rearmedAt,
+    };
+    if (reviewer.length > 0) entry.rearmedBy = reviewer;
+    if (rationale.length > 0) entry.rationale = rationale;
+    return entry;
+  });
+  const nextHistory: RearmAuditEntry[] =
+    removed.length > 0
+      ? [...(state.rearmHistory ?? []), ...auditEntries]
+      : (state.rearmHistory ?? []);
   if (removed.length > 0) {
-    writeState({ _meta: state._meta, notified: kept });
+    writeState({
+      _meta: state._meta,
+      notified: kept,
+      rearmHistory: nextHistory,
+    });
   }
-  return { removed, notFound, remaining: kept.length };
+  // Echo back the newest-trimmed snapshot so callers see the same view
+  // a subsequent `listRearmHistory()` would return (i.e. with the
+  // REARM_HISTORY_LIMIT trim applied).
+  const persistedHistory = nextHistory.slice(-REARM_HISTORY_LIMIT);
+  return {
+    removed,
+    notFound,
+    remaining: kept.length,
+    auditEntries,
+    rearmHistory: persistedHistory,
+  };
+}
+
+/**
+ * Snapshot of the persisted re-arm audit log. Returns a fresh array on
+ * every call so callers can safely mutate the result.
+ */
+export function listRearmHistory(): RearmAuditEntry[] {
+  return (readState().rearmHistory ?? []).map((e) => ({ ...e }));
 }
 
 // Exported for unit tests so they can pin internal state without
@@ -788,6 +954,7 @@ export const __testing = {
   readState,
   writeState,
   HISTORY_LIMIT,
+  REARM_HISTORY_LIMIT,
   DEFAULT_INTERVAL_MS,
   DEFAULT_RETRY_INTERVAL_MS,
   DEFAULT_INITIAL_DELAY_MS,

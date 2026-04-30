@@ -21,6 +21,7 @@ import type {
   ApplyCalibrationResponse,
   AvriDriftNotificationsList,
   AvriDriftRearmBody,
+  AvriDriftRearmHistoryList,
   AvriDriftRearmResponse,
   AvriDriftReport,
   AvriDriftSchedulerStatus,
@@ -1514,6 +1515,10 @@ Unknown keys are reported back via `notFound` (mirroring the
 per-phrase removal pattern); the request returns 200 when at least
 one entry was re-armed and 404 only when nothing matched.
 
+The optional `reviewer` and `rationale` body fields feed the
+bounded re-arm audit log persisted alongside the dedup state
+so multi-reviewer teams can see who re-armed which flag and why.
+
  * @summary Re-arm one or more previously-notified AVRI drift flags
  */
 export const getRearmAvriDriftNotificationsUrl = () => {
@@ -1687,6 +1692,94 @@ export function useGetAvriDriftSchedulerStatus<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAvriDriftSchedulerStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns the bounded audit log of every reviewer-driven re-arm
+event recorded by
+`POST /feedback/calibration/avri-drift/notifications/rearm`. The
+log is capped at 200 entries (oldest trimmed first). Strict-auth
+because the entries include the original flag `detail` plus
+reviewer/rationale context.
+
+ * @summary List the persisted AVRI drift re-arm audit log
+ */
+export const getGetAvriDriftRearmHistoryUrl = () => {
+  return `/api/feedback/calibration/avri-drift/notifications/rearm-history`;
+};
+
+export const getAvriDriftRearmHistory = async (
+  options?: RequestInit,
+): Promise<AvriDriftRearmHistoryList> => {
+  return customFetch<AvriDriftRearmHistoryList>(
+    getGetAvriDriftRearmHistoryUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetAvriDriftRearmHistoryQueryKey = () => {
+  return [
+    `/api/feedback/calibration/avri-drift/notifications/rearm-history`,
+  ] as const;
+};
+
+export const getGetAvriDriftRearmHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAvriDriftRearmHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftRearmHistory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAvriDriftRearmHistoryQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAvriDriftRearmHistory>>
+  > = ({ signal }) => getAvriDriftRearmHistory({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftRearmHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAvriDriftRearmHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAvriDriftRearmHistory>>
+>;
+export type GetAvriDriftRearmHistoryQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List the persisted AVRI drift re-arm audit log
+ */
+
+export function useGetAvriDriftRearmHistory<
+  TData = Awaited<ReturnType<typeof getAvriDriftRearmHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftRearmHistory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAvriDriftRearmHistoryQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

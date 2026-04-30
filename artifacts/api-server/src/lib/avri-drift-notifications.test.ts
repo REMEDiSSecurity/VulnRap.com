@@ -11,10 +11,12 @@ import {
   listNotifiedFlags,
   removeNotifiedFlags,
   getDriftSchedulerStatus,
+  listRearmHistory,
   __testing,
   type WebhookDispatcher,
   type WebhookPayload,
   type NotifiedFlagRecord,
+  type RearmAuditEntry,
 } from "./avri-drift-notifications";
 import type { AvriDriftReport, DriftFlag } from "./avri-drift";
 
@@ -866,5 +868,281 @@ describe("getDriftSchedulerStatus", () => {
     // for the same reason.
     expect(status.schedulerStarted).toBe(true);
     expect(status.startedAt).toBe("2026-04-29T00:00:00.000Z");
+  });
+});
+
+describe("removeNotifiedFlags audit log + listRearmHistory", () => {
+  let tmpDir: string;
+  let statePath: string;
+  let originalStatePath: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "avri-drift-audit-"));
+    statePath = path.join(tmpDir, "notifications.json");
+    originalStatePath = process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = statePath;
+    __testing.resetResolvedPath();
+  });
+
+  afterEach(() => {
+    if (originalStatePath === undefined)
+      delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    else process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = originalStatePath;
+    __testing.resetResolvedPath();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function seedState(records: NotifiedFlagRecord[], history?: RearmAuditEntry[]) {
+    const payload: { notified: NotifiedFlagRecord[]; rearmHistory?: RearmAuditEntry[] } = {
+      notified: records,
+    };
+    if (history !== undefined) payload.rearmHistory = history;
+    writeFileSync(statePath, JSON.stringify(payload));
+  }
+
+  it("listRearmHistory returns an empty array when the state file does not exist", () => {
+    expect(listRearmHistory()).toEqual([]);
+  });
+
+  it("appends one audit entry per matched key with reviewer + rationale", () => {
+    seedState([
+      {
+        key: "k1",
+        weekStart: "2026-04-20",
+        kind: "GAP_BELOW_45",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "gap detail",
+      },
+      {
+        key: "k2",
+        weekStart: "2026-04-20",
+        kind: "FAMILY_MEAN_SHIFT",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "fam detail",
+      },
+    ]);
+    const fixedNow = new Date("2026-04-30T12:34:56.000Z");
+    const result = removeNotifiedFlags(["k1", "k2"], {
+      reviewer: "  alice  ",
+      rationale: "  fix-by date lapsed  ",
+      now: () => fixedNow,
+    });
+    expect(result.removed).toHaveLength(2);
+    expect(result.auditEntries).toHaveLength(2);
+    // Same wall-clock across the batch — UI groups on rearmedAt.
+    expect(new Set(result.auditEntries.map((e) => e.rearmedAt))).toEqual(
+      new Set(["2026-04-30T12:34:56.000Z"]),
+    );
+    // Reviewer + rationale are trimmed.
+    for (const entry of result.auditEntries) {
+      expect(entry.rearmedBy).toBe("alice");
+      expect(entry.rationale).toBe("fix-by date lapsed");
+    }
+    // Original metadata preserved per-key.
+    const byKey = new Map(result.auditEntries.map((e) => [e.key, e]));
+    expect(byKey.get("k1")?.kind).toBe("GAP_BELOW_45");
+    expect(byKey.get("k1")?.originalDetail).toBe("gap detail");
+    expect(byKey.get("k1")?.originalNotifiedAt).toBe("2026-04-21T00:00:00.000Z");
+    expect(byKey.get("k2")?.kind).toBe("FAMILY_MEAN_SHIFT");
+
+    // Persisted to disk.
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      rearmHistory: RearmAuditEntry[];
+    };
+    expect(persisted.rearmHistory).toHaveLength(2);
+    expect(listRearmHistory()).toHaveLength(2);
+    // Returned snapshot matches persisted snapshot.
+    expect(result.rearmHistory.map((e) => e.key)).toEqual(["k1", "k2"]);
+  });
+
+  it("omits rearmedBy / rationale when caller supplies blank strings", () => {
+    seedState([
+      {
+        key: "k1",
+        weekStart: "2026-04-20",
+        kind: "GAP_BELOW_45",
+        notifiedAt: "2026-04-21T00:00:00.000Z",
+        detail: "gap",
+      },
+    ]);
+    const result = removeNotifiedFlags(["k1"], {
+      reviewer: "   ",
+      rationale: "",
+    });
+    const entry = result.auditEntries[0]!;
+    expect(entry.rearmedBy).toBeUndefined();
+    expect(entry.rationale).toBeUndefined();
+  });
+
+  it("does not append audit entries when nothing matched", () => {
+    seedState(
+      [
+        {
+          key: "k1",
+          weekStart: "2026-04-20",
+          kind: "GAP_BELOW_45",
+          notifiedAt: "2026-04-21T00:00:00.000Z",
+          detail: "gap",
+        },
+      ],
+      [
+        {
+          key: "old",
+          weekStart: "2026-04-13",
+          kind: "GAP_BELOW_45",
+          originalNotifiedAt: "2026-04-14T00:00:00.000Z",
+          originalDetail: "old gap",
+          rearmedAt: "2026-04-15T00:00:00.000Z",
+        },
+      ],
+    );
+    const before = readFileSync(statePath, "utf8");
+    const result = removeNotifiedFlags(["does-not-exist"], { reviewer: "alice" });
+    expect(result.auditEntries).toEqual([]);
+    // Existing log unchanged AND file untouched (no churn on a no-op).
+    expect(readFileSync(statePath, "utf8")).toBe(before);
+    expect(listRearmHistory()).toHaveLength(1);
+    // Snapshot still includes the previously-persisted entry.
+    expect(result.rearmHistory).toHaveLength(1);
+    expect(result.rearmHistory[0]!.key).toBe("old");
+  });
+
+  it("trims the audit log to REARM_HISTORY_LIMIT (oldest-first)", () => {
+    const limit = __testing.REARM_HISTORY_LIMIT;
+    // Seed a full audit log.
+    const seeded: RearmAuditEntry[] = Array.from({ length: limit }, (_, i) => ({
+      key: `seeded-${i}`,
+      weekStart: "2026-04-20",
+      kind: "GAP_BELOW_45",
+      originalNotifiedAt: "2026-04-21T00:00:00.000Z",
+      originalDetail: `seed ${i}`,
+      rearmedAt: `2026-04-22T00:00:00.${String(i).padStart(3, "0")}Z`,
+    }));
+    seedState(
+      [
+        {
+          key: "fresh",
+          weekStart: "2026-04-20",
+          kind: "GAP_BELOW_45",
+          notifiedAt: "2026-04-21T00:00:00.000Z",
+          detail: "fresh detail",
+        },
+      ],
+      seeded,
+    );
+    const result = removeNotifiedFlags(["fresh"], {
+      reviewer: "alice",
+      now: () => new Date("2026-04-30T00:00:00.000Z"),
+    });
+    expect(result.rearmHistory).toHaveLength(limit);
+    // Oldest seeded entry was dropped, newest call is at the end.
+    expect(result.rearmHistory[0]!.key).toBe("seeded-1");
+    expect(result.rearmHistory[result.rearmHistory.length - 1]!.key).toBe("fresh");
+    // Persisted file is also trimmed (we don't want unbounded growth).
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      rearmHistory: RearmAuditEntry[];
+    };
+    expect(persisted.rearmHistory).toHaveLength(limit);
+  });
+
+  it("preserves audit history when notifyDriftFlagsIfNew writes the dedup state", async () => {
+    // Pre-existing audit log from an earlier reviewer action.
+    seedState(
+      [],
+      [
+        {
+          key: "old",
+          weekStart: "2026-04-13",
+          kind: "GAP_BELOW_45",
+          originalNotifiedAt: "2026-04-14T00:00:00.000Z",
+          originalDetail: "old gap",
+          rearmedAt: "2026-04-15T00:00:00.000Z",
+          rearmedBy: "alice",
+        },
+      ],
+    );
+    const dispatch: WebhookDispatcher = async () => ({ ok: true, status: 200 });
+    await notifyDriftFlagsIfNew(makeReport({ flags: [GAP_FLAG] }), {
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+    });
+    // The notify path must NOT have wiped the audit log.
+    const history = listRearmHistory();
+    expect(history).toHaveLength(1);
+    expect(history[0]!.key).toBe("old");
+    expect(history[0]!.rearmedBy).toBe("alice");
+  });
+
+  it("does not clobber a concurrent re-arm that lands during webhook dispatch", async () => {
+    // Seed a previously-notified flag for a *different* key than the
+    // one notify will dispatch — that other-key entry will be re-armed
+    // by a concurrent reviewer click while dispatch is awaiting.
+    seedState(
+      [
+        {
+          key: "concurrent-rearm-target",
+          weekStart: "2026-04-13",
+          kind: "GAP_BELOW_45",
+          notifiedAt: "2026-04-14T00:00:00.000Z",
+          detail: "gap to be re-armed mid-dispatch",
+        },
+      ],
+      [],
+    );
+    // The dispatcher awaits a deferred promise so we can interleave a
+    // removeNotifiedFlags() call between the initial state read and the
+    // post-dispatch writeState. Without the fresh re-read fix in
+    // notifyDriftFlagsIfNew, that re-arm's audit entry (and removal)
+    // is overwritten by the stale snapshot.
+    let resolveDispatch!: () => void;
+    const dispatchGate = new Promise<void>((r) => { resolveDispatch = r; });
+    const dispatch: WebhookDispatcher = async () => {
+      await dispatchGate;
+      return { ok: true, status: 200 };
+    };
+    const notifyPromise = notifyDriftFlagsIfNew(
+      makeReport({ flags: [GAP_FLAG] }),
+      { webhookUrl: "https://example.com/hook", dispatch },
+    );
+    // Concurrent reviewer click during the awaited dispatch.
+    const rearmResult = removeNotifiedFlags(["concurrent-rearm-target"], {
+      reviewer: "alice",
+      rationale: "race-condition test",
+    });
+    expect(rearmResult.removed).toHaveLength(1);
+    // Now let the dispatcher finish — the post-await writeState must
+    // re-read fresh state and merge in alice's audit entry, not blow
+    // it away with the snapshot it captured before dispatch awaited.
+    resolveDispatch();
+    await notifyPromise;
+    const history = listRearmHistory();
+    expect(history).toHaveLength(1);
+    expect(history[0]!.key).toBe("concurrent-rearm-target");
+    expect(history[0]!.rearmedBy).toBe("alice");
+    // The dedup state should NOT contain the re-armed key (alice
+    // removed it) — only the freshly-notified GAP_FLAG should be
+    // present.
+    const notified = listNotifiedFlags();
+    expect(notified.map((n) => n.key)).not.toContain("concurrent-rearm-target");
+  });
+
+  it("listRearmHistory returns deep copies so callers cannot mutate persisted state", () => {
+    seedState(
+      [],
+      [
+        {
+          key: "k1",
+          weekStart: "2026-04-20",
+          kind: "GAP_BELOW_45",
+          originalNotifiedAt: "2026-04-21T00:00:00.000Z",
+          originalDetail: "gap",
+          rearmedAt: "2026-04-22T00:00:00.000Z",
+          rearmedBy: "alice",
+        },
+      ],
+    );
+    const snap = listRearmHistory();
+    snap[0]!.rearmedBy = "MUTATED";
+    expect(listRearmHistory()[0]!.rearmedBy).toBe("alice");
   });
 });
