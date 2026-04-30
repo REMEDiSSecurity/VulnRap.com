@@ -8511,6 +8511,12 @@ interface ArchetypeHistoryCompactionStats {
   lastCompactedAt: string;
   lastRemovedCount: number;
 }
+// Task #288 — on-disk size + snapshot count of the persisted history
+// file. `null` while the file does not exist yet.
+interface ArchetypeHistoryFileStats {
+  sizeBytes: number;
+  snapshotCount: number;
+}
 interface ArchetypeHistoryConfigResponse {
   effectiveDays: number;
   source: "env" | "persisted" | "default";
@@ -8520,6 +8526,23 @@ interface ArchetypeHistoryConfigResponse {
   min: number;
   max: number;
   lastCompaction: ArchetypeHistoryCompactionStats | null;
+  historyFile: ArchetypeHistoryFileStats | null;
+}
+
+// Task #288 — format an on-disk byte count using base-1024 units so the
+// surfaced number lines up with what `du -h` would report. Returns null
+// for non-finite/negative inputs so the caller can hide the line cleanly.
+function formatBytes(bytes: number): string | null {
+  if (!Number.isFinite(bytes) || bytes < 0) return null;
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unitIdx = 0;
+  while (value >= 1024 && unitIdx < units.length - 1) {
+    value /= 1024;
+    unitIdx++;
+  }
+  return `${value.toFixed(1)} ${units[unitIdx]}`;
 }
 
 // Task #211 — render an ISO timestamp as a coarse "Xs/min/h/d ago"
@@ -9207,6 +9230,26 @@ function EmergingArchetypesSection() {
                   {configData.lastCompaction.lastRemovedCount}
                 </span>{" "}
                 snapshot{configData.lastCompaction.lastRemovedCount === 1 ? "" : "s"}
+              </span>
+            )}
+            {/* Task #288 — surface the persisted history file's on-disk
+                size + snapshot count for storage-sizing decisions.
+                Hidden until the file exists or if the size can't be
+                formatted. */}
+            {configData.historyFile && formatBytes(configData.historyFile.sizeBytes) && (
+              <span
+                className="basis-full text-muted-foreground/70"
+                title={`${configData.historyFile.sizeBytes} bytes on disk`}
+              >
+                History file:{" "}
+                <span className="font-mono text-foreground/80 tabular-nums">
+                  {formatBytes(configData.historyFile.sizeBytes)}
+                </span>
+                {" · "}
+                <span className="font-mono text-foreground/80 tabular-nums">
+                  {configData.historyFile.snapshotCount}
+                </span>{" "}
+                snapshot{configData.historyFile.snapshotCount === 1 ? "" : "s"}
               </span>
             )}
           </div>

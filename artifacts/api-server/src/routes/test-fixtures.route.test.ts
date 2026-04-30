@@ -425,6 +425,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     // Task #211 — most recent compaction pass outcome, or null if the
     // routine has not run yet on this deployment.
     lastCompaction: { lastCompactedAt: string; lastRemovedCount: number } | null;
+    // Task #288 — on-disk size of the persisted history file plus the
+    // snapshot count it currently holds, or null until the file exists.
+    historyFile: { sizeBytes: number; snapshotCount: number } | null;
   }
 
   function deleteJson<T>(urlPath: string): Promise<{ status: number; body: T }> {
@@ -586,6 +589,39 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     // must report zero rolled-up rows. (If this ever flips to non-zero
     // it means the compaction pass started misclassifying recent rows.)
     expect(stats.lastRemovedCount).toBe(0);
+  });
+
+  // Task #288 — the config response also surfaces the persisted history
+  // file's on-disk size + snapshot count so the dashboard can render
+  // "History file: 124 KB · 487 snapshots" next to the compaction
+  // controls. By the time this test runs the earlier
+  // "/api/test/archetype-history" describe block has already triggered
+  // /api/test/run, so the history file must exist and have a positive
+  // size + snapshot count.
+  it("GET surfaces the persisted history file's on-disk size and snapshot count", async () => {
+    const cfg = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    expect(cfg.historyFile).not.toBeNull();
+    const file = cfg.historyFile!;
+    expect(typeof file.sizeBytes).toBe("number");
+    expect(file.sizeBytes).toBeGreaterThan(0);
+    expect(Number.isInteger(file.sizeBytes)).toBe(true);
+    expect(typeof file.snapshotCount).toBe("number");
+    expect(Number.isInteger(file.snapshotCount)).toBe(true);
+    expect(file.snapshotCount).toBeGreaterThan(0);
+  });
+
+  // Task #288 — PUT must mirror the GET shape so the dashboard can drop
+  // the response straight into its query cache without a follow-up GET
+  // to learn the on-disk file size.
+  it("PUT response includes the persisted history file's size + snapshot count", async () => {
+    const put = await putJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+      { compactAfterDays: 45 },
+    );
+    expect(put.status).toBe(200);
+    expect(put.body.historyFile).not.toBeNull();
+    expect(put.body.historyFile!.sizeBytes).toBeGreaterThan(0);
+    expect(put.body.historyFile!.snapshotCount).toBeGreaterThan(0);
   });
 });
 

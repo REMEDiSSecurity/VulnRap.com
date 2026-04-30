@@ -18,6 +18,7 @@ import { fuseScores, type ValidityFusionAudit } from "../lib/score-fusion";
 import {
   appendArchetypeSnapshots,
   readArchetypeHistory,
+  readArchetypeHistoryFileStats,
 } from "../lib/archetype-history";
 import {
   appendDatasetCohortSnapshots,
@@ -2883,7 +2884,7 @@ router.get("/test/dataset-history", async (_req, res) => {
 // shared calibration token so the endpoint can be safely exposed
 // publicly once the namespace is locked down. Both endpoints return 404
 // in production because the surrounding /test/* surface is dev-only.
-router.get("/test/archetype-history/config", (_req, res) => {
+router.get("/test/archetype-history/config", async (_req, res) => {
   if (process.env.NODE_ENV === "production") {
     res.status(404).json({ error: "Not available in production." });
     return;
@@ -2893,9 +2894,12 @@ router.get("/test/archetype-history/config", (_req, res) => {
   // "Last compacted Xh ago — removed N snapshots". `null` when the
   // routine has not run yet on this deployment (e.g. fresh env, no
   // /api/test/run calls have triggered an append yet).
+  // Task #288 — also expose the persisted history file's on-disk size +
+  // snapshot count for storage-sizing decisions. `null` until the file exists.
   res.json({
     ...getCompactAfterDaysSetting(),
     lastCompaction: readCompactionStats(),
+    historyFile: await readArchetypeHistoryFileStats(),
   });
 });
 
@@ -2912,10 +2916,15 @@ router.put(
         (req.body as { compactAfterDays?: unknown } | null | undefined)
           ?.compactAfterDays,
       );
-      // Mirror the GET shape (Task #211) so the dashboard can drop the
-      // PUT response straight into its query cache without a follow-up
-      // GET to learn the most recent compaction outcome.
-      res.json({ ...next, lastCompaction: readCompactionStats() });
+      // Mirror the GET shape (Task #211, Task #288) so the dashboard can
+      // drop the PUT response straight into its query cache without a
+      // follow-up GET to learn the most recent compaction outcome and
+      // the on-disk size of the persisted history file.
+      res.json({
+        ...next,
+        lastCompaction: readCompactionStats(),
+        historyFile: await readArchetypeHistoryFileStats(),
+      });
     } catch (err) {
       if (err instanceof CompactWindowValidationError) {
         res.status(err.status).json({ error: err.message });

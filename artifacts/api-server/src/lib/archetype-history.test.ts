@@ -7,6 +7,7 @@ import {
   appendArchetypeSnapshots,
   compactSnapshots,
   readArchetypeHistory,
+  readArchetypeHistoryFileStats,
   type ArchetypeSnapshot,
 } from "./archetype-history";
 import {
@@ -189,6 +190,31 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
     expect(stats).not.toBeNull();
     expect(stats!.lastRemovedCount).toBe(127 - 22);
     expect(Number.isFinite(Date.parse(stats!.lastCompactedAt))).toBe(true);
+  });
+
+  // Task #288 — readArchetypeHistoryFileStats lets the calibration
+  // dashboard surface "History file: 124 KB · 487 snapshots" so reviewers
+  // can size storage when picking a compaction window. Returns null when
+  // the file does not exist yet (fresh deploy) and a positive sizeBytes +
+  // snapshot count once the routine has appended.
+  it("readArchetypeHistoryFileStats returns null before any append", async () => {
+    const stats = await readArchetypeHistoryFileStats();
+    expect(stats).toBeNull();
+  });
+
+  it("readArchetypeHistoryFileStats reports the on-disk size and snapshot count after appends", async () => {
+    await appendArchetypeSnapshots([
+      { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
+      { archetype: "paraphrased_cve", count: 1, avriOnMean: 7, avriOnMax: 9, minDistanceToCeiling: 26, ceiling: 35 },
+    ]);
+    const stats = await readArchetypeHistoryFileStats();
+    expect(stats).not.toBeNull();
+    expect(stats!.snapshotCount).toBe(2);
+    expect(stats!.sizeBytes).toBeGreaterThan(0);
+    // Cross-check against the actual file on disk so we know we're
+    // reporting the same number `du` would.
+    const onDisk = await fs.stat(process.env.ARCHETYPE_HISTORY_PATH!);
+    expect(stats!.sizeBytes).toBe(onDisk.size);
   });
 
   it("records a 0-row compaction pass when nothing is old enough to roll up", async () => {

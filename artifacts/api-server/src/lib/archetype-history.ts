@@ -222,6 +222,36 @@ export async function readArchetypeHistory(): Promise<ArchetypeHistoryFile> {
   return readFromDisk(historyPath());
 }
 
+// Task #288 — on-disk size of the persisted history file plus the
+// snapshot count it currently holds, so the calibration dashboard can
+// surface "History file: 124 KB · 487 snapshots" when reviewers are
+// picking a compaction window. Returns null when the file does not exist
+// yet (any other stat failure also returns null with a console warning).
+export interface ArchetypeHistoryFileStats {
+  sizeBytes: number;
+  snapshotCount: number;
+}
+
+export async function readArchetypeHistoryFileStats(): Promise<ArchetypeHistoryFileStats | null> {
+  const p = historyPath();
+  let sizeBytes: number;
+  try {
+    sizeBytes = (await fs.stat(p)).size;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT") return null;
+    console.warn(
+      `[archetype-history] failed to stat ${p} (${code ?? (err as Error)?.message ?? "unknown"}); hiding history file size from dashboard`,
+    );
+    return null;
+  }
+  // readFromDisk tolerates parse errors by returning an empty snapshots
+  // array, so a corrupt file shows "0 snapshots" rather than hiding the
+  // size line entirely.
+  const file = await readFromDisk(p);
+  return { sizeBytes, snapshotCount: file.snapshots.length };
+}
+
 export const __testing = {
   MAX_SNAPSHOTS,
   DEFAULT_COMPACT_AFTER_DAYS,
