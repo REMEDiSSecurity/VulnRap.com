@@ -14,232 +14,61 @@
 // toast that read "HTTP 429 Too Many Requests…", which gave reviewers no
 // indication that the failure was self-imposed and would resolve on its own.
 //
-// This module subscribes once (at import time) to the shared API client's
-// rate-limit observer (`addRateLimitObserver` in custom-fetch.ts), filters
-// down to calibration mutation URLs, and exposes a tiny store + React hook
-// the calibration UI uses to:
-//   1. Render a friendly banner explaining the cooldown ("too many failed
-//      attempts — try again in N seconds").
-//   2. Disable mutation buttons until the bucket resets.
-//
-// The store is a plain module-level singleton with a `useSyncExternalStore`
-// hook so the banner re-renders every second to count down without mounting
-// a separate timer per consumer.
+// Task #417 generalised the underlying store + hook into
+// `createRateLimitCooldown` (in `./rate-limit-cooldown.ts`) so other
+// mutation-heavy pages (report-submit, future archetype-history admin)
+// can opt in with one mount + one hook subscription. This module is now a
+// thin wrapper that pins the calibration URL prefix and re-exports the
+// existing names so calibration screens + their tests keep their UX
+// without any call-site changes.
 
-import { useEffect, useSyncExternalStore } from "react";
 import {
-  addRateLimitObserver,
-  type RateLimitNotice,
-} from "@workspace/api-client-react";
+  createRateLimitCooldown,
+  type RateLimitCooldownState,
+} from "./rate-limit-cooldown";
 
 // Path filter — only treat 429s on the calibration mutation namespace as
 // calibration cooldowns. Other routes (e.g. /api/reports submit) have their
-// own throttles that surface elsewhere.
+// own throttles surfaced by their own per-page stores.
 const CALIBRATION_PATH_FRAGMENT = "/feedback/calibration/";
 
-/**
- * Snapshot returned by `useCalibrationCooldown`.
- *
- * `active` flips to true once a 429 has been observed and stays true until
- * `resetAt` has elapsed. While active, mutation buttons should be disabled
- * and the banner shown. `secondsRemaining` is the rounded-up integer for
- * display ("try again in 3 seconds"); `resetAt` is the wall-clock deadline.
- *
- * `serverMessage` carries the friendly text the server included in the JSON
- * body so the UI can quote it verbatim — keeping a single canonical message
- * across server, CLI, and UI.
- *
- * `noticeId` is a monotonically increasing counter that bumps on every
- * fresh notice. It's exposed so consumers (e.g. tests, future telemetry)
- * can deduplicate work across renders.
- */
-export interface CalibrationCooldownState {
-  active: boolean;
-  secondsRemaining: number;
-  resetAt: number | null;
-  serverMessage: string | null;
-  limit: number | null;
-  noticeId: number;
-}
-
-const INITIAL_STATE: CalibrationCooldownState = {
-  active: false,
-  secondsRemaining: 0,
-  resetAt: null,
-  serverMessage: null,
-  limit: null,
-  noticeId: 0,
-};
-
-let state: CalibrationCooldownState = INITIAL_STATE;
-const listeners = new Set<() => void>();
-
-function notify(): void {
-  for (const listener of Array.from(listeners)) {
-    try {
-      listener();
-    } catch {
-      // Defensive: a misbehaving subscriber must not stall the others.
-    }
-  }
-}
-
-function setState(next: CalibrationCooldownState): void {
-  state = next;
-  notify();
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function getSnapshot(): CalibrationCooldownState {
-  return state;
-}
-
-function isCalibrationMutationUrl(url: string): boolean {
-  // The shared client passes us absolute URLs (when the response has a
-  // canonical URL) or path-only URLs from the orval-generated callers. Both
-  // forms include the calibration namespace fragment when relevant; we
-  // intentionally keep the check substring-based so query strings, trailing
-  // slashes, and host prefixes don't have to be hand-handled.
-  return url.includes(CALIBRATION_PATH_FRAGMENT);
-}
-
-function extractServerMessage(body: unknown): string | null {
-  if (!body || typeof body !== "object") return null;
-  const candidate = body as Record<string, unknown>;
-  for (const key of ["error", "message", "detail", "title"] as const) {
-    const value = candidate[key];
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed.length > 0) return trimmed;
-    }
-  }
-  return null;
-}
-
-function recomputeRemaining(now: number): number {
-  if (state.resetAt == null) return 0;
-  const msLeft = state.resetAt - now;
-  if (msLeft <= 0) return 0;
-  // Round UP so the countdown never reads "0 seconds" while the bucket is
-  // still considered active — the gate flips off only when msLeft <= 0.
-  return Math.ceil(msLeft / 1000);
-}
+const calibrationStore = createRateLimitCooldown({
+  urlPrefixes: CALIBRATION_PATH_FRAGMENT,
+});
 
 /**
- * Apply a 429 notice to the in-memory cooldown state. Exported for tests and
- * for the rare consumer (e.g. a manual "I just hit 429" code path) that
- * wants to push a notice in directly.
- *
- * Returns the new state snapshot for convenience.
- *
- * If the new notice's `resetAt` is BEFORE the currently-active deadline, we
- * keep the longer cooldown — the limiter never shrinks the bucket between
- * requests, so a fresher (shorter) notice would only be a stale-clock
- * artifact.
+ * Snapshot returned by `useCalibrationCooldown`. Re-exported as a type
+ * alias of the generic state shape so call sites that imported
+ * `CalibrationCooldownState` keep working unchanged.
  */
-export function applyRateLimitNotice(
-  notice: RateLimitNotice,
-): CalibrationCooldownState {
-  if (!isCalibrationMutationUrl(notice.url)) return state;
-  if (notice.status !== 429) return state;
-
-  // Floor the cooldown at 1 second so the banner is visible even when the
-  // server reports a sub-second reset (race between the request landing
-  // and the next window tick). Empty headers fall through to this floor too.
-  const minResetAt = Date.now() + 1000;
-  const candidateResetAt = Math.max(notice.resetAt, minResetAt);
-  const resetAt =
-    state.resetAt != null && state.resetAt > candidateResetAt
-      ? state.resetAt
-      : candidateResetAt;
-
-  const serverMessage = extractServerMessage(notice.body) ?? state.serverMessage;
-  const limit = notice.limit ?? state.limit;
-
-  const next: CalibrationCooldownState = {
-    active: true,
-    resetAt,
-    secondsRemaining: Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)),
-    serverMessage,
-    limit,
-    noticeId: state.noticeId + 1,
-  };
-  setState(next);
-  return next;
-}
+export type CalibrationCooldownState = RateLimitCooldownState;
 
 /**
- * Reset the cooldown to the initial (inactive) state. Exported for tests.
+ * Apply a 429 notice to the in-memory calibration cooldown state. Exported
+ * for tests and for the rare consumer (e.g. a manual "I just hit 429" code
+ * path) that wants to push a notice in directly. Returns the new state
+ * snapshot for convenience. Notices on non-calibration URLs are ignored.
  */
-export function resetCalibrationCooldown(): void {
-  setState(INITIAL_STATE);
-}
+export const applyRateLimitNotice = calibrationStore.applyRateLimitNotice;
+
+/** Reset the cooldown to the initial (inactive) state. Exported for tests. */
+export const resetCalibrationCooldown = calibrationStore.resetCooldown;
 
 /**
  * Re-evaluate `secondsRemaining` / `active` against the current clock, and
  * either advance the countdown or clear the cooldown if the bucket has
- * elapsed. Called by the hook's per-second tick. Idempotent.
+ * elapsed. Idempotent.
  */
-export function tickCalibrationCooldown(now: number = Date.now()): void {
-  if (!state.active || state.resetAt == null) return;
-  if (now >= state.resetAt) {
-    setState({
-      active: false,
-      secondsRemaining: 0,
-      resetAt: null,
-      // Keep the last server message around for one more snapshot so a
-      // post-cooldown render can still reference what the server said,
-      // but flip `active` so consumers stop disabling buttons.
-      serverMessage: state.serverMessage,
-      limit: state.limit,
-      noticeId: state.noticeId,
-    });
-    return;
-  }
-  const remaining = recomputeRemaining(now);
-  if (remaining === state.secondsRemaining) return;
-  setState({ ...state, secondsRemaining: remaining });
-}
-
-// ---------------------------------------------------------------------------
-// Wire the observer ONCE at module load. Importing this module is enough to
-// start receiving 429s; the calibration UI just calls `useCalibrationCooldown`.
-// We do not unsubscribe — the subscriber lives for the lifetime of the page,
-// matching the lifetime of the feedback-analytics route.
-// ---------------------------------------------------------------------------
-addRateLimitObserver((notice) => {
-  applyRateLimitNotice(notice);
-});
+export const tickCalibrationCooldown = calibrationStore.tickCooldown;
 
 /**
- * React hook that returns the current cooldown state and re-renders once per
- * second while the cooldown is active so the countdown ticks down in place.
+ * React hook that returns the current calibration cooldown state and
+ * re-renders once per ~500ms while the cooldown is active so the
+ * countdown ticks down in place.
  *
  * Consumers typically:
- *   - Render a banner when `state.active` is true.
+ *   - Render `<CalibrationCooldownBanner state={cooldown} />` when
+ *     `state.active` is true (the banner returns `null` while inactive).
  *   - Disable mutation buttons via `disabled={state.active || …}`.
  */
-export function useCalibrationCooldown(): CalibrationCooldownState {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-
-  useEffect(() => {
-    if (!snapshot.active) return;
-    const id = window.setInterval(() => {
-      tickCalibrationCooldown();
-    }, 500);
-    // Tick once synchronously so the first second after activation doesn't
-    // have to wait a full interval to update.
-    tickCalibrationCooldown();
-    return () => {
-      window.clearInterval(id);
-    };
-  }, [snapshot.active]);
-
-  return snapshot;
-}
+export const useCalibrationCooldown = calibrationStore.useCooldown;

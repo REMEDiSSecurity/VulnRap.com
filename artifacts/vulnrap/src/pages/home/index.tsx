@@ -7,6 +7,8 @@ import {
 import { LogoBeams } from "@/components/laser-effects";
 import { CrawlingBugs } from "@/components/crawling-bugs";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
+import { ReportSubmitCooldownBanner } from "@/components/report-submit-cooldown-banner";
+import { useReportSubmitCooldown } from "@/lib/report-submit-cooldown";
 import { useSubmitReport, SubmitReportBodyContentMode } from "@workspace/api-client-react";
 import { addHistoryEntry } from "@/lib/history";
 import { Button } from "@/components/ui/button";
@@ -129,6 +131,13 @@ export default function Home() {
       observer.disconnect();
     };
   }, []);
+
+  // Task #417 — surface the shared `/api/reports` rate limiter as a
+  // friendly countdown banner above the submit card instead of letting
+  // the mutation's onError bubble a raw "HTTP 429" toast. The hook
+  // itself only re-renders while the cooldown is active, so the home
+  // page pays nothing on the steady-state happy path.
+  const reportSubmitCooldown = useReportSubmitCooldown();
 
   const submitMutation = useSubmitReport({
     mutation: {
@@ -324,6 +333,8 @@ export default function Home() {
           Assess the likelihood that an incoming vulnerability report describes a real, reproducible issue. Cross-check claims against live sources, detect duplicate submissions, and surface what deserves analyst time. Built for PSIRT teams, triage analysts, and anyone buried in an inbox full of incoming reports.
         </p>
       </div>
+
+      <ReportSubmitCooldownBanner state={reportSubmitCooldown} />
 
       <Card className="glass-card-accent rounded-xl">
         <CardHeader>
@@ -593,7 +604,7 @@ export default function Home() {
           <Button
             className="w-full h-11 sm:h-12 text-base sm:text-lg font-bold gap-2 glow-button"
             onClick={handleSubmit}
-            disabled={!hasContent || isProcessing || !!fileError}
+            disabled={!hasContent || isProcessing || !!fileError || reportSubmitCooldown.active}
             data-testid="button-submit"
           >
             {getButtonContent()}
