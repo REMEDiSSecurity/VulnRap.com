@@ -403,7 +403,37 @@ export const GOLD_SIGNAL_WEIGHTS: Readonly<Record<string, number>> = {
 
 /** Cap for the summed per-category bonus applied to the substance score.
  * Keeps a bounded translation from AVRI per-signal points into the default
- * Engine 2 path (mirrors the +15 strengthBonus cap). */
+ * Engine 2 path (mirrors the +15 strengthBonus cap).
+ *
+ * Calibration evidence (Task #333, Apr 2026 — gold-signal-calibration.test.ts):
+ *
+ *   Real-cohort distribution over the 11 benchmark fixtures (5 slop + 2
+ *   curl-slop + 3 legit + 1 borderline) under the legacy AVRI-off path:
+ *     - rawSum range  : 0..5
+ *     - rawSum max    : 5pt (single HIGH-weight category fires)
+ *     - cap-hits      : 0/11 (no real fixture approaches 12)
+ *     - 8/11 fixtures fire ZERO gold signals — slop intentionally excluded
+ *       by the per-category placeholder/fabrication validators.
+ *     - 3/11 fixtures (2 legit, 1 borderline) fire exactly one HIGH
+ *       category. Legit floor stays at composite ≥ 50 on the legacy path.
+ *
+ *   Synthetic anchors (gold-signal-calibration.test.ts) extend the cohort
+ *   to exercise the cap shape — real bug reports in the corpus today
+ *   never multi-fire categories:
+ *     - rich-legit (auth bearer + SQLi UNION + diff): rawSum=11, bonus=11.
+ *       Sits 1pt under the cap, leaving headroom for a 4th category. Final
+ *       composite=69 (PROMISING) on the legacy path.
+ *     - max-stuffed (6 categories incl. crash trace, raw HTTP, diff, auth,
+ *       SQLi, command injection, traversal): rawSum=25, bonus=12 (cap
+ *       clips). Final composite=81 (STRONG) — the -13pt cap suppression
+ *       does NOT push richly-evidenced reports out of the STRONG band.
+ *
+ *   Conclusion: weights and cap remain at #240's values. The cap of 12
+ *   is correctly positioned: above any single-category bonus (max=5),
+ *   reachable by a realistic 3-category combination (≥10), and tight
+ *   enough to bound the unrealistic chained-exploit upper bound (25 → 12)
+ *   without over-suppressing the report. Re-run the calibration test
+ *   after any weight change or new detector to refresh this evidence. */
 export const GOLD_SIGNAL_BONUS_CAP = 12;
 
 // ---------------------------------------------------------------------------
