@@ -30,6 +30,7 @@ import { parseSections, findSectionMatches } from "../lib/section-parser";
 import { sanitizeText, sanitizeForAnalysis, sanitizeFileName, detectBinaryContent } from "../lib/sanitize";
 import { extractTextFromPdf } from "../lib/pdf";
 import { logger } from "../lib/logger";
+import { buildPublicUrl } from "../lib/public-url";
 import { performActiveVerification, type VerificationResult } from "../lib/active-verification";
 import { classifyReport } from "../lib/engines/avri/classify";
 import type { VerificationMode } from "../lib/engines/avri/families";
@@ -94,12 +95,11 @@ function extractCitedCwes(text: string): string[] {
 // Order: PUBLIC_URL → request-derived origin → vulnrap.com fallback.
 // Shared by the verification-sources, triage-recommendation,
 // triage-matrix-inputs, and avri-family-rubric pointer lines.
+// Delegates to the shared buildPublicUrl helper so this stays in lockstep
+// with every other server-side public link (verifyUrl, drift webhook,
+// etc.).
 function buildChangelogDocsLink(req: Request, anchor: string): string {
-  const reqHost = req.get("host");
-  const base =
-    process.env.PUBLIC_URL ||
-    (reqHost ? `${req.protocol}://${reqHost}` : "https://vulnrap.com");
-  return `${base.replace(/\/$/, "")}/changelog#${anchor}`;
+  return buildPublicUrl({ req, path: `/changelog#${anchor}` });
 }
 
 function deriveVerificationStrategy(
@@ -1771,8 +1771,7 @@ router.get("/reports/:id/verify", async (req, res): Promise<void> => {
   const matches = (report.similarityMatches as Array<{ reportId: number }>) || [];
   const secMatches = (report.sectionMatches as Array<{ sectionTitle: string }>) || [];
 
-  const baseUrl = process.env.PUBLIC_URL || "https://vulnrap.com";
-  const verifyUrl = `${baseUrl}/verify/${report.id}`;
+  const verifyUrl = buildPublicUrl({ req, path: `/verify/${report.id}` });
 
   const response = GetVerificationResponse.parse({
     id: report.id,
@@ -2343,8 +2342,12 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       const verifiedReferenced = referencedChecks.filter(c => c.result === "verified").length;
       lines.push(`- verified ${verifiedReferenced}/${referencedChecks.length} · referenced: ${referencedChecks.length} · search-fallback: ${fallbackChecks.length}`);
       // Task 188: mirror the in-app "Learn more →" link from the submitter
-      // results page so the downloadable export still points readers at the
-      // docs that explain referenced vs. search-fallback verification.
+      // results page (results.tsx ~L240) so a downloaded/exported markdown
+      // report still points readers at the docs that explain referenced vs.
+      // search-fallback verification. buildChangelogDocsLink (defined
+      // above) delegates to the shared buildPublicUrl helper so the
+      // PUBLIC_URL → request-origin → vulnrap.com precedence ladder and
+      // trailing-slash normalization match every other server-side link.
       lines.push(
         `- _Learn more about referenced vs. search-fallback verification: ${buildChangelogDocsLink(req, "verification-sources")}_`,
       );

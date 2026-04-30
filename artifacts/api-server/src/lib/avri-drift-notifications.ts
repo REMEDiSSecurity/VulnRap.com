@@ -26,6 +26,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "./logger";
+import { buildPublicUrl } from "./public-url";
 import {
   generateAvriDriftReport,
   type AvriDriftReport,
@@ -247,9 +248,11 @@ function buildLinks(
   calibrationUrl: string;
   runbookUrl: string;
 } {
-  // Strip any trailing slash so the join below doesn't double-up.
-  const base = (publicUrl ?? process.env.PUBLIC_URL ?? "https://vulnrap.com")
-    .replace(/\/+$/, "");
+  // Trailing-slash stripping + the PUBLIC_URL→default fallback ladder are
+  // owned by the shared buildPublicUrl helper so this module stays in lockstep
+  // with server-side links emitted from routes.ts. The `publicUrl` arg here
+  // is a per-call test/operator override and takes precedence over env.
+  const base = buildPublicUrl({ override: publicUrl });
   // The runbook is a Markdown file in the repo and is NOT served as a
   // static asset by the deployed Express app, so the default
   // `${PUBLIC_URL}/${RUNBOOK_URL_PATH}` link will 404 in most
