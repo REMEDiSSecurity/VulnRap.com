@@ -1134,6 +1134,100 @@ export default function Changelog() {
         </CardContent>
       </Card>
 
+      <Card
+        id="triage-docs-host"
+        className="bg-card/40 backdrop-blur border-border"
+      >
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <CardTitle className="text-xl font-mono font-bold text-primary glow-text-sm flex items-center gap-2">
+              <Target className="w-4 h-4" />
+              Docs · Triage report sections
+            </CardTitle>
+            <Badge variant="outline" className="border-cyan-500/40 text-cyan-300/80">
+              recommendation · matrix · AVRI rubric
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6 text-sm text-muted-foreground leading-relaxed">
+          <p>
+            The downloadable triage-report markdown export carries a one-line
+            italicised pointer under each major section so a report shared
+            outside the in-app diagnostics panel still links back to the
+            canonical explanation. The three anchors below back those pointers.
+          </p>
+
+          <section
+            id="triage-recommendation"
+            className="space-y-2 scroll-mt-24"
+          >
+            <h3 className="text-sm font-bold text-primary">Triage Recommendation</h3>
+            <p>
+              The <span className="font-mono text-foreground/90">## Triage Recommendation</span> section
+              of the export reports the matrix-derived <span className="font-mono text-foreground/90">action</span>
+              {" "}(PRIORITIZE / MANUAL_REVIEW / CHALLENGE_REPORTER / DEFER) plus a
+              one-line <span className="font-mono text-foreground/90">reason</span> and a longer
+              <span className="font-mono text-foreground/90"> note</span>. It is the same recommendation the
+              live results page renders &mdash; rebuilt server-side from the
+              cached composite, Engine 2 score, verification ratio, and strong
+              evidence count for whichever scoring path produced the report.
+            </p>
+            <p className="text-xs text-muted-foreground/80">
+              The recommendation can also carry temporal signals, template-reuse
+              context, and revision-detection metadata when those signals fire;
+              each renders as its own subsection below the headline action.
+            </p>
+          </section>
+
+          <section
+            id="triage-matrix-inputs"
+            className="space-y-2 scroll-mt-24"
+          >
+            <h3 className="text-sm font-bold text-primary">Matrix Inputs</h3>
+            <p>
+              The <span className="font-mono text-foreground/90">## Matrix Inputs</span> section lists the
+              four axes the triage matrix evaluates:
+            </p>
+            <ul className="space-y-1 text-xs text-muted-foreground/80 list-disc pl-5">
+              <li><span className="font-mono text-foreground/90">Composite Score</span> &mdash; the v3.6.0 5/55/40 weighted blend of Engines 1&ndash;3 (or the AVRI variant when enabled), 0&ndash;100 with higher = more credible.</li>
+              <li><span className="font-mono text-foreground/90">Engine 2 Score</span> &mdash; the Technical Substance Analyzer's standalone 0&ndash;100 reading, surfaced separately because the matrix uses it as a guard against composite inflation from CWE coherence alone.</li>
+              <li><span className="font-mono text-foreground/90">Verification Ratio</span> &mdash; <span className="font-mono">verified / referenced</span> from the Active Verification panel (search-fallback checks are excluded from both numerator and denominator).</li>
+              <li><span className="font-mono text-foreground/90">Strong Evidence Count</span> &mdash; the number of evidence items the matrix treats as "strong" (the &ge;3 threshold also blocks CHALLENGE_REPORTER outright).</li>
+            </ul>
+            <p className="text-xs text-muted-foreground/80">
+              Reading the four values together explains why a borderline
+              composite was promoted to PRIORITIZE or held in MANUAL_REVIEW.
+            </p>
+          </section>
+
+          <section
+            id="avri-family-rubric"
+            className="space-y-2 scroll-mt-24"
+          >
+            <h3 className="text-sm font-bold text-primary">AVRI Family Rubric</h3>
+            <p>
+              The <span className="font-mono text-foreground/90">## AVRI Family Rubric</span> section
+              mirrors the in-app diagnostics rubric: which CWE family the
+              report was classified into, the gold signals the family expects,
+              which of those gold signals were found vs. missing, the absence
+              penalties applied to hand-wavy phrasing, and any AVRI-specific
+              composite overrides
+              {" "}(<span className="font-mono text-foreground/90">AVRI_NO_GOLD_SIGNALS</span>,
+              {" "}<span className="font-mono text-foreground/90">AVRI_FAMILY_CONTRADICTION</span>,
+              {" "}<span className="font-mono text-foreground/90">AVRI_VELOCITY</span>,
+              {" "}<span className="font-mono text-foreground/90">AVRI_TEMPLATE_CAMPAIGN</span>) that moved the
+              composite on top of the engine-weighted base.
+            </p>
+            <p className="text-xs text-muted-foreground/80">
+              The section is omitted on legacy reports that were scored before
+              AVRI shipped; on reconstructed reports the gold-hit/miss list is
+              skipped because the original report text was not retained, but
+              family classification and behavioural penalties still render.
+            </p>
+          </section>
+        </CardContent>
+      </Card>
+
       {CHANGELOG.map((entry) => (
         <Card key={entry.version} className="bg-card/40 backdrop-blur border-border">
           <CardHeader className="pb-3">

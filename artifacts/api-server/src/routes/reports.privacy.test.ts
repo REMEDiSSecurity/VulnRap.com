@@ -628,6 +628,187 @@ describe("GET /api/reports/:id/triage-report — verification mode header", () =
     expect(cachedRes.body).toContain(expected);
   });
 
+  it("emits docs pointer lines under the Triage Recommendation, Matrix Inputs, and AVRI Family Rubric headings", async () => {
+    // Task 259: each major section in the markdown export carries a one-line
+    // italicised pointer to its canonical /changelog anchor, built through
+    // the same PUBLIC_URL → request-origin → vulnrap.com resolution as the
+    // verification-sources line.
+    const tr = await import("../lib/triage-recommendation");
+    vi.mocked(tr.generateTriageRecommendation).mockReturnValueOnce({
+      action: "PRIORITIZE",
+      reason: "High composite + strong evidence",
+      note: "Composite 78 with 3 strong evidence items.",
+      challengeQuestions: [],
+      temporalSignals: [],
+      templateMatch: null,
+      revision: null,
+      matrixInputs: {
+        compositeScore: 78,
+        engine2Score: 64,
+        verificationRatio: 0.75,
+        strongEvidenceCount: 3,
+      },
+    } as ReturnType<typeof tr.generateTriageRecommendation>);
+
+    const previousPublicUrl = process.env.PUBLIC_URL;
+    process.env.PUBLIC_URL = "https://vulnrap.com";
+    try {
+      const r = seedReport({
+        showInFeed: true,
+        redactedText: "sample triage body",
+        // Seed an AVRI composite + Engine 2 sub-block so the AVRI Family
+        // Rubric section renders end-to-end and the docs pointer below it
+        // can be asserted in the same export.
+        vulnrapEngineResults: {
+          avri: {
+            family: "MEMORY_CORRUPTION",
+            familyName: "Memory corruption / unsafe C",
+            classification: { confidence: "HIGH", reason: "matched CWE-787" },
+            goldHitCount: 1,
+            velocityPenalty: 0,
+            templatePenalty: 0,
+            rawCompositeBeforeBehavioralPenalties: 50,
+          },
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              signalBreakdown: {
+                avri: {
+                  family: "MEMORY_CORRUPTION",
+                  familyName: "Memory corruption / unsafe C",
+                  goldHitCount: 1,
+                  goldTotalCount: 5,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                },
+              },
+            },
+          ],
+        },
+      });
+      const res = await getText(`/api/reports/${r.id}/triage-report`);
+      expect(res.status).toBe(200);
+
+      // 1) Triage Recommendation pointer sits between the section header and
+      //    the **Action** line so readers see the link before the action.
+      const trHeaderIdx = res.body.indexOf("## Triage Recommendation");
+      const trDocsIdx = res.body.indexOf(
+        "_Learn more about how triage recommendations are chosen: https://vulnrap.com/changelog#triage-recommendation_",
+      );
+      const trActionIdx = res.body.indexOf("**Action**: PRIORITIZE");
+      expect(trHeaderIdx).toBeGreaterThan(-1);
+      expect(trDocsIdx).toBeGreaterThan(trHeaderIdx);
+      expect(trDocsIdx).toBeLessThan(trActionIdx);
+
+      // 2) Matrix Inputs pointer sits between its header and the
+      //    **Composite Score** bullet.
+      const miHeaderIdx = res.body.indexOf("## Matrix Inputs");
+      const miDocsIdx = res.body.indexOf(
+        "_Learn more about the triage-matrix inputs: https://vulnrap.com/changelog#triage-matrix-inputs_",
+      );
+      const miCompositeIdx = res.body.indexOf("- **Composite Score**: 78");
+      expect(miHeaderIdx).toBeGreaterThan(trHeaderIdx);
+      expect(miDocsIdx).toBeGreaterThan(miHeaderIdx);
+      expect(miDocsIdx).toBeLessThan(miCompositeIdx);
+
+      // 3) AVRI Family Rubric pointer sits between its header and the
+      //    **Family** bullet.
+      const avriHeaderIdx = res.body.indexOf("## AVRI Family Rubric");
+      const avriDocsIdx = res.body.indexOf(
+        "_Learn more about the AVRI Family Rubric: https://vulnrap.com/changelog#avri-family-rubric_",
+      );
+      const avriFamilyIdx = res.body.indexOf(
+        "- **Family**: Memory corruption / unsafe C",
+      );
+      expect(avriHeaderIdx).toBeGreaterThan(-1);
+      expect(avriDocsIdx).toBeGreaterThan(avriHeaderIdx);
+      expect(avriDocsIdx).toBeLessThan(avriFamilyIdx);
+    } finally {
+      if (previousPublicUrl === undefined) delete process.env.PUBLIC_URL;
+      else process.env.PUBLIC_URL = previousPublicUrl;
+    }
+  });
+
+  it("falls back to the request-derived origin for the Triage / Matrix / AVRI pointer lines when PUBLIC_URL is unset", async () => {
+    // Task 259: the request-origin fallback must apply to every new pointer
+    // line so self-hosted installs without PUBLIC_URL still get working
+    // docs links in the markdown export.
+    const tr = await import("../lib/triage-recommendation");
+    vi.mocked(tr.generateTriageRecommendation).mockReturnValueOnce({
+      action: "PRIORITIZE",
+      reason: "fallback test",
+      note: "fallback test",
+      challengeQuestions: [],
+      temporalSignals: [],
+      templateMatch: null,
+      revision: null,
+      matrixInputs: {
+        compositeScore: 50,
+        engine2Score: 50,
+        verificationRatio: 0,
+        strongEvidenceCount: 0,
+      },
+    } as ReturnType<typeof tr.generateTriageRecommendation>);
+
+    const previousPublicUrl = process.env.PUBLIC_URL;
+    delete process.env.PUBLIC_URL;
+    try {
+      const r = seedReport({
+        showInFeed: true,
+        redactedText: "fallback body",
+        vulnrapEngineResults: {
+          avri: {
+            family: "MEMORY_CORRUPTION",
+            familyName: "Memory corruption / unsafe C",
+            classification: { confidence: "HIGH", reason: "matched CWE-787" },
+            goldHitCount: 0,
+            velocityPenalty: 0,
+            templatePenalty: 0,
+          },
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              signalBreakdown: {
+                avri: {
+                  family: "MEMORY_CORRUPTION",
+                  familyName: "Memory corruption / unsafe C",
+                  goldHitCount: 0,
+                  goldTotalCount: 5,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                },
+              },
+            },
+          ],
+        },
+      });
+      const res = await getText(`/api/reports/${r.id}/triage-report`);
+      expect(res.status).toBe(200);
+
+      // The test server binds to 127.0.0.1; each pointer line must use the
+      // request origin (not a hard-coded vulnrap.com) so self-hosted exports
+      // resolve back to the same origin the report was downloaded from.
+      expect(res.body).toMatch(
+        /_Learn more about how triage recommendations are chosen: http:\/\/127\.0\.0\.1:\d+\/changelog#triage-recommendation_/,
+      );
+      expect(res.body).toMatch(
+        /_Learn more about the triage-matrix inputs: http:\/\/127\.0\.0\.1:\d+\/changelog#triage-matrix-inputs_/,
+      );
+      expect(res.body).toMatch(
+        /_Learn more about the AVRI Family Rubric: http:\/\/127\.0\.0\.1:\d+\/changelog#avri-family-rubric_/,
+      );
+    } finally {
+      if (previousPublicUrl === undefined) delete process.env.PUBLIC_URL;
+      else process.env.PUBLIC_URL = previousPublicUrl;
+    }
+  });
+
   it("emits a docs link under the verified/referenced/search-fallback breakdown", async () => {
     // Task 188: the submitter results UI links the breakdown line to
     // /changelog#verification-sources via a "Learn more →" affordance. The

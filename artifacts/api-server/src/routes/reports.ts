@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import crypto from "crypto";
 import multer from "multer";
 import { and, eq, or, sql, desc } from "drizzle-orm";
@@ -88,6 +88,18 @@ function extractCitedCwes(text: string): string[] {
     }
   }
   return out;
+}
+
+// Resolve a /changelog#anchor docs link for the markdown triage export.
+// Order: PUBLIC_URL → request-derived origin → vulnrap.com fallback.
+// Shared by the verification-sources, triage-recommendation,
+// triage-matrix-inputs, and avri-family-rubric pointer lines.
+function buildChangelogDocsLink(req: Request, anchor: string): string {
+  const reqHost = req.get("host");
+  const base =
+    process.env.PUBLIC_URL ||
+    (reqHost ? `${req.protocol}://${reqHost}` : "https://vulnrap.com");
+  return `${base.replace(/\/$/, "")}/changelog#${anchor}`;
 }
 
 function deriveVerificationStrategy(
@@ -2227,6 +2239,11 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   if (triageRecommendation) {
     lines.push("## Triage Recommendation");
     lines.push("");
+    // Task 259: docs pointer for the triage-matrix action/reason vocabulary.
+    lines.push(
+      `_Learn more about how triage recommendations are chosen: ${buildChangelogDocsLink(req, "triage-recommendation")}_`,
+    );
+    lines.push("");
     lines.push(`**Action**: ${triageRecommendation.action}`);
     lines.push(`**Reason**: ${triageRecommendation.reason}`);
     lines.push("");
@@ -2236,6 +2253,11 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     if (triageRecommendation.matrixInputs) {
       const mi = triageRecommendation.matrixInputs;
       lines.push("## Matrix Inputs");
+      lines.push("");
+      // Task 259: docs pointer for the four matrix axes.
+      lines.push(
+        `_Learn more about the triage-matrix inputs: ${buildChangelogDocsLink(req, "triage-matrix-inputs")}_`,
+      );
       lines.push("");
       lines.push(`- **Composite Score**: ${mi.compositeScore.toFixed(1)}`);
       lines.push(`- **Engine 2 Score**: ${mi.engine2Score.toFixed(1)}`);
@@ -2321,19 +2343,11 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       const verifiedReferenced = referencedChecks.filter(c => c.result === "verified").length;
       lines.push(`- verified ${verifiedReferenced}/${referencedChecks.length} · referenced: ${referencedChecks.length} · search-fallback: ${fallbackChecks.length}`);
       // Task 188: mirror the in-app "Learn more →" link from the submitter
-      // results page (results.tsx ~L240) so a downloaded/exported markdown
-      // report still points readers at the docs that explain referenced vs.
-      // search-fallback verification. Prefer the canonical PUBLIC_URL so the
-      // link survives being pasted into trackers / emails; fall back to the
-      // request-derived origin (and finally vulnrap.com) so self-hosted
-      // installs still get a working link. Build the request-origin candidate
-      // only when req.get("host") is actually present — otherwise the
-      // interpolated string would be truthy ("http://undefined") and
-      // shadow the canonical fallback.
-      const reqHost = req.get("host");
-      const docsBase = process.env.PUBLIC_URL
-        || (reqHost ? `${req.protocol}://${reqHost}` : "https://vulnrap.com");
-      lines.push(`- _Learn more about referenced vs. search-fallback verification: ${docsBase.replace(/\/$/, "")}/changelog#verification-sources_`);
+      // results page so the downloadable export still points readers at the
+      // docs that explain referenced vs. search-fallback verification.
+      lines.push(
+        `- _Learn more about referenced vs. search-fallback verification: ${buildChangelogDocsLink(req, "verification-sources")}_`,
+      );
       lines.push("");
     }
     lines.push(`| Check | Status | Source | Detail |`);
@@ -2510,13 +2524,28 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     /Technical Substance/i.test(e.engine ?? ""),
   );
   const e2Avri = e2AvriEntry?.signalBreakdown?.avri ?? null;
-  lines.push(
-    ...buildAvriRubricMarkdown({
-      composite: avriComposite as AvriRubricCompositeBlock | null,
-      engine2: e2Avri as AvriRubricEngine2Block | null,
-      overridesApplied: (report.vulnrapOverridesApplied ?? []) as string[],
-    }),
-  );
+  const avriLines = buildAvriRubricMarkdown({
+    composite: avriComposite as AvriRubricCompositeBlock | null,
+    engine2: e2Avri as AvriRubricEngine2Block | null,
+    overridesApplied: (report.vulnrapOverridesApplied ?? []) as string[],
+  });
+  // Task 259: inject the docs pointer right after the AVRI heading so the
+  // export matches the other section headers. The injection lives here (not
+  // inside buildAvriRubricMarkdown) because the shared @workspace/avri-rubric
+  // helper has no Express request context — request-origin resolution
+  // belongs at the route boundary.
+  if (avriLines.length > 0) {
+    const headerIdx = avriLines.findIndex((l: string) => l === "## AVRI Family Rubric");
+    if (headerIdx >= 0) {
+      avriLines.splice(
+        headerIdx + 2,
+        0,
+        `_Learn more about the AVRI Family Rubric: ${buildChangelogDocsLink(req, "avri-family-rubric")}_`,
+        "",
+      );
+    }
+  }
+  lines.push(...avriLines);
 
   lines.push("---");
   lines.push("*Generated by VulnRap v3.0 — Free & Anonymous Vulnerability Report Validation*");
