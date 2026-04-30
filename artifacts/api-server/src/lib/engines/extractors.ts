@@ -56,23 +56,144 @@ export const STRENGTH_MULTIPLIERS: Record<EvidenceType, number> = {
 // CWE-77 instead of being silently lumped under RCE/CWE-78. The matcher
 // returns the FIRST entry that matches, so Command Injection is intentionally
 // placed before RCE to take precedence on the shorthand.
+//
+// Task #424: every entry now also recognises the most common long-form
+// translations in Spanish, Portuguese, French, Russian, and Japanese so
+// reports like "inyección de comandos", "inclusion de fichier local", or
+// "локальное включение файла" stop dropping into the underspecified bucket
+// when the researcher writes the class name in their own language and
+// omits the English acronym. Cyrillic ranges are written explicitly
+// ([а-яА-Я]) because JS \w is ASCII-only; accented Latin chars use the
+// /i flag which case-folds them in modern V8.
 const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
-  XSS: [/cross.?site.?script/i, /\bXSS\b/i, /<script>/i, /document\.cookie/i],
-  SQLi: [/sql.?inject/i, /\bSQLi\b/i, /UNION\s+SELECT/i, /OR\s+1\s*=\s*1/i],
-  SSRF: [/server.?side.?request/i, /\bSSRF\b/i, /169\.254\.169\.254/],
-  XXE: [/xml.?external.?entit/i, /\bXXE\b/i],
-  "Buffer Overflow": [/buffer.?overflow/i, /heap.?overflow/i, /stack.?overflow/i, /out.?of.?bounds/i],
-  "Use After Free": [/use.?after.?free/i, /\bUAF\b/i, /CWE-416/i],
-  "Path Traversal": [/path.?traversal/i, /directory.?traversal/i, /\.\.\//],
-  LFI: [/local.?file.?inclusion/i, /\bLFI\b/i],
-  "Auth Bypass": [/auth(?:entication|orization).?bypass/i, /\bIDOR\b/i, /broken.?access/i],
-  CSRF: [/cross.?site.?request.?forgery/i, /\bCSRF\b/i],
-  "Open Redirect": [/open.?redirect/i, /unvalidated.?redirect/i],
-  "Insecure Deserialization": [/insecure.?deseriali[sz]/i, /unsafe.?deseriali[sz]/i, /\bdeseriali[sz]ation\b/i],
-  "Prototype Pollution": [/prototype.?pollution/i, /__proto__\s*\[/],
-  "Command Injection": [/command.?inject/i, /\bCMDi\b/i, /shell.?inject/i],
-  RCE: [/remote.?code.?execution/i, /\bRCE\b/i],
-  "Info Disclosure": [/information.?disclosure/i, /sensitive.?data.?expos/i, /info.?leak/i],
+  XSS: [
+    /cross.?site.?script/i, /\bXSS\b/i, /<script>/i, /document\.cookie/i,
+    /secuencias?\s+de\s+comandos\s+en\s+sitios?\s+cruzados?/i,                   // ES
+    /scripts?\s+entre\s+sites/i,                                                 // PT
+    /scripts?\s+inter[\s-]?sites?/i,                                             // FR
+    /межсайтов[а-яА-Я]+\s+скриптинг/i,                                           // RU
+    /クロスサイトスクリプティング/,                                               // JA
+  ],
+  SQLi: [
+    /sql.?inject/i, /\bSQLi\b/i, /UNION\s+SELECT/i, /OR\s+1\s*=\s*1/i,
+    /iny[eé]cci[oó]n\s+(?:de\s+)?SQL/i,                                          // ES
+    /inje[çc][aã]o\s+(?:de\s+)?SQL/i,                                            // PT
+    /injection\s+(?:de\s+)?SQL/i,                                                // FR
+    /SQL[-\s]?инъекци[а-яА-Я]*/i,                                                // RU
+    /SQLインジェクション/,                                                        // JA
+  ],
+  SSRF: [
+    /server.?side.?request/i, /\bSSRF\b/i, /169\.254\.169\.254/,
+    /falsificaci[oó]n\s+de\s+solicitud(?:es)?\s+del\s+lado\s+del\s+servidor/i,   // ES
+    /falsifica[çc][aã]o\s+de\s+(?:requisi[çc][aã]o|solicita[çc][aã]o)\s+do\s+lado\s+do\s+servidor/i, // PT
+    /falsification\s+de\s+requ[eê]te\s+c[oô]t[eé]\s+serveur/i,                   // FR
+    /подделк[а-яА-Я]+\s+запрос[а-яА-Я]+\s+на\s+сторон[а-яА-Я]+\s+сервер[а-яА-Я]*/i, // RU
+    /サーバーサイドリクエストフォージェリ/,                                        // JA
+  ],
+  XXE: [
+    /xml.?external.?entit/i, /\bXXE\b/i,
+    /entidad\s+externa\s+XML/i,                                                  // ES
+    /entidade\s+externa\s+XML/i,                                                 // PT
+    /entit[eé]\s+externe\s+XML/i,                                                // FR
+    /внешн[а-яА-Я]+\s+сущност[а-яА-Я]+\s+XML/i,                                  // RU
+    /XML外部(?:実体|エンティティ)/,                                                // JA
+  ],
+  "Buffer Overflow": [
+    /buffer.?overflow/i, /heap.?overflow/i, /stack.?overflow/i, /out.?of.?bounds/i,
+    /desbordamiento\s+(?:de\s+)?b[uú]fer/i,                                      // ES
+    /(?:estouro|transbordamento)\s+(?:de\s+)?buffer/i,                           // PT
+    /(?:d[eé]bordement|d[eé]passement)\s+(?:de\s+)?tampon/i,                     // FR
+    /переполнени[а-яА-Я]+\s+буфер[а-яА-Я]*/i,                                    // RU
+    /バッファオーバーフロー/,                                                      // JA
+  ],
+  "Use After Free": [
+    /use.?after.?free/i, /\bUAF\b/i, /CWE-416/i,
+    /uso\s+despu[eé]s\s+de\s+(?:liberar|liberaci[oó]n)/i,                        // ES
+    /uso\s+(?:ap[oó]s|depois\s+de)\s+(?:libera[çc][aã]o|liberar)/i,              // PT
+    /utilisation\s+apr[eè]s\s+lib[eé]ration/i,                                   // FR
+    /использовани[а-яА-Я]+\s+после\s+освобожден[а-яА-Я]+/i,                      // RU
+    /解放後使用/,                                                                  // JA
+  ],
+  "Path Traversal": [
+    /path.?traversal/i, /directory.?traversal/i, /\.\.\//,
+    /(?:salto|recorrido|traves[ií]a)\s+(?:de\s+)?(?:directorio|ruta)/i,          // ES
+    /travessia\s+(?:de\s+)?(?:diret[oó]rio|caminho)/i,                           // PT
+    /travers[eé]e\s+(?:de\s+)?(?:r[eé]pertoire|chemin)/i,                        // FR
+    /обход\s+(?:каталог[а-яА-Я]*|директор[а-яА-Я]+)/i,                           // RU
+    /(?:ディレクトリ|パス)トラバーサル/,                                            // JA
+  ],
+  LFI: [
+    /local.?file.?inclusion/i, /\bLFI\b/i,
+    /inclusi[oó]n\s+(?:local\s+)?de\s+archivos?(?:\s+locales?)?/i,               // ES
+    /inclus[aã]o\s+(?:local\s+)?de\s+arquivos?(?:\s+locais?)?/i,                 // PT
+    /inclusion\s+(?:locale\s+)?de\s+fichiers?(?:\s+(?:locale|local|locaux)e?s?)?/i, // FR
+    /локальн[а-яА-Я]+\s+включени[а-яА-Я]+\s+файл[а-яА-Я]*/i,                     // RU
+    /ローカルファイルインクル[ーー]ジョン/,                                         // JA
+  ],
+  "Auth Bypass": [
+    /auth(?:entication|orization).?bypass/i, /\bIDOR\b/i, /broken.?access/i,
+    /(?:bypass|elusi[oó]n)\s+de\s+(?:la\s+)?autenticaci[oó]n/i,                  // ES
+    /(?:bypass|elus[aã]o)\s+(?:da\s+|de\s+)autentica[çc][aã]o/i,                 // PT
+    /contournement\s+d[\u2019']?\s*authentification/i,                           // FR
+    /обход\s+(?:аутентификации|авторизации)/i,                                   // RU
+    /認証(?:バイパス|回避)/,                                                       // JA
+  ],
+  CSRF: [
+    /cross.?site.?request.?forgery/i, /\bCSRF\b/i,
+    /falsificaci[oó]n\s+de\s+solicitud(?:es)?\s+entre\s+sitios?/i,               // ES
+    /falsifica[çc][aã]o\s+de\s+(?:solicita[çc][aã]o|requisi[çc][aã]o)\s+entre\s+sites/i, // PT
+    /falsification\s+de\s+requ[eê]te\s+inter[\s-]?sites?/i,                      // FR
+    /межсайтов[а-яА-Я]+\s+подделк[а-яА-Я]+\s+запрос[а-яА-Я]*/i,                  // RU
+    /クロスサイトリクエストフォージェリ/,                                          // JA
+  ],
+  "Open Redirect": [
+    /open.?redirect/i, /unvalidated.?redirect/i,
+    /redirecci[oó]n\s+abierta/i,                                                 // ES
+    /redirecionamento\s+aberto/i,                                                // PT
+    /redirection\s+(?:ouverte|non\s+valid[eé]e)/i,                               // FR
+    /открыт[а-яА-Я]+\s+(?:перенаправлени[а-яА-Я]+|редирект[а-яА-Я]*)/i,          // RU
+    /オープンリダイレクト/,                                                        // JA
+  ],
+  "Insecure Deserialization": [
+    /insecure.?deseriali[sz]/i, /unsafe.?deseriali[sz]/i, /\bdeseriali[sz]ation\b/i,
+    /deserializaci[oó]n\s+insegura/i,                                            // ES
+    /desserializa[çc][aã]o\s+insegura/i,                                         // PT
+    /d[eé]s[eé]rialisation\s+(?:non\s+s[eé]curis[eé]e|non\s+s[uû]re|ins[eé]curis[eé]e)/i, // FR
+    /небезопасн[а-яА-Я]+\s+десериализаци[а-яА-Я]+/i,                             // RU
+    /(?:安全でない|安全ではない)デシリアライ[ゼズ]ーション/,                          // JA
+  ],
+  "Prototype Pollution": [
+    /prototype.?pollution/i, /__proto__\s*\[/,
+    /contaminaci[oó]n\s+(?:del?\s+)?prototipo/i,                                 // ES
+    /polui[çc][aã]o\s+(?:de|do)\s+prot[oó]tipo/i,                                // PT
+    /pollution\s+de\s+prototype/i,                                               // FR
+    /загрязнени[а-яА-Я]+\s+прототип[а-яА-Я]*/i,                                  // RU
+    /プロトタイプ汚染/,                                                            // JA
+  ],
+  "Command Injection": [
+    /command.?inject/i, /\bCMDi\b/i, /shell.?inject/i,
+    /iny[eé]cci[oó]n\s+de\s+(?:comandos?|[oó]rdenes)/i,                          // ES
+    /inje[çc][aã]o\s+de\s+comandos?/i,                                           // PT
+    /injection\s+de\s+commandes?/i,                                              // FR
+    /(?:внедрени[а-яА-Я]+|инъекци[а-яА-Я]+)\s+команд[а-яА-Я]*/i,                 // RU
+    /コマンドインジェクション/,                                                    // JA
+  ],
+  RCE: [
+    /remote.?code.?execution/i, /\bRCE\b/i,
+    /ejecuci[oó]n\s+(?:remota\s+de\s+c[oó]digo|de\s+c[oó]digo\s+remoto)/i,       // ES
+    /execu[çc][aã]o\s+(?:remota\s+de\s+c[oó]digo|de\s+c[oó]digo\s+remoto)/i,     // PT
+    /ex[eé]cution\s+(?:de\s+code\s+[aà]\s+distance|distante\s+de\s+code)/i,      // FR
+    /удал[её]нн[а-яА-Я]+\s+выполнени[а-яА-Я]+\s+код[а-яА-Я]*/i,                  // RU
+    /リモートコード実行/,                                                          // JA
+  ],
+  "Info Disclosure": [
+    /information.?disclosure/i, /sensitive.?data.?expos/i, /info.?leak/i,
+    /(?:divulgaci[oó]n|exposici[oó]n)\s+de\s+informaci[oó]n/i,                   // ES
+    /(?:divulga[çc][aã]o|exposi[çc][aã]o)\s+de\s+(?:informa[çc][aã]o|dados)/i,   // PT
+    /divulgation\s+d[\u2019']?\s*informations?/i,                                // FR
+    /(?:раскрыти[а-яА-Я]+|утечк[а-яА-Я]+)\s+информаци[а-яА-Я]+/i,                // RU
+    /情報漏(?:洩|えい)/,                                                          // JA
+  ],
 };
 
 // Sprint 13C (Task #205) — soft-citation lookup. Mirrors VULN_TYPE_PATTERNS

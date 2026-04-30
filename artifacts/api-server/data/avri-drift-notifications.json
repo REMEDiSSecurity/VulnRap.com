@@ -71,6 +71,40 @@
       "lastTickNewFlagCount": null,
       "nextTickAt": null,
       "ticksCompleted": 0
+    },
+    "9557ff2c605e-fef1c6b7": {
+      "replicaId": "9557ff2c605e-fef1c6b7",
+      "hostname": "9557ff2c605e",
+      "heartbeatAt": "2026-04-30T16:31:25.762Z",
+      "schedulerStarted": true,
+      "startedAt": "2026-04-30T16:31:25.430Z",
+      "intervalMs": 21600000,
+      "retryIntervalMs": 300000,
+      "webhookConfigured": false,
+      "lastTickAt": null,
+      "lastTickOk": null,
+      "lastTickRanCheck": null,
+      "lastTickDispatched": null,
+      "lastTickNewFlagCount": null,
+      "nextTickAt": null,
+      "ticksCompleted": 0
+    },
+    "9557ff2c605e-9670279d": {
+      "replicaId": "9557ff2c605e-9670279d",
+      "hostname": "9557ff2c605e",
+      "heartbeatAt": "2026-04-30T16:31:31.011Z",
+      "schedulerStarted": true,
+      "startedAt": "2026-04-30T16:31:29.689Z",
+      "intervalMs": 21600000,
+      "retryIntervalMs": 300000,
+      "webhookConfigured": false,
+      "lastTickAt": null,
+      "lastTickOk": null,
+      "lastTickRanCheck": null,
+      "lastTickDispatched": null,
+      "lastTickNewFlagCount": null,
+      "nextTickAt": null,
+      "ticksCompleted": 0
     }
   }
 }

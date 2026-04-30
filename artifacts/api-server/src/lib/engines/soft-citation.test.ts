@@ -84,6 +84,74 @@ describe("Sprint 13C: soft-citation lookup", () => {
   });
 });
 
+// Task #424: terse vulnerability shorthand in non-English languages.
+// Researchers writing in Spanish, Portuguese, French, Russian, or Japanese
+// routinely use translated long-form labels alongside the same English
+// acronyms, and pre-Task-424 only the English/acronym patterns were honoured,
+// so reports omitting the acronym dropped into the underspecified bucket.
+// Each test below exercises one foreign-language phrasing per added language
+// (ES/PT/FR/RU/JA) covering a different vulnerability class so a regression
+// in any single language's regex surfaces here.
+describe("Task #424: foreign-language shorthand", () => {
+  it("Spanish: 'inyección de comandos' resolves to Command Injection / CWE-77", () => {
+    expect(detectSoftCitation("encontré una inyección de comandos en el endpoint /run")).toEqual({
+      name: "Command Injection",
+      cweId: "77",
+    });
+  });
+
+  it("Portuguese: 'travessia de diretório' resolves to Path Traversal / CWE-22", () => {
+    expect(detectSoftCitation("encontrei uma travessia de diretório via o parâmetro file=")).toEqual({
+      name: "Path Traversal",
+      cweId: "22",
+    });
+  });
+
+  it("French: 'inclusion de fichier local' resolves to LFI / CWE-98", () => {
+    expect(detectSoftCitation("inclusion de fichier local via le paramètre include")).toEqual({
+      name: "LFI",
+      cweId: "98",
+    });
+  });
+
+  it("Russian: 'локальное включение файла' resolves to LFI / CWE-98", () => {
+    expect(detectSoftCitation("обнаружено локальное включение файла на странице ?page=")).toEqual({
+      name: "LFI",
+      cweId: "98",
+    });
+  });
+
+  it("Japanese: 'コマンドインジェクション' resolves to Command Injection / CWE-77", () => {
+    expect(detectSoftCitation("/api/run にコマンドインジェクションがあります")).toEqual({
+      name: "Command Injection",
+      cweId: "77",
+    });
+  });
+
+  // End-to-end: a fully foreign-language terse report should clear the
+  // soft-citation bar in the legacy E3 engine the same way the equivalent
+  // English shorthand does (E3 = 60). Pre-Task-424 this exact text scored
+  // ~38 because no VULN_TYPE_PATTERNS regex matched.
+  it("Spanish terse report lifts to E3 = 60 with inferred CWE-77", () => {
+    const text = "encontré una inyección de comandos en el parámetro filename";
+    const signals = extractSignals(text);
+    expect(signals.claimedCwes).toEqual([]);
+    const r = runEngine3(signals, text);
+    expect(r.score).toBe(60);
+    expect(r.signalBreakdown).toMatchObject({
+      softCitation: { name: "Command Injection", inferredCwe: "CWE-77" },
+    });
+  });
+
+  // Sanity: foreign-language patterns must not regress the suppression of
+  // generic non-vulnerability prose. A Spanish report that doesn't actually
+  // name a recognised class should still return null, the same as English.
+  it("foreign-language prose with no recognised class still returns null", () => {
+    expect(detectSoftCitation("creo que su aplicación tiene un problema de seguridad")).toBeNull();
+    expect(detectSoftCitation("votre site a peut-être un souci de sécurité")).toBeNull();
+  });
+});
+
 describe("Sprint 13C: legacy E3 soft-citation tier", () => {
   it("terse XSS report (no CWE token) lifts to E3 = 60", () => {
     const text = "found a stored xss in the comments section";
