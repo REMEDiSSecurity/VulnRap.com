@@ -349,4 +349,73 @@ test.describe("FLAT hand-wavy phrase panel — 'Preview reinstate' batch button"
       await apiCtx.dispose();
     }
   });
+
+  // Task #355 — companion to the per-phrase-reinstate drift case above.
+  // `expectedOutcomeFor` (in feedback-analytics.tsx) has three branches:
+  // already-reinstated (history row's reinstated flag flipped),
+  // already-active (the phrase is on the active list independent of any
+  // history row), and would-reinstate. The test above covers the first
+  // branch via POST .../reinstate; this test covers the second branch by
+  // independently re-adding one of the inner phrases to the active list
+  // via POST /handwavy-phrases between preview and confirm. The dry-run
+  // captured "would-reinstate" for that row, but `expectedOutcomeFor`
+  // now resolves it to "already-active" because it shows up in the
+  // `phrases` list, so the panel's stale notice should fire after the
+  // 5s in-panel poll picks up the new active-list state.
+  test("a re-add to the active list landing between preview and confirm surfaces the 'stale preview' notice on the panel", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3);
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p);
+      const batch = await batchRemove(apiCtx, phrases);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      const group = await openHistoryAndFindBatch(page, removedAt);
+      await group.getByTestId("handwavy-reinstate-batch-preview").click();
+      const panel = group.getByTestId("handwavy-reinstate-batch-preview-panel");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Every row starts as "would-reinstate" and the stale notice is
+      // not rendered yet — the snapshot still matches reality.
+      const wouldRows = panel.locator(
+        '[data-testid="handwavy-reinstate-batch-preview-row"][data-outcome="would-reinstate"]',
+      );
+      await expect(wouldRows).toHaveCount(phrases.length);
+      await expect(
+        panel.getByTestId("handwavy-reinstate-batch-preview-stale"),
+      ).toHaveCount(0);
+
+      // Out of band: a teammate independently re-adds the first inner
+      // phrase to the active list via POST /handwavy-phrases (i.e. NOT
+      // the per-batch or per-phrase reinstate endpoint, so the inner
+      // history row's `reinstated` flag stays false). The dry-run
+      // snapshot still says "would-reinstate" for that row but the
+      // current state has it on the active list, so
+      // `expectedOutcomeFor` now classifies it as "already-active".
+      await addPhrase(apiCtx, phrases[0]);
+
+      // The preview panel polls /handwavy-phrases every 5s while open
+      // (Task #248). Once the next poll lands the active-list contains
+      // the re-added phrase, the panel-side `previewDrifted` check
+      // notices the mismatch ("would-reinstate" snapshot vs current
+      // "already-active") and renders the stale notice.
+      const stale = panel.getByTestId("handwavy-reinstate-batch-preview-stale");
+      await expect(stale).toBeVisible({ timeout: 20_000 });
+      await expect(stale).toContainText(/Re-preview to refresh/);
+
+      // Confirm stays enabled — the server's reinstate call already
+      // de-dupes already-active rows safely. The original per-phrase
+      // outcomes are still rendered exactly as captured at click time.
+      await expect(
+        panel.getByTestId("handwavy-reinstate-batch-preview-confirm"),
+      ).toBeEnabled();
+      await expect(wouldRows).toHaveCount(phrases.length);
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
 });
