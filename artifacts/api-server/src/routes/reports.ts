@@ -66,6 +66,7 @@ import {
   type TriageAssistantResult,
 } from "../lib/triage-assistant";
 import { deriveFabricatedEvidenceFlags } from "../lib/fabricated-evidence-flags";
+import { deriveInferredCwe } from "../lib/inferred-cwe";
 
 function parseBoolParam(value: unknown): boolean {
   return value === "true" || value === true;
@@ -1608,6 +1609,14 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
     const derived = deriveFabricatedEvidenceFlags(r.vulnrapEngineResults);
     const fakeRawHttp = r.fakeRawHttp || derived.fakeRawHttp;
     const strippedCrashTrace = r.strippedCrashTrace || derived.strippedCrashTrace;
+    // Task #423 — surface the soft-citation inferred CWE on the row so
+    // reviewers can scan / batch by inferred CWE without opening each
+    // report. Sourced from the same JSONB blob the triage panel reads;
+    // no new column is cached because soft citations are uncommon and
+    // the blob is already selected for fabricated-evidence derivation.
+    const { inferredCwe, inferredCweName } = deriveInferredCwe(
+      r.vulnrapEngineResults,
+    );
     return {
       id: r.id,
       reportCode: anonymizeId(r.id),
@@ -1619,6 +1628,8 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       avriFamily: r.avriFamily ?? null,
       fakeRawHttp,
       strippedCrashTrace,
+      inferredCwe,
+      inferredCweName,
     };
   });
 

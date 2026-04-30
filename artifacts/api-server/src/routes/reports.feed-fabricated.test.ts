@@ -557,3 +557,156 @@ describe("GET /api/reports/feed — fabricated-evidence filter", () => {
     expect(body.summary.totalPublic).toBe(2);
   });
 });
+
+// Task #423 — Verify the route surfaces the soft-citation inferred CWE
+// on each feed row when it's present in vulnrap_engine_results, sourced
+// from signalBreakdown.avri.softCitation (preferred) or
+// signalBreakdown.softCitation (legacy). The badge on the reports feed
+// reads these fields so reviewers can scan / batch by inferred CWE
+// without opening each report.
+
+function makeEngine3Avri(opts: { name: string; cwe: string }) {
+  return {
+    engines: [
+      {
+        engine: "CWE Coherence Checker",
+        signalBreakdown: {
+          avri: {
+            family: "WEB_CLIENT",
+            softCitation: { name: opts.name, inferredCwe: opts.cwe },
+          },
+        },
+      },
+    ],
+  };
+}
+
+function makeEngine3Legacy(opts: { name: string; cwe: string }) {
+  return {
+    engines: [
+      {
+        engine: "CWE Coherence Checker",
+        signalBreakdown: {
+          softCitation: { name: opts.name, inferredCwe: opts.cwe },
+        },
+      },
+    ],
+  };
+}
+
+describe("GET /api/reports/feed — Task #423 inferredCwe row field", () => {
+  it("emits inferredCwe + inferredCweName when AVRI soft citation is present", async () => {
+    const row = seedReport({
+      avriFamily: "WEB_CLIENT",
+      vulnrapEngineResults: makeEngine3Avri({ name: "XSS", cwe: "CWE-79" }),
+    });
+
+    const res = await fetch(`${baseUrl}/api/reports/feed`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    const out = body.reports.find((r: { id: number }) => r.id === row.id);
+    expect(out).toBeDefined();
+    expect(out.inferredCwe).toBe("CWE-79");
+    expect(out.inferredCweName).toBe("XSS");
+  });
+
+  it("falls back to legacy signalBreakdown.softCitation for rows analysed before AVRI rolled out", async () => {
+    const row = seedReport({
+      avriFamily: "FLAT",
+      vulnrapEngineResults: makeEngine3Legacy({
+        name: "Open Redirect",
+        cwe: "CWE-601",
+      }),
+    });
+
+    const res = await fetch(`${baseUrl}/api/reports/feed`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    const out = body.reports.find((r: { id: number }) => r.id === row.id);
+    expect(out).toBeDefined();
+    expect(out.inferredCwe).toBe("CWE-601");
+    expect(out.inferredCweName).toBe("Open Redirect");
+  });
+
+  it("emits null inferredCwe when no soft citation fired (e.g. explicit CWE was claimed)", async () => {
+    const row = seedReport({
+      avriFamily: "INJECTION",
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "CWE Coherence Checker",
+            signalBreakdown: {
+              avri: { family: "INJECTION", softCitation: null },
+            },
+          },
+        ],
+      },
+    });
+
+    const res = await fetch(`${baseUrl}/api/reports/feed`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    const out = body.reports.find((r: { id: number }) => r.id === row.id);
+    expect(out).toBeDefined();
+    expect(out.inferredCwe).toBeNull();
+    expect(out.inferredCweName).toBeNull();
+  });
+
+  it("emits null inferredCwe for rows with no engine results (legacy / failed pipelines)", async () => {
+    const row = seedReport({
+      avriFamily: "FLAT",
+      vulnrapEngineResults: null,
+    });
+
+    const res = await fetch(`${baseUrl}/api/reports/feed`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    const out = body.reports.find((r: { id: number }) => r.id === row.id);
+    expect(out).toBeDefined();
+    expect(out.inferredCwe).toBeNull();
+    expect(out.inferredCweName).toBeNull();
+  });
+
+  it("does not interfere with existing fabricated-evidence filters (a row can carry both inferredCwe and the fabricated chips)", async () => {
+    // A real-world combo: AVRI Engine 2 flagged the report's raw HTTP as
+    // fake AND Engine 3 inferred a CWE from the report's text. Both
+    // signals should surface on the same row independently.
+    const row = seedReport({
+      avriFamily: "REQUEST_SMUGGLING",
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            signalBreakdown: {
+              avri: {
+                rawHttp: { isFake: true },
+                crashTrace: { isStripped: false },
+              },
+            },
+          },
+          {
+            engine: "CWE Coherence Checker",
+            signalBreakdown: {
+              avri: {
+                family: "REQUEST_SMUGGLING",
+                softCitation: {
+                  name: "Request Smuggling",
+                  inferredCwe: "CWE-444",
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const res = await fetch(`${baseUrl}/api/reports/feed`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    const out = body.reports.find((r: { id: number }) => r.id === row.id);
+    expect(out).toBeDefined();
+    expect(out.fakeRawHttp).toBe(true);
+    expect(out.inferredCwe).toBe("CWE-444");
+    expect(out.inferredCweName).toBe("Request Smuggling");
+  });
+});

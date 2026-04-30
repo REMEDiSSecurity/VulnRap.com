@@ -2198,6 +2198,22 @@ components:
                   True when AVRI Engine 2 flagged the report's crash/race trace as stripped
                   (signalBreakdown.avri.crashTrace.isStripped = true). Paired with fakeRawHttp so
                   the two block types stay symmetric in the feed UI.
+              inferredCwe:
+                type: ["string", "null"]
+                description: |
+                  Soft-citation inferred CWE (e.g. "CWE-79") for reports where the engine
+                  recognised a vulnerability class name but no explicit CWE token was cited.
+                  Sourced from signalBreakdown.avri.softCitation.inferredCwe (preferred) or
+                  signalBreakdown.softCitation.inferredCwe (legacy) on the CWE Coherence
+                  Checker engine — same field the triage report panel already consumes.
+                  Null when no soft citation fired for the report.
+              inferredCweName:
+                type: ["string", "null"]
+                description: |
+                  Friendly name of the soft-citation match (e.g. "XSS", "Open Redirect")
+                  paired with inferredCwe. Null when inferredCwe is null. Used as a tooltip
+                  on the row badge so reviewers can see the matched class without opening
+                  the diagnostics panel.
             required:
               - id
               - reportCode

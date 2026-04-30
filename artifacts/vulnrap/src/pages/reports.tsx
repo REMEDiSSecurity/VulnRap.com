@@ -607,6 +607,25 @@ export default function Reports() {
                     FAKE_RAW_HTTP
                   </Badge>
                 )}
+                {/* Task #423 — Surface the soft-citation inferred CWE on the
+                    feed row so reviewers can scan / batch by inferred CWE
+                    without opening each report. Sourced from the same
+                    signalBreakdown.softCitation / signalBreakdown.avri
+                    .softCitation field the triage report panel consumes. */}
+                {report.inferredCwe && (
+                  <Badge
+                    variant="outline"
+                    data-testid="badge-inferred-cwe"
+                    className="text-[10px] hidden md:inline-flex font-mono text-cyan-300 border-cyan-500/40 bg-cyan-500/10"
+                    title={
+                      report.inferredCweName
+                        ? `Soft citation: ${report.inferredCweName} → ${report.inferredCwe}. The report named the vulnerability class without citing the explicit CWE token; the engine inferred it.`
+                        : `Soft citation: ${report.inferredCwe}. The report named the vulnerability class without citing the explicit CWE token; the engine inferred it.`
+                    }
+                  >
+                    {report.inferredCwe}
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
                 <div className="flex items-center gap-2">

@@ -31,4 +31,24 @@ fabricated-raw-HTTP REQUEST_SMUGGLING reports without opening each one.
 the two block types stay symmetric in the feed UI.
  */
   strippedCrashTrace: boolean;
+  /**
+   * Soft-citation inferred CWE (e.g. "CWE-79") for reports where the engine
+recognised a vulnerability class name but no explicit CWE token was cited.
+Sourced from signalBreakdown.avri.softCitation.inferredCwe (preferred) or
+signalBreakdown.softCitation.inferredCwe (legacy) on the CWE Coherence
+Checker engine — same field the triage report panel already consumes.
+Null when no soft citation fired for the report.
+
+   * @nullable
+   */
+  inferredCwe?: string | null;
+  /**
+   * Friendly name of the soft-citation match (e.g. "XSS", "Open Redirect")
+paired with inferredCwe. Null when inferredCwe is null. Used as a tooltip
+on the row badge so reviewers can see the matched class without opening
+the diagnostics panel.
+
+   * @nullable
+   */
+  inferredCweName?: string | null;
 };

@@ -2164,6 +2164,18 @@ export const GetReportFeedResponse = zod.object({
         .describe(
           "True when AVRI Engine 2 flagged the report's crash\/race trace as stripped\n(signalBreakdown.avri.crashTrace.isStripped = true). Paired with fakeRawHttp so\nthe two block types stay symmetric in the feed UI.\n",
         ),
+      inferredCwe: zod
+        .string()
+        .nullish()
+        .describe(
+          'Soft-citation inferred CWE (e.g. \"CWE-79\") for reports where the engine\nrecognised a vulnerability class name but no explicit CWE token was cited.\nSourced from signalBreakdown.avri.softCitation.inferredCwe (preferred) or\nsignalBreakdown.softCitation.inferredCwe (legacy) on the CWE Coherence\nChecker engine — same field the triage report panel already consumes.\nNull when no soft citation fired for the report.\n',
+        ),
+      inferredCweName: zod
+        .string()
+        .nullish()
+        .describe(
+          'Friendly name of the soft-citation match (e.g. \"XSS\", \"Open Redirect\")\npaired with inferredCwe. Null when inferredCwe is null. Used as a tooltip\non the row badge so reviewers can see the matched class without opening\nthe diagnostics panel.\n',
+        ),
     }),
   ),
   total: zod.number(),
