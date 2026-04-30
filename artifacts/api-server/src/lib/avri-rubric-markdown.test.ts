@@ -198,6 +198,111 @@ describe("buildAvriRubricMarkdown", () => {
     expect(toolLines.some((l) => l.includes("Stripped tool trace"))).toBe(true);
   });
 
+  // Task #319 — pin the new "Response Plausibility" sub-section so the
+  // printable triage report markdown carries the per-response markers
+  // (missing Date/Server, suspiciously clean JSON body, missing
+  // incidentals) and the response-class revoked gold signal id(s) the
+  // diagnostics panel already shows. Future fabricated-response
+  // detector additions land here too.
+  it("renders a Response Plausibility sub-section with markers and revoked gold signals when the response side is fake", () => {
+    const lines = buildAvriRubricMarkdown({
+      composite: { family: "INJECTION", familyName: "Injection" },
+      engine2: {
+        family: "INJECTION",
+        familyName: "Injection",
+        rawHttp: {
+          requestsAnalyzed: 0,
+          totalHeaders: 0,
+          placeholderHeaders: 0,
+          crlfPresent: false,
+          teClConflicts: 0,
+          teClBroken: 0,
+          isFake: true,
+          reason:
+            "Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body)",
+          revokedGoldHits: [
+            { id: "request_response_diff", points: 12 },
+          ],
+          penalty: -12,
+          response: {
+            responsesAnalyzed: 1,
+            responsesFlagged: 1,
+            totalHeaders: 2,
+            responsesMissingDate: 1,
+            responsesMissingServer: 1,
+            responsesWithSuspiciousJsonBody: 1,
+            responsesMissingIncidentals: 1,
+            isFake: true,
+            reason:
+              "Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body)",
+            revokedGoldHits: [
+              { id: "request_response_diff", points: 12 },
+            ],
+          },
+        },
+      },
+    });
+    expect(lines).toMatchInlineSnapshot(`
+      [
+        "## AVRI Family Rubric",
+        "",
+        "- **Family**: Injection",
+        "- **Fake raw HTTP response** (penalty -12): Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body) — requests 0, headers 0/0 good, placeholder 0, CRLF no, TE/CL conflicts 0 (broken 0)",
+        "  - **Response Plausibility** (1/1 response block flagged):",
+        "    - Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body)",
+        "    - Missing Date header: 1",
+        "    - Missing Server header: 1",
+        "    - Suspiciously clean JSON body: 1",
+        "    - Missing incidental headers: 1",
+        "    - Response gold signals revoked: request_response_diff (−12)",
+        "  - Gold signals revoked: request_response_diff (−12)",
+        "",
+      ]
+    `);
+  });
+
+  it("renders a Response Plausibility sub-section even when the response sub-block omits revokedGoldHits (legacy persisted reports)", () => {
+    const lines = buildAvriRubricMarkdown({
+      composite: { family: "WEB_CLIENT", familyName: "Web Client" },
+      engine2: {
+        family: "WEB_CLIENT",
+        familyName: "Web Client",
+        rawHttp: {
+          requestsAnalyzed: 0,
+          totalHeaders: 0,
+          placeholderHeaders: 0,
+          crlfPresent: false,
+          teClConflicts: 0,
+          teClBroken: 0,
+          isFake: true,
+          reason: null,
+          revokedGoldHits: [],
+          penalty: -12,
+          response: {
+            responsesAnalyzed: 2,
+            responsesFlagged: 2,
+            totalHeaders: 4,
+            responsesMissingDate: 2,
+            responsesMissingServer: 2,
+            responsesWithSuspiciousJsonBody: 2,
+            responsesMissingIncidentals: 2,
+            isFake: true,
+            reason: null,
+            // revokedGoldHits intentionally omitted to simulate a
+            // legacy persisted report from before Task #319 shipped.
+          },
+        },
+      },
+    });
+    expect(lines).toContain("  - **Response Plausibility** (2/2 response blocks flagged):");
+    expect(lines).toContain("    - Missing Date header: 2");
+    expect(lines).toContain("    - Missing incidental headers: 2");
+    // No "Response gold signals revoked" line when the field is absent.
+    expect(lines.some((l) => l.includes("Response gold signals revoked"))).toBe(
+      false,
+    );
+  });
+
   it("only emits the Composite overrides block when there is something to show", () => {
     const lines = buildAvriRubricMarkdown({
       composite: { family: "GENERIC", goldHitCount: 1 },

@@ -409,6 +409,13 @@ export function runEngine2Avri(
   // would carry a plausibility-passing response excerpt (with Date /
   // Server / incidental fields), so this branch never fires there.
   let rawHttpResponse: RawHttpResponseEvaluation | null = null;
+  // Task #319 — track response-side revocations separately from the
+  // combined `revokedRawHttpHits` list so the printable triage report can
+  // surface them under the new "Response Plausibility" sub-section. The
+  // parent `revokedRawHttpHits` still receives them too so the existing
+  // top-level "Gold signals revoked" line and indicator continue to show
+  // the OR-merged view.
+  const revokedResponseHits: Array<{ id: string; description: string; points: number }> = [];
   const responseGoldIds = rawHttpResponseGoldSignalIdsFor(family.id);
   if (responseGoldIds) {
     rawHttpResponse = evaluateRawHttpResponse(fullText);
@@ -417,6 +424,7 @@ export function runEngine2Avri(
       for (const hit of goldHits) {
         if (responseGoldIds.has(hit.id)) {
           revokedRawHttpHits.push(hit);
+          revokedResponseHits.push(hit);
           goldTotal -= hit.points;
         } else {
           remaining.push(hit);
@@ -710,6 +718,15 @@ export function runEngine2Avri(
                   responsesMissingIncidentals: rawHttpResponse.responsesMissingIncidentals,
                   isFake: rawHttpResponse.isFake,
                   reason: rawHttpResponse.reason,
+                  // Task #319 — response-class gold signals revoked by the
+                  // fabricated-response detector, persisted separately from
+                  // the OR-merged parent `revokedGoldHits` so the printable
+                  // triage report can list them under the new "Response
+                  // Plausibility" sub-section.
+                  revokedGoldHits: revokedResponseHits.map((r) => ({
+                    id: r.id,
+                    points: r.points,
+                  })),
                 }
               : null,
           }

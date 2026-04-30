@@ -80,6 +80,14 @@ export interface AvriEngine2RawHttpResponse {
   responsesMissingIncidentals: number;
   isFake: boolean;
   reason: string | null;
+  // Task #319 — response-side gold-signal revocations, surfaced separately
+  // from the parent `AvriEngine2RawHttp.revokedGoldHits` (which is the
+  // OR-merged request+response view the diagnostics panel already renders)
+  // so the printable triage report can list which response-class signals
+  // were revoked under the "Response Plausibility" sub-section. Optional
+  // because legacy persisted reports analyzed before this field shipped
+  // won't carry it; consumers default to an empty list.
+  revokedGoldHits?: Array<{ id: string; points: number }>;
 }
 
 export interface AvriEngine2RawHttp {
@@ -334,11 +342,34 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
     lines.push(
       `- **${title}** (penalty ${rh.penalty}): ${rh.reason ?? "fabricated raw HTTP bytes"} — requests ${rh.requestsAnalyzed}, headers ${goodHeaders}/${rh.totalHeaders} good, placeholder ${rh.placeholderHeaders}, CRLF ${rh.crlfPresent ? "yes" : "no"}, TE/CL conflicts ${rh.teClConflicts} (broken ${rh.teClBroken})`,
     );
+    // Task #319 — surface the response-side plausibility evidence as a
+    // proper "Response Plausibility" sub-section under the raw-HTTP block
+    // (per-marker counters + response-class revoked gold signal ids) so the
+    // printable triage report carries the same fabricated-response markers
+    // the diagnostics panel already shows. The parent `revokedGoldHits`
+    // line below still lists *all* revoked ids for backward compatibility.
     if (respFake && rh.response) {
       const r = rh.response;
       lines.push(
-        `  - Response plausibility: ${r.responsesFlagged}/${r.responsesAnalyzed} flagged — missing Date ${r.responsesMissingDate}, missing Server ${r.responsesMissingServer}, suspicious JSON body ${r.responsesWithSuspiciousJsonBody}, no incidentals ${r.responsesMissingIncidentals}`,
+        `  - **Response Plausibility** (${r.responsesFlagged}/${r.responsesAnalyzed} response block${r.responsesAnalyzed === 1 ? "" : "s"} flagged):`,
       );
+      if (r.reason) {
+        lines.push(`    - ${r.reason}`);
+      }
+      lines.push(`    - Missing Date header: ${r.responsesMissingDate}`);
+      lines.push(`    - Missing Server header: ${r.responsesMissingServer}`);
+      lines.push(
+        `    - Suspiciously clean JSON body: ${r.responsesWithSuspiciousJsonBody}`,
+      );
+      lines.push(
+        `    - Missing incidental headers: ${r.responsesMissingIncidentals}`,
+      );
+      const respRevoked = r.revokedGoldHits ?? [];
+      if (respRevoked.length > 0) {
+        lines.push(
+          `    - Response gold signals revoked: ${respRevoked.map((g) => `${g.id} (−${g.points})`).join(", ")}`,
+        );
+      }
     }
     if (rh.revokedGoldHits.length > 0) {
       lines.push(
