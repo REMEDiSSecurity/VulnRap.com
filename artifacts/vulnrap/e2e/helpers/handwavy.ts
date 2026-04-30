@@ -17,6 +17,32 @@ import { randomUUID } from "node:crypto";
 // Centralising them here keeps the seed/cleanup contract honest and lets a
 // new `handwavy-*.spec.ts` add real coverage without copying boilerplate.
 //
+// Task #385 — PARALLEL-SAFETY CONTRACT for the release-gate runner.
+// `scripts/release-e2e-check.sh` runs its curated RELEASE_SPECS list with
+// E2E_FULLY_PARALLEL=1 / E2E_WORKERS=4 against a shared api-server. Note
+// that `fullyParallel=true` parallelizes INDIVIDUAL TESTS across workers,
+// not just spec files, so these invariants apply to every test in a
+// release-gate spec (sibling tests in the same file can race against
+// each other just as readily as tests in different files):
+//   1. Always seed via `uniquePhrase()` / `uniquePhrases()` so the
+//      randomUUID-backed phrase strings can't collide with a parallel
+//      test (same-file or cross-file) writing to the same
+//      handwavy-phrases.json.
+//   2. Scope every Playwright count/text assertion to the unique phrase or
+//      `data-batch-removed-at` you just seeded — never assert on a global
+//      panel size, list length, or "first row" without a unique-key
+//      filter, since other parallel tests' rows will be on the same panel.
+//   3. Do mutations through this helper module (or other request-context
+//      helpers); the api-server persists handwavy state via synchronous
+//      read-modify-writeFileSync with no awaits in between, which is what
+//      makes parallel workers safe — adding an awaited DB call upstream
+//      would invalidate that property.
+// If a new test genuinely cannot honor (1)–(3) but its file-level
+// neighbors are still parallel-safe, wrap its `test.describe(...)` as
+// `.serial` so the in-file ordering survives without disabling cross-file
+// parallelism. If even that's not enough, hoist the spec out of
+// RELEASE_SPECS and document why inline.
+//
 // Helpers in this file:
 //   - newApiContext(): a Playwright APIRequestContext pre-loaded with the
 //     calibration token header so the strict-auth gate (Task #163) accepts

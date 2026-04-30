@@ -71,6 +71,30 @@ RELEASE_SPECS=(
   handwavy-revert-disabled.spec.ts
 )
 
+# Task #385 — Run the curated RELEASE_SPECS list in parallel against the
+# shared production webservers. The Playwright config under
+# artifacts/vulnrap/playwright.config.ts honors E2E_FULLY_PARALLEL +
+# E2E_WORKERS so the release-gate-only opt-in doesn't change behavior for
+# unrelated `playwright test` invocations against the broader e2e/ suite.
+#
+# Why parallel is safe for this exact list: every release-gate spec mints
+# unique phrases via uniquePhrase()/uniquePhrases() (randomUUID-backed) and
+# scopes every count assertion against shared panels by phrase / batch
+# `removedAt`, so the api-server's per-phrase keying isolates concurrent
+# flows. The phrase store is also persisted via synchronous read-modify-
+# writeFileSync with no awaits, so Node's single-thread model serializes
+# the writes even under concurrent HTTP load. See the matching banner in
+# artifacts/vulnrap/playwright.config.ts for the full audit notes —
+# additions to RELEASE_SPECS MUST preserve those properties.
+#
+# Default to 4 workers, which brings 14-spec wall-clock back to roughly the
+# pre-#274 4-spec runtime; CI / contributors can override via E2E_WORKERS=N
+# (e.g. `E2E_WORKERS=1 scripts/release-e2e-check.sh` to bisect a flake by
+# falling back to serial execution without editing this file).
+export E2E_FULLY_PARALLEL="${E2E_FULLY_PARALLEL:-1}"
+export E2E_WORKERS="${E2E_WORKERS:-4}"
+echo "[release-e2e-check] Running ${#RELEASE_SPECS[@]} specs across ${E2E_WORKERS} parallel Playwright worker(s) (E2E_FULLY_PARALLEL=${E2E_FULLY_PARALLEL}; this is in-process worker parallelism, not CI-level sharding)."
+
 if ! pnpm --filter @workspace/vulnrap exec playwright test \
   --config playwright.config.ts \
   "${RELEASE_SPECS[@]}"; then

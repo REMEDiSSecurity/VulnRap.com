@@ -43,10 +43,50 @@ const CALIBRATION_TOKEN = process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-
 // artifacts/api-server/.replit-artifact/artifact.toml.
 const USE_DEV_SERVERS = process.env.E2E_DEV_SERVERS === "1";
 
+// Task #385 — Worker / parallelism knobs. The defaults stay at 1 worker /
+// fullyParallel=false so an unsuspecting `playwright test` invocation
+// against the broader e2e/ suite (which includes specs not vetted for
+// parallel safety yet) keeps the historical serial behavior.
+//
+// `scripts/release-e2e-check.sh` opts the curated release-gate spec list
+// into parallel execution by setting E2E_FULLY_PARALLEL=1 and
+// E2E_WORKERS=<N>. Important: `fullyParallel=true` parallelizes
+// INDIVIDUAL TESTS within a single spec file across workers — not just
+// spec FILES — so the audit below applies test-by-test, not file-by-file.
+// (If a future release-gate spec turns out to share state across its own
+// tests, mark its `test.describe(...)` as `.serial` to preserve in-file
+// ordering while still letting other files run in parallel; or, as a
+// blunter knob, the gate can be downgraded to `E2E_FULLY_PARALLEL=0` so
+// only files run concurrently.)
+//
+// The release-gate spec list is audited for parallel safety per-test:
+//   - Every test mints its own phrases via uniquePhrase()/uniquePhrases()
+//     (randomUUID-backed) so the api-server's per-phrase keying isolates
+//     concurrent add/remove/reinstate flows even between siblings in the
+//     same spec file.
+//   - Every count assertion against shared panels (active list,
+//     removal-batches picker, history list) is filtered by the unique
+//     phrase / batch removedAt, so cross-test data doesn't leak in.
+//   - Phrase mutations on the api-server are synchronous (read-modify-
+//     writeFileSync with no awaits in between), so Node's single-thread
+//     execution model serializes them even under concurrent HTTP load.
+//   - Route intercepts (page.route) and localStorage are per-page-context
+//     and don't leak across workers OR across sibling tests in the same
+//     file (each test gets its own page).
+// New specs added to RELEASE_SPECS in scripts/release-e2e-check.sh MUST
+// preserve these properties at the per-test level, or be marked
+// `test.describe.serial(...)` (intra-file ordering) AND hoisted out of
+// the release-gate list if cross-file parallelism would still race.
+const PARSED_WORKERS = Number.parseInt(process.env.E2E_WORKERS ?? "", 10);
+const WORKERS = Number.isFinite(PARSED_WORKERS) && PARSED_WORKERS > 0
+  ? PARSED_WORKERS
+  : 1;
+const FULLY_PARALLEL = process.env.E2E_FULLY_PARALLEL === "1";
+
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: false,
-  workers: 1,
+  fullyParallel: FULLY_PARALLEL,
+  workers: WORKERS,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   timeout: 60_000,
