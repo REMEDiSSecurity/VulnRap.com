@@ -25,16 +25,26 @@ set -euo pipefail
 # (E2E_CALIBRATION_TOKEN=...) propagates to both the webServer env
 # block and the spec-side request contexts.
 #
-# Task #250 — Build cache reuse.
+# Task #250 + Task #351 — Build cache reuse.
 # The Playwright `webServer` blocks chain `node scripts/build-if-stale.mjs`
 # in front of `start`/`serve`, so the vite + esbuild builds are reused when
 # `artifacts/api-server/dist/index.mjs` and
 # `artifacts/vulnrap/dist/public/index.html` are newer than every watched
 # source dir/file (each artifact's own src/ + build configs + every
 # `@workspace/*` dep declared in its package.json, resolved to
-# `lib/<short-name>/src`). On a cold container both builds run; on a warm
-# back-to-back run both are skipped and the e2e step starts the servers
-# in well under a second of build-cache overhead.
+# `lib/<short-name>/src`). On a warm back-to-back run both are skipped and
+# the e2e step starts the servers in well under a second of build-cache
+# overhead.
+#
+# Task #351 extends that benefit to the cold-start path: when dist/ is
+# missing or stale, build-if-stale.mjs first checks a persistent
+# content-addressed cache under `.cache/build-if-stale/<target>/<hash>/`
+# (workspace-relative so it survives full container restarts). The hash
+# is a SHA-256 over the same source set the freshness check walks, so a
+# new `@workspace/*` dep automatically invalidates it. On a hit the cached
+# dist/ is copied back into place and we skip the rebuild entirely; on a
+# miss the build runs and its output is snapshotted into the cache for
+# the next cold container.
 #
 # Critical: the cache check MUST run with the same build-time env
 # Playwright uses for the webServer (notably `VITE_CALIBRATION_TOKEN`,
@@ -43,16 +53,25 @@ set -euo pipefail
 # do NOT pre-warm the cache here — Playwright's webServer commands handle
 # both the freshness check and (if needed) the build under the right env.
 #
-# Escape hatches (Task #250 + Task #251):
-#   E2E_SKIP_PROD_BUILD=1   trust the existing dist/ (no freshness check;
-#                           use when CI built it in a separate stage).
-#   E2E_FORCE_PROD_BUILD=1  always rebuild (escape hatch when the mtime
-#                           heuristic ever looks suspect).
-#   E2E_RUN_ALL_SPECS=1     force the full suite (skip the change-aware
-#                           filter). Use this for nightly runs or when
-#                           debugging the selector itself.
-#   E2E_DIFF_BASE=<ref>     override the git ref the selector compares
-#                           against (defaults to origin/main, then main).
+# Escape hatches (Task #250 + Task #251 + Task #351):
+#   E2E_SKIP_PROD_BUILD=1            trust the existing dist/ (no freshness
+#                                    check; use when CI built it in a
+#                                    separate stage).
+#   E2E_FORCE_PROD_BUILD=1           always rebuild and skip the persistent
+#                                    cache restore (escape hatch when the
+#                                    mtime heuristic ever looks suspect).
+#   BUILD_IF_STALE_DISABLE_CACHE=1   skip both the persistent-cache restore
+#                                    and the post-build save (still uses
+#                                    the per-container mtime check).
+#   BUILD_IF_STALE_CACHE_DIR=<path>  relocate the persistent cache root
+#                                    (defaults to `.cache/build-if-stale`).
+#   E2E_RUN_ALL_SPECS=1              force the full suite (skip the
+#                                    change-aware filter). Use this for
+#                                    nightly runs or when debugging the
+#                                    selector itself.
+#   E2E_DIFF_BASE=<ref>              override the git ref the selector
+#                                    compares against (defaults to
+#                                    origin/main, then main).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SELECTOR="${SCRIPT_DIR}/vulnrap-e2e-select-specs.mjs"

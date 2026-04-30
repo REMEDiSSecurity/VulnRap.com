@@ -6,9 +6,17 @@ echo "[release-e2e-check] (vite preview + bundled dist/index.mjs, not the dev se
 # By default the Playwright webServer chains scripts/build-if-stale.mjs in
 # front of `start`/`serve`, so the vite + esbuild builds are reused when
 # dist/ is newer than every watched source (saves ~15s on back-to-back runs).
+# Task #351 also wires in a cross-restart persistent cache: when dist/ is
+# missing or stale (e.g. on a cold container), build-if-stale.mjs first
+# tries to restore a content-addressed snapshot from
+# `.cache/build-if-stale/<target>/<hash>/` before paying for a full build,
+# and snapshots the resulting dist/ post-build for the next cold start.
 # CI callers that already produced an up-to-date dist/ in a separate stage
 # can short-circuit the freshness check entirely with E2E_SKIP_PROD_BUILD=1;
-# E2E_FORCE_PROD_BUILD=1 forces a rebuild if the heuristic ever looks stale.
+# E2E_FORCE_PROD_BUILD=1 forces a rebuild (and skips the persistent cache
+# restore) if the heuristic ever looks stale; BUILD_IF_STALE_DISABLE_CACHE=1
+# disables only the persistent cache while keeping the per-container
+# freshness check.
 if [ "${E2E_SKIP_PROD_BUILD:-0}" = "1" ]; then
   echo "[release-e2e-check] E2E_SKIP_PROD_BUILD=1 — trusting existing dist/ (no rebuild)"
 elif [ "${E2E_FORCE_PROD_BUILD:-0}" = "1" ]; then
