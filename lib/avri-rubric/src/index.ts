@@ -48,6 +48,11 @@ export interface AvriEngine2AbsencePenalty {
   flatHandwavyCategory?: AvriHandwavyCategory;
 }
 
+export interface AvriEngine2StructuralMarker {
+  id: string;
+  description: string;
+}
+
 export interface AvriEngine2CrashTrace {
   framesAnalyzed: number;
   goodFrames: number;
@@ -56,6 +61,13 @@ export interface AvriEngine2CrashTrace {
   reason: string | null;
   revokedGoldHits: Array<{ id: string; points: number }>;
   penalty: number;
+  // Sprint 13B-2: structural-fabrication markers attached to the trace.
+  // Optional because reports analyzed before the structural-fab detector
+  // shipped won't carry them; consumers that don't render structural-fab
+  // details (markdown formatter, triage export) can simply ignore them.
+  structuralMarkers?: AvriEngine2StructuralMarker[];
+  hasStructuralFabrication?: boolean;
+  structuralFabricationPenalty?: number;
 }
 
 export interface AvriEngine2RawHttpResponse {
@@ -90,6 +102,10 @@ export interface AvriEngine2RawHttp {
 export interface AvriEngine2Block {
   family?: string | null;
   familyName?: string | null;
+  // Normalized AVRI base score (gold hits scaled against the family's
+  // calibrated max). Optional — not all consumers (e.g. the markdown
+  // formatter) read it, but the engine writes it on every fresh report.
+  baseScore?: number;
   goldHitCount?: number;
   goldTotalCount?: number;
   goldHits?: AvriEngine2GoldSignal[];
@@ -97,8 +113,14 @@ export interface AvriEngine2Block {
   absencePenalty?: number;
   absencePenalties?: AvriEngine2AbsencePenalty[];
   contradictions?: string[];
+  contradictionPenalty?: number;
   crashTrace?: AvriEngine2CrashTrace | null;
   rawHttp?: AvriEngine2RawHttp | null;
+  // Final score components: AVRI raw (after penalties), legacy substance
+  // score, and the blended Engine 2 score that lands on `engine.score`.
+  rawAvriScore?: number;
+  legacyScore?: number;
+  blendedScore?: number;
 }
 
 export interface AvriRubricInput {

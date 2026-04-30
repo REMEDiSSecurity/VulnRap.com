@@ -574,68 +574,13 @@ const HANDWAVY_CATEGORY_HELP: Record<AvriHandwavyCategory | "other", string> = {
 // Pulls structured data from Engine 2's signalBreakdown.avri (per-signal
 // descriptions) and merges it with the composite-level avri block (family
 // classification reason / behavioural penalties).
-interface AvriEngine2Breakdown {
-  family?: string;
-  familyName?: string;
-  baseScore?: number;
-  goldHitCount?: number;
-  goldTotalCount?: number;
-  goldHits?: Array<{ id: string; description: string; points: number }>;
-  goldMisses?: Array<{ id: string; description: string; points: number }>;
-  absencePenalty?: number;
-  absencePenalties?: Array<{ id: string; description: string; points: number; flatHandwavyCategory?: AvriHandwavyCategory }>;
-  contradictions?: string[];
-  contradictionPenalty?: number;
-  // Sprint 11 / Task 78: stripped-crash-trace block written by Engine 2
-  // when a MEMORY_CORRUPTION report's stack trace had no resolvable
-  // symbols / contained placeholder offsets. The presence of this block
-  // (with isStripped=true) is what triggers the STRIPPED_CRASH_TRACE
-  // indicator and the trace-gold revocation surfaced in the panel.
-  crashTrace?: {
-    framesAnalyzed: number;
-    goodFrames: number;
-    placeholderFrames: number;
-    isStripped: boolean;
-    reason: string | null;
-    revokedGoldHits: Array<{ id: string; points: number }>;
-    penalty: number;
-  } | null;
-  // Sprint 12 / Task 93: fake-raw-HTTP block written by Engine 2 when a
-  // REQUEST_SMUGGLING report's raw HTTP request bytes are fabricated
-  // (placeholder header values, no CRLFs, or incoherent TE/CL conflict).
-  // The presence of this block (with isFake=true) is what triggers the
-  // FAKE_RAW_HTTP indicator and the smuggling-gold revocation surfaced in
-  // the panel and the printable export.
-  rawHttp?: {
-    requestsAnalyzed: number;
-    totalHeaders: number;
-    placeholderHeaders: number;
-    crlfPresent: boolean;
-    teClConflicts: number;
-    teClBroken: number;
-    isFake: boolean;
-    reason: string | null;
-    revokedGoldHits: Array<{ id: string; points: number }>;
-    penalty: number;
-    // Sprint 13B-3: response-side plausibility evaluation. Present
-    // (with isFake possibly false) when the family declares response-
-    // class gold signals (INJECTION, WEB_CLIENT). Null otherwise.
-    response?: {
-      responsesAnalyzed: number;
-      responsesFlagged: number;
-      totalHeaders: number;
-      responsesMissingDate: number;
-      responsesMissingServer: number;
-      responsesWithSuspiciousJsonBody: number;
-      responsesMissingIncidentals: number;
-      isFake: boolean;
-      reason: string | null;
-    } | null;
-  } | null;
-  rawAvriScore?: number;
-  legacyScore?: number;
-  blendedScore?: number;
-}
+//
+// Task 273: the persisted `signalBreakdown.avri` shape used to be
+// re-declared here as `AvriEngine2Breakdown` (with crashTrace, rawHttp +
+// nested response, and the score components added in earlier sprints);
+// it now lives in `@workspace/avri-rubric` as `AvriEngine2Block` (already
+// imported above) so the engine, this panel, and the printable triage
+// report can't drift.
 
 // Task 272: token+label come from `@workspace/avri-rubric`
 // (`AVRI_OVERRIDE_LABELS`) so the panel and the markdown export agree on
@@ -667,7 +612,7 @@ function AvriFamilySection({
   cachedFamily?: string | null;
 }) {
   const e2 = engines.find((e) => /Technical Substance/i.test(e.engine));
-  const e2Avri = (e2?.signalBreakdown?.avri ?? null) as AvriEngine2Breakdown | null;
+  const e2Avri = (e2?.signalBreakdown?.avri ?? null) as AvriEngine2Block | null;
 
   // Nothing to show if AVRI didn't run *and* we don't have a cached family on
   // the row. Keep the cached-family-only branch lightweight rather than going

@@ -23,6 +23,7 @@ import {
   type RawHttpResponseEvaluation,
 } from "./raw-http";
 import { getHandwavyPhrases } from "./handwavy-phrases";
+import type { AvriEngine2Block } from "@workspace/avri-rubric";
 
 const ABSENCE_PENALTY_CAP = 12;
 /** Out-of-cap penalty applied to crash-/race-trace-bearing reports whose
@@ -134,6 +135,12 @@ export function runEngine2Avri(
     // leaving every matched-phrase entry visible in `absencePenaltiesApplied`.
     const haircut = Math.min(HANDWAVY_HAIRCUT_CAP, haircutRaw);
     const adjusted = clamp(legacy.score - haircut);
+    // Task 273: type via the shared @workspace/avri-rubric `AvriEngine2Block`
+    // shape so the engine, the diagnostics-panel reader, and the printable
+    // triage report all agree on the persisted JSON contract. `satisfies`
+    // (rather than a cast) lets TypeScript still narrow individual fields
+    // for downstream readers in this file while catching missing/typo'd
+    // fields at compile time.
     const flatAvriBreakdown = {
       family: family.id,
       familyName: family.displayName,
@@ -156,7 +163,7 @@ export function runEngine2Avri(
       rawAvriScore: adjusted,
       legacyScore: legacy.score,
       blendedScore: adjusted,
-    };
+    } satisfies AvriEngine2Block;
     return {
       engine: {
         ...legacy,
@@ -543,6 +550,93 @@ export function runEngine2Avri(
     .filter((g) => !goldHits.some((h) => h.id === g.id))
     .map((g) => ({ id: g.id, description: g.description, points: g.points }));
 
+  // Task 273: type the persisted AVRI block via the shared
+  // `AvriEngine2Block` shape from `@workspace/avri-rubric`. The diagnostics
+  // panel and the printable triage report both read this same shape, so
+  // pinning it here means a future field rename or add lands as a compile
+  // error in all three places at once instead of silent drift. `satisfies`
+  // (rather than a cast) keeps the literal's narrowed types so downstream
+  // logic in this file still type-checks against the precise values.
+  const avriBlock = {
+    family: family.id,
+    familyName: family.displayName,
+    baseScore: Math.round(baseScore),
+    goldHitCount: goldHits.length,
+    goldTotalCount: family.goldSignals.length,
+    goldHits: goldHits.map((g) => ({ id: g.id, description: g.description, points: g.points })),
+    goldMisses,
+    absencePenalty: -totalAbsencePenalty,
+    absencePenalties: absencePenaltiesApplied.map((a) => ({ id: a.id, description: a.description, points: a.points })),
+    contradictions: contradictionsFound,
+    contradictionPenalty: -contradictionPenalty,
+    crashTrace: crashTrace
+      ? {
+          framesAnalyzed: crashTrace.framesAnalyzed,
+          goodFrames: crashTrace.goodFrames,
+          placeholderFrames: crashTrace.placeholderFrames,
+          isStripped: crashTrace.isStripped,
+          reason: crashTrace.reason,
+          revokedGoldHits: revokedTraceHits.map((r) => ({ id: r.id, points: r.points })),
+          penalty: -strippedTracePenalty,
+          // Sprint 13B-2: list of structural-fabrication markers that
+          // fired against this trace (each with id + description), so the
+          // diagnostics panel can render a "Structural fabrication" sub
+          // -section without re-running detectors.
+          structuralMarkers: crashTrace.structuralMarkers.map((m) => ({
+            id: m.id,
+            description: m.description,
+          })),
+          hasStructuralFabrication: crashTrace.hasStructuralFabrication,
+          structuralFabricationPenalty: -structuralFabPenalty,
+        }
+      : null,
+    // Sprint 13B-3: top-level `rawHttp` is the merged view that the
+    // diagnostics panel and printable triage report read. When the
+    // response side fires (with no request-side rawHttp evaluation,
+    // e.g. WEB_CLIENT/INJECTION outside the request-side gold-signal
+    // map), we synthesize zeroed request fields so the existing UI
+    // contract still holds. `isFake`/`reason` are the OR-merged
+    // overall view; per-side details live in `response`.
+    rawHttp:
+      rawHttp || rawHttpResponse
+        ? {
+            requestsAnalyzed: rawHttp?.requestsAnalyzed ?? 0,
+            totalHeaders: rawHttp?.totalHeaders ?? 0,
+            placeholderHeaders: rawHttp?.placeholderHeaders ?? 0,
+            crlfPresent: rawHttp?.crlfPresent ?? false,
+            teClConflicts: rawHttp?.teClConflicts ?? 0,
+            teClBroken: rawHttp?.teClBroken ?? 0,
+            isFake: anyRawHttpFake,
+            reason:
+              rawHttp?.isFake && rawHttpResponse?.isFake
+                ? `${rawHttp.reason ?? "Fabricated raw HTTP request"}; ${rawHttpResponse.reason ?? "Fabricated raw HTTP response"}`
+                : rawHttp?.isFake
+                  ? rawHttp.reason
+                  : rawHttpResponse?.isFake
+                    ? rawHttpResponse.reason
+                    : (rawHttp?.reason ?? null),
+            revokedGoldHits: revokedRawHttpHits.map((r) => ({ id: r.id, points: r.points })),
+            penalty: -fakeRawHttpPenalty,
+            response: rawHttpResponse
+              ? {
+                  responsesAnalyzed: rawHttpResponse.responsesAnalyzed,
+                  responsesFlagged: rawHttpResponse.responsesFlagged,
+                  totalHeaders: rawHttpResponse.totalHeaders,
+                  responsesMissingDate: rawHttpResponse.responsesMissingDate,
+                  responsesMissingServer: rawHttpResponse.responsesMissingServer,
+                  responsesWithSuspiciousJsonBody: rawHttpResponse.responsesWithSuspiciousJsonBody,
+                  responsesMissingIncidentals: rawHttpResponse.responsesMissingIncidentals,
+                  isFake: rawHttpResponse.isFake,
+                  reason: rawHttpResponse.reason,
+                }
+              : null,
+          }
+        : null,
+    rawAvriScore: Math.round(rawAvriScore),
+    legacyScore: legacy.score,
+    blendedScore,
+  } satisfies AvriEngine2Block;
+
   // Carry the legacy signalBreakdown forward so the v3.6.0 triage matrix
   // helpers (pickEngine2Fields → strongCount via signalBreakdown.evidenceStrength)
   // keep working unchanged. We add an `avri` block alongside.
@@ -554,85 +648,7 @@ export function runEngine2Avri(
     triggeredIndicators: indicators,
     signalBreakdown: {
       ...legacy.signalBreakdown,
-      avri: {
-        family: family.id,
-        familyName: family.displayName,
-        baseScore: Math.round(baseScore),
-        goldHitCount: goldHits.length,
-        goldTotalCount: family.goldSignals.length,
-        goldHits: goldHits.map((g) => ({ id: g.id, description: g.description, points: g.points })),
-        goldMisses,
-        absencePenalty: -totalAbsencePenalty,
-        absencePenalties: absencePenaltiesApplied.map((a) => ({ id: a.id, description: a.description, points: a.points })),
-        contradictions: contradictionsFound,
-        contradictionPenalty: -contradictionPenalty,
-        crashTrace: crashTrace
-          ? {
-              framesAnalyzed: crashTrace.framesAnalyzed,
-              goodFrames: crashTrace.goodFrames,
-              placeholderFrames: crashTrace.placeholderFrames,
-              isStripped: crashTrace.isStripped,
-              reason: crashTrace.reason,
-              revokedGoldHits: revokedTraceHits.map((r) => ({ id: r.id, points: r.points })),
-              penalty: -strippedTracePenalty,
-              // Sprint 13B-2: list of structural-fabrication markers that
-              // fired against this trace (each with id + description), so the
-              // diagnostics panel can render a "Structural fabrication" sub
-              // -section without re-running detectors.
-              structuralMarkers: crashTrace.structuralMarkers.map((m) => ({
-                id: m.id,
-                description: m.description,
-              })),
-              hasStructuralFabrication: crashTrace.hasStructuralFabrication,
-              structuralFabricationPenalty: -structuralFabPenalty,
-            }
-          : null,
-        // Sprint 13B-3: top-level `rawHttp` is the merged view that the
-        // diagnostics panel and printable triage report read. When the
-        // response side fires (with no request-side rawHttp evaluation,
-        // e.g. WEB_CLIENT/INJECTION outside the request-side gold-signal
-        // map), we synthesize zeroed request fields so the existing UI
-        // contract still holds. `isFake`/`reason` are the OR-merged
-        // overall view; per-side details live in `response`.
-        rawHttp:
-          rawHttp || rawHttpResponse
-            ? {
-                requestsAnalyzed: rawHttp?.requestsAnalyzed ?? 0,
-                totalHeaders: rawHttp?.totalHeaders ?? 0,
-                placeholderHeaders: rawHttp?.placeholderHeaders ?? 0,
-                crlfPresent: rawHttp?.crlfPresent ?? false,
-                teClConflicts: rawHttp?.teClConflicts ?? 0,
-                teClBroken: rawHttp?.teClBroken ?? 0,
-                isFake: anyRawHttpFake,
-                reason:
-                  rawHttp?.isFake && rawHttpResponse?.isFake
-                    ? `${rawHttp.reason ?? "Fabricated raw HTTP request"}; ${rawHttpResponse.reason ?? "Fabricated raw HTTP response"}`
-                    : rawHttp?.isFake
-                      ? rawHttp.reason
-                      : rawHttpResponse?.isFake
-                        ? rawHttpResponse.reason
-                        : (rawHttp?.reason ?? null),
-                revokedGoldHits: revokedRawHttpHits.map((r) => ({ id: r.id, points: r.points })),
-                penalty: -fakeRawHttpPenalty,
-                response: rawHttpResponse
-                  ? {
-                      responsesAnalyzed: rawHttpResponse.responsesAnalyzed,
-                      responsesFlagged: rawHttpResponse.responsesFlagged,
-                      totalHeaders: rawHttpResponse.totalHeaders,
-                      responsesMissingDate: rawHttpResponse.responsesMissingDate,
-                      responsesMissingServer: rawHttpResponse.responsesMissingServer,
-                      responsesWithSuspiciousJsonBody: rawHttpResponse.responsesWithSuspiciousJsonBody,
-                      responsesMissingIncidentals: rawHttpResponse.responsesMissingIncidentals,
-                      isFake: rawHttpResponse.isFake,
-                      reason: rawHttpResponse.reason,
-                    }
-                  : null,
-              }
-            : null,
-        rawAvriScore: Math.round(rawAvriScore),
-        legacyScore: legacy.score,
-        blendedScore,
-      },
+      avri: avriBlock,
     },
     note: `AVRI ${family.displayName}: ${goldHits.length} gold signal(s) (+${goldTotal}), -${totalAbsencePenalty} absence, -${contradictionPenalty} contradiction${strippedTracePenalty ? `, -${strippedTracePenalty} stripped-trace` : ""}${structuralFabPenalty ? `, -${structuralFabPenalty} structural-fabrication` : ""}${fakeRawHttpPenalty ? `, -${fakeRawHttpPenalty} fake-raw-http` : ""}. Blended with legacy substance: ${blendedScore}.`,
   };

@@ -2159,72 +2159,19 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   // absence penalties, contradictions, stripped-trace / fake-raw-HTTP) so we
   // can render the same "AVRI Family Rubric" section the diagnostics export
   // does. Task 64: keep offline triage exports in sync with the panel/MD.
+  // Task 273: the AVRI composite + Engine 2 sub-block shapes used to be
+  // re-declared inline here as `TriageAvriComposite` / `TriageAvriEngine2`;
+  // they now come from `@workspace/avri-rubric`
+  // (`AvriRubricCompositeBlock` / `AvriRubricEngine2Block`, already
+  // imported at the top of the file) so the engine source-of-truth, the
+  // diagnostics-panel reader, and this triage export can't drift.
   type TriageVulnrapBlob = {
     reconstructed?: boolean;
-    avri?: TriageAvriComposite;
+    avri?: AvriRubricCompositeBlock;
     engines?: Array<{
       engine: string;
-      signalBreakdown?: Record<string, unknown> & { avri?: TriageAvriEngine2 };
+      signalBreakdown?: Record<string, unknown> & { avri?: AvriRubricEngine2Block };
     }>;
-  };
-  type TriageAvriComposite = {
-    family?: string;
-    familyName?: string;
-    classification?: { confidence?: string; reason?: string };
-    goldHitCount?: number;
-    velocityPenalty?: number;
-    templatePenalty?: number;
-    rawCompositeBeforeBehavioralPenalties?: number;
-  };
-  type TriageHandwavyCategory = "absence" | "hedging" | "buzzword";
-  type TriageAvriEngine2 = {
-    family?: string;
-    familyName?: string;
-    goldHitCount?: number;
-    goldTotalCount?: number;
-    goldHits?: Array<{ id: string; description: string; points: number }>;
-    goldMisses?: Array<{ id: string; description: string; points: number }>;
-    absencePenalty?: number;
-    absencePenalties?: Array<{
-      id: string;
-      description: string;
-      points: number;
-      flatHandwavyCategory?: TriageHandwavyCategory;
-    }>;
-    contradictions?: string[];
-    crashTrace?: {
-      framesAnalyzed: number;
-      goodFrames: number;
-      placeholderFrames: number;
-      isStripped: boolean;
-      reason: string | null;
-      revokedGoldHits: Array<{ id: string; points: number }>;
-      penalty: number;
-    } | null;
-    rawHttp?: {
-      requestsAnalyzed: number;
-      totalHeaders: number;
-      placeholderHeaders: number;
-      crlfPresent: boolean;
-      teClConflicts: number;
-      teClBroken: number;
-      isFake: boolean;
-      reason: string | null;
-      revokedGoldHits: Array<{ id: string; points: number }>;
-      penalty: number;
-      // Sprint 13B-3: response-side plausibility evaluation.
-      response?: {
-        responsesAnalyzed: number;
-        responsesFlagged: number;
-        totalHeaders: number;
-        responsesMissingDate: number;
-        responsesMissingServer: number;
-        responsesWithSuspiciousJsonBody: number;
-        responsesMissingIncidentals: number;
-        isFake: boolean;
-        reason: string | null;
-      } | null;
-    } | null;
   };
   const vulnrapBlob = (report.vulnrapEngineResults ?? {}) as TriageVulnrapBlob;
   const vulnrapReconstructed =
