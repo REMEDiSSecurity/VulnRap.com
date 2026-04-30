@@ -269,4 +269,84 @@ test.describe("FLAT hand-wavy phrase panel — 'Preview reinstate' batch button"
       await apiCtx.dispose();
     }
   });
+
+  // Task #248 — when a teammate per-phrase reinstates one of the inner
+  // phrases between the dry-run preview and the reviewer's confirm click,
+  // the panel keeps showing the original "would-reinstate" outcome for
+  // that row. The new drift indicator should detect the mismatch (the
+  // current state would now classify the row as "already-reinstated")
+  // and surface a "Re-preview to refresh" notice, mirroring the
+  // bulk-remove preview's "Selection has changed since this preview was
+  // generated" warning. Confirm stays enabled — the server's reinstate
+  // call already ignores already-reinstated / already-active rows
+  // safely (Task #159).
+  test("a per-phrase reinstate landing between preview and confirm surfaces a 'stale preview' notice on the panel", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3);
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p);
+      const batch = await batchRemove(apiCtx, phrases);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      const group = await openHistoryAndFindBatch(page, removedAt);
+      await group.getByTestId("handwavy-reinstate-batch-preview").click();
+      const panel = group.getByTestId("handwavy-reinstate-batch-preview-panel");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Every row starts as "would-reinstate" and the stale notice is
+      // not rendered yet — the snapshot still matches reality.
+      const wouldRows = panel.locator(
+        '[data-testid="handwavy-reinstate-batch-preview-row"][data-outcome="would-reinstate"]',
+      );
+      await expect(wouldRows).toHaveCount(phrases.length);
+      await expect(
+        panel.getByTestId("handwavy-reinstate-batch-preview-stale"),
+      ).toHaveCount(0);
+
+      // Out of band: a teammate per-phrase reinstates the first inner
+      // phrase. The preview panel's snapshot now disagrees with reality
+      // (it still shows that row as "would-reinstate" but the real
+      // state is "already-reinstated").
+      const reinstateRes = await apiCtx.post(
+        "/api/feedback/calibration/handwavy-phrases/reinstate",
+        {
+          data: {
+            phrase: phrases[0],
+            removedAt,
+            reviewer: "e2e-task248-drift",
+          },
+        },
+      );
+      expect(
+        reinstateRes.ok(),
+        `per-phrase reinstate failed: ${reinstateRes.status()} ${await reinstateRes.text()}`,
+      ).toBeTruthy();
+
+      // While the preview panel is open Task #248 polls
+      // /handwavy-phrases every 5s so the page picks up out-of-band
+      // mutations like this per-phrase reinstate without the reviewer
+      // having to alt-tab. After the next poll the inner row's
+      // `reinstated` flag is true and the panel's captured
+      // "would-reinstate" snapshot for that row no longer matches
+      // reality, so the stale notice renders.
+      const stale = panel.getByTestId("handwavy-reinstate-batch-preview-stale");
+      await expect(stale).toBeVisible({ timeout: 20_000 });
+      await expect(stale).toContainText(/Re-preview to refresh/);
+
+      // The confirm button stays enabled — the server-side mutating
+      // call already de-dupes already-reinstated rows safely, so the
+      // notice is a heads-up rather than a hard block. The original
+      // per-phrase outcomes are still rendered exactly as captured.
+      await expect(
+        panel.getByTestId("handwavy-reinstate-batch-preview-confirm"),
+      ).toBeEnabled();
+      await expect(wouldRows).toHaveCount(phrases.length);
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
 });

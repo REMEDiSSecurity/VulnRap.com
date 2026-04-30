@@ -2294,7 +2294,21 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
   } | null>(null);
 
   const { data, isLoading } = useGetHandwavyPhrases({
-    query: { queryKey: getGetHandwavyPhrasesQueryKey() },
+    query: {
+      queryKey: getGetHandwavyPhrasesQueryKey(),
+      // Task #248 — while the per-batch reinstate preview panel is open
+      // we keep the active-list + history snapshot fresh so the drift
+      // indicator can detect a teammate's per-phrase reinstate / re-add
+      // landing between preview and confirm. Without this the query
+      // never refetches on its own (no refetchInterval, default
+      // staleTime), so the page state stays equal to what the preview
+      // captured and `previewDrifted` would be a no-op until the
+      // reviewer happens to alt-tab back into the page (the
+      // refetchOnWindowFocus default fires then). Disabled when the
+      // panel is closed so we don't pay for polling on the common
+      // case where no preview is open.
+      refetchInterval: reinstatePreview ? 5000 : false,
+    },
   });
 
   // Task #175 — fetch the slim "recent batch removals" summary for the
@@ -6429,6 +6443,52 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                         const noun =
                           wouldReinstateCount === 1 ? "phrase" : "phrases";
                         const confirming = busy === batchKey;
+                        // Task #248 — drift detection mirrors the bulk-remove
+                        // preview's "Selection has changed since this preview
+                        // was generated" warning. The dry-run snapshot was
+                        // captured at click time; if a teammate per-phrase
+                        // reinstates one of the inner phrases, re-removes a
+                        // previously reinstated row, or independently re-adds
+                        // one of these phrases to the active list between
+                        // the preview and the reviewer's confirm click, the
+                        // panel's per-phrase outcomes silently go stale. We
+                        // recompute the expected outcome for each preview
+                        // row off the current `group.rows` (reinstated flags
+                        // from history) + the current active list and flag
+                        // any mismatch so the reviewer knows to re-preview
+                        // before pressing confirm. The mutating server call
+                        // already ignores already-active / already-reinstated
+                        // rows safely (Task #159), so this is a heads-up,
+                        // not a hard block — confirm stays enabled.
+                        const expectedOutcomeFor = (
+                          phrase: string,
+                        ): "would-reinstate" | "already-reinstated" | "already-active" => {
+                          const innerRow = group.rows.find(
+                            (r) => r.phrase === phrase,
+                          );
+                          if (innerRow?.reinstated) return "already-reinstated";
+                          if (
+                            phrases.some(
+                              (m: { phrase: string }) => m.phrase === phrase,
+                            )
+                          ) {
+                            return "already-active";
+                          }
+                          return "would-reinstate";
+                        };
+                        const previewOutcomeFor = (
+                          r: HandwavyPhraseReinstateBatchEntryResult,
+                        ): "would-reinstate" | "already-reinstated" | "already-active" | "unknown" => {
+                          if (r.reinstated) return "would-reinstate";
+                          if (r.reason === "already-reinstated") return "already-reinstated";
+                          if (r.reason === "already-active") return "already-active";
+                          return "unknown";
+                        };
+                        const previewDrifted = results.some((r) => {
+                          const previewOutcome = previewOutcomeFor(r);
+                          if (previewOutcome === "unknown") return false;
+                          return expectedOutcomeFor(r.phrase) !== previewOutcome;
+                        });
                         return (
                           <div
                             className="px-3 py-2 border-l-2 border-sky-500/40 bg-sky-500/5 space-y-2"
@@ -6529,6 +6589,15 @@ function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean 
                                 );
                               })}
                             </ul>
+                            {previewDrifted && (
+                              <div
+                                className="text-[11px] text-amber-200 italic flex items-start gap-1"
+                                data-testid="handwavy-reinstate-batch-preview-stale"
+                              >
+                                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                                Phrase state has changed since this preview was generated. Re-preview to refresh — confirming will still skip any phrase the server now sees as already active or already reinstated.
+                              </div>
+                            )}
                             <div className="flex items-center justify-end gap-2">
                               <Button
                                 variant="ghost"
