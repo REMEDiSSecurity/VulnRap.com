@@ -13,6 +13,10 @@ import {
   FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
   sortDatasetSamplesByDistanceFromMean,
   type DatasetSampleRow,
+  isValidDriftLookback,
+  parseDriftLookback,
+  readStoredDriftLookback,
+  AVRI_DRIFT_LOOKBACK_STORAGE_KEY,
 } from "./feedback-analytics";
 import type {
   HandwavyEditEntry,
@@ -648,5 +652,103 @@ describe("sortDatasetSamplesByDistanceFromMean (Task #255 — surface cohort out
   it("handles an empty input without throwing", () => {
     expect(sortDatasetSamplesByDistanceFromMean([], 75)).toEqual([]);
     expect(sortDatasetSamplesByDistanceFromMean([], null)).toEqual([]);
+  });
+});
+
+describe("AVRI drift lookback persistence helpers (Task #270 — lock the parser/validator contract)", () => {
+  describe("isValidDriftLookback", () => {
+    it("accepts each of the four supported numeric options", () => {
+      expect(isValidDriftLookback(4)).toBe(true);
+      expect(isValidDriftLookback(8)).toBe(true);
+      expect(isValidDriftLookback(13)).toBe(true);
+      expect(isValidDriftLookback(26)).toBe(true);
+    });
+
+    it("rejects numbers that aren't on the option list, including neighbouring values", () => {
+      expect(isValidDriftLookback(0)).toBe(false);
+      expect(isValidDriftLookback(1)).toBe(false);
+      expect(isValidDriftLookback(7)).toBe(false);
+      expect(isValidDriftLookback(9)).toBe(false);
+      expect(isValidDriftLookback(12)).toBe(false);
+      expect(isValidDriftLookback(99)).toBe(false);
+      expect(isValidDriftLookback(-8)).toBe(false);
+    });
+
+    it("rejects non-integer numerics that happen to round to a valid option", () => {
+      // 8.5 is not an allowed lookback even though Math.round(8.5) === 9 (and
+      // 8 is valid). The validator must use exact equality, not rounding.
+      expect(isValidDriftLookback(8.5)).toBe(false);
+      expect(isValidDriftLookback(7.999)).toBe(false);
+    });
+
+    it("rejects NaN so a Number(...) parse failure can't sneak through", () => {
+      expect(isValidDriftLookback(Number.NaN)).toBe(false);
+    });
+  });
+
+  describe("parseDriftLookback", () => {
+    it("accepts the supported options expressed as decimal strings", () => {
+      expect(parseDriftLookback("4")).toBe(4);
+      expect(parseDriftLookback("8")).toBe(8);
+      expect(parseDriftLookback("13")).toBe(13);
+      expect(parseDriftLookback("26")).toBe(26);
+    });
+
+    it("treats null, undefined and the empty string as 'no value' (returns null)", () => {
+      // The empty-string case matters: useSearchParams returns "" for
+      // `?driftWeeks=` and we must NOT coerce that into 0.
+      expect(parseDriftLookback(null)).toBeNull();
+      expect(parseDriftLookback(undefined)).toBeNull();
+      expect(parseDriftLookback("")).toBeNull();
+    });
+
+    it("rejects malformed and out-of-range strings so the panel falls back to the default", () => {
+      expect(parseDriftLookback("abc")).toBeNull();
+      expect(parseDriftLookback("0")).toBeNull();
+      expect(parseDriftLookback("99")).toBeNull();
+      expect(parseDriftLookback("8.5")).toBeNull();
+      expect(parseDriftLookback("-8")).toBeNull();
+      expect(parseDriftLookback(" ")).toBeNull();
+      // " 8 " becomes 8 via Number(...) so it currently parses; lock that
+      // behaviour explicitly so any future tightening is a deliberate choice.
+      expect(parseDriftLookback(" 8 ")).toBe(8);
+    });
+  });
+
+  describe("readStoredDriftLookback", () => {
+    // happy-dom gives us a real window.localStorage; make sure each test
+    // starts from a clean slate so order doesn't matter.
+    function clearStorage() {
+      window.localStorage.removeItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY);
+    }
+
+    it("returns null when nothing has been stored yet", () => {
+      clearStorage();
+      expect(readStoredDriftLookback()).toBeNull();
+    });
+
+    it("returns the stored value when it is one of the supported options", () => {
+      clearStorage();
+      window.localStorage.setItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY, "26");
+      expect(readStoredDriftLookback()).toBe(26);
+    });
+
+    it("returns null for a stale/garbage stored value so the panel can fall back to the default", () => {
+      // Simulates a build that previously wrote a value the current code no
+      // longer accepts (e.g. someone hand-edited storage, or an old version
+      // stored "abc"). The reader must go through parseDriftLookback so a
+      // stale entry can't crash or skew the panel.
+      clearStorage();
+      window.localStorage.setItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY, "abc");
+      expect(readStoredDriftLookback()).toBeNull();
+
+      window.localStorage.setItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY, "99");
+      expect(readStoredDriftLookback()).toBeNull();
+
+      window.localStorage.setItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY, "");
+      expect(readStoredDriftLookback()).toBeNull();
+
+      clearStorage();
+    });
   });
 });

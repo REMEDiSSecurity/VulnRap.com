@@ -9881,24 +9881,24 @@ function DatasetCohortDriftSection() {
   );
 }
 
-const AVRI_DRIFT_LOOKBACK_OPTIONS = [4, 8, 13, 26] as const;
-type AvriDriftLookbackWeeks = (typeof AVRI_DRIFT_LOOKBACK_OPTIONS)[number];
+export const AVRI_DRIFT_LOOKBACK_OPTIONS = [4, 8, 13, 26] as const;
+export type AvriDriftLookbackWeeks = (typeof AVRI_DRIFT_LOOKBACK_OPTIONS)[number];
 const AVRI_DRIFT_DEFAULT_WEEKS: AvriDriftLookbackWeeks = 8;
 const AVRI_DRIFT_LOOKBACK_QUERY_KEY = "driftWeeks";
-const AVRI_DRIFT_LOOKBACK_STORAGE_KEY = "vulnrap.avri.driftWeeks";
+export const AVRI_DRIFT_LOOKBACK_STORAGE_KEY = "vulnrap.avri.driftWeeks";
 
-function isValidDriftLookback(value: number): value is AvriDriftLookbackWeeks {
+export function isValidDriftLookback(value: number): value is AvriDriftLookbackWeeks {
   return (AVRI_DRIFT_LOOKBACK_OPTIONS as readonly number[]).includes(value);
 }
 
-function parseDriftLookback(raw: string | null | undefined): AvriDriftLookbackWeeks | null {
+export function parseDriftLookback(raw: string | null | undefined): AvriDriftLookbackWeeks | null {
   if (raw == null || raw === "") return null;
   const n = Number(raw);
   if (!Number.isFinite(n)) return null;
   return isValidDriftLookback(n) ? n : null;
 }
 
-function readStoredDriftLookback(): AvriDriftLookbackWeeks | null {
+export function readStoredDriftLookback(): AvriDriftLookbackWeeks | null {
   if (typeof window === "undefined") return null;
   try {
     return parseDriftLookback(window.localStorage.getItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY));
