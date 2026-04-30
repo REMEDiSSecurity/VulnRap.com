@@ -1194,7 +1194,7 @@ function formatAuditTimestamp(iso: string | undefined | null): string | null {
 // doesn't render a confusing same-day range. Returns null when the scan
 // produced no usable timestamps (curated block, empty production scan, or
 // rows without createdAt) so the caller can omit the line entirely.
-function formatProductionScanRange(
+export function formatProductionScanRange(
   oldestIso: string | null | undefined,
   newestIso: string | null | undefined,
 ): string | null {
