@@ -2021,6 +2021,16 @@ function normalizeSampleMatchTier(t: string): string {
   return t;
 }
 
+// Task #346 — server caps `sampleMatches` at 12 entries per tier, so a phrase
+// that hits all four tiers can render up to 48 IDs per corpus (96 total)
+// inline in the Trash preview, which pushes the acknowledgment checkbox and
+// the Remove/Back-out buttons below the fold. We default each tier to the
+// first 5 IDs and let reviewers expand individual tiers via a per-tier
+// "Show all N" toggle so the panel stays compact for typical multi-tier
+// dry-runs while still preserving the "see what would be un-flagged in
+// place" affordance for reviewers who need it.
+const HANDWAVY_REMOVE_PREVIEW_MATCHES_DEFAULT_VISIBLE = 5;
+
 function HandwavyRemovePreviewMatches({
   kind,
   title,
@@ -2035,6 +2045,21 @@ function HandwavyRemovePreviewMatches({
   // same base path or they'd 404 in deployed builds where the artifact
   // is served from a sub-path (e.g. `/vulnrap`).
   const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+  // Per-tier expansion state — keyed by the normalized tier so each tier
+  // section in this corpus block can be drilled into independently. Reviewers
+  // often only care about one tier (e.g. T1 false-positives) and shouldn't
+  // have to expand the whole list to see them.
+  const [expandedTiers, setExpandedTiers] = useState<Record<string, boolean>>(
+    {},
+  );
+  // If the parent swaps a different dry-run's `matches` array into this same
+  // component instance (e.g. reviewer triggers a fresh preview without the
+  // panel unmounting), reset expansion so the new preview always starts in
+  // the compact 5-per-tier window — the whole point of Task #346 is that the
+  // ack checkbox + Remove button stay above the fold *by default*.
+  useEffect(() => {
+    setExpandedTiers({});
+  }, [matches]);
   const grouped = new Map<string, Array<{ id: string }>>();
   for (const m of matches) {
     const key = normalizeSampleMatchTier(m.tier);
@@ -2066,20 +2091,32 @@ function HandwavyRemovePreviewMatches({
               : meta?.tone === "green"
                 ? "border-emerald-500/40 text-emerald-200"
                 : "border-foreground/30 text-muted-foreground";
+        const isExpanded = expandedTiers[tierKey] === true;
+        const overflow =
+          items.length > HANDWAVY_REMOVE_PREVIEW_MATCHES_DEFAULT_VISIBLE;
+        const visibleItems =
+          overflow && !isExpanded
+            ? items.slice(0, HANDWAVY_REMOVE_PREVIEW_MATCHES_DEFAULT_VISIBLE)
+            : items;
+        const hiddenCount = items.length - visibleItems.length;
+        const tierLabel = meta?.label ?? tierKey;
         return (
           <div
             key={tierKey}
             className="space-y-1"
             data-testid={`handwavy-remove-preview-matches-${kind}-tier-${tierKey}`}
+            data-handwavy-remove-preview-matches-expanded={
+              overflow ? (isExpanded ? "true" : "false") : "n/a"
+            }
           >
             <Badge
               variant="outline"
               className={cn("text-[9px] uppercase tracking-wide", toneClass)}
             >
-              {meta?.label ?? tierKey} — {items.length}
+              {tierLabel} — {items.length}
             </Badge>
             <ul className="ml-3 list-disc space-y-0.5 font-mono text-muted-foreground break-all">
-              {items.map((m) => (
+              {visibleItems.map((m) => (
                 <li key={m.id}>
                   {kind === "production" ? (
                     <a
@@ -2101,6 +2138,36 @@ function HandwavyRemovePreviewMatches({
                 </li>
               ))}
             </ul>
+            {overflow && (
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedTiers((prev) => ({
+                    ...prev,
+                    [tierKey]: !isExpanded,
+                  }))
+                }
+                aria-expanded={isExpanded}
+                aria-label={
+                  isExpanded
+                    ? `Show fewer ${tierLabel} matches`
+                    : `Show all ${items.length} ${tierLabel} matches`
+                }
+                className="ml-3 inline-flex items-center gap-0.5 rounded-sm text-[10px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/70"
+                data-testid={`handwavy-remove-preview-matches-${kind}-tier-${tierKey}-toggle`}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
+                <span>
+                  {isExpanded
+                    ? "Show fewer"
+                    : `Show all ${items.length} (${hiddenCount} more)`}
+                </span>
+              </button>
+            )}
           </div>
         );
       })}

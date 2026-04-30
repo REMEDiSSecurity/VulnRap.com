@@ -572,6 +572,256 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
     }
   });
 
+  // Task #346 — server caps `sampleMatches` at 12 entries per tier, so a phrase
+  // that hits all four tiers can render up to 48 IDs per corpus inline in the
+  // Trash preview, pushing the acknowledgment checkbox and Remove/Back-out
+  // buttons below the fold. We default each tier to the first 5 IDs and
+  // require the reviewer to opt into the long list per-tier via a "Show all
+  // N" toggle so the panel stays compact for large multi-tier dry-runs.
+  test("inline sample-match list caps each tier at 5 IDs with a per-tier 'Show all N' toggle", async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const phrase = uniquePhrase("show-all-toggle");
+
+    // Fill T3_SLOP with the server's hard cap (12 entries) on both corpora —
+    // far above the 5-item default — so the toggle MUST be required for the
+    // 6th+ ID to be visible. T1 stays at 1 entry to also assert the toggle
+    // is NOT rendered for tiers under the threshold.
+    const curatedT3Ids = Array.from(
+      { length: 12 },
+      (_, i) => `fixture-T3-${String(i + 1).padStart(2, "0")}`,
+    );
+    const productionT3Ids = Array.from(
+      { length: 12 },
+      (_, i) => String(7000 + i),
+    );
+
+    try {
+      await addPhrase(apiCtx, phrase);
+
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrase?: string; phrases?: string[] }
+            | undefined;
+          if (body?.dryRun && body.phrase === phrase) {
+            await route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify({
+                dryRun: true,
+                batch: false,
+                wouldRemove: 1,
+                notFound: 0,
+                duplicateInBatch: 0,
+                phrase,
+                raw: phrase,
+                removed: true,
+                reason: null,
+                total: 99,
+                projectedTotal: 98,
+                results: [{ raw: phrase, phrase, removed: true }],
+                dryRunImpact: {
+                  corpus: {
+                    total: 13,
+                    validDetectionsLost: 12,
+                    falsePositivesDropped: 1,
+                    byTier: {
+                      t1Legit: 1,
+                      t2Borderline: 0,
+                      t3Slop: 12,
+                      t4Hallucinated: 0,
+                    },
+                    sampleMatches: [
+                      { id: "fixture-T1-only", tier: "T1_LEGIT" },
+                      ...curatedT3Ids.map((id) => ({ id, tier: "T3_SLOP" })),
+                    ],
+                    warning:
+                      "12 legitimate detections would be lost from the curated benchmark",
+                    corpusSize: 47,
+                    oldestCreatedAt: null,
+                    newestCreatedAt: null,
+                  },
+                  production: {
+                    total: 12,
+                    validDetectionsLost: 12,
+                    falsePositivesDropped: 0,
+                    byTier: {
+                      t1Legit: 0,
+                      t2Borderline: 0,
+                      t3Slop: 12,
+                      t4Hallucinated: 0,
+                    },
+                    sampleMatches: productionT3Ids.map((id) => ({
+                      id,
+                      tier: "T3_SLOP",
+                    })),
+                    warning:
+                      "12 legitimate detections would be lost from the production archive",
+                    corpusSize: 200,
+                    oldestCreatedAt: "2026-04-01T00:00:00.000Z",
+                    newestCreatedAt: "2026-04-29T00:00:00.000Z",
+                  },
+                  productionError: null,
+                  productionLimit: 200,
+                },
+                phrases: [],
+              }),
+            });
+            return;
+          }
+          await route.fallback();
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const row = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      await expect(row).toHaveCount(1, { timeout: 15_000 });
+      await row.getByTestId("handwavy-remove").click();
+
+      const panel = page.getByTestId("handwavy-remove-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // The single T1 entry is under the 5-item threshold — no toggle should
+      // be rendered for that tier in either corpus.
+      const curatedT1 = panel.getByTestId(
+        "handwavy-remove-preview-matches-curated-tier-T1_LEGIT",
+      );
+      await expect(curatedT1).toBeVisible();
+      await expect(curatedT1).toContainText("fixture-T1-only");
+      await expect(
+        curatedT1.getByTestId(
+          "handwavy-remove-preview-matches-curated-tier-T1_LEGIT-toggle",
+        ),
+      ).toHaveCount(0);
+
+      // The 12-entry T3 tier on the curated side starts collapsed: only the
+      // first 5 IDs are visible, the 6th+ are hidden, and a "Show all 12"
+      // toggle is offered.
+      const curatedT3 = panel.getByTestId(
+        "handwavy-remove-preview-matches-curated-tier-T3_SLOP",
+      );
+      await expect(curatedT3).toBeVisible();
+      await expect(curatedT3).toHaveAttribute(
+        "data-handwavy-remove-preview-matches-expanded",
+        "false",
+      );
+      for (const id of curatedT3Ids.slice(0, 5)) {
+        await expect(
+          curatedT3.getByTestId(
+            `handwavy-remove-preview-matches-curated-id-${id}`,
+          ),
+        ).toBeVisible();
+      }
+      for (const id of curatedT3Ids.slice(5)) {
+        await expect(
+          curatedT3.getByTestId(
+            `handwavy-remove-preview-matches-curated-id-${id}`,
+          ),
+        ).toHaveCount(0);
+      }
+      const curatedT3Toggle = curatedT3.getByTestId(
+        "handwavy-remove-preview-matches-curated-tier-T3_SLOP-toggle",
+      );
+      await expect(curatedT3Toggle).toBeVisible();
+      await expect(curatedT3Toggle).toHaveText(/Show all 12 \(7 more\)/);
+      await expect(curatedT3Toggle).toHaveAttribute("aria-expanded", "false");
+
+      // Production T3 tier: same overflow story, independent of curated.
+      const productionT3 = panel.getByTestId(
+        "handwavy-remove-preview-matches-production-tier-T3_SLOP",
+      );
+      await expect(productionT3).toBeVisible();
+      await expect(productionT3).toHaveAttribute(
+        "data-handwavy-remove-preview-matches-expanded",
+        "false",
+      );
+      for (const id of productionT3Ids.slice(0, 5)) {
+        await expect(
+          productionT3.getByTestId(
+            `handwavy-remove-preview-matches-production-link-${id}`,
+          ),
+        ).toBeVisible();
+      }
+      for (const id of productionT3Ids.slice(5)) {
+        await expect(
+          productionT3.getByTestId(
+            `handwavy-remove-preview-matches-production-link-${id}`,
+          ),
+        ).toHaveCount(0);
+      }
+      const productionT3Toggle = productionT3.getByTestId(
+        "handwavy-remove-preview-matches-production-tier-T3_SLOP-toggle",
+      );
+      await expect(productionT3Toggle).toBeVisible();
+
+      // Acknowledgment checkbox stays in the DOM and is reachable — the
+      // collapsed-by-default behavior is what keeps it above the fold for
+      // typical multi-tier dry-runs.
+      await expect(
+        panel.getByTestId("handwavy-remove-preview-ack-label"),
+      ).toBeVisible();
+
+      // Expand only the curated T3 tier — the production T3 toggle's state
+      // must not change, proving the per-tier (per-corpus) independence.
+      await curatedT3Toggle.click();
+      await expect(curatedT3).toHaveAttribute(
+        "data-handwavy-remove-preview-matches-expanded",
+        "true",
+      );
+      await expect(curatedT3Toggle).toHaveAttribute("aria-expanded", "true");
+      await expect(curatedT3Toggle).toHaveText(/Show fewer/);
+      // All 12 curated IDs are now visible.
+      for (const id of curatedT3Ids) {
+        await expect(
+          curatedT3.getByTestId(
+            `handwavy-remove-preview-matches-curated-id-${id}`,
+          ),
+        ).toBeVisible();
+      }
+      // Production T3 stays collapsed — independent state.
+      await expect(productionT3).toHaveAttribute(
+        "data-handwavy-remove-preview-matches-expanded",
+        "false",
+      );
+      for (const id of productionT3Ids.slice(5)) {
+        await expect(
+          productionT3.getByTestId(
+            `handwavy-remove-preview-matches-production-link-${id}`,
+          ),
+        ).toHaveCount(0);
+      }
+
+      // Collapsing again returns to the 5-item window.
+      await curatedT3Toggle.click();
+      await expect(curatedT3).toHaveAttribute(
+        "data-handwavy-remove-preview-matches-expanded",
+        "false",
+      );
+      for (const id of curatedT3Ids.slice(5)) {
+        await expect(
+          curatedT3.getByTestId(
+            `handwavy-remove-preview-matches-curated-id-${id}`,
+          ),
+        ).toHaveCount(0);
+      }
+    } finally {
+      await cleanup(apiCtx, [phrase]);
+      await apiCtx.dispose();
+    }
+  });
+
   // Task #293 — Task #218 added a "Scanned N reports from <oldest> to
   // <newest>" line to the bulk hand-wavy phrase removal preview's
   // production block (rendered via `BulkRemovalImpactBlock` with the
