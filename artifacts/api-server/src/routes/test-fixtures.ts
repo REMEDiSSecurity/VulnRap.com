@@ -2946,7 +2946,16 @@ router.get("/test/run", async (req, res) => {
   // Task #209 — strip the per-fixture `_audit` blob before serializing
   // results back to the dashboard. The aggregated counters live in
   // `auditTelemetry` below; per-fixture audit data is internal.
-  const sanitizedResults = results.map(({ _audit, ...rest }) => rest);
+  // Task #311 — opt-in `?debug=1` surfaces the per-fixture audit row so
+  // calibration can inspect the heuristic-score distribution that feeds
+  // the LLM cost gate without bouncing through the diagnostics panel.
+  // This is observation-only (no scores or thresholds change) and was the
+  // mechanism used to capture the heuristic distribution that justified
+  // *not* widening the cost-gate thresholds — see llm-slop.ts header.
+  const debugAudit = String(req.query.debug ?? "") === "1";
+  const sanitizedResults = results.map(({ _audit, ...rest }) =>
+    debugAudit ? { ...rest, _audit } : rest,
+  );
 
   res.json({
     fixtureCount: FIXTURES.length,

@@ -287,6 +287,44 @@ describe("GET /api/test/run — Task #209 auditTelemetry contract", () => {
     expect(fusion.meanDeltaWhenApplied).toBeNull();
     expect(fusion.note).toMatch(/withLlm=1/);
   }, 60_000);
+
+  // Task #311 — the per-fixture `_audit` blob is stripped from the default
+  // response (it lives on the aggregate `auditTelemetry` block instead) and
+  // is only re-attached when the caller passes `?debug=1`. Calibration
+  // tooling depends on this contract: the audit row carries the heuristic
+  // score that feeds the LLM cost-gate, and was the data source for the
+  // documented decision in docs/calibration/2026-04-30-llm-cost-gate-audit.md.
+  it("strips per-fixture _audit by default and includes it on ?debug=1", async () => {
+    interface AuditRow {
+      fixtureId: string;
+      tier: string;
+      heuristicScore: number;
+      gateReason: string;
+      gateShouldCall: boolean;
+    }
+    interface ResultRow { id: string; tier: string; _audit?: AuditRow }
+    interface RunBody { results: ResultRow[] }
+
+    const defaultBody = await fetchJson<RunBody>("/api/test/run");
+    expect(Array.isArray(defaultBody.results)).toBe(true);
+    expect(defaultBody.results.length).toBeGreaterThan(0);
+    for (const r of defaultBody.results) {
+      expect(r._audit).toBeUndefined();
+    }
+
+    const debugBody = await fetchJson<RunBody>("/api/test/run?debug=1");
+    expect(debugBody.results.length).toBe(defaultBody.results.length);
+    for (const r of debugBody.results) {
+      expect(r._audit).toBeDefined();
+      expect(r._audit!.fixtureId).toBe(r.id);
+      expect(r._audit!.tier).toBe(r.tier);
+      expect(typeof r._audit!.heuristicScore).toBe("number");
+      expect(r._audit!.heuristicScore).toBeGreaterThanOrEqual(0);
+      expect(r._audit!.heuristicScore).toBeLessThanOrEqual(100);
+      expect(typeof r._audit!.gateReason).toBe("string");
+      expect(typeof r._audit!.gateShouldCall).toBe("boolean");
+    }
+  }, 90_000);
 });
 
 describe("GET /api/test/archetype-history — Sprint 13 trend persistence", () => {

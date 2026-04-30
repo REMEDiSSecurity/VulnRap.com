@@ -76,6 +76,14 @@ const LLM_TIMEOUT_MS = 30_000;
 // pipeline applied. Keep these the single source of truth: any future change
 // to the cost-gate must update this constant rather than open-coding the
 // thresholds elsewhere.
+//
+// Task #311 — calibration-battery audit decision: leave these thresholds
+// unchanged. The audit found the gate's heuristic input is ~0 for the entire
+// 72-fixture battery (gate-fire rate 0%), so widening LOW/HIGH/CONFIDENCE
+// here cannot fix the missed borderline-composite reports — the gate's input
+// signal needs to change, not its threshold widths. Full data, the list of
+// 16 silently-skipped borderline-composite fixtures, and the per-knob "why
+// not" reasoning live in docs/calibration/2026-04-30-llm-cost-gate-audit.md.
 export const COST_GUARD_LOW = 25;
 export const COST_GUARD_HIGH = 60;
 export const COST_GUARD_CONFIDENCE = 0.5;
