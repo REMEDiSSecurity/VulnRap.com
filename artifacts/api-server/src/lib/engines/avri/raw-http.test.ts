@@ -743,6 +743,79 @@ const SLOP_SQLI_PROSE_PLACEHOLDER_BARE_FIXTURE = [
   "include sensitive rows.",
 ].join("\n");
 
+// SQLi slop fixture using the double-quote-fenced dodge: prose says
+// "the payload \"<sql payload here>\" was tried" — the slot is wrapped
+// in bare double-quotes instead of backticks. The slot's inner text is
+// slop vocabulary so the double-quote prose-placeholder check must
+// revoke `concrete_payload`.
+const SLOP_SQLI_PROSE_PLACEHOLDER_DQUOTE_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query.",
+  'This is the canonical UNION SELECT class of attacks (CWE-89).',
+  "Severity: Critical. Affects all customers in production.",
+  "",
+  'We confirmed the issue end-to-end: the payload "<sql payload here>"',
+  "was tried against /search and returned the full user table.",
+  "",
+  "Replay against any modern database backend; the response will",
+  "include sensitive rows.",
+].join("\n");
+
+// Command-injection slop fixture using the double-quote-fenced dodge:
+// "send \"<inject>\" to /api/exec" — slop author leans on the double
+// quotes to make the slot read as a literal string while skipping
+// the markdown inline-code fence.
+const SLOP_CMDI_PROSE_PLACEHOLDER_DQUOTE_FIXTURE = [
+  "# Critical command injection on POST /api/exec",
+  "",
+  "The cmd field is passed straight to a shell, allowing arbitrary",
+  "command execution. Per CWE-78, exploitation typically uses",
+  "separators like ; cat /etc/passwd to chain commands.",
+  "Severity: Critical.",
+  "",
+  'To reproduce, send "<inject>" to the cmd field on /api/exec.',
+  "",
+  "Any modern shell will exhibit this. Severe risk to the production",
+  "fleet — please prioritize.",
+].join("\n");
+
+// SQLi slop fixture using the square-bracket-fenced dodge: prose says
+// "the payload [<sql payload here>] was tried" — the slot is wrapped
+// in bare square brackets instead of backticks. Same shape as the
+// double-quote dodge with `[`/`]` standing in for the inline-code
+// fence; the slop-vocab guard means only payload-shaped slots qualify.
+const SLOP_SQLI_PROSE_PLACEHOLDER_SQBRACKET_FIXTURE = [
+  "# Critical SQL injection on /search via the q parameter",
+  "",
+  "The q parameter is concatenated directly into a database query.",
+  "This is the canonical UNION SELECT class of attacks (CWE-89).",
+  "Severity: Critical. Affects all customers in production.",
+  "",
+  "We confirmed the issue end-to-end: the payload [<sql payload here>]",
+  "was tried against /search and returned the full user table.",
+  "",
+  "Replay against any modern database backend; the response will",
+  "include sensitive rows.",
+].join("\n");
+
+// Command-injection slop fixture using the square-bracket-fenced
+// dodge: "send [<inject>] to /api/exec" — slop author wraps the slot
+// in bare square brackets instead of backticks.
+const SLOP_CMDI_PROSE_PLACEHOLDER_SQBRACKET_FIXTURE = [
+  "# Critical command injection on POST /api/exec",
+  "",
+  "The cmd field is passed straight to a shell, allowing arbitrary",
+  "command execution. Per CWE-78, exploitation typically uses",
+  "separators like ; cat /etc/passwd to chain commands.",
+  "Severity: Critical.",
+  "",
+  "To reproduce, send [<inject>] to the cmd field on /api/exec.",
+  "",
+  "Any modern shell will exhibit this. Severe risk to the production",
+  "fleet — please prioritize.",
+].join("\n");
+
 // SQLi slop fixture using the post-slot dodge: prose puts the slot
 // FIRST and the payload-context word AFTER — "`<sql payload here>`
 // was the SQLi payload tried". Both the colon-form regex and the
@@ -1692,6 +1765,84 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
     const result = runEngine2Avri(
       sig,
       SLOP_SQLI_PROSE_PLACEHOLDER_BARE_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+  });
+
+  it("revokes concrete_payload when prose wraps the slot in double quotes: 'the payload \"<sql payload here>\" was tried'", () => {
+    // The double-quote-fenced dodge: the slot is wrapped in bare `"`
+    // characters instead of backticks. The slot's inner text is slop
+    // vocabulary so the double-quote prose-placeholder check must still
+    // revoke `concrete_payload` and the incidental "UNION SELECT" token
+    // in the CWE prose can't carry the slop report past gold.
+    const sig = extractSignals(SLOP_SQLI_PROSE_PLACEHOLDER_DQUOTE_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_SQLI_PROSE_PLACEHOLDER_DQUOTE_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+  });
+
+  it("revokes concrete_payload when prose wraps the slot in double quotes: 'send \"<inject>\" to'", () => {
+    const sig = extractSignals(SLOP_CMDI_PROSE_PLACEHOLDER_DQUOTE_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_CMDI_PROSE_PLACEHOLDER_DQUOTE_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+  });
+
+  it("revokes concrete_payload when prose wraps the slot in square brackets: 'the payload [<sql payload here>] was tried'", () => {
+    // The square-bracket-fenced dodge: the slot is wrapped in `[`/`]`
+    // instead of backticks. Symmetric to the double-quote form; the
+    // bracket fence is the substitute for the markdown inline-code
+    // fence and the slop-vocab guard keeps neutral prose like
+    // "the payload [<unknown>] was rejected" safe.
+    const sig = extractSignals(SLOP_SQLI_PROSE_PLACEHOLDER_SQBRACKET_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_SQLI_PROSE_PLACEHOLDER_SQBRACKET_FIXTURE,
+      INJ,
+    );
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const fakeInd = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
+    expect(fakeInd?.explanation).toMatch(/[Pp]rose payload reference/);
+  });
+
+  it("revokes concrete_payload when prose wraps the slot in square brackets: 'send [<inject>] to'", () => {
+    const sig = extractSignals(SLOP_CMDI_PROSE_PLACEHOLDER_SQBRACKET_FIXTURE);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_CMDI_PROSE_PLACEHOLDER_SQBRACKET_FIXTURE,
       INJ,
     );
     const survivingIds = result.detail.goldHits.map((g) => g.id);
