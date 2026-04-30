@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "postinstall": "pnpm --filter @workspace/api-spec run codegen && tsc --build",
+    "postinstall": "node scripts/codegen-if-stale.mjs && tsc --build",
     "codegen": "pnpm --filter @workspace/api-spec run codegen",
     "verify:codegen": "node scripts/verify-codegen.mjs",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
