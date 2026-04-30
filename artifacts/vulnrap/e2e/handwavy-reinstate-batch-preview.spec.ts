@@ -418,4 +418,99 @@ test.describe("FLAT hand-wavy phrase panel — 'Preview reinstate' batch button"
       await apiCtx.dispose();
     }
   });
+
+  // Task #354 — when the stale notice surfaces (Task #248), the reviewer
+  // can refresh the dry-run snapshot in place by pressing the
+  // "Re-preview" button rendered next to the notice copy. That re-runs
+  // handlePreviewReinstateBatch(removedAtIso) so the captured results +
+  // counts catch up to current state without forcing the reviewer to
+  // close the panel and click "Preview reinstate" again (two clicks
+  // for what is effectively a refresh, and which would lose their place
+  // in the history list). Once the new snapshot matches reality the
+  // stale notice disappears.
+  test("the stale notice's 'Re-preview' button refreshes the snapshot in place and clears the notice", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3);
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p);
+      const batch = await batchRemove(apiCtx, phrases);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      const group = await openHistoryAndFindBatch(page, removedAt);
+      await group.getByTestId("handwavy-reinstate-batch-preview").click();
+      const panel = group.getByTestId("handwavy-reinstate-batch-preview-panel");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Initial snapshot: every row would-reinstate, no stale notice.
+      const wouldRows = panel.locator(
+        '[data-testid="handwavy-reinstate-batch-preview-row"][data-outcome="would-reinstate"]',
+      );
+      await expect(wouldRows).toHaveCount(phrases.length);
+      await expect(
+        panel.getByTestId("handwavy-reinstate-batch-preview-stale"),
+      ).toHaveCount(0);
+
+      // Out of band: a teammate per-phrase reinstates the first inner
+      // phrase. The poll picks it up and the stale notice renders
+      // (the same trigger as the Task #248 spec above).
+      const reinstateRes = await apiCtx.post(
+        "/api/feedback/calibration/handwavy-phrases/reinstate",
+        {
+          data: {
+            phrase: phrases[0],
+            removedAt,
+            reviewer: "e2e-task354-drift",
+          },
+        },
+      );
+      expect(
+        reinstateRes.ok(),
+        `per-phrase reinstate failed: ${reinstateRes.status()} ${await reinstateRes.text()}`,
+      ).toBeTruthy();
+
+      const stale = panel.getByTestId("handwavy-reinstate-batch-preview-stale");
+      await expect(stale).toBeVisible({ timeout: 20_000 });
+
+      // The stale notice now exposes a one-click "Re-preview" button
+      // alongside the "Re-preview to refresh" copy.
+      const repreviewBtn = stale.getByTestId(
+        "handwavy-reinstate-batch-preview-stale-repreview",
+      );
+      await expect(repreviewBtn).toBeVisible();
+      await expect(repreviewBtn).toHaveText(/Re-preview/);
+      await expect(repreviewBtn).toBeEnabled();
+
+      // Pressing it re-runs the dry-run preview against current state.
+      // The previously-reinstated phrase should now be classified as
+      // "already-reinstated" (so 2 would-reinstate rows + 1
+      // already-reinstated row), and the stale notice should clear
+      // because the new snapshot matches reality. Critically, the
+      // panel itself stays open — the reviewer's place in the history
+      // list isn't lost.
+      await repreviewBtn.click();
+
+      const alreadyReinstatedRows = panel.locator(
+        '[data-testid="handwavy-reinstate-batch-preview-row"][data-outcome="already-reinstated"]',
+      );
+      await expect(alreadyReinstatedRows).toHaveCount(1, { timeout: 15_000 });
+      await expect(alreadyReinstatedRows.first()).toContainText(phrases[0]);
+      await expect(wouldRows).toHaveCount(phrases.length - 1);
+      await expect(
+        panel.getByTestId("handwavy-reinstate-batch-preview-stale"),
+      ).toHaveCount(0);
+      await expect(panel).toBeVisible();
+
+      // Confirm count reflects the refreshed snapshot — only the
+      // remaining would-reinstate rows.
+      await expect(
+        panel.getByTestId("handwavy-reinstate-batch-preview-confirm"),
+      ).toContainText(`Confirm reinstate (${phrases.length - 1})`);
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
 });

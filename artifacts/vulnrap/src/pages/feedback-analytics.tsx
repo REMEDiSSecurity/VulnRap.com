@@ -70,7 +70,7 @@ import {
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
   Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
-  KeyRound, Calendar, ChevronDown, ChevronRight,
+  KeyRound, Calendar, ChevronDown, ChevronRight, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCalibrationCooldown } from "@/lib/calibration-cooldown";
@@ -9017,7 +9017,43 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                 data-testid="handwavy-reinstate-batch-preview-stale"
                               >
                                 <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-                                Phrase state has changed since this preview was generated. Re-preview to refresh — confirming will still skip any phrase the server now sees as already active or already reinstated.
+                                <span className="flex-1">
+                                  Phrase state has changed since this preview was generated. Re-preview to refresh — confirming will still skip any phrase the server now sees as already active or already reinstated.
+                                </span>
+                                {/* Task #354 — one-click in-place refresh of
+                                    the dry-run snapshot, so the reviewer
+                                    doesn't have to close the panel and lose
+                                    their place in the history list. */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200 shrink-0"
+                                  disabled={
+                                    busy === previewKey ||
+                                    confirming ||
+                                    !mutationsAllowed
+                                  }
+                                  title={
+                                    !mutationsAllowed
+                                      ? MUTATIONS_BLOCKED_TITLE
+                                      : undefined
+                                  }
+                                  onClick={() =>
+                                    handlePreviewReinstateBatch(
+                                      group.removedAtIso,
+                                    )
+                                  }
+                                  data-testid="handwavy-reinstate-batch-preview-stale-repreview"
+                                  data-mutations-blocked={
+                                    !mutationsAllowed ? "true" : "false"
+                                  }
+                                  aria-label="Re-preview reinstate to refresh the snapshot"
+                                >
+                                  <RefreshCw className="w-3 h-3 mr-1" />
+                                  {busy === previewKey
+                                    ? "Refreshing…"
+                                    : "Re-preview"}
+                                </Button>
                               </div>
                             )}
                             <div className="flex items-center justify-end gap-2">
