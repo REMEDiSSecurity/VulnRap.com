@@ -337,7 +337,7 @@ function BucketRow({ bucket }: { bucket: BucketAnalysis }) {
   );
 }
 
-function SuggestionCard({ suggestion, onApply, applying, cooldownActive, cooldownSecondsRemaining, mutationsAllowed }: {
+export function SuggestionCard({ suggestion, onApply, applying, cooldownActive, cooldownSecondsRemaining, mutationsAllowed }: {
   suggestion: CalibrationSuggestion;
   onApply: (s: CalibrationSuggestion) => void;
   applying: boolean;
@@ -2155,7 +2155,7 @@ export function renderHandwavyEditEntries({
     });
 }
 
-function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean }) {
+export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean }) {
   // Task #214 — when the calibration auth probe says mutations would be
   // rejected (reviewer token missing or invalid), every mutating control on
   // this admin panel is disabled with a tooltip pointing reviewers back at
