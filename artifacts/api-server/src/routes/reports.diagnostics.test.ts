@@ -11,47 +11,50 @@ process.env.DATABASE_URL =
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import {
+  createInMemoryDb,
+  drizzleOrmOverrides,
+  makeHashesTableSpec,
+  makeReportsTableSpec,
+  makeSimilaritiesTableSpec,
+  makeStatsTableSpec,
+  resetBaseState,
+  seedReport as seedReportShared,
+  type BaseDbState,
+  type FakeRow,
+} from "./__test-fixtures__/in-memory-db";
 
-interface FakeRow extends Record<string, unknown> {}
-
-interface DbState {
-  reports: FakeRow[];
+// Diagnostics-specific state extends the shared base with `analysisTraces`
+// rows + an auto-incrementing trace id, plus two test-side toggles:
+//   - `failTraceInsert`: when true, the trace TableSpec.insert throws,
+//     letting us exercise the strict-mode rollback path in
+//     `POST /api/reports`.
+//   - `insertedTracePayloads`: every payload the route attempted to insert,
+//     including ones the failure hook rejected — so the rollback test can
+//     assert "we tried to write a trace before the transaction failed".
+interface DbState extends BaseDbState {
   traces: FakeRow[];
-  hashes: FakeRow[];
-  similarities: FakeRow[];
-  stats: Map<string, number>;
-  nextReportId: number;
   nextTraceId: number;
   failTraceInsert: boolean;
   insertedTracePayloads: FakeRow[];
 }
 
-function freshState(): DbState {
-  return {
-    reports: [],
-    traces: [],
-    hashes: [],
-    similarities: [],
-    stats: new Map(),
-    nextReportId: 1,
-    nextTraceId: 1,
-    failTraceInsert: false,
-    insertedTracePayloads: [],
-  };
-}
-
-const dbState: DbState = freshState();
+const dbState: DbState = {
+  reports: [],
+  traces: [],
+  hashes: [],
+  similarities: [],
+  stats: new Map(),
+  nextReportId: 1,
+  nextTraceId: 1,
+  failTraceInsert: false,
+  insertedTracePayloads: [],
+};
 (globalThis as unknown as { __fakeDbState: DbState }).__fakeDbState = dbState;
 
 vi.mock("drizzle-orm", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("drizzle-orm");
-  return {
-    ...actual,
-    eq: (col: unknown, val: unknown) => ({ __op: "eq", col, val }),
-    or: (...conds: unknown[]) => ({ __op: "or", conds }),
-    and: (...conds: unknown[]) => ({ __op: "and", conds }),
-    desc: (col: unknown) => ({ __op: "desc", col }),
-  };
+  return { ...actual, ...drizzleOrmOverrides };
 });
 
 vi.mock("../lib/active-verification", () => ({
@@ -82,271 +85,58 @@ vi.mock("@workspace/db", async () => {
   const state = (globalThis as unknown as { __fakeDbState: DbState })
     .__fakeDbState;
 
-  type Cond =
-    | { __op: "eq"; col: unknown; val: unknown }
-    | { __op: "or"; conds: Cond[] }
-    | { __op: "and"; conds: Cond[] }
-    | { __op: "desc"; col: unknown }
-    | null
-    | undefined;
-
-  function findColName(table: Record<string, unknown>, col: unknown): string {
-    for (const k of Object.keys(table)) {
-      if (table[k] === col) return k;
-    }
-    return "__unknown__";
-  }
-
-  function applyCond(
-    rows: FakeRow[],
-    cond: Cond,
-    table: Record<string, unknown>,
-  ): FakeRow[] {
-    if (!cond || typeof cond !== "object") return rows;
-    if ((cond as { __op?: string }).__op === "eq") {
-      const c = cond as { col: unknown; val: unknown };
-      const colName = findColName(table, c.col);
-      return rows.filter((r) => r[colName] === c.val);
-    }
-    if ((cond as { __op?: string }).__op === "or") {
-      const c = cond as { conds: Cond[] };
-      return rows.filter(
-        (r) => c.conds.some((sub) => applyCond([r], sub, table).length > 0),
-      );
-    }
-    if ((cond as { __op?: string }).__op === "and") {
-      const c = cond as { conds: Cond[] };
-      return c.conds.reduce<FakeRow[]>(
-        (acc, sub) => applyCond(acc, sub, table),
-        rows,
-      );
-    }
-    return rows;
-  }
-
-  function tableKey(
-    table: unknown,
-  ): "reports" | "traces" | "hashes" | "similarities" | "stats" | "unknown" {
-    if (table === schema.reportsTable) return "reports";
-    if (table === schema.analysisTracesTable) return "traces";
-    if (table === schema.reportHashesTable) return "hashes";
-    if (table === schema.similarityResultsTable) return "similarities";
-    if (table === schema.reportStatsTable) return "stats";
-    return "unknown";
-  }
-
-  function getTableRows(table: unknown): FakeRow[] {
-    const k = tableKey(table);
-    if (k === "reports") return state.reports;
-    if (k === "traces") return state.traces;
-    if (k === "hashes") return state.hashes;
-    if (k === "similarities") return state.similarities;
-    if (k === "stats") {
-      return Array.from(state.stats.entries()).map(([key, value]) => ({
-        key,
-        value,
-      }));
-    }
-    return [];
-  }
-
-  function selectChain(): Record<string, unknown> {
-    let cond: Cond = null;
-    let limitN: number | null = null;
-    let order: { col: string; dir: "asc" | "desc" } | null = null;
-    let table: Record<string, unknown> | null = null;
-    const chain: Record<string, unknown> = {
-      from(t: Record<string, unknown>) {
-        table = t;
-        return chain;
-      },
-      where(c: Cond) {
-        cond = c;
-        return chain;
-      },
-      limit(n: number) {
-        limitN = n;
-        return chain;
-      },
-      orderBy(o: unknown) {
-        if ((o as { __op?: string })?.__op === "desc") {
-          order = {
-            col: findColName(table!, (o as { col: unknown }).col),
-            dir: "desc",
-          };
-        }
-        return chain;
-      },
-      then(resolve: (rows: FakeRow[]) => void, reject: (err: unknown) => void) {
-        try {
-          let rows = getTableRows(table);
-          rows = applyCond(rows, cond, table!);
-          if (order) {
-            const o = order;
-            rows = [...rows].sort((a, b) => {
-              const av = a[o.col] as number | string | Date;
-              const bv = b[o.col] as number | string | Date;
-              if (av < bv) return o.dir === "desc" ? 1 : -1;
-              if (av > bv) return o.dir === "desc" ? -1 : 1;
-              return 0;
-            });
+  const { db, pool } = createInMemoryDb({
+    schema,
+    // Snapshot mode mirrors the real `db.transaction(fn)` semantics that the
+    // strict trace-failure test depends on: when the trace insert throws,
+    // every table the transaction touched (reports + traces + counters)
+    // must be rolled back.
+    transactionMode: "snapshot",
+    tables: [
+      makeReportsTableSpec(schema, state),
+      makeHashesTableSpec(schema, state),
+      makeSimilaritiesTableSpec(schema, state),
+      makeStatsTableSpec(schema, state),
+      // Diagnostics-only table: analysis_traces. The route inserts trace
+      // payloads inside the same transaction as the report itself, so we
+      // capture every attempted payload (`insertedTracePayloads`) and then
+      // optionally throw based on the `failTraceInsert` toggle. Snapshot/
+      // restore only carries `traces` + `nextTraceId` so the failure
+      // bookkeeping (`insertedTracePayloads`, `failTraceInsert`) survives a
+      // rollback for the test to assert against.
+      {
+        table: schema.analysisTracesTable,
+        getRows: () => state.traces,
+        insert: (r) => {
+          state.insertedTracePayloads.push({ ...r });
+          if (state.failTraceInsert) {
+            throw new Error("simulated trace insert failure");
           }
-          if (limitN != null) rows = rows.slice(0, limitN);
-          resolve(rows);
-        } catch (err) {
-          reject(err);
-        }
+          const row = {
+            ...r,
+            id: state.nextTraceId++,
+            createdAt: r.createdAt ?? new Date(),
+          };
+          state.traces.push(row);
+          return row;
+        },
+        snapshot: () => ({
+          rows: state.traces.map((r) => ({ ...r })),
+          next: state.nextTraceId,
+        }),
+        restore: (snap) => {
+          const s = snap as { rows: FakeRow[]; next: number };
+          state.traces = s.rows;
+          state.nextTraceId = s.next;
+        },
       },
-    };
-    return chain;
-  }
-
-  function doInsert(table: unknown, rows: FakeRow[]): FakeRow[] {
-    const k = tableKey(table);
-    const inserted: FakeRow[] = [];
-    for (const r of rows) {
-      if (k === "reports") {
-        const row = {
-          ...r,
-          id: state.nextReportId++,
-          createdAt: r.createdAt ?? new Date(),
-        };
-        state.reports.push(row);
-        inserted.push(row);
-      } else if (k === "traces") {
-        state.insertedTracePayloads.push({ ...r });
-        if (state.failTraceInsert) {
-          throw new Error("simulated trace insert failure");
-        }
-        const row = {
-          ...r,
-          id: state.nextTraceId++,
-          createdAt: r.createdAt ?? new Date(),
-        };
-        state.traces.push(row);
-        inserted.push(row);
-      } else if (k === "hashes") {
-        state.hashes.push({ ...r });
-        inserted.push({ ...r });
-      } else if (k === "similarities") {
-        state.similarities.push({ ...r });
-        inserted.push({ ...r });
-      } else if (k === "stats") {
-        const key = r.key as string;
-        const inc = typeof r.value === "number" ? r.value : 1;
-        state.stats.set(key, (state.stats.get(key) ?? 0) + inc);
-      }
-    }
-    return inserted;
-  }
-
-  function makeDb() {
-    const db: Record<string, unknown> = {
-      select(_proj?: unknown) {
-        return {
-          from(t: Record<string, unknown>) {
-            const chain = selectChain();
-            (chain.from as (t: unknown) => unknown)(t);
-            return chain;
-          },
-        };
-      },
-      insert(table: unknown) {
-        return {
-          values(input: FakeRow | FakeRow[]) {
-            const inputs = Array.isArray(input) ? input : [input];
-            const op: Record<string, unknown> = {
-              returning() {
-                return {
-                  then(
-                    resolve: (rows: FakeRow[]) => void,
-                    reject: (err: unknown) => void,
-                  ) {
-                    try {
-                      resolve(doInsert(table, inputs));
-                    } catch (e) {
-                      reject(e);
-                    }
-                  },
-                };
-              },
-              onConflictDoUpdate(_o: unknown) {
-                return {
-                  then(
-                    resolve: (v: undefined) => void,
-                    reject: (err: unknown) => void,
-                  ) {
-                    try {
-                      // For stats tables we simulate "increment on conflict"
-                      // already; just call doInsert which adds/increments.
-                      doInsert(table, inputs);
-                      resolve(undefined);
-                    } catch (e) {
-                      reject(e);
-                    }
-                  },
-                };
-              },
-              then(
-                resolve: (v: undefined) => void,
-                reject: (err: unknown) => void,
-              ) {
-                try {
-                  doInsert(table, inputs);
-                  resolve(undefined);
-                } catch (e) {
-                  reject(e);
-                }
-              },
-            };
-            return op;
-          },
-        };
-      },
-    };
-
-    function snapshot(): DbState {
-      return {
-        reports: state.reports.map((r) => ({ ...r })),
-        traces: state.traces.map((r) => ({ ...r })),
-        hashes: state.hashes.map((r) => ({ ...r })),
-        similarities: state.similarities.map((r) => ({ ...r })),
-        stats: new Map(state.stats),
-        nextReportId: state.nextReportId,
-        nextTraceId: state.nextTraceId,
-        failTraceInsert: state.failTraceInsert,
-        insertedTracePayloads: [...state.insertedTracePayloads],
-      };
-    }
-    function restore(snap: DbState) {
-      state.reports = snap.reports;
-      state.traces = snap.traces;
-      state.hashes = snap.hashes;
-      state.similarities = snap.similarities;
-      state.stats = snap.stats;
-      state.nextReportId = snap.nextReportId;
-      state.nextTraceId = snap.nextTraceId;
-    }
-
-    db.transaction = async (
-      fn: (tx: Record<string, unknown>) => Promise<unknown>,
-    ) => {
-      const snap = snapshot();
-      try {
-        return await fn(db);
-      } catch (err) {
-        restore(snap);
-        throw err;
-      }
-    };
-
-    return db;
-  }
+    ],
+  });
 
   return {
     ...schema,
-    db: makeDb(),
-    pool: { end: async () => undefined },
+    db,
+    pool,
   };
 });
 
@@ -370,61 +160,20 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  Object.assign(dbState, freshState());
+  resetBaseState(dbState);
+  dbState.traces = [];
+  dbState.nextTraceId = 1;
+  dbState.failTraceInsert = false;
+  dbState.insertedTracePayloads = [];
   delete process.env.VULNRAP_USE_NEW_COMPOSITE;
   delete process.env.VULNRAP_TRACE_BEST_EFFORT;
 });
 
+// Defaults come from the shared `BASE_REPORT` (showInFeed: true so the
+// happy-path tests don't have to flip it; null `redactedText`/`contentText`
+// so the route's verification step is naturally skipped).
 function seedReport(overrides: Partial<FakeRow> = {}): FakeRow {
-  const id = dbState.nextReportId++;
-  const row: FakeRow = {
-    id,
-    deleteToken: "tok",
-    contentHash: "hash",
-    simhash: "0",
-    minhashSignature: [],
-    lshBuckets: [],
-    contentText: null,
-    redactedText: null,
-    contentMode: "full",
-    slopScore: 50,
-    slopTier: "Questionable",
-    qualityScore: 50,
-    confidence: 0.5,
-    breakdown: {},
-    evidence: [],
-    similarityMatches: [],
-    sectionHashes: {},
-    sectionMatches: [],
-    redactionSummary: { totalRedactions: 0, categories: {} },
-    feedback: [],
-    llmSlopScore: null,
-    llmFeedback: null,
-    llmBreakdown: null,
-    authenticityScore: 0,
-    validityScore: 0,
-    quadrant: "WEAK_HUMAN",
-    archetype: "REQUEST_DETAILS",
-    humanIndicators: [],
-    templateHash: null,
-    vulnrapCompositeScore: null,
-    vulnrapCompositeLabel: null,
-    vulnrapEngineResults: null,
-    vulnrapOverridesApplied: null,
-    vulnrapCorrelationId: null,
-    vulnrapDurationMs: null,
-    // Task #265: the public diagnostics route filters on showInFeed and 404s
-    // hidden reports. The happy-path tests in this file expect 200, so the
-    // default has to be visible — the privacy regression suite explicitly
-    // overrides this to false to exercise the hidden-report 404 path.
-    showInFeed: true,
-    fileName: null,
-    fileSize: 0,
-    createdAt: new Date(),
-    ...overrides,
-  };
-  dbState.reports.push(row);
-  return row;
+  return seedReportShared(dbState, overrides);
 }
 
 function seedTrace(overrides: Partial<FakeRow> = {}): FakeRow {

@@ -9,49 +9,42 @@ process.env.DATABASE_URL =
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import {
+  createInMemoryDb,
+  drizzleOrmOverrides,
+  makeHashesTableSpec,
+  makeReportsTableSpec,
+  makeSimilaritiesTableSpec,
+  makeStatsTableSpec,
+  resetBaseState,
+  seedReport as seedReportShared,
+  type BaseDbState,
+  type FakeRow,
+} from "./__test-fixtures__/in-memory-db";
 
-interface FakeRow extends Record<string, unknown> {}
-
-interface DbState {
-  reports: FakeRow[];
+// Privacy-specific state extends the shared base with `userFeedbackTable`
+// rows and an auto-incrementing feedback id. The shared harness supplies
+// `reports`, `hashes`, `similarities`, `stats`, and `nextReportId`.
+interface DbState extends BaseDbState {
   feedback: FakeRow[];
-  hashes: FakeRow[];
-  similarities: FakeRow[];
-  stats: Map<string, number>;
-  nextReportId: number;
   nextFeedbackId: number;
 }
 
-function freshState(): DbState {
-  return {
-    reports: [],
-    feedback: [],
-    hashes: [],
-    similarities: [],
-    stats: new Map(),
-    nextReportId: 1,
-    nextFeedbackId: 1,
-  };
-}
-
-const dbState: DbState = freshState();
-(globalThis as unknown as { __privacyDbState: DbState }).__privacyDbState = dbState;
+const dbState: DbState = {
+  reports: [],
+  feedback: [],
+  hashes: [],
+  similarities: [],
+  stats: new Map(),
+  nextReportId: 1,
+  nextFeedbackId: 1,
+};
+(globalThis as unknown as { __privacyDbState: DbState }).__privacyDbState =
+  dbState;
 
 vi.mock("drizzle-orm", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("drizzle-orm");
-  return {
-    ...actual,
-    eq: (col: unknown, val: unknown) => ({ __op: "eq", col, val }),
-    or: (...conds: unknown[]) => ({ __op: "or", conds }),
-    and: (...conds: unknown[]) => ({ __op: "and", conds }),
-    desc: (col: unknown) => ({ __op: "desc", col }),
-    gte: (col: unknown, val: unknown) => ({ __op: "gte", col, val }),
-    isNotNull: (col: unknown) => ({ __op: "isNotNull", col }),
-    sql: Object.assign(
-      (_strings: TemplateStringsArray) => ({ __op: "sql_fragment" }),
-      { mapWith: () => ({ __op: "sql_mapped" }) },
-    ),
-  };
+  return { ...actual, ...drizzleOrmOverrides };
 });
 
 vi.mock("../lib/active-verification", () => ({
@@ -119,213 +112,36 @@ vi.mock("@workspace/db", async () => {
   const state = (globalThis as unknown as { __privacyDbState: DbState })
     .__privacyDbState;
 
-  type Cond =
-    | { __op: "eq"; col: unknown; val: unknown }
-    | { __op: "or"; conds: Cond[] }
-    | { __op: "and"; conds: Cond[] }
-    | { __op: "gte"; col: unknown; val: unknown }
-    | { __op: "isNotNull"; col: unknown }
-    | { __op: "sql_fragment" }
-    | null
-    | undefined;
-
-  function findColName(table: Record<string, unknown>, col: unknown): string {
-    for (const k of Object.keys(table)) {
-      if (table[k] === col) return k;
-    }
-    return "__unknown__";
-  }
-
-  function applyCond(
-    rows: FakeRow[],
-    cond: Cond,
-    table: Record<string, unknown>,
-  ): FakeRow[] {
-    if (!cond || typeof cond !== "object") return rows;
-    const op = (cond as { __op?: string }).__op;
-    if (op === "eq") {
-      const c = cond as { col: unknown; val: unknown };
-      const colName = findColName(table, c.col);
-      if (colName === "__unknown__") return rows;
-      // Handle column-to-column comparisons (JOIN conditions like col1 = col2)
-      const valColName = findColName(table, c.val);
-      if (valColName !== "__unknown__") {
-        return rows.filter((r) => r[colName] === r[valColName]);
-      }
-      return rows.filter((r) => r[colName] === c.val);
-    }
-    if (op === "or") {
-      const c = cond as { conds: Cond[] };
-      return rows.filter((r) =>
-        c.conds.some((sub) => applyCond([r], sub, table).length > 0),
-      );
-    }
-    if (op === "and") {
-      const c = cond as { conds: Cond[] };
-      return c.conds.reduce<FakeRow[]>(
-        (acc, sub) => applyCond(acc, sub, table),
-        rows,
-      );
-    }
-    return rows;
-  }
-
-  type TableKey = "reports" | "feedback" | "hashes" | "similarities" | "stats" | "unknown";
-
-  function tableKey(table: unknown): TableKey {
-    if (table === schema.reportsTable) return "reports";
-    if (table === schema.userFeedbackTable) return "feedback";
-    if (table === schema.reportHashesTable) return "hashes";
-    if (table === schema.similarityResultsTable) return "similarities";
-    if (table === schema.reportStatsTable) return "stats";
-    return "unknown";
-  }
-
-  function getTableRows(table: unknown): FakeRow[] {
-    const k = tableKey(table);
-    if (k === "reports") return state.reports;
-    if (k === "feedback") return state.feedback;
-    if (k === "hashes") return state.hashes;
-    if (k === "similarities") return state.similarities;
-    return [];
-  }
-
-  function selectChain(): Record<string, unknown> {
-    let cond: Cond = null;
-    let limitN: number | null = null;
-    let baseTable: Record<string, unknown> | null = null;
-    let joined: { rows: FakeRow[]; schema: Record<string, unknown> } | null = null;
-
-    const chain: Record<string, unknown> = {
-      from(t: Record<string, unknown>) {
-        baseTable = t;
-        return chain;
-      },
-      where(c: Cond) {
-        cond = c;
-        return chain;
-      },
-      limit(n: number) {
-        limitN = n;
-        return chain;
-      },
-      orderBy(_o: unknown) {
-        return chain;
-      },
-      groupBy(_o: unknown) {
-        return chain;
-      },
-      innerJoin(joinTable: unknown, joinCond: Cond) {
-        const baseRows = getTableRows(baseTable);
-        const joinRows = getTableRows(joinTable);
-        const joinSchema = joinTable as Record<string, unknown>;
-        const merged: FakeRow[] = [];
-        const effectiveSchema = { ...baseTable!, ...joinSchema };
-        for (const base of baseRows) {
-          for (const jr of joinRows) {
-            const combined = { ...jr, ...base };
-            if (applyCond([combined], joinCond, effectiveSchema).length > 0) {
-              merged.push(combined);
-            }
-          }
-        }
-        joined = { rows: merged, schema: effectiveSchema };
-        return chain;
-      },
-      leftJoin(joinTable: unknown, joinCond: Cond) {
-        const baseRows = getTableRows(baseTable);
-        const joinRows = getTableRows(joinTable);
-        const joinSchema = joinTable as Record<string, unknown>;
-        const effectiveSchema = { ...baseTable!, ...joinSchema };
-        const merged: FakeRow[] = [];
-        for (const base of baseRows) {
-          const matches: FakeRow[] = [];
-          for (const jr of joinRows) {
-            const combined = { ...jr, ...base };
-            if (applyCond([combined], joinCond, effectiveSchema).length > 0) {
-              matches.push(combined);
-            }
-          }
-          merged.push(...(matches.length > 0 ? matches : [{ ...base }]));
-        }
-        joined = { rows: merged, schema: effectiveSchema };
-        return chain;
-      },
-      then(
-        resolve: (rows: FakeRow[]) => void,
-        reject: (err: unknown) => void,
-      ) {
-        try {
-          let rows = joined ? joined.rows : getTableRows(baseTable);
-          const effectiveSchema = joined
-            ? joined.schema
-            : (baseTable as Record<string, unknown>);
-          rows = applyCond(rows, cond, effectiveSchema);
-          if (limitN != null) rows = rows.slice(0, limitN);
-          resolve(rows);
-        } catch (err) {
-          reject(err);
-        }
-      },
-    };
-    return chain;
-  }
-
-  function doInsert(table: unknown, rows: FakeRow[]): FakeRow[] {
-    const k = tableKey(table);
-    const inserted: FakeRow[] = [];
-    for (const r of rows) {
-      if (k === "reports") {
-        const row = { ...r, id: state.nextReportId++, createdAt: r.createdAt ?? new Date() };
-        state.reports.push(row);
-        inserted.push(row);
-      } else if (k === "feedback") {
-        const row = { ...r, id: state.nextFeedbackId++, createdAt: r.createdAt ?? new Date() };
-        state.feedback.push(row);
-        inserted.push(row);
-      } else if (k === "hashes") {
-        state.hashes.push({ ...r });
-        inserted.push({ ...r });
-      } else if (k === "similarities") {
-        state.similarities.push({ ...r });
-        inserted.push({ ...r });
-      } else if (k === "stats") {
-        const key = r.key as string;
-        const inc = typeof r.value === "number" ? r.value : 1;
-        state.stats.set(key, (state.stats.get(key) ?? 0) + inc);
-      }
-    }
-    return inserted;
-  }
-
-  const db: Record<string, unknown> = {
-    select(_proj?: unknown) {
-      return { from: (t: Record<string, unknown>) => { const c = selectChain(); (c.from as (t: unknown) => unknown)(t); return c; } };
-    },
-    insert(table: unknown) {
-      return {
-        values(input: FakeRow | FakeRow[]) {
-          const inputs = Array.isArray(input) ? input : [input];
-          const op: Record<string, unknown> = {
-            returning() {
-              return { then(res: (r: FakeRow[]) => void, rej: (e: unknown) => void) { try { res(doInsert(table, inputs)); } catch (e) { rej(e); } } };
-            },
-            onConflictDoUpdate(_o: unknown) {
-              return { then(res: (v: undefined) => void, rej: (e: unknown) => void) { try { doInsert(table, inputs); res(undefined); } catch (e) { rej(e); } } };
-            },
-            then(res: (v: undefined) => void, rej: (e: unknown) => void) {
-              try { doInsert(table, inputs); res(undefined); } catch (e) { rej(e); }
-            },
+  const { db, pool } = createInMemoryDb({
+    schema,
+    transactionMode: "passthrough",
+    tables: [
+      makeReportsTableSpec(schema, state),
+      makeHashesTableSpec(schema, state),
+      makeSimilaritiesTableSpec(schema, state),
+      makeStatsTableSpec(schema, state),
+      // Privacy-only table: feedback. The /api/feedback/analytics route
+      // joins this against reportsTable, so the harness needs both row
+      // storage and an auto-incrementing id.
+      {
+        table: schema.userFeedbackTable,
+        getRows: () => state.feedback,
+        insert: (r) => {
+          const row = {
+            ...r,
+            id: state.nextFeedbackId++,
+            createdAt: r.createdAt ?? new Date(),
           };
-          return op;
+          state.feedback.push(row);
+          return row;
         },
-      };
-    },
-    transaction: async (fn: (tx: Record<string, unknown>) => Promise<unknown>) => fn(db),
-  };
+      },
+    ],
+  });
 
   return {
     db,
+    pool,
     reportsTable: schema.reportsTable,
     reportHashesTable: schema.reportHashesTable,
     similarityResultsTable: schema.similarityResultsTable,
@@ -334,11 +150,10 @@ vi.mock("@workspace/db", async () => {
     // /reports/:id/diagnostics looks up analysis_traces by correlation_id and
     // again by report_id. Without exporting this table the route resolves it
     // to undefined and the drizzle chain throws on `.where(eq(undefined.col,
-    // ...))`, which surfaced to the harness as a 500. We don't seed any rows
-    // for it here — the fake selectChain just returns [] for unknown tables,
+    // ...))`, which surfaced to the harness as a 500. We don't register a
+    // TableSpec for it — the shared harness returns [] for unknown tables,
     // which exercises the legacy "no trace" branch the route handles fine.
     analysisTracesTable: schema.analysisTracesTable,
-    pool: { end: async () => undefined },
   };
 });
 
@@ -359,64 +174,20 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  dbState.reports = [];
+  resetBaseState(dbState);
   dbState.feedback = [];
-  dbState.hashes = [];
-  dbState.similarities = [];
-  dbState.stats = new Map();
-  dbState.nextReportId = 1;
   dbState.nextFeedbackId = 1;
 });
 
-const BASE_REPORT: FakeRow = {
-  deleteToken: "tok",
-  contentHash: "abc123",
-  simhash: "sim0",
-  minhashSignature: [],
-  lshBuckets: [],
-  contentText: "sample",
-  redactedText: "sample",
-  contentMode: "full",
-  slopScore: 50,
-  slopTier: "Questionable",
-  qualityScore: 50,
-  confidence: 0.5,
-  breakdown: {},
-  evidence: [],
-  similarityMatches: [],
-  sectionHashes: {},
-  sectionMatches: [],
-  redactionSummary: { totalRedactions: 0, categories: {} },
-  feedback: [],
-  llmSlopScore: null,
-  llmFeedback: null,
-  llmBreakdown: null,
-  authenticityScore: 0,
-  validityScore: 0,
-  quadrant: "WEAK_HUMAN",
-  archetype: "REQUEST_DETAILS",
-  humanIndicators: [],
-  templateHash: null,
-  vulnrapCompositeScore: null,
-  vulnrapCompositeLabel: null,
-  vulnrapEngineResults: null,
-  vulnrapOverridesApplied: null,
-  vulnrapCorrelationId: null,
-  vulnrapDurationMs: null,
-  fileName: null,
-  fileSize: 0,
-  showInFeed: true,
-};
-
+// Privacy historically used `contentHash: "abc123"` and `simhash: "sim0"` —
+// no test in this file asserts on those exact values (the helper's defaults
+// "hash" / "0" are equally opaque), but `contentText` / `redactedText` was
+// `"sample"` here, where the helper defaults to `null`. Tests that need a
+// non-null body already pass `redactedText: "sample text"` (etc.) explicitly,
+// so the null default is safe; the few legacy callers that don't override
+// exercise routes that early-return on a null body.
 function seedReport(overrides: Partial<FakeRow> = {}): FakeRow {
-  const row: FakeRow = {
-    ...BASE_REPORT,
-    id: dbState.nextReportId++,
-    createdAt: new Date(),
-    ...overrides,
-  };
-  dbState.reports.push(row);
-  return row;
+  return seedReportShared(dbState, overrides);
 }
 
 function seedFeedback(overrides: Partial<FakeRow> = {}): FakeRow {
