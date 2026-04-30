@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   DiagnosticsPanel,
   buildMarkdownSummary,
+  loadDiagnosticsForExport,
+  getDiagnosticsQueryKey,
+  DIAGNOSTICS_STALE_TIME_MS,
   type DiagnosticsResponse,
 } from "./diagnostics-panel";
 
@@ -1092,5 +1095,35 @@ describe("DiagnosticsPanel smoke test", () => {
     await waitFor(() => {
       expect(screen.getByText(/Failed to load diagnostics: HTTP 500/i)).toBeInTheDocument();
     });
+  });
+
+  it("loadDiagnosticsForExport caches back-to-back exports (one fetch for JSON+TXT)", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const first = await loadDiagnosticsForExport(client, REPORT_ID);
+    const second = await loadDiagnosticsForExport(client, REPORT_ID);
+
+    expect(first.reportId).toBe(REPORT_ID);
+    expect(first.composite?.score).toBe(73);
+    expect(second).toBe(first);
+
+    const diagnosticsCalls = fetchSpy.mock.calls.filter(([input]) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      return url.includes(`/api/reports/${REPORT_ID}/diagnostics`);
+    });
+    expect(diagnosticsCalls).toHaveLength(1);
+
+    const cached = client.getQueryData<DiagnosticsResponse>(
+      getDiagnosticsQueryKey(REPORT_ID),
+    );
+    expect(cached).toBe(first);
+    expect(DIAGNOSTICS_STALE_TIME_MS).toBeGreaterThan(0);
   });
 });

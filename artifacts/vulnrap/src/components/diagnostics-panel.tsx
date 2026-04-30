@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -194,6 +194,19 @@ export const DIAGNOSTICS_STALE_TIME_MS = 60_000;
 
 export function getDiagnosticsQueryKey(reportId: number): readonly unknown[] {
   return ["report-diagnostics", reportId] as const;
+}
+
+// Shared diagnostics fetch for the JSON and TXT export buttons. Reuses the
+// panel's queryKey + staleTime so back-to-back exports hit the network once.
+export async function loadDiagnosticsForExport(
+  queryClient: QueryClient,
+  reportId: number,
+): Promise<DiagnosticsResponse> {
+  return queryClient.fetchQuery({
+    queryKey: getDiagnosticsQueryKey(reportId),
+    queryFn: () => fetchDiagnostics(reportId),
+    staleTime: DIAGNOSTICS_STALE_TIME_MS,
+  });
 }
 
 export function DiagnosticsPanel({ reportId }: { reportId: number }) {

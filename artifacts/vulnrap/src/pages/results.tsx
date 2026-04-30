@@ -17,7 +17,7 @@ import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCust
 import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport } from "@/components/evidence-highlighter";
-import { DiagnosticsPanel, fetchDiagnostics, buildMarkdownSummary, getDiagnosticsQueryKey, DIAGNOSTICS_STALE_TIME_MS, type DiagnosticsResponse } from "@/components/diagnostics-panel";
+import { DiagnosticsPanel, buildMarkdownSummary, loadDiagnosticsForExport as loadCachedDiagnosticsForExport, type DiagnosticsResponse } from "@/components/diagnostics-panel";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -1125,15 +1125,7 @@ export default function Results() {
 
   const loadDiagnosticsForExport = async (): Promise<DiagnosticsResponse | null> => {
     try {
-      // Reuse the diagnostics-panel react-query cache so back-to-back JSON+TXT
-      // exports only hit the server once. Matching the panel's staleTime keeps
-      // behavior consistent: a fresh entry (within 60s) is returned instantly,
-      // and otherwise the response is fetched and cached for the next call.
-      return await queryClient.fetchQuery({
-        queryKey: getDiagnosticsQueryKey(id),
-        queryFn: () => fetchDiagnostics(id),
-        staleTime: DIAGNOSTICS_STALE_TIME_MS,
-      });
+      return await loadCachedDiagnosticsForExport(queryClient, id);
     } catch (err) {
       toast({
         title: "Diagnostics unavailable",
