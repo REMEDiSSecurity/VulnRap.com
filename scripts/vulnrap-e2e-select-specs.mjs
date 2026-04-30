@@ -59,12 +59,16 @@ const E2E_DIR = "artifacts/vulnrap/e2e";
 // Files that, when changed, force the full suite to run. Each entry has a
 // short comment so the next maintainer can tell why it's release-blocking.
 export const FULL_SUITE_PATTERNS = [
-  // The selection logic itself + the bash wrapper that consumes its output.
-  // Touching either of these can change which specs we'd otherwise pick, so
-  // the safest reaction is "rerun everything once to catch the regression".
+  // The selection logic itself + the bash wrapper that consumes its output
+  // + the Task #353 registration helper that decides whether the validation
+  // step is wired at all. Touching any of these can change which specs we'd
+  // otherwise pick (or whether the wrapper runs at all), so the safest
+  // reaction is "rerun everything once to catch the regression".
   /^scripts\/vulnrap-e2e-check\.sh$/,
   /^scripts\/vulnrap-e2e-select-specs\.mjs$/,
   /^scripts\/vulnrap-e2e-select-specs\.test\.mjs$/,
+  /^scripts\/vulnrap-e2e-register\.mjs$/,
+  /^scripts\/vulnrap-e2e-register\.test\.mjs$/,
   // The build helper the Playwright webServer chains in front of every
   // start/serve. A regression here changes whether dist/ gets rebuilt and
   // therefore which code the browser actually exercises.

@@ -322,6 +322,39 @@ the release-blocker check (`scripts/vulnrap-e2e-check.sh`) invokes:
 pnpm --filter @workspace/vulnrap run test:e2e
 ```
 
+The wrapper consults `scripts/vulnrap-e2e-select-specs.mjs` to run only
+the specs the current branch's diff can affect. A companion
+`scripts/vulnrap-e2e-register.mjs` re-uses the same selector to decide
+whether the `vulnrap-e2e` validation step should be registered at all:
+when the diff touches no e2e surface area the registrar de-registers
+the step so the validation dashboard shows "not applicable" instead of
+"passed in 8s with 0 specs".
+
+Inspect the decision for the current diff (`stdout` is exactly
+`REGISTER` or `CLEAR`; `stderr` carries the reasoning):
+
+```bash
+node scripts/vulnrap-e2e-register.mjs
+```
+
+Apply the decision from the agent's `code_execution` sandbox (the
+validation skill's callbacks are only available there):
+
+```javascript
+const reg = await import("./scripts/vulnrap-e2e-register.mjs");
+await reg.syncVulnrapE2eValidation({
+  setValidationCommand,    // pre-registered in code_execution
+  clearValidationCommand,  // pre-registered in code_execution
+});
+```
+
+`syncVulnrapE2eValidation` calls `setValidationCommand` (registering
+`vulnrap-e2e` -> `scripts/vulnrap-e2e-check.sh`) when the selector
+returns ALL or a subset, and calls `clearValidationCommand` (removing
+the entry from `.replit`) when the selector returns NONE. The wrapper
+script itself also runs the selector as the first thing it does, so a
+direct invocation under a NONE diff still bails in milliseconds.
+
 For iterative debugging — e.g. when adding a new spec or chasing a
 regression in the calibration / hand-wavy phrase panel — run the same
 specs against the **dev servers** (Vite dev + the api-server's `dev`

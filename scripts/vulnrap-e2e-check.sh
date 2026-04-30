@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Task #182 + Task #250 + Task #251 -- Run the vulnrap Playwright e2e suite
-# against the PRODUCTION builds of @workspace/vulnrap and @workspace/api-server.
+# Task #182 + Task #250 + Task #251 + Task #353 -- Run the vulnrap Playwright
+# e2e suite against the PRODUCTION builds of @workspace/vulnrap and
+# @workspace/api-server.
 #
 # This wraps `pnpm --filter @workspace/vulnrap run test:e2e` so it can be
 # wired into a registered validation step (and any future CI workflow).
+# Companion: scripts/vulnrap-e2e-register.mjs decides whether the
+# validation step should be registered AT ALL for the current diff -- a
+# NONE outcome de-registers it so the dashboard shows "skipped" instead
+# of "passed in 8s with 0 specs" (Task #353). This wrapper still runs the
+# selector itself as a defense-in-depth fast-path for direct invocations.
 # The Playwright config (artifacts/vulnrap/playwright.config.ts) handles
 # the webServer plumbing for both the bundled api-server (dist/index.mjs
 # via `start`) and the vite preview build, so this script's job is to:
@@ -79,6 +85,41 @@ SELECTOR="${SCRIPT_DIR}/vulnrap-e2e-select-specs.mjs"
 echo "[vulnrap-e2e-check] Running the vulnrap Playwright e2e suite against the PRODUCTION builds of vulnrap and api-server..."
 echo "[vulnrap-e2e-check] (vite preview + bundled dist/index.mjs, not the dev servers)"
 
+# --- Change-aware spec selection (Task #251) ---
+# Run the selector FIRST so a NONE outcome bails before the Chromium
+# check / token setup / build-cache log lines run (Task #353). Under
+# normal validation runs scripts/vulnrap-e2e-register.mjs will already
+# have de-registered this step on a NONE diff; this block is the
+# defense-in-depth path for direct invocations.
+#
+# Selector protocol: ALL | NONE | <spec basename per line>.
+echo "[vulnrap-e2e-check] Selecting specs based on the current branch's changed files..."
+SELECTOR_OUTPUT="$(node "${SELECTOR}")"
+SELECTED_SPECS=()
+RUN_MODE="all"
+while IFS= read -r line; do
+  [ -z "${line}" ] && continue
+  if [ "${line}" = "ALL" ]; then
+    RUN_MODE="all"
+    SELECTED_SPECS=()
+    break
+  elif [ "${line}" = "NONE" ]; then
+    RUN_MODE="none"
+    SELECTED_SPECS=()
+    break
+  else
+    RUN_MODE="subset"
+    SELECTED_SPECS+=("${line}")
+  fi
+done <<<"${SELECTOR_OUTPUT}"
+
+if [ "${RUN_MODE}" = "none" ]; then
+  echo "[vulnrap-e2e-check] No vulnrap e2e surface area was touched -- skipping suite."
+  echo "[vulnrap-e2e-check] (run scripts/vulnrap-e2e-register.mjs to also de-register the validation step,"
+  echo "                    or set E2E_RUN_ALL_SPECS=1 to force the full suite)"
+  exit 0
+fi
+
 if [ "${E2E_SKIP_PROD_BUILD:-0}" = "1" ]; then
   echo "[vulnrap-e2e-check] E2E_SKIP_PROD_BUILD=1 — trusting existing dist/ (no rebuild)"
 elif [ "${E2E_FORCE_PROD_BUILD:-0}" = "1" ]; then
@@ -102,38 +143,6 @@ export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="${CHROMIUM_PATH}"
 # exporting E2E_CALIBRATION_TOKEN before invoking this script.
 export E2E_CALIBRATION_TOKEN="${E2E_CALIBRATION_TOKEN:-e2e-calibration-token}"
 echo "[vulnrap-e2e-check] E2E_CALIBRATION_TOKEN is set (length=${#E2E_CALIBRATION_TOKEN})."
-
-# --- Change-aware spec selection (Task #251) ---
-# The selector prints either:
-#   ALL                 -> run every spec
-#   NONE                -> skip the suite entirely
-#   <spec>...           -> one spec basename per line, run only those
-# stderr from the selector is forwarded so the reasoning shows up in logs.
-echo "[vulnrap-e2e-check] Selecting specs based on the current branch's changed files..."
-SELECTOR_OUTPUT="$(node "${SELECTOR}")"
-SELECTED_SPECS=()
-RUN_MODE="all"
-while IFS= read -r line; do
-  [ -z "${line}" ] && continue
-  if [ "${line}" = "ALL" ]; then
-    RUN_MODE="all"
-    SELECTED_SPECS=()
-    break
-  elif [ "${line}" = "NONE" ]; then
-    RUN_MODE="none"
-    SELECTED_SPECS=()
-    break
-  else
-    RUN_MODE="subset"
-    SELECTED_SPECS+=("${line}")
-  fi
-done <<<"${SELECTOR_OUTPUT}"
-
-if [ "${RUN_MODE}" = "none" ]; then
-  echo "[vulnrap-e2e-check] No vulnrap e2e surface area was touched -- skipping suite."
-  echo "[vulnrap-e2e-check] (set E2E_RUN_ALL_SPECS=1 to force the full suite)"
-  exit 0
-fi
 
 if [ "${RUN_MODE}" = "subset" ]; then
   echo "[vulnrap-e2e-check] Running ${#SELECTED_SPECS[@]} change-affected spec(s):"

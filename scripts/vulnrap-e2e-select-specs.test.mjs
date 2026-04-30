@@ -61,6 +61,8 @@ const SHARED_FILE_SAMPLES = [
   "scripts/vulnrap-e2e-check.sh",
   "scripts/vulnrap-e2e-select-specs.mjs",
   "scripts/vulnrap-e2e-select-specs.test.mjs",
+  "scripts/vulnrap-e2e-register.mjs",
+  "scripts/vulnrap-e2e-register.test.mjs",
   "scripts/build-if-stale.mjs",
   "artifacts/vulnrap/playwright.config.ts",
   "artifacts/vulnrap/e2e/helpers/handwavy.ts",
