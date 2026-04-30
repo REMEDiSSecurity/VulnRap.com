@@ -4392,6 +4392,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       parentKind: bulkResults.kind,
     };
     if (bulkResults.kind === "remove") {
+      // Task #335 — `confirmBulkRemove` does NOT call `bailOnCooldown`
+      // itself (the original entry point `confirmBulkRemoveFromPreview`
+      // is what gates the preview-confirm path). Without this guard the
+      // Retry button would quietly bypass the wrong-token throttle that
+      // every other mutation handler in the panel respects. The undo
+      // branch below routes through `handleUndoBulkBatch`, which already
+      // calls `bailOnCooldown("Undo this batch")` itself, so we only
+      // gate the remove branch here to keep the existing toast labels.
+      if (bailOnCooldown("Retry failed")) return;
       // confirmBulkRemove builds a fresh banner ({ kind: "remove", rows })
       // from the new per-phrase outcomes, which is exactly the "replace
       // the banner with the new per-phrase outcomes" behaviour the task
@@ -6613,13 +6622,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   size="sm"
                   className="ml-auto h-7 px-2 text-[11px]"
                   onClick={handleRetryFailedBulkResults}
-                  disabled={retryBusy || !mutationsAllowed}
+                  disabled={retryBusy || cooldown.active || !mutationsAllowed}
                   title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                   data-testid="handwavy-bulk-retry-failed"
                   data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                  data-cooldown-active={cooldown.active ? "true" : "false"}
                 >
                   <RotateCcw className="w-3 h-3 mr-1" />
-                  {retryBusy
+                  {cooldown.active
+                    ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                    : retryBusy
                     ? `Retrying ${retryFailedCount}…`
                     : `Retry failed (${retryFailedCount})`}
                 </Button>
