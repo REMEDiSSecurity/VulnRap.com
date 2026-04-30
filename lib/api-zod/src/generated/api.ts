@@ -2071,6 +2071,12 @@ export const GetReportFeedQueryParams = zod.object({
     .describe(
       "Filter by cached AVRI rubric family id (exact match against reports.avri_family).",
     ),
+  fabricatedEvidence: zod
+    .enum(["fake_raw_http", "stripped_trace", "either"])
+    .optional()
+    .describe(
+      "Filter the feed to AVRI Engine 2 fabricated-evidence cohorts. `fake_raw_http`\nkeeps only rows where signalBreakdown.avri.rawHttp.isFake is true,\n`stripped_trace` keeps only rows where signalBreakdown.avri.crashTrace.isStripped\nis true, and `either` keeps rows that match either flag. Mirrors the\nfakeRawHttp \/ strippedCrashTrace booleans surfaced on each feed row.\n",
+    ),
   sort: zod
     .enum(["newest", "oldest", "score_asc", "score_desc"])
     .default(getReportFeedQuerySortDefault),
@@ -6925,9 +6931,18 @@ export const GetHandwavyPhraseRemovalBatchResponse = zod
                       .describe(
                         "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
                       ),
+                    phrase: zod
+                      .object({
+                        from: zod.string(),
+                        to: zod.string(),
+                      })
+                      .optional()
+                      .describe(
+                        "Task #247 — before\/after values for the phrase string itself,\npresent only when the reviewer renamed the marker via the\nedit endpoint's `newPhrase` field. Both values are stored\nalready normalized (lowercase + collapsed whitespace).\n",
+                      ),
                   })
                   .describe(
-                    "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                    "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category`, `rationale`, and\/or — Task\n#247 — the phrase string itself when a reviewer renamed it).\nFields that did not change are omitted to keep the audit log\ncompact.\n",
                   ),
               )
               .optional()
@@ -8021,9 +8036,18 @@ export const UndoHandwavyPhrasesBatchResponse = zod
                         .describe(
                           "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
                         ),
+                      phrase: zod
+                        .object({
+                          from: zod.string(),
+                          to: zod.string(),
+                        })
+                        .optional()
+                        .describe(
+                          "Task #247 — before\/after values for the phrase string itself,\npresent only when the reviewer renamed the marker via the\nedit endpoint's `newPhrase` field. Both values are stored\nalready normalized (lowercase + collapsed whitespace).\n",
+                        ),
                     })
                     .describe(
-                      "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                      "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category`, `rationale`, and\/or — Task\n#247 — the phrase string itself when a reviewer renamed it).\nFields that did not change are omitted to keep the audit log\ncompact.\n",
                     ),
                 )
                 .optional()
@@ -8114,9 +8138,18 @@ export const UndoHandwavyPhrasesBatchResponse = zod
                                 .describe(
                                   "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
                                 ),
+                              phrase: zod
+                                .object({
+                                  from: zod.string(),
+                                  to: zod.string(),
+                                })
+                                .optional()
+                                .describe(
+                                  "Task #247 — before\/after values for the phrase string itself,\npresent only when the reviewer renamed the marker via the\nedit endpoint's `newPhrase` field. Both values are stored\nalready normalized (lowercase + collapsed whitespace).\n",
+                                ),
                             })
                             .describe(
-                              "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                              "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category`, `rationale`, and\/or — Task\n#247 — the phrase string itself when a reviewer renamed it).\nFields that did not change are omitted to keep the audit log\ncompact.\n",
                             ),
                         )
                         .optional()
@@ -8210,9 +8243,18 @@ export const UndoHandwavyPhrasesBatchResponse = zod
                   .describe(
                     "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
                   ),
+                phrase: zod
+                  .object({
+                    from: zod.string(),
+                    to: zod.string(),
+                  })
+                  .optional()
+                  .describe(
+                    "Task #247 — before\/after values for the phrase string itself,\npresent only when the reviewer renamed the marker via the\nedit endpoint's `newPhrase` field. Both values are stored\nalready normalized (lowercase + collapsed whitespace).\n",
+                  ),
               })
               .describe(
-                "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category`, `rationale`, and\/or — Task\n#247 — the phrase string itself when a reviewer renamed it).\nFields that did not change are omitted to keep the audit log\ncompact.\n",
               ),
           )
           .optional()
@@ -8275,9 +8317,18 @@ export const UndoHandwavyPhrasesBatchResponse = zod
                     .describe(
                       "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
                     ),
+                  phrase: zod
+                    .object({
+                      from: zod.string(),
+                      to: zod.string(),
+                    })
+                    .optional()
+                    .describe(
+                      "Task #247 — before\/after values for the phrase string itself,\npresent only when the reviewer renamed the marker via the\nedit endpoint's `newPhrase` field. Both values are stored\nalready normalized (lowercase + collapsed whitespace).\n",
+                    ),
                 })
                 .describe(
-                  "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                  "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category`, `rationale`, and\/or — Task\n#247 — the phrase string itself when a reviewer renamed it).\nFields that did not change are omitted to keep the audit log\ncompact.\n",
                 ),
             )
             .optional()
@@ -8368,9 +8419,18 @@ export const UndoHandwavyPhrasesBatchResponse = zod
                             .describe(
                               "Before\/after values for the rationale text. Empty string indicates the rationale was set or cleared.",
                             ),
+                          phrase: zod
+                            .object({
+                              from: zod.string(),
+                              to: zod.string(),
+                            })
+                            .optional()
+                            .describe(
+                              "Task #247 — before\/after values for the phrase string itself,\npresent only when the reviewer renamed the marker via the\nedit endpoint's `newPhrase` field. Both values are stored\nalready normalized (lowercase + collapsed whitespace).\n",
+                            ),
                         })
                         .describe(
-                          "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category` and\/or `rationale`). Fields that\ndid not change are omitted to keep the audit log compact.\n",
+                          "Single in-place edit applied to a curated hand-wavy marker phrase.\nRecords who made the change, when, and the before\/after for whichever\nfields actually changed (`category`, `rationale`, and\/or — Task\n#247 — the phrase string itself when a reviewer renamed it).\nFields that did not change are omitted to keep the audit log\ncompact.\n",
                         ),
                     )
                     .optional()

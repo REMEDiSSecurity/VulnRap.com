@@ -68,6 +68,7 @@ export * from "./gapItemAudience";
 export * from "./gapItemSeverity";
 export * from "./getAvriDriftReportParams";
 export * from "./getReportFeedAvriFamily";
+export * from "./getReportFeedFabricatedEvidence";
 export * from "./getReportFeedParams";
 export * from "./getReportFeedSort";
 export * from "./getTrendsParams";

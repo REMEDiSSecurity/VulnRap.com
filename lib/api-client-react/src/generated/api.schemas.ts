@@ -2770,6 +2770,15 @@ export type GetReportFeedParams = {
    * Filter by cached AVRI rubric family id (exact match against reports.avri_family).
    */
   avriFamily?: GetReportFeedAvriFamily;
+  /**
+ * Filter the feed to AVRI Engine 2 fabricated-evidence cohorts. `fake_raw_http`
+keeps only rows where signalBreakdown.avri.rawHttp.isFake is true,
+`stripped_trace` keeps only rows where signalBreakdown.avri.crashTrace.isStripped
+is true, and `either` keeps rows that match either flag. Mirrors the
+fakeRawHttp / strippedCrashTrace booleans surfaced on each feed row.
+
+ */
+  fabricatedEvidence?: GetReportFeedFabricatedEvidence;
   sort?: GetReportFeedSort;
 };
 
@@ -2786,6 +2795,15 @@ export const GetReportFeedAvriFamily = {
   RACE_CONCURRENCY: "RACE_CONCURRENCY",
   REQUEST_SMUGGLING: "REQUEST_SMUGGLING",
   FLAT: "FLAT",
+} as const;
+
+export type GetReportFeedFabricatedEvidence =
+  (typeof GetReportFeedFabricatedEvidence)[keyof typeof GetReportFeedFabricatedEvidence];
+
+export const GetReportFeedFabricatedEvidence = {
+  fake_raw_http: "fake_raw_http",
+  stripped_trace: "stripped_trace",
+  either: "either",
 } as const;
 
 export type GetReportFeedSort =

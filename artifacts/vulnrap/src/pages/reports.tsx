@@ -108,6 +108,22 @@ const VALID_SORTS = new Set<string>(SORT_OPTIONS.map((s) => s.value));
 const VALID_FAMILIES = new Set<string>(AVRI_FAMILY_OPTIONS.map((o) => o.value));
 const VALID_TIERS = new Set<string>(["All", ...TIER_ORDER]);
 
+const FABRICATED_EVIDENCE_OPTIONS: Array<{ value: string; label: string; short: string }> = [
+  { value: "All", label: "All evidence", short: "All evidence" },
+  { value: "fake_raw_http", label: "Fake raw HTTP only", short: "Fake raw HTTP" },
+  { value: "stripped_trace", label: "Stripped crash trace only", short: "Stripped trace" },
+  { value: "either", label: "Either fabricated flag", short: "Either flag" },
+];
+const VALID_FABRICATED = new Set<string>(
+  FABRICATED_EVIDENCE_OPTIONS.map((o) => o.value),
+);
+
+function fabricatedEvidenceShort(value: string): string {
+  return (
+    FABRICATED_EVIDENCE_OPTIONS.find((o) => o.value === value)?.short ?? value
+  );
+}
+
 export default function Reports() {
   // Sprint 12 — Persist filters in the URL so reviewers can bookmark or share
   // a filtered view (e.g. /reports?avriFamily=INJECTION&sort=score_desc) and
@@ -120,6 +136,10 @@ export default function Reports() {
   const tierFilter = VALID_TIERS.has(rawTier) ? rawTier : "All";
   const rawFamily = searchParams.get("avriFamily") ?? "All";
   const familyFilter = VALID_FAMILIES.has(rawFamily) ? rawFamily : "All";
+  const rawFabricated = searchParams.get("fabricatedEvidence") ?? "All";
+  const fabricatedFilter = VALID_FABRICATED.has(rawFabricated)
+    ? rawFabricated
+    : "All";
   const rawOffset = parseInt(searchParams.get("offset") ?? "0", 10);
   const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
@@ -143,18 +163,31 @@ export default function Reports() {
   const setSort = (value: string) => updateParams({ sort: value, offset: "0" });
   const setTierFilter = (value: string) => updateParams({ tier: value, offset: "0" });
   const setFamilyFilter = (value: string) => updateParams({ avriFamily: value, offset: "0" });
+  const setFabricatedFilter = (value: string) =>
+    updateParams({ fabricatedEvidence: value, offset: "0" });
   const setOffset = (value: number) => updateParams({ offset: String(value) });
 
   // Sprint 12 — A filter is "active" when any of tier/family/sort differ from
   // their default. Offset is intentionally excluded: paging by itself isn't a
   // filter, and we already reset offset whenever a filter changes.
-  const hasActiveFilters = tierFilter !== "All" || familyFilter !== "All" || sort !== "newest";
+  const hasActiveFilters =
+    tierFilter !== "All" ||
+    familyFilter !== "All" ||
+    fabricatedFilter !== "All" ||
+    sort !== "newest";
   const clearAllFilters = () =>
-    updateParams({ tier: null, avriFamily: null, sort: null, offset: null });
+    updateParams({
+      tier: null,
+      avriFamily: null,
+      fabricatedEvidence: null,
+      sort: null,
+      offset: null,
+    });
 
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showTierMenu, setShowTierMenu] = useState(false);
   const [showFamilyMenu, setShowFamilyMenu] = useState(false);
+  const [showFabricatedMenu, setShowFabricatedMenu] = useState(false);
 
   const feedParams = {
     limit: PAGE_SIZE,
@@ -175,6 +208,14 @@ export default function Reports() {
             | "RACE_CONCURRENCY"
             | "REQUEST_SMUGGLING"
             | "FLAT",
+        }
+      : {}),
+    ...(fabricatedFilter !== "All"
+      ? {
+          fabricatedEvidence: fabricatedFilter as
+            | "fake_raw_http"
+            | "stripped_trace"
+            | "either",
         }
       : {}),
   };
@@ -274,7 +315,7 @@ export default function Reports() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => { setShowTierMenu(!showTierMenu); setShowSortMenu(false); }}
+              onClick={() => { setShowTierMenu(!showTierMenu); setShowSortMenu(false); setShowFamilyMenu(false); setShowFabricatedMenu(false); }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
               <Filter className="w-3.5 h-3.5 text-muted-foreground" />
@@ -307,7 +348,7 @@ export default function Reports() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => { setShowFamilyMenu(!showFamilyMenu); setShowTierMenu(false); setShowSortMenu(false); }}
+              onClick={() => { setShowFamilyMenu(!showFamilyMenu); setShowTierMenu(false); setShowSortMenu(false); setShowFabricatedMenu(false); }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
               <Filter className="w-3.5 h-3.5 text-muted-foreground" />
@@ -362,7 +403,41 @@ export default function Reports() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => { setShowSortMenu(!showSortMenu); setShowTierMenu(false); }}
+              data-testid="fabricated-evidence-trigger"
+              onClick={() => { setShowFabricatedMenu(!showFabricatedMenu); setShowTierMenu(false); setShowFamilyMenu(false); setShowSortMenu(false); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
+            >
+              <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>{fabricatedEvidenceShort(fabricatedFilter)}</span>
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            </button>
+            {showFabricatedMenu && (
+              <div
+                data-testid="fabricated-evidence-menu"
+                className="absolute top-full mt-1 left-0 z-50 glass-card rounded-lg border border-border/50 shadow-xl py-1 min-w-[220px]"
+              >
+                {FABRICATED_EVIDENCE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    data-testid={`fabricated-evidence-option-${opt.value}`}
+                    onClick={() => { setFabricatedFilter(opt.value); setShowFabricatedMenu(false); }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
+                      fabricatedFilter === opt.value && "text-primary font-medium",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => { setShowSortMenu(!showSortMenu); setShowTierMenu(false); setShowFamilyMenu(false); setShowFabricatedMenu(false); }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
               <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
@@ -435,6 +510,19 @@ export default function Reports() {
             >
               <span className="text-muted-foreground">Family:</span>
               <span className="text-foreground">{familyLabel(familyFilter) ?? familyFilter}</span>
+              <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
+            </button>
+          )}
+          {fabricatedFilter !== "All" && (
+            <button
+              type="button"
+              data-testid="fabricated-evidence-chip"
+              onClick={() => setFabricatedFilter("All")}
+              aria-label={`Remove fabricated-evidence filter: ${fabricatedEvidenceShort(fabricatedFilter)}`}
+              className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
+            >
+              <span className="text-muted-foreground">Evidence:</span>
+              <span className="text-foreground">{fabricatedEvidenceShort(fabricatedFilter)}</span>
               <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
             </button>
           )}

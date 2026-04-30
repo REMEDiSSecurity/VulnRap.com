@@ -362,6 +362,21 @@ paths:
               - REQUEST_SMUGGLING
               - FLAT
           description: Filter by cached AVRI rubric family id (exact match against reports.avri_family).
+        - name: fabricatedEvidence
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - fake_raw_http
+              - stripped_trace
+              - either
+          description: |
+            Filter the feed to AVRI Engine 2 fabricated-evidence cohorts. `fake_raw_http`
+            keeps only rows where signalBreakdown.avri.rawHttp.isFake is true,
+            `stripped_trace` keeps only rows where signalBreakdown.avri.crashTrace.isStripped
+            is true, and `either` keeps rows that match either flag. Mirrors the
+            fakeRawHttp / strippedCrashTrace booleans surfaced on each feed row.
         - name: sort
           in: query
           required: false

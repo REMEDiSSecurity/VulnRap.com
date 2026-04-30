@@ -1439,6 +1439,21 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   const rawAvriFamily = req.query.avriFamily ? String(req.query.avriFamily) : null;
   const avriFamilyFilter = rawAvriFamily && AVRI_FAMILY_IDS.has(rawAvriFamily) ? rawAvriFamily : null;
 
+  // Task #279 — fabricated-evidence filter (FAKE_RAW_HTTP / STRIPPED_CRASH_TRACE).
+  // Mirrors avriFamily: unknown values fall through to no-op rather than 400.
+  const FABRICATED_EVIDENCE_VALUES = new Set<string>([
+    "fake_raw_http",
+    "stripped_trace",
+    "either",
+  ]);
+  const rawFabricatedEvidence = req.query.fabricatedEvidence
+    ? String(req.query.fabricatedEvidence)
+    : null;
+  const fabricatedEvidenceFilter =
+    rawFabricatedEvidence && FABRICATED_EVIDENCE_VALUES.has(rawFabricatedEvidence)
+      ? rawFabricatedEvidence
+      : null;
+
   const conditions = [eq(reportsTable.showInFeed, true)];
   if (tierFilter) {
     conditions.push(eq(reportsTable.slopTier, tierFilter));
@@ -1457,7 +1472,32 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       conditions.push(eq(reportsTable.avriFamily, avriFamilyFilter));
     }
   }
+  // JSONPath scopes to engine name matching /Technical Substance/i so the
+  // SQL filter agrees with the JS row mapper (which derives the chip flags
+  // from Engine 2 only).
+  const fakeRawHttpPredicate = sql`jsonb_path_exists(${reportsTable.vulnrapEngineResults}, '$.engines[*] ? (@.engine like_regex "Technical Substance" flag "i").signalBreakdown.avri.rawHttp.isFake ? (@ == true)')`;
+  const strippedTracePredicate = sql`jsonb_path_exists(${reportsTable.vulnrapEngineResults}, '$.engines[*] ? (@.engine like_regex "Technical Substance" flag "i").signalBreakdown.avri.crashTrace.isStripped ? (@ == true)')`;
+  let fabricatedEvidenceCondition: ReturnType<typeof sql> | null = null;
+  if (fabricatedEvidenceFilter === "fake_raw_http") {
+    fabricatedEvidenceCondition = fakeRawHttpPredicate;
+  } else if (fabricatedEvidenceFilter === "stripped_trace") {
+    fabricatedEvidenceCondition = strippedTracePredicate;
+  } else if (fabricatedEvidenceFilter === "either") {
+    fabricatedEvidenceCondition = sql`(${fakeRawHttpPredicate} OR ${strippedTracePredicate})`;
+  }
+  if (fabricatedEvidenceCondition) {
+    conditions.push(fabricatedEvidenceCondition);
+  }
   const whereClause = and(...conditions)!;
+
+  // Summary counts include the fabricated-evidence filter (so the cards
+  // describe the visible cohort) but exclude tier/family — those filters
+  // need the full distribution in their dropdowns to remain selectable.
+  const summaryConditions = [eq(reportsTable.showInFeed, true)];
+  if (fabricatedEvidenceCondition) {
+    summaryConditions.push(fabricatedEvidenceCondition);
+  }
+  const summaryWhere = and(...summaryConditions)!;
 
   let orderClause;
   switch (sortParam) {
@@ -1486,7 +1526,7 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       avgScore: sql<number>`coalesce(avg("slop_score"), 0)`,
     })
     .from(reportsTable)
-    .where(eq(reportsTable.showInFeed, true));
+    .where(summaryWhere);
 
   const tierRows = await db
     .select({
@@ -1494,7 +1534,7 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       count: sql<number>`count(*)::int`,
     })
     .from(reportsTable)
-    .where(eq(reportsTable.showInFeed, true))
+    .where(summaryWhere)
     .groupBy(reportsTable.slopTier);
 
   const tierCounts: Record<string, number> = {};
@@ -1506,13 +1546,16 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   // "(N)" next to each option, mirroring tierCounts. We coalesce NULL rows
   // (legacy reports submitted before the column was persisted) into the FLAT
   // bucket since that's what the classifier would assign them today.
+  // Task #279 — these reflect the fabricated-evidence-filtered subset (see
+  // the summaryWhere comment above) so the dropdown reflects what's actually
+  // in the visible cohort when a fabricated-evidence filter is active.
   const familyRows = await db
     .select({
       family: sql<string>`coalesce(${reportsTable.avriFamily}, 'FLAT')`,
       count: sql<number>`count(*)::int`,
     })
     .from(reportsTable)
-    .where(eq(reportsTable.showInFeed, true))
+    .where(summaryWhere)
     .groupBy(sql`coalesce(${reportsTable.avriFamily}, 'FLAT')`);
 
   const familyCounts: Record<string, number> = {};

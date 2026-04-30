@@ -6,6 +6,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { GetReportFeedAvriFamily } from "./getReportFeedAvriFamily";
+import type { GetReportFeedFabricatedEvidence } from "./getReportFeedFabricatedEvidence";
 import type { GetReportFeedSort } from "./getReportFeedSort";
 
 export type GetReportFeedParams = {
@@ -26,5 +27,14 @@ export type GetReportFeedParams = {
    * Filter by cached AVRI rubric family id (exact match against reports.avri_family).
    */
   avriFamily?: GetReportFeedAvriFamily;
+  /**
+ * Filter the feed to AVRI Engine 2 fabricated-evidence cohorts. `fake_raw_http`
+keeps only rows where signalBreakdown.avri.rawHttp.isFake is true,
+`stripped_trace` keeps only rows where signalBreakdown.avri.crashTrace.isStripped
+is true, and `either` keeps rows that match either flag. Mirrors the
+fakeRawHttp / strippedCrashTrace booleans surfaced on each feed row.
+
+ */
+  fabricatedEvidence?: GetReportFeedFabricatedEvidence;
   sort?: GetReportFeedSort;
 };
