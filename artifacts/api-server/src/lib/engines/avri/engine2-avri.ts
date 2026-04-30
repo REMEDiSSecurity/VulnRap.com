@@ -13,6 +13,7 @@ import { runEngine2 as runEngine2Legacy } from "../engines";
 import type { FamilyRubric } from "./families";
 import { evaluateCrashTrace, crashTraceGoldSignalIdsFor, type CrashTraceEvaluation } from "./crash-trace";
 import {
+  augmentTextWithUnescapedHttp,
   evaluateRawHttpRequest,
   evaluateRawHttpResponse,
   rawHttpGoldSignalIdsFor,
@@ -271,11 +272,27 @@ export function runEngine2Avri(
     };
   }
 
+  // Task #427 — for families whose rubric awards gold points for raw
+  // HTTP request bytes (REQUEST_SMUGGLING / AUTHN_AUTHZ / INJECTION),
+  // also test the gold-signal patterns and absence-penalty patterns
+  // against the unescaped bytes from any `printf '...HTTP/1.x\r\n...'`
+  // shell-escaped reproductions in the report. Without this, a legit
+  // smuggling report whose only reproduction is a printf shell command
+  // misses `raw_http_request` (+18) and `smuggled_second_request`
+  // (+12) because the literal-CRLF gold patterns can't see through
+  // the shell escapes. The augmentation only applies to families that
+  // already opt in via `rawHttpGoldSignalIdsFor`, keeping families
+  // that don't care about HTTP byte framing untouched.
+  const familyWantsRawHttp = rawHttpGoldSignalIdsFor(family.id) !== null;
+  const httpAugmentedText = familyWantsRawHttp
+    ? augmentTextWithUnescapedHttp(fullText)
+    : fullText;
+
   // 1. Sum gold-signal points (cap at 100 raw).
   const goldHits: Array<{ id: string; description: string; points: number }> = [];
   let goldTotal = 0;
   for (const sig of family.goldSignals) {
-    if (sig.pattern.test(fullText)) {
+    if (sig.pattern.test(httpAugmentedText)) {
       goldHits.push({ id: sig.id, description: sig.description, points: sig.points });
       goldTotal += sig.points;
     }
@@ -469,10 +486,14 @@ export function runEngine2Avri(
   const baseScore = Math.min(84, (goldTotal / calibratedMax) * 100);
 
   // 2. Apply absence penalties POST-normalization, capped at -25 total.
+  // Task #427 — absence-penalty patterns also test the shell-escape-
+  // augmented view for raw-HTTP families so a printf reproduction
+  // satisfies the "raw HTTP request bytes provided" check the same
+  // way a literal-CRLF block does.
   const absencePenaltiesApplied: Array<{ id: string; description: string; points: number }> = [];
   let totalAbsencePenalty = 0;
   for (const ap of family.absencePenalties) {
-    if (!ap.pattern.test(fullText)) {
+    if (!ap.pattern.test(httpAugmentedText)) {
       const remaining = ABSENCE_PENALTY_CAP - totalAbsencePenalty;
       if (remaining <= 0) break;
       const applied = Math.min(ap.points, remaining);

@@ -597,12 +597,22 @@ Cache poisoning, request hijacking, auth bypass. CVSS 9.0.`,
     // recognized open-source list. The legit-03 `acme-proxy 2.4.1 - 2.6.3`
     // mention now fires the gold signal (+8) and silences `no_proxy_named`
     // (+6 absence avoided), pushing rawAvriScore from 39 → ~53, E2 from
-    // 45 → 60, and composite from ~63 (REASONABLE) → 73 (PROMISING). The
-    // threshold below is bumped from 50 to 65 to lock in the gain while
-    // keeping a small headroom for blend-noise. The slop cohort (none of
+    // 45 → 60, and composite from ~63 → 73 (PROMISING).
+    //
+    // Task #427 — added a shell-escaped HTTP detector that feeds the
+    // printf reproduction through the same gold-signal pipeline as a
+    // literal CRLF block. This stacks on top of #426: `raw_http_request`
+    // (+18) and `smuggled_second_request` (+12) now also fire on the
+    // unescaped bytes, so gold = 14 (te_or_cl_conflict) + 8 (proxy) +
+    // 18 (raw_http) + 12 (second_request) = 52 / calibratedMax=31, the
+    // baseScore caps at 84 with no absence penalty, blended with
+    // legacy=50 → measured composite 77 (PROMISING). The threshold
+    // below is bumped from 65 → 70 to lock in the additional headroom
+    // while leaving room for blend-noise. The slop cohort (none of
     // which claim CWE-444) is unaffected because the REQUEST_SMUGGLING
-    // rubric only runs for that family.
-    expectMinScore: 65,
+    // rubric only runs for that family, and the shell-escape detector
+    // still revokes raw-HTTP points when the unescaped bytes are slop.
+    expectMinScore: 70,
   },
   // Task #425 — real-world legit fixtures for the six newly-recognised
   // vulnerability classes added in Task #301 (XXE, LFI, Open Redirect,

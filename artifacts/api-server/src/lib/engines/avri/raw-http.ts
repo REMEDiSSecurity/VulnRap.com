@@ -112,6 +112,86 @@ export interface RawHttpEvaluation {
 // error here).
 const REQUEST_LINE_RE = /(^|\n)([A-Z]{3,10})[ \t]+(\S+)[ \t]+HTTP\/1\.[01]\r?\n/g;
 
+// Task #427 — shell-escaped HTTP framing. Many real smuggling
+// reproductions paste the request as a `printf 'POST / HTTP/1.1\r\n…'`
+// shell command rather than a literal CRLF block. The body of the
+// printf carries shell-escape sequences (a literal backslash followed
+// by `r`/`n`/`t`) that printf would convert to actual control bytes
+// before piping the request to nc. The literal-CRLF detector above
+// can't see through those escape sequences, so we recognise quoted
+// runs that contain `HTTP/1.[01]\r\n` (with literal backslash-r-
+// backslash-n), unescape them, and feed the unescaped bytes through
+// the same detector / fakeness pipeline. Symmetric matchers cover
+// single- and double-quoted bodies; the `[^'\n]` / `[^"\n]` classes
+// keep the match anchored to one shell-line so we don't accidentally
+// span paragraphs of unrelated prose. The `\b(?:HTTP|HTTP)` shape
+// inside the body keeps neutral quoted strings out of the match.
+const SHELL_ESCAPED_HTTP_SINGLE_RE =
+  /'([^'\n]*HTTP\/1\.[01]\\r\\n[^'\n]*)'/g;
+const SHELL_ESCAPED_HTTP_DOUBLE_RE =
+  /"([^"\n]*HTTP\/1\.[01]\\r\\n[^"\n]*)"/g;
+
+/** Decode the common shell-escape sequences (`\r`, `\n`, `\t`, `\v`,
+ * `\0`, `\\`, `\'`, `\"`) inside a `printf '...'`-style body. Unknown
+ * escapes are left as-is so we don't silently drop bytes. */
+function unescapeShellBody(body: string): string {
+  return body.replace(/\\([rntv0\\'"])/g, (_m, c: string) => {
+    switch (c) {
+      case "r":
+        return "\r";
+      case "n":
+        return "\n";
+      case "t":
+        return "\t";
+      case "v":
+        return "\v";
+      case "0":
+        return "\0";
+      case "\\":
+        return "\\";
+      case "'":
+        return "'";
+      case '"':
+        return '"';
+      default:
+        return _m;
+    }
+  });
+}
+
+/** Find every shell-escaped HTTP fragment in `text` (printf '…' / "…"
+ * bodies that contain `HTTP/1.x\r\n` with literal backslash-r-
+ * backslash-n) and return their unescaped concatenation, joined by a
+ * blank line so each unescaped block stands as its own request /
+ * response excerpt for the downstream detectors. Returns "" when no
+ * such fragment is present so callers can short-circuit. */
+export function unescapeShellHttpFragments(text: string): string {
+  const out: string[] = [];
+  SHELL_ESCAPED_HTTP_SINGLE_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = SHELL_ESCAPED_HTTP_SINGLE_RE.exec(text)) !== null) {
+    out.push(unescapeShellBody(m[1]));
+  }
+  SHELL_ESCAPED_HTTP_DOUBLE_RE.lastIndex = 0;
+  while ((m = SHELL_ESCAPED_HTTP_DOUBLE_RE.exec(text)) !== null) {
+    out.push(unescapeShellBody(m[1]));
+  }
+  if (out.length === 0) return "";
+  return out.join("\n\n");
+}
+
+/** Return `text` augmented with the unescaped bytes from any
+ * shell-escaped HTTP fragments it contains, separated by a blank line.
+ * When no shell-escaped fragment is present the original text is
+ * returned unchanged. Used to feed `printf '...HTTP/1.x\r\n...'`
+ * reproductions through the same gold-signal / fakeness pipeline as
+ * literal raw HTTP bytes. */
+export function augmentTextWithUnescapedHttp(text: string): string {
+  const unescaped = unescapeShellHttpFragments(text);
+  if (unescaped.length === 0) return text;
+  return `${text}\n\n${unescaped}`;
+}
+
 // Header-line shape: name ":" OWS value OWS.
 const HEADER_LINE_RE = /^([A-Za-z][A-Za-z0-9\-_]*)\s*:\s*(.*?)\s*$/;
 
@@ -735,16 +815,32 @@ export interface RawHttpEvaluationOptions {
 }
 
 export function evaluateRawHttpRequest(
-  text: string,
+  rawText: string,
   options: RawHttpEvaluationOptions = {},
 ): RawHttpEvaluation {
   const strictCrlf = options.strictCrlf ?? false;
+  // Task #427 — many real smuggling reports paste their reproduction as
+  // a `printf 'POST / HTTP/1.1\r\n…'` shell command. The literal-CRLF
+  // request-line detector can't see through those escapes, so we
+  // augment the analyzed text with the unescaped bytes (separated by a
+  // blank line) and run the existing pipeline against the augmented
+  // view. The same TE/CL coherence and placeholder-header checks then
+  // apply to shell-escaped bytes — slop reproductions whose unescaped
+  // bytes are placeholder-padded still get revoked.
+  const text = augmentTextWithUnescapedHttp(rawText);
   const blocks = findRequestBlocks(text);
   // Prose-level placeholder payload mentions are scanned regardless of
   // whether any raw HTTP request blocks are present — the slop dodge here
   // is to drop "Payload: `<inject>`" in plain prose with no fake bytes
   // alongside it.
-  const proseRanges = findProsePlaceholderPayloadRanges(text);
+  // Prose placeholder scanning runs against the ORIGINAL text only —
+  // the appended unescaped HTTP bytes from `augmentTextWithUnescapedHttp`
+  // exist purely to surface request-block framing for the raw-HTTP
+  // pipeline, and re-scanning them would just double-count any prose
+  // dodge that lives inside the printf body itself (the body is already
+  // present in `rawText` at its original offset, so the ranges stay
+  // mappable to the source text).
+  const proseRanges = findProsePlaceholderPayloadRanges(rawText);
   const proseDetails = proseRanges.map((r) => ({
     category: r.category,
     snippet: r.snippet,
