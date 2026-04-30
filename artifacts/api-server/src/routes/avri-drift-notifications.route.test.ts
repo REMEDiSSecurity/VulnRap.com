@@ -10,7 +10,7 @@ import os from "node:os";
 import { promises as fs } from "node:fs";
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 const TOKEN = "drift-notify-token";
 
@@ -371,6 +371,187 @@ describe("POST /feedback/calibration/avri-drift/notifications/rearm", () => {
       AUTH,
     );
     expect(r.status).toBe(400);
+  });
+});
+
+// Task #398 — Route-level coverage for the unauthenticated
+// `scheduler-status` endpoint: stays un-gated regardless of
+// CALIBRATION_TOKEN, JSON shape matches the OpenAPI contract, and the
+// body never carries the webhook URL or token. Task #277 unit-tested
+// the in-memory struct directly; this block exercises the real route.
+interface SchedulerStatusBody {
+  schedulerStarted: boolean;
+  startedAt: string | null;
+  intervalMs: number | null;
+  retryIntervalMs: number | null;
+  webhookConfigured: boolean;
+  lastTickAt: string | null;
+  lastTickOk: boolean | null;
+  lastTickRanCheck: boolean | null;
+  lastTickDispatched: boolean | null;
+  lastTickNewFlagCount: number | null;
+  nextTickAt: string | null;
+  ticksCompleted: number;
+}
+
+describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
+  const SCHEDULER_PATH = "/feedback/calibration/avri-drift/scheduler-status";
+  const REQUIRED_KEYS: ReadonlyArray<keyof SchedulerStatusBody> = [
+    "schedulerStarted",
+    "startedAt",
+    "intervalMs",
+    "retryIntervalMs",
+    "webhookConfigured",
+    "lastTickAt",
+    "lastTickOk",
+    "lastTickRanCheck",
+    "lastTickDispatched",
+    "lastTickNewFlagCount",
+    "nextTickAt",
+    "ticksCompleted",
+  ];
+
+  let scheduler: { stop(): void } | null = null;
+
+  beforeEach(async () => {
+    const lib = await import("../lib/avri-drift-notifications");
+    lib.__testing.resetSchedulerStatus();
+  });
+
+  afterEach(() => {
+    if (scheduler) {
+      scheduler.stop();
+      scheduler = null;
+    }
+    delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    // Restore the strict-auth token that the suite-level beforeAll set,
+    // in case an individual test cleared it to exercise the no-token
+    // branch.
+    process.env.CALIBRATION_TOKEN = TOKEN;
+  });
+
+  it("returns 200 unauthenticated even when CALIBRATION_TOKEN is configured", async () => {
+    // Sanity-check the suite's env so a future refactor that stops
+    // setting the token in `beforeAll` doesn't quietly turn this into
+    // a no-op.
+    expect(process.env.CALIBRATION_TOKEN).toBe(TOKEN);
+    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    expect(r.status).toBe(200);
+    expect(r.body.schedulerStarted).toBe(false);
+  });
+
+  it("returns 200 unauthenticated when CALIBRATION_TOKEN is not set", async () => {
+    delete process.env.CALIBRATION_TOKEN;
+    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    expect(r.status).toBe(200);
+    expect(r.body.schedulerStarted).toBe(false);
+  });
+
+  it("ignores a stray x-calibration-token header (route is un-gated, not opportunistically auth'd)", async () => {
+    const r = await request<SchedulerStatusBody>(
+      "GET",
+      SCHEDULER_PATH,
+      undefined,
+      { "x-calibration-token": "wrong-token" },
+    );
+    expect(r.status).toBe(200);
+  });
+
+  it("returns the 'never started' baseline before the scheduler runs", async () => {
+    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({
+      schedulerStarted: false,
+      startedAt: null,
+      intervalMs: null,
+      retryIntervalMs: null,
+      lastTickAt: null,
+      lastTickOk: null,
+      lastTickRanCheck: null,
+      lastTickDispatched: null,
+      lastTickNewFlagCount: null,
+      nextTickAt: null,
+      ticksCompleted: 0,
+    });
+    // webhookConfigured is derived from env at read-time, so just
+    // assert the type — the env-set case is covered separately below.
+    expect(typeof r.body.webhookConfigured).toBe("boolean");
+  });
+
+  it("reflects a running scheduler with schedulerStarted + nextTickAt populated", async () => {
+    const lib = await import("../lib/avri-drift-notifications");
+    // Use a long initial delay so the real timer can't fire during the
+    // request and mutate the status struct mid-test. The unref'd timer
+    // also won't keep the process alive after the suite ends, but
+    // afterEach still calls stop() to be tidy.
+    scheduler = lib.startDriftNotificationScheduler({
+      intervalMs: 60_000,
+      retryIntervalMs: 5_000,
+      initialDelayMs: 60_000,
+      run: async () => ({ ok: true }),
+    });
+    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    expect(r.status).toBe(200);
+    expect(r.body.schedulerStarted).toBe(true);
+    expect(r.body.startedAt).not.toBeNull();
+    expect(r.body.intervalMs).toBe(60_000);
+    expect(r.body.retryIntervalMs).toBe(5_000);
+    expect(r.body.nextTickAt).not.toBeNull();
+    expect(r.body.ticksCompleted).toBe(0);
+    // No tick has fired yet, so the per-tick fields stay null.
+    expect(r.body.lastTickAt).toBeNull();
+    expect(r.body.lastTickOk).toBeNull();
+  });
+
+  it("matches the OpenAPI shape exactly — no missing keys, no surprise keys", async () => {
+    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    expect(r.status).toBe(200);
+    for (const key of REQUIRED_KEYS) {
+      expect(r.body).toHaveProperty(key);
+    }
+    // Lock the key set so a future patch that drops the webhook URL,
+    // an error message, or a bearer token into the status struct fails
+    // here instead of silently leaking on a public endpoint.
+    expect(Object.keys(r.body).sort()).toEqual([...REQUIRED_KEYS].sort());
+  });
+
+  it("does not leak AVRI_DRIFT_WEBHOOK_URL even when the env is set and the scheduler is running", async () => {
+    // A realistic-looking secret URL with a credential-shaped path
+    // segment so the `not.toContain` checks below fail loudly if any
+    // future patch ever serializes the URL into the status struct.
+    const sentinelUrl =
+      "https://hooks.example-leak-test.invalid/services/T0SECRET/B0SECRET/abcdef1234567890";
+    process.env.AVRI_DRIFT_WEBHOOK_URL = sentinelUrl;
+
+    const lib = await import("../lib/avri-drift-notifications");
+    scheduler = lib.startDriftNotificationScheduler({
+      intervalMs: 60_000,
+      retryIntervalMs: 5_000,
+      initialDelayMs: 60_000,
+      run: async () => ({ ok: true }),
+    });
+
+    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    expect(r.status).toBe(200);
+
+    // The boolean projection is fine to expose — the UI uses it to warn
+    // when the webhook is missing — but the URL itself must never
+    // appear anywhere in the body.
+    expect(r.body.webhookConfigured).toBe(true);
+
+    const raw = JSON.stringify(r.body);
+    expect(raw).not.toContain(sentinelUrl);
+    expect(raw).not.toContain("hooks.example-leak-test.invalid");
+    expect(raw).not.toContain("T0SECRET");
+    expect(raw).not.toContain("B0SECRET");
+    expect(raw).not.toContain("abcdef1234567890");
+    // No URL-shaped string at all — defends against a future field
+    // that quotes a different webhook URL (e.g. a "lastDispatchedTo").
+    expect(raw).not.toMatch(/https?:\/\//);
+    // And no calibration token either — even though the route is
+    // un-gated, a future field that echoed the configured auth token
+    // would defeat the whole "no credentials in this body" policy.
+    expect(raw).not.toContain(TOKEN);
   });
 });
 
