@@ -1640,6 +1640,40 @@ export interface AvriDriftRearmResponse {
   notified: AvriDriftNotificationRecord[];
 }
 
+/**
+ * In-process status of the AVRI drift-notification scheduler.
+Timestamps are ISO 8601; `null` is used wherever the field is
+not yet meaningful (e.g. `lastTickAt` before the first tick,
+`nextTickAt` while the scheduler is stopped).
+
+ */
+export interface AvriDriftSchedulerStatus {
+  /** True once the scheduler has been armed in this process. */
+  schedulerStarted: boolean;
+  /** ISO timestamp when the scheduler was started, or null when never started in this process. */
+  startedAt: string | null;
+  /** Configured success-case interval (ms), or null when not started. */
+  intervalMs: number | null;
+  /** Configured retry-on-failure interval (ms), or null when not started. */
+  retryIntervalMs: number | null;
+  /** True when the drift webhook URL is currently set; ticks short-circuit when false. */
+  webhookConfigured: boolean;
+  /** ISO timestamp of the most recent completed tick, or null when no tick has run yet. */
+  lastTickAt: string | null;
+  /** True when the last tick succeeded; false on failure; null until the first tick. */
+  lastTickOk: boolean | null;
+  /** True when the last tick scanned the database; false when it short-circuited because no webhook is configured; null until the first tick. */
+  lastTickRanCheck: boolean | null;
+  /** True when the last tick dispatched a webhook; null until the first tick or when no dispatch was attempted. */
+  lastTickDispatched: boolean | null;
+  /** Number of new flags dispatched on the most recent tick; null until the first tick or when no dispatch was attempted. */
+  lastTickNewFlagCount: number | null;
+  /** ISO timestamp when the next tick is scheduled to fire; null when the scheduler is stopped or never started. */
+  nextTickAt: string | null;
+  /** Number of ticks that have completed since the scheduler started. */
+  ticksCompleted: number;
+}
+
 export type CalibrationReportOverallHealth =
   (typeof CalibrationReportOverallHealth)[keyof typeof CalibrationReportOverallHealth];
 

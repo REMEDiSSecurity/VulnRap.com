@@ -19,6 +19,7 @@ export * from "./avriDriftRearmBody";
 export * from "./avriDriftRearmResponse";
 export * from "./avriDriftReport";
 export * from "./avriDriftReportCohort";
+export * from "./avriDriftSchedulerStatus";
 export * from "./avriDriftThresholds";
 export * from "./avriDriftWeekBucket";
 export * from "./avriDriftWeekBucketPerFamily";

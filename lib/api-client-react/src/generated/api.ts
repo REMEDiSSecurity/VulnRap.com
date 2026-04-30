@@ -23,6 +23,7 @@ import type {
   AvriDriftRearmBody,
   AvriDriftRearmResponse,
   AvriDriftReport,
+  AvriDriftSchedulerStatus,
   CalibrationAuthStatus,
   CalibrationReport,
   CheckReportBody,
@@ -1603,6 +1604,96 @@ export const useRearmAvriDriftNotifications = <
 > => {
   return useMutation(getRearmAvriDriftNotificationsMutationOptions(options));
 };
+
+/**
+ * Operator-visible status of the in-process AVRI drift-notification
+scheduler started at server boot. Backs the calibration page's
+heartbeat panel so reviewers can confirm the timer is firing
+without scraping logs.
+
+Unauthenticated, matching `/feedback/calibration/auth-status`:
+the response is timestamps + booleans only (no error text,
+webhook URL, or token). Per-process — in a multi-replica deploy
+the response reflects whichever replica handled the request.
+
+ * @summary Get the in-process AVRI drift scheduler status
+ */
+export const getGetAvriDriftSchedulerStatusUrl = () => {
+  return `/api/feedback/calibration/avri-drift/scheduler-status`;
+};
+
+export const getAvriDriftSchedulerStatus = async (
+  options?: RequestInit,
+): Promise<AvriDriftSchedulerStatus> => {
+  return customFetch<AvriDriftSchedulerStatus>(
+    getGetAvriDriftSchedulerStatusUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetAvriDriftSchedulerStatusQueryKey = () => {
+  return [`/api/feedback/calibration/avri-drift/scheduler-status`] as const;
+};
+
+export const getGetAvriDriftSchedulerStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAvriDriftSchedulerStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftSchedulerStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAvriDriftSchedulerStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAvriDriftSchedulerStatus>>
+  > = ({ signal }) =>
+    getAvriDriftSchedulerStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftSchedulerStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAvriDriftSchedulerStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAvriDriftSchedulerStatus>>
+>;
+export type GetAvriDriftSchedulerStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the in-process AVRI drift scheduler status
+ */
+
+export function useGetAvriDriftSchedulerStatus<
+  TData = Awaited<ReturnType<typeof getAvriDriftSchedulerStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAvriDriftSchedulerStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAvriDriftSchedulerStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * Returns the active scoring config version and full version history.

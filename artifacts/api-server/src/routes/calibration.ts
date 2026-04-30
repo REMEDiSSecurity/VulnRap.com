@@ -8,6 +8,7 @@ import {
   notifyDriftFlagsIfNew,
   listNotifiedFlags,
   removeNotifiedFlags,
+  getDriftSchedulerStatus,
 } from "../lib/avri-drift-notifications";
 import {
   getHandwavyPhrases,
@@ -709,6 +710,24 @@ router.post(
     }
   },
 );
+
+// Operator-visible drift scheduler status. Backs the calibration
+// page's heartbeat panel so reviewers can confirm the background
+// timer is firing without scraping logs.
+//
+// Unauthenticated like `/auth-status`: response is timestamps +
+// booleans only (no error text, webhook URL, or token).
+router.get("/feedback/calibration/avri-drift/scheduler-status", (_req, res) => {
+  try {
+    const status = getDriftSchedulerStatus();
+    res.json(status);
+  } catch (err) {
+    _req.log?.error(err, "Failed to read AVRI drift scheduler status");
+    res
+      .status(500)
+      .json({ error: "Failed to read AVRI drift scheduler status." });
+  }
+});
 
 router.get("/feedback/calibration/config", (_req, res) => {
   try {

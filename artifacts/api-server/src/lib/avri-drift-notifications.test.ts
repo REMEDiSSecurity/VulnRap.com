@@ -10,6 +10,7 @@ import {
   startDriftNotificationScheduler,
   listNotifiedFlags,
   removeNotifiedFlags,
+  getDriftSchedulerStatus,
   __testing,
   type WebhookDispatcher,
   type WebhookPayload,
@@ -724,5 +725,146 @@ describe("listNotifiedFlags / removeNotifiedFlags", () => {
     const refreshed = listNotifiedFlags();
     expect(refreshed.map((r) => r.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
     expect(refreshed[0]!.notifiedAt).not.toBe("2026-04-21T00:00:00.000Z");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getDriftSchedulerStatus exposes the in-memory scheduler heartbeat that the
+// calibration page reads. Tests pin the wall clock and inject a runner so
+// the status struct's timestamps are deterministic.
+// ---------------------------------------------------------------------------
+
+describe("getDriftSchedulerStatus", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-29T00:00:00.000Z"));
+    __testing.resetSchedulerStatus();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    __testing.resetSchedulerStatus();
+  });
+
+  async function flushTick(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it("returns the 'never started' baseline before the scheduler runs", () => {
+    const status = getDriftSchedulerStatus();
+    expect(status.schedulerStarted).toBe(false);
+    expect(status.startedAt).toBeNull();
+    expect(status.lastTickAt).toBeNull();
+    expect(status.nextTickAt).toBeNull();
+    expect(status.lastTickOk).toBeNull();
+    expect(status.ticksCompleted).toBe(0);
+  });
+
+  it("seeds startedAt + nextTickAt when the scheduler starts", () => {
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 60_000,
+      retryIntervalMs: 5_000,
+      initialDelayMs: 1_000,
+      run: async () => ({ ok: true }),
+    });
+    try {
+      const status = getDriftSchedulerStatus();
+      expect(status.schedulerStarted).toBe(true);
+      expect(status.startedAt).toBe("2026-04-29T00:00:00.000Z");
+      expect(status.intervalMs).toBe(60_000);
+      expect(status.retryIntervalMs).toBe(5_000);
+      // initialDelayMs is added to the wall clock; first tick is due
+      // 1s after start.
+      expect(status.nextTickAt).toBe("2026-04-29T00:00:01.000Z");
+      expect(status.lastTickAt).toBeNull();
+      expect(status.ticksCompleted).toBe(0);
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("updates lastTickAt + nextTickAt + counters after each successful tick", async () => {
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 60_000,
+      retryIntervalMs: 5_000,
+      initialDelayMs: 1_000,
+      run: async () => ({
+        ok: true,
+        ranCheck: true,
+        outcome: {
+          // newFlagCount on the status surface is derived from
+          // notified.length so it stays in sync with the dedup state
+          // file (the actual number of flags written to disk).
+          notified: [
+            { ...GAP_FLAG, key: "k1" },
+            { ...FAM_FLAG_T1_INJ, key: "k2" },
+          ],
+          alreadyNotified: [],
+          dispatched: true,
+          dispatchResult: { ok: true },
+        },
+      }),
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await flushTick();
+
+      const status = getDriftSchedulerStatus();
+      expect(status.lastTickAt).toBe("2026-04-29T00:00:01.000Z");
+      expect(status.lastTickOk).toBe(true);
+      expect(status.lastTickRanCheck).toBe(true);
+      expect(status.lastTickDispatched).toBe(true);
+      expect(status.lastTickNewFlagCount).toBe(2);
+      // After a successful tick the next firing is intervalMs (60s)
+      // away, not retryIntervalMs.
+      expect(status.nextTickAt).toBe("2026-04-29T00:01:01.000Z");
+      expect(status.ticksCompleted).toBe(1);
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("uses the retry cadence when a tick fails", async () => {
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 60_000,
+      retryIntervalMs: 5_000,
+      initialDelayMs: 0,
+      run: async () => ({
+        ok: false,
+        ranCheck: true,
+      }),
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await flushTick();
+
+      const status = getDriftSchedulerStatus();
+      expect(status.lastTickOk).toBe(false);
+      // Failed tick reschedules at retryIntervalMs (5s), not the
+      // success intervalMs (60s).
+      expect(status.nextTickAt).toBe("2026-04-29T00:00:05.000Z");
+      expect(status.ticksCompleted).toBe(1);
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("clears nextTickAt when stop() is called", async () => {
+    const sched = startDriftNotificationScheduler({
+      intervalMs: 60_000,
+      retryIntervalMs: 5_000,
+      initialDelayMs: 1_000,
+      run: async () => ({ ok: true }),
+    });
+    expect(getDriftSchedulerStatus().nextTickAt).not.toBeNull();
+    sched.stop();
+    const status = getDriftSchedulerStatus();
+    expect(status.nextTickAt).toBeNull();
+    // schedulerStarted stays true so the UI can still show the
+    // "scheduler ran but is stopped" state. startedAt is preserved
+    // for the same reason.
+    expect(status.schedulerStarted).toBe(true);
+    expect(status.startedAt).toBe("2026-04-29T00:00:00.000Z");
   });
 });

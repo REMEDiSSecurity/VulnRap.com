@@ -5,9 +5,11 @@ import {
   useGetScoringConfig, getGetScoringConfigQueryKey,
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
   useGetAvriDriftNotifications, getGetAvriDriftNotificationsQueryKey,
+  useGetAvriDriftSchedulerStatus, getGetAvriDriftSchedulerStatusQueryKey,
   rearmAvriDriftNotifications,
   ApiError,
   type AvriDriftNotificationRecord,
+  type AvriDriftSchedulerStatus,
   useGetCalibrationAuthStatus, getGetCalibrationAuthStatusQueryKey,
   useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
   useListHandwavyPhraseRemovalBatches, getListHandwavyPhraseRemovalBatchesQueryKey,
@@ -8645,6 +8647,220 @@ function GapSparkline({ weeks, gapWarn }: { weeks: AvriDriftWeekBucket[]; gapWar
   );
 }
 
+// Format a future timestamp as "in 3m" / "in 2h" / "overdue by 5s".
+// Returns null when the input is unparseable so callers can render a
+// placeholder.
+function formatRelativeUntil(iso: string, now: number = Date.now()): string | null {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const diffMs = t - now;
+  const overdue = diffMs < 0;
+  const absMs = Math.abs(diffMs);
+  const sec = Math.round(absMs / 1000);
+  const fmt = (label: string) => (overdue ? `overdue by ${label}` : `in ${label}`);
+  if (sec < 5) return overdue ? "due now" : "in <5s";
+  if (sec < 60) return fmt(`${sec}s`);
+  const min = Math.round(sec / 60);
+  if (min < 60) return fmt(`${min}m`);
+  const hr = Math.round(min / 60);
+  if (hr < 24) return fmt(`${hr}h`);
+  const day = Math.round(hr / 24);
+  return fmt(`${day}d`);
+}
+
+// Operator-visible heartbeat for the in-process AVRI drift scheduler.
+// Reads the unauthenticated status endpoint and renders last-tick /
+// next-tick / cadence so reviewers can confirm the timer is firing
+// without scraping logs. Per-process — in a multi-replica deploy the
+// panel reflects whichever replica handled the request.
+function SchedulerStatusPanel() {
+  const queryKey = getGetAvriDriftSchedulerStatusQueryKey();
+  // Refetch every 30s — the endpoint just reads an in-memory struct.
+  const { data, isLoading, isError } = useGetAvriDriftSchedulerStatus({
+    query: { queryKey, refetchInterval: 30_000 },
+  });
+
+  // Tick `now` between server fetches so the relative-time labels
+  // ("in 4m" / "5m ago") stay roughly fresh without re-querying.
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+        <Clock className="w-3 h-3" />
+        <span>Scheduler heartbeat</span>
+        <span className="text-muted-foreground/40 normal-case font-normal italic">
+          background drift check (per process)
+        </span>
+      </div>
+      {isLoading ? (
+        <Skeleton className="h-16 rounded-md" />
+      ) : isError || !data ? (
+        <p className="text-xs text-muted-foreground/70 py-2 flex items-center gap-2">
+          <XCircle className="w-3.5 h-3.5 text-red-400" />
+          Could not load scheduler status.
+        </p>
+      ) : (
+        <SchedulerStatusContent status={data} now={now} />
+      )}
+    </div>
+  );
+}
+
+function SchedulerStatusContent({
+  status,
+  now,
+}: {
+  status: AvriDriftSchedulerStatus;
+  now: number;
+}) {
+  let headline: { label: string; color: string; icon: ReactNode };
+  if (!status.schedulerStarted) {
+    headline = {
+      label: "Not started in this process",
+      color: "text-muted-foreground bg-muted/30 border-border/40",
+      icon: <Info className="w-3 h-3" />,
+    };
+  } else if (!status.webhookConfigured) {
+    headline = {
+      label: "Armed · webhook not configured",
+      color: "text-muted-foreground bg-muted/30 border-border/40",
+      icon: <Info className="w-3 h-3" />,
+    };
+  } else if (status.lastTickOk === false) {
+    headline = {
+      label: "Last tick failed",
+      color: "text-red-400 bg-red-400/10 border-red-400/30",
+      icon: <XCircle className="w-3 h-3" />,
+    };
+  } else if (status.lastTickOk === true) {
+    headline = {
+      label: "Healthy",
+      color: "text-green-400 bg-green-400/10 border-green-400/30",
+      icon: <CheckCircle2 className="w-3 h-3" />,
+    };
+  } else {
+    headline = {
+      label: "Armed · awaiting first tick",
+      color: "text-primary bg-primary/10 border-primary/30",
+      icon: <Activity className="w-3 h-3" />,
+    };
+  }
+
+  const lastAgo = status.lastTickAt ? formatRelativeAgo(status.lastTickAt, now) : null;
+  const nextIn = status.nextTickAt ? formatRelativeUntil(status.nextTickAt, now) : null;
+  const startedAgo = status.startedAt ? formatRelativeAgo(status.startedAt, now) : null;
+
+  let lastDetail: string;
+  if (status.lastTickAt == null) {
+    lastDetail = "—";
+  } else if (status.lastTickOk === false) {
+    lastDetail = "failed";
+  } else if (!status.lastTickRanCheck) {
+    lastDetail = "skipped (no webhook configured)";
+  } else if (status.lastTickDispatched) {
+    const n = status.lastTickNewFlagCount ?? 0;
+    lastDetail = `dispatched ${n} new flag${n === 1 ? "" : "s"}`;
+  } else {
+    lastDetail = "no new flags to dispatch";
+  }
+
+  const cadence =
+    status.intervalMs != null && status.retryIntervalMs != null
+      ? `every ${formatMsInterval(status.intervalMs)} (retry ${formatMsInterval(status.retryIntervalMs)})`
+      : null;
+
+  return (
+    <div className="rounded-md border border-border/40 bg-muted/[0.03] p-3 space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <Badge variant="outline" className={cn("text-[10px] gap-1", headline.color)}>
+          {headline.icon}
+          {headline.label}
+        </Badge>
+        <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+          {status.ticksCompleted} tick{status.ticksCompleted === 1 ? "" : "s"} completed
+        </span>
+      </div>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground/70 shrink-0">Last tick:</dt>
+          <dd className="text-foreground/90">
+            {status.lastTickAt ? (
+              <>
+                <span className="tabular-nums" title={status.lastTickAt}>
+                  {lastAgo ?? status.lastTickAt}
+                </span>
+                <span className="text-muted-foreground/60"> · {lastDetail}</span>
+              </>
+            ) : (
+              <span className="text-muted-foreground/60">never</span>
+            )}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground/70 shrink-0">Next tick:</dt>
+          <dd className="text-foreground/90">
+            {status.nextTickAt ? (
+              <span className="tabular-nums" title={status.nextTickAt}>
+                {nextIn ?? status.nextTickAt}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/60">
+                {status.schedulerStarted ? "stopped" : "—"}
+              </span>
+            )}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground/70 shrink-0">Started:</dt>
+          <dd className="text-foreground/90">
+            {status.startedAt ? (
+              <span className="tabular-nums" title={status.startedAt}>
+                {startedAgo ?? status.startedAt}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/60">never</span>
+            )}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground/70 shrink-0">Cadence:</dt>
+          <dd className="text-foreground/90">
+            {cadence ?? <span className="text-muted-foreground/60">—</span>}
+          </dd>
+        </div>
+      </dl>
+      {status.schedulerStarted && !status.webhookConfigured && (
+        <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed">
+          Set <code className="font-mono">AVRI_DRIFT_WEBHOOK_URL</code> on the
+          server to enable webhook dispatch — until then the scheduler ticks
+          but skips the database scan.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Render an interval like "6h" / "45m" / "30s". Used only by
+// SchedulerStatusPanel.
+function formatMsInterval(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m`;
+  const hr = min / 60;
+  if (hr < 24) {
+    return Number.isInteger(hr) ? `${hr}h` : `${hr.toFixed(1)}h`;
+  }
+  const day = hr / 24;
+  return Number.isInteger(day) ? `${day}d` : `${day.toFixed(1)}d`;
+}
+
 // Task #196 — Persisted dedup state for AVRI drift notifications. Each
 // entry represents a flag that has already been dispatched to the
 // reviewer webhook and would be silently suppressed on the next dispatch
@@ -10264,6 +10480,8 @@ function AvriDriftSection() {
             driftReportQueryKey={driftReportQueryKey}
           />
         </div>
+
+        <SchedulerStatusPanel />
 
         <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed border-t border-border/30 pt-3">
           {report.bucketingNote}

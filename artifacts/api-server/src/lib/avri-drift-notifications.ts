@@ -519,8 +519,18 @@ export interface DriftSchedulerOptions {
   retryIntervalMs?: number;
   /** Delay before the first tick (defaults to 60s; tests typically pass 0). */
   initialDelayMs?: number;
-  /** Inject a custom runner (used by tests to avoid touching the DB). */
-  run?: () => Promise<{ ok: boolean }>;
+  /**
+   * Inject a custom runner (used by tests to avoid touching the DB).
+   * Optional `ranCheck` / `outcome` fields flow through to the
+   * scheduler status surface so the calibration UI can show whether
+   * the last tick actually scanned the database. Tests that don't
+   * care about status can keep returning just `{ ok }`.
+   */
+  run?: () => Promise<{
+    ok: boolean;
+    ranCheck?: boolean;
+    outcome?: NotificationOutcome;
+  }>;
 }
 
 export interface DriftScheduler {
@@ -531,6 +541,53 @@ export interface DriftScheduler {
    * tests that want to await the next scheduled tick deterministically.
    */
   ticksCompleted(): number;
+}
+
+/**
+ * Read-only snapshot of the in-process drift-notification scheduler.
+ * Backs the calibration page's heartbeat panel so reviewers can confirm
+ * the timer is firing without scraping logs. The shape is intentionally
+ * boolean/timestamp-only — it never carries error text or webhook URLs
+ * because the backing endpoint is unauthenticated.
+ *
+ * Per-process by design: the dedup state file is the cross-replica
+ * guard against duplicate dispatch; this struct is just the heartbeat
+ * for the replica that served the request.
+ */
+export interface DriftSchedulerStatus {
+  schedulerStarted: boolean;
+  startedAt: string | null;
+  intervalMs: number | null;
+  retryIntervalMs: number | null;
+  webhookConfigured: boolean;
+  lastTickAt: string | null;
+  lastTickOk: boolean | null;
+  lastTickRanCheck: boolean | null;
+  lastTickDispatched: boolean | null;
+  lastTickNewFlagCount: number | null;
+  nextTickAt: string | null;
+  ticksCompleted: number;
+}
+
+const INITIAL_SCHEDULER_STATUS: DriftSchedulerStatus = {
+  schedulerStarted: false,
+  startedAt: null,
+  intervalMs: null,
+  retryIntervalMs: null,
+  webhookConfigured: false,
+  lastTickAt: null,
+  lastTickOk: null,
+  lastTickRanCheck: null,
+  lastTickDispatched: null,
+  lastTickNewFlagCount: null,
+  nextTickAt: null,
+  ticksCompleted: 0,
+};
+
+let schedulerStatus: DriftSchedulerStatus = { ...INITIAL_SCHEDULER_STATUS };
+
+export function getDriftSchedulerStatus(): DriftSchedulerStatus {
+  return { ...schedulerStatus, webhookConfigured: isWebhookConfigured() };
 }
 
 /**
@@ -550,6 +607,20 @@ export function startDriftNotificationScheduler(
   let stopped = false;
   let completed = 0;
 
+  // Seed the status surface so the heartbeat panel can render
+  // "scheduler started, first tick scheduled at <initialDelay>" even
+  // before the first tick fires.
+  const startedAtMs = Date.now();
+  schedulerStatus = {
+    ...INITIAL_SCHEDULER_STATUS,
+    schedulerStarted: true,
+    startedAt: new Date(startedAtMs).toISOString(),
+    intervalMs,
+    retryIntervalMs,
+    webhookConfigured: isWebhookConfigured(),
+    nextTickAt: new Date(startedAtMs + initialDelayMs).toISOString(),
+  };
+
   function schedule(delayMs: number): void {
     if (stopped) return;
     timer = setTimeout(() => {
@@ -563,9 +634,17 @@ export function startDriftNotificationScheduler(
   async function tick(): Promise<void> {
     if (stopped) return;
     let ok = true;
+    let ranCheck: boolean | null = null;
+    let dispatched: boolean | null = null;
+    let newFlagCount: number | null = null;
     try {
       const result = await run();
       ok = result.ok;
+      ranCheck = typeof result.ranCheck === "boolean" ? result.ranCheck : null;
+      if (result.outcome) {
+        dispatched = result.outcome.dispatched;
+        newFlagCount = result.outcome.notified.length;
+      }
     } catch (err) {
       // `run` is supposed to swallow its own errors, but defend against
       // a misbehaving injected runner so a single throw doesn't kill
@@ -577,6 +656,21 @@ export function startDriftNotificationScheduler(
       ok = false;
     } finally {
       completed += 1;
+      const completedAtMs = Date.now();
+      const nextDelayMs = ok ? intervalMs : retryIntervalMs;
+      schedulerStatus = {
+        ...schedulerStatus,
+        webhookConfigured: isWebhookConfigured(),
+        lastTickAt: new Date(completedAtMs).toISOString(),
+        lastTickOk: ok,
+        lastTickRanCheck: ranCheck,
+        lastTickDispatched: dispatched,
+        lastTickNewFlagCount: newFlagCount,
+        nextTickAt: stopped
+          ? null
+          : new Date(completedAtMs + nextDelayMs).toISOString(),
+        ticksCompleted: completed,
+      };
     }
     schedule(ok ? intervalMs : retryIntervalMs);
   }
@@ -595,6 +689,10 @@ export function startDriftNotificationScheduler(
         clearTimeout(timer);
         timer = null;
       }
+      // Reflect the stop in the status surface so the heartbeat panel
+      // doesn't keep showing a "next tick at <past time>" after a
+      // SIGTERM during deploy.
+      schedulerStatus = { ...schedulerStatus, nextTickAt: null };
     },
     ticksCompleted: () => completed,
   };
@@ -679,6 +777,12 @@ export function removeNotifiedFlags(keys: string[]): RemoveNotifiedFlagsResult {
 export const __testing = {
   resetResolvedPath: () => {
     RESOLVED_PATH = null;
+  },
+  // Reset the in-memory scheduler status between tests so a prior
+  // test's "scheduler started" record doesn't leak into a test that
+  // exercises the "never started" code path.
+  resetSchedulerStatus: () => {
+    schedulerStatus = { ...INITIAL_SCHEDULER_STATUS };
   },
   buildLinks,
   readState,

@@ -569,6 +569,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/AvriDriftRearmResponse"
 
+  /feedback/calibration/avri-drift/scheduler-status:
+    get:
+      operationId: getAvriDriftSchedulerStatus
+      tags: [feedback]
+      summary: Get the in-process AVRI drift scheduler status
+      description: |
+        Operator-visible status of the in-process AVRI drift-notification
+        scheduler started at server boot. Backs the calibration page's
+        heartbeat panel so reviewers can confirm the timer is firing
+        without scraping logs.
+
+        Unauthenticated, matching `/feedback/calibration/auth-status`:
+        the response is timestamps + booleans only (no error text,
+        webhook URL, or token). Per-process — in a multi-replica deploy
+        the response reflects whichever replica handled the request.
+      responses:
+        "200":
+          description: Scheduler status snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvriDriftSchedulerStatus"
+
   /feedback/calibration/config:
     get:
       operationId: getScoringConfig
@@ -3393,6 +3416,76 @@ components:
             $ref: "#/components/schemas/AvriDriftNotificationRecord"
           description: Refreshed dedup state snapshot after the re-arm so the UI can update without an extra GET.
       required: [rearmed, notFound, remaining, removed, notified]
+
+    AvriDriftSchedulerStatus:
+      type: object
+      description: |
+        In-process status of the AVRI drift-notification scheduler.
+        Timestamps are ISO 8601; `null` is used wherever the field is
+        not yet meaningful (e.g. `lastTickAt` before the first tick,
+        `nextTickAt` while the scheduler is stopped).
+      properties:
+        schedulerStarted:
+          type: boolean
+          description: True once the scheduler has been armed in this process.
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO timestamp when the scheduler was started, or null when never started in this process.
+        intervalMs:
+          type: integer
+          nullable: true
+          description: Configured success-case interval (ms), or null when not started.
+        retryIntervalMs:
+          type: integer
+          nullable: true
+          description: Configured retry-on-failure interval (ms), or null when not started.
+        webhookConfigured:
+          type: boolean
+          description: True when the drift webhook URL is currently set; ticks short-circuit when false.
+        lastTickAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO timestamp of the most recent completed tick, or null when no tick has run yet.
+        lastTickOk:
+          type: boolean
+          nullable: true
+          description: True when the last tick succeeded; false on failure; null until the first tick.
+        lastTickRanCheck:
+          type: boolean
+          nullable: true
+          description: True when the last tick scanned the database; false when it short-circuited because no webhook is configured; null until the first tick.
+        lastTickDispatched:
+          type: boolean
+          nullable: true
+          description: True when the last tick dispatched a webhook; null until the first tick or when no dispatch was attempted.
+        lastTickNewFlagCount:
+          type: integer
+          nullable: true
+          description: Number of new flags dispatched on the most recent tick; null until the first tick or when no dispatch was attempted.
+        nextTickAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO timestamp when the next tick is scheduled to fire; null when the scheduler is stopped or never started.
+        ticksCompleted:
+          type: integer
+          description: Number of ticks that have completed since the scheduler started.
+      required:
+        - schedulerStarted
+        - startedAt
+        - intervalMs
+        - retryIntervalMs
+        - webhookConfigured
+        - lastTickAt
+        - lastTickOk
+        - lastTickRanCheck
+        - lastTickDispatched
+        - lastTickNewFlagCount
+        - nextTickAt
+        - ticksCompleted
 
     CalibrationReport:
       type: object

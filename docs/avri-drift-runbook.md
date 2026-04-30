@@ -183,6 +183,21 @@ notified, so transient webhook outages auto-recover on the next run.
 - The manual `POST .../notify` endpoint always runs the check (it's
   not gated by the scheduler interval) so reviewers can press a
   "Re-check now" button between scheduled runs.
+- **Scheduler heartbeat panel.** The calibration page
+  renders a "Scheduler heartbeat" panel below the notified-flags
+  table. It displays the in-process scheduler's last tick + last
+  outcome, the next scheduled tick, the configured cadence, and a
+  health badge ("Healthy" / "Last tick failed" / "Armed · webhook
+  not configured" / "Not started in this process"). Use it as the
+  first stop when the question is "is the scheduler still alive?" —
+  no need to scrape stdout for the
+  `[avri-drift-notifications] Drift notification scheduler started.`
+  boot line. Backed by
+  `GET /api/feedback/calibration/avri-drift/scheduler-status`, which
+  is un-gated (status only, no webhook URL or token leakage). Like
+  every other piece of scheduler state it is per-process, so in a
+  multi-replica deploy the panel reflects whichever replica handled
+  the request.
 - When the webhook is unset but flags exist, the notifier still
   records them as notified locally so wiring up a webhook later
   does not produce a retroactive flood. Truncate the state file if

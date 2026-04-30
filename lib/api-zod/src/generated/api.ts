@@ -2501,6 +2501,93 @@ export const RearmAvriDriftNotificationsResponse = zod.object({
 });
 
 /**
+ * Operator-visible status of the in-process AVRI drift-notification
+scheduler started at server boot. Backs the calibration page's
+heartbeat panel so reviewers can confirm the timer is firing
+without scraping logs.
+
+Unauthenticated, matching `/feedback/calibration/auth-status`:
+the response is timestamps + booleans only (no error text,
+webhook URL, or token). Per-process — in a multi-replica deploy
+the response reflects whichever replica handled the request.
+
+ * @summary Get the in-process AVRI drift scheduler status
+ */
+export const GetAvriDriftSchedulerStatusResponse = zod
+  .object({
+    schedulerStarted: zod
+      .boolean()
+      .describe("True once the scheduler has been armed in this process."),
+    startedAt: zod.coerce
+      .date()
+      .nullable()
+      .describe(
+        "ISO timestamp when the scheduler was started, or null when never started in this process.",
+      ),
+    intervalMs: zod
+      .number()
+      .nullable()
+      .describe(
+        "Configured success-case interval (ms), or null when not started.",
+      ),
+    retryIntervalMs: zod
+      .number()
+      .nullable()
+      .describe(
+        "Configured retry-on-failure interval (ms), or null when not started.",
+      ),
+    webhookConfigured: zod
+      .boolean()
+      .describe(
+        "True when the drift webhook URL is currently set; ticks short-circuit when false.",
+      ),
+    lastTickAt: zod.coerce
+      .date()
+      .nullable()
+      .describe(
+        "ISO timestamp of the most recent completed tick, or null when no tick has run yet.",
+      ),
+    lastTickOk: zod
+      .boolean()
+      .nullable()
+      .describe(
+        "True when the last tick succeeded; false on failure; null until the first tick.",
+      ),
+    lastTickRanCheck: zod
+      .boolean()
+      .nullable()
+      .describe(
+        "True when the last tick scanned the database; false when it short-circuited because no webhook is configured; null until the first tick.",
+      ),
+    lastTickDispatched: zod
+      .boolean()
+      .nullable()
+      .describe(
+        "True when the last tick dispatched a webhook; null until the first tick or when no dispatch was attempted.",
+      ),
+    lastTickNewFlagCount: zod
+      .number()
+      .nullable()
+      .describe(
+        "Number of new flags dispatched on the most recent tick; null until the first tick or when no dispatch was attempted.",
+      ),
+    nextTickAt: zod.coerce
+      .date()
+      .nullable()
+      .describe(
+        "ISO timestamp when the next tick is scheduled to fire; null when the scheduler is stopped or never started.",
+      ),
+    ticksCompleted: zod
+      .number()
+      .describe(
+        "Number of ticks that have completed since the scheduler started.",
+      ),
+  })
+  .describe(
+    "In-process status of the AVRI drift-notification scheduler.\nTimestamps are ISO 8601; `null` is used wherever the field is\nnot yet meaningful (e.g. `lastTickAt` before the first tick,\n`nextTickAt` while the scheduler is stopped).\n",
+  );
+
+/**
  * Returns the active scoring config version and full version history.
  * @summary Get current and historical scoring configurations
  */
