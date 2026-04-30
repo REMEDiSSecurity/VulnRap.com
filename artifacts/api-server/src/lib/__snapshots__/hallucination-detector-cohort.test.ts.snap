@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight snapshot (update with \`pnpm test -u\`) > T1 cohort totalWeights match snapshot 1`] = `
+{
+  "T1-01-uaf-libfoo": 0,
+  "T1-02-sqli-django": 0,
+  "T1-03-ssrf-aws": 0,
+  "T1-04-pathtraversal-flask": 0,
+  "T1-05-xxe-libxml": 0,
+  "T1-06-prototype-pollution": 0,
+  "T1-07-jwt-none": 0,
+  "T1-08-redis-cmdinj": 0,
+  "T1-09-ssrf-graphql": 0,
+  "T1-10-rce-deserialize": 0,
+  "T1-11-toctou-symlink": 0,
+  "T1-12-cors-credentials": 0,
+  "T1-AVRI-curl-hsts-bypass": 0,
+  "T1-AVRI-cve-2025-0725-curl": 0,
+  "T1-AVRI-firefox-uaf": 0,
+}
+`;
+
+exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight snapshot (update with \`pnpm test -u\`) > T2 cohort totalWeights match snapshot 1`] = `
+{
+  "T2-01-xss-unconfirmed": 8,
+  "T2-02-csrf-noproof": 0,
+  "T2-03-info-disclosure-headers": 0,
+  "T2-04-rate-limit-missing": 0,
+  "T2-05-clickjack-noframeguard": 0,
+  "T2-06-mixed-content": 0,
+  "T2-07-idor-suspicion": 0,
+  "T2-08-weak-jwt-secret": 0,
+  "T2-09-stack-trace-on-error": 0,
+  "T2-10-open-redirect": 0,
+}
+`;
+
+exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight snapshot (update with \`pnpm test -u\`) > T3 cohort totalWeights match snapshot 1`] = `
+{
+  "T3-01-generic-letter": 8,
+  "T3-02-marketing-tone": 0,
+  "T3-03-checklist-no-evidence": 0,
+  "T3-04-buzzword-soup": 0,
+  "T3-05-no-target": 0,
+  "T3-06-vague-xss": 0,
+  "T3-07-handwave-rce": 0,
+  "T3-08-checklist": 0,
+  "T3-09-ssrf-handwave": 0,
+  "T3-10-empty-shell": 0,
+  "T3-11-fabricated-diff-no-proof": 0,
+  "T3-12-paraphrased-cve-renamed-fn": 10,
+  "T3-13-narrated-curl-no-evidence": 0,
+  "T3-14-pseudo-asan-symbolless": 0,
+  "T3-15-prose-poc-no-payload": 0,
+  "T3-16-fabricated-diff-injection": 0,
+  "T3-17-fabricated-diff-web-client": 0,
+  "T3-18-fabricated-diff-memory-corruption": 12,
+  "T3-19-no-gold-injection": 0,
+  "T3-20-no-gold-web-client": 0,
+  "T3-21-no-gold-memory-corruption": 0,
+  "T3-22-no-gold-authn-authz": 0,
+  "T3-23-contradiction-injection": 0,
+  "T3-24-contradiction-web-client": 0,
+  "T3-25-contradiction-memory-corruption": 0,
+  "T3-26-contradiction-authn-authz": 0,
+  "T3-27-flat-slop-no-poc": 0,
+  "T3-28-flat-slop-structural-only": 0,
+  "T3-29-flat-slop-buzzword-soup": 0,
+  "T3-AVRI-generic-xss": 8,
+  "T3-AVRI-http3-dos": 0,
+  "T3-AVRI-ipfs-traversal": 0,
+  "T3-AVRI-ssrf-template": 0,
+}
+`;
+
+exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > per-fixture totalWeight snapshot (update with \`pnpm test -u\`) > T4 cohort totalWeights match snapshot 1`] = `
+{
+  "T4-01-fake-cve-fake-fn": 24,
+  "T4-02-round-addresses": 18,
+  "T4-03-plagiarized-nvd": 5,
+  "T4-04-fake-asan-no-summary": 13,
+  "T4-05-fake-cwe-mismatch": 0,
+  "T4-06-fake-stacktrace-repeat": 18,
+  "T4-07-fake-pid-fake-fn": 14,
+  "T4-08-fake-cve-id": 13,
+  "T4-09-ai-tool-curl-uaf": 16,
+  "T4-10-fake-openssl-regression": 13,
+}
+`;
