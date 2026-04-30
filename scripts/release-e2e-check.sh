@@ -29,11 +29,38 @@ echo "[release-e2e-check] Using Chromium at: ${CHROMIUM_PATH}"
 #   - handwavy-undo.spec.ts                       : the FLAT hand-wavy phrase add+undo flow
 #   - handwavy-reinstate-batch.spec.ts            : the "Reinstate all" batch flow
 #   - handwavy-production-scan-limit.spec.ts      : Task #125 production-scan window control (input + warning + persistence + subtitle)
+# Task #274 — The bulk preview/confirm phrase flows are just as release-blocking
+# as the FLAT add+undo flow above: a bundled-only regression in any of these
+# would let the reviewer either lose valid detections (failed dry-run gating)
+# or silently re-arm a high-thrash marker (failed reinstate-confirm). Each
+# spec drives the production vite preview + dist/index.mjs through a single
+# user-visible flow, so they belong on the release gate alongside the
+# original four.
+#   - handwavy-bulk-preview.spec.ts               : side-by-side bulk-removal preview + confirm gating (Task #154)
+#   - handwavy-bulk-undo.spec.ts                  : "Undo this batch" banner action (Task #142)
+#   - handwavy-preview-side-by-side.spec.ts       : single-add side-by-side preview + destructive confirm (Task #126)
+#   - handwavy-reinstate-batch-preview.spec.ts    : per-batch "Preview reinstate" dry-run + confirm (Task #177)
+#   - handwavy-reinstate-batch-thrash.spec.ts     : bulk-reinstate thrash warning surface (Task #179)
+#   - handwavy-reinstate-confirm.spec.ts          : per-row reinstate AlertDialog confirm (Task #153)
+#   - handwavy-removal-batches-panel.spec.ts      : inline "Recent batch removals" reinstate picker (Task #175)
+#   - handwavy-remove-confirm.spec.ts             : high-thrash single-remove confirm panel (Task #152)
+#   - handwavy-remove-preview.spec.ts             : per-row Trash dry-run + acknowledgment gate (Task #173)
+#   - handwavy-revert-disabled.spec.ts            : per-edit Revert disabled-state on the edit history (Task #148)
 RELEASE_SPECS=(
   diagnostics-panel.spec.ts
   handwavy-undo.spec.ts
   handwavy-reinstate-batch.spec.ts
   handwavy-production-scan-limit.spec.ts
+  handwavy-bulk-preview.spec.ts
+  handwavy-bulk-undo.spec.ts
+  handwavy-preview-side-by-side.spec.ts
+  handwavy-reinstate-batch-preview.spec.ts
+  handwavy-reinstate-batch-thrash.spec.ts
+  handwavy-reinstate-confirm.spec.ts
+  handwavy-removal-batches-panel.spec.ts
+  handwavy-remove-confirm.spec.ts
+  handwavy-remove-preview.spec.ts
+  handwavy-revert-disabled.spec.ts
 )
 
 if ! pnpm --filter @workspace/vulnrap exec playwright test \
