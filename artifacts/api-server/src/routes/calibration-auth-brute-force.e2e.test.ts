@@ -5,12 +5,13 @@
 // middlewares/calibration-auth-brute-force-alert.test.ts which inject a
 // dispatcher into an in-process Express app.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { AddressInfo } from "node:net";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 const __filename = fileURLToPath(import.meta.url);
 const ARTIFACT_DIR = path.resolve(path.dirname(__filename), "..", "..");
@@ -103,6 +104,17 @@ interface ApiHarness {
   stop: () => Promise<void>;
 }
 
+// Per-test temp dir for the brute-force cooldown JSON. Without this the
+// spawned api-server defaults to the shipped
+// artifacts/api-server/data/calibration-auth-brute-force-state.json file
+// and dirties source control with test-generated IP entries every run.
+const tempStateDirs: string[] = [];
+function createScratchStatePath(): string {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "vulnrap-brute-force-state-"));
+  tempStateDirs.push(dir);
+  return path.join(dir, "state.json");
+}
+
 async function startApiServer(env: Record<string, string>): Promise<ApiHarness> {
   const port = await pickFreePort();
   // Hermeticity: strip any inherited CALIBRATION_AUTH_BRUTE_FORCE_* / rate-limit
@@ -117,10 +129,16 @@ async function startApiServer(env: Record<string, string>): Promise<ApiHarness> 
       delete inherited[key];
     }
   }
+  // Default the persisted-cooldown JSON to a per-test scratch file so the
+  // spawned server never touches the shipped data file. Caller can override.
+  const stateEnv: Record<string, string> = env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH
+    ? {}
+    : { CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH: createScratchStatePath() };
   const proc = spawn("node", ["--enable-source-maps", SERVER_WRAPPER], {
     // NODE_ENV cleared to skip productionOnly migrations against the dev DB.
     env: {
       ...inherited,
+      ...stateEnv,
       ...env,
       PORT: String(port),
       NODE_ENV: "",
@@ -278,6 +296,16 @@ afterEach(async () => {
   if (activeListener) {
     await activeListener.close();
     activeListener = null;
+  }
+});
+
+afterAll(() => {
+  for (const dir of tempStateDirs.splice(0)) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup; the temp dir is small and self-pruning anyway
+    }
   }
 });
 
