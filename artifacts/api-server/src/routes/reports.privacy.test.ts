@@ -1477,6 +1477,165 @@ describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", ()
   });
 });
 
+// Task #468: the printable triage report must surface Engine 2's
+// `signalBreakdown.goldSignalBonus` (strong-evidence per-category bonus
+// applied to the substance score), mirroring the diagnostics-panel
+// "Strong-Evidence Bonus (Gold Categories)" section. Two cases:
+//   1. Populated: the section header, applied/raw/cap totals, category
+//      count, and per-signal bullets are all rendered.
+//   2. Empty (bonus=0 / no signals fired): the section is omitted
+//      entirely so the report doesn't render an empty stub.
+describe("GET /api/reports/:id/triage-report — Strong-Evidence Bonus section", () => {
+  async function getText(path: string): Promise<{ status: number; body: string }> {
+    const r = await fetch(`${baseUrl}${path}`);
+    return { status: r.status, body: await r.text() };
+  }
+
+  it("renders the bonus section with applied/raw/cap totals and per-category bullets when categories fired", async () => {
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "sample report body",
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 65,
+            verdict: "YELLOW",
+            confidence: "MEDIUM",
+            signalBreakdown: {
+              goldSignalBonus: {
+                bonus: 10,
+                rawSum: 14,
+                cap: 10,
+                signals: [
+                  { id: "real_crash_trace", weight: 6 },
+                  { id: "raw_http_response", weight: 5 },
+                  { id: "code_diff", weight: 3 },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+
+    // Section header is present.
+    const sectionIdx = res.body.indexOf(
+      "## Strong-Evidence Bonus (Gold Categories)",
+    );
+    expect(sectionIdx).toBeGreaterThan(-1);
+
+    // Applied / raw / cap totals.
+    expect(res.body).toContain("- **Applied bonus**: +10");
+    // rawSum (14) > cap (10) → "capped at" wording.
+    expect(res.body).toContain("- **Raw sum**: +14 (capped at +10)");
+    expect(res.body).toContain("- **Categories fired**: 3");
+
+    // Per-category bullets in the Markdown table.
+    expect(res.body).toContain("| `real_crash_trace` | +6 |");
+    expect(res.body).toContain("| `raw_http_response` | +5 |");
+    expect(res.body).toContain("| `code_diff` | +3 |");
+  });
+
+  it("uses 'under cap' wording when the raw sum is below the cap", async () => {
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "sample report body",
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 60,
+            verdict: "YELLOW",
+            confidence: "MEDIUM",
+            signalBreakdown: {
+              goldSignalBonus: {
+                bonus: 6,
+                rawSum: 6,
+                cap: 10,
+                signals: [{ id: "real_crash_trace", weight: 6 }],
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+    expect(res.body).toContain(
+      "## Strong-Evidence Bonus (Gold Categories)",
+    );
+    expect(res.body).toContain("- **Applied bonus**: +6");
+    // rawSum (6) <= cap (10) → "under cap" wording, not "capped at".
+    expect(res.body).toContain("- **Raw sum**: +6 (under cap +10)");
+    expect(res.body).not.toContain("(capped at");
+    expect(res.body).toContain("- **Categories fired**: 1");
+  });
+
+  it("omits the section entirely when no gold-signal bonus was applied (bonus=0 / no signals fired)", async () => {
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "sample report body",
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 50,
+            verdict: "YELLOW",
+            confidence: "MEDIUM",
+            signalBreakdown: {
+              goldSignalBonus: {
+                bonus: 0,
+                rawSum: 0,
+                cap: 10,
+                signals: [],
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+    // Section header and any of its bullets must be absent.
+    expect(res.body).not.toContain(
+      "## Strong-Evidence Bonus (Gold Categories)",
+    );
+    expect(res.body).not.toContain("- **Applied bonus**:");
+    expect(res.body).not.toContain("- **Raw sum**:");
+    expect(res.body).not.toContain("- **Categories fired**:");
+  });
+
+  it("omits the section when the Engine 2 entry carries no goldSignalBonus block at all", async () => {
+    const r = seedReport({
+      showInFeed: true,
+      redactedText: "legacy report body",
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 50,
+            verdict: "YELLOW",
+            confidence: "MEDIUM",
+            signalBreakdown: {},
+          },
+        ],
+      },
+    });
+
+    const res = await getText(`/api/reports/${r.id}/triage-report`);
+    expect(res.status).toBe(200);
+    expect(res.body).not.toContain(
+      "## Strong-Evidence Bonus (Gold Categories)",
+    );
+  });
+});
+
 // Task #367: the /.well-known/security.txt response must build its Canonical
 // and Policy lines through the shared buildPublicUrl helper so self-hosted
 // installs that set PUBLIC_URL — or that don't configure it at all — get a
