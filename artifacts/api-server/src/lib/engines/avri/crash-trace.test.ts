@@ -484,6 +484,156 @@ RBX: 0x0000000000002000 was the destination operand.`;
   });
 });
 
+// --- Task #455: /proc/self/status + ARM64/RISC-V register detectors ------
+
+describe("detectStructuralFabrication — Task #455 fabricated_proc_status", () => {
+  it("flags a /proc/self/status excerpt where ≥2 Vm fields are exact powers of two", () => {
+    // VmPeak/VmSize/VmHWM/VmRSS all sit on textbook 64 MiB / 16 MiB
+    // boundaries — real kernel-emitted values are pseudo-random kB
+    // counts and essentially never land on these.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+    #0 0x4001000 in foo src/foo.c:1
+/proc/self/status excerpt:
+VmPeak:    65536 kB
+VmSize:    65536 kB
+VmHWM:     16384 kB
+VmRSS:     16384 kB
+VmData:    32768 kB`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_proc_status");
+  });
+
+  it("flags VmRSS: 1024 kB + VmSize: 65536 kB even with one non-round filler", () => {
+    // The detector should still fire when only two of three Vm lines
+    // are textbook powers of two (the task spec calls these out
+    // explicitly).
+    const trace = `Process status at fault:
+VmPeak:    65536 kB
+VmRSS:     1024 kB
+VmData:    18960 kB`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_proc_status");
+  });
+
+  it("does NOT fire on a realistic /proc/self/status excerpt", () => {
+    // Real values: page-aligned (multiples of 4 kB) but pseudo-random
+    // — none are exact powers of two ≥ 1 MiB.
+    const trace = `/proc/self/status:
+VmPeak:    25876 kB
+VmSize:    25876 kB
+VmLck:         0 kB
+VmHWM:      4232 kB
+VmRSS:      4232 kB
+VmData:    18960 kB
+VmStk:       132 kB
+VmExe:        36 kB
+VmLib:      7188 kB`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_proc_status");
+  });
+
+  it("does NOT fire on a single VmRSS mention in prose", () => {
+    // Below the 3-Vm-line threshold; prose mention of `VmRSS: 1024 kB`
+    // alone must never trip the rule.
+    const trace = `The crash happened when VmRSS: 1024 kB was reported by the watchdog.`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_proc_status");
+  });
+
+  it("does NOT fire when small VmStk/VmExe values are powers of two but no Vm field is ≥ 1 MiB", () => {
+    // Small fields can legitimately be powers of two for tiny
+    // processes (32 kB stack, 64 kB exe). The 1 MiB floor on the
+    // suspicion check guards against false positives here.
+    const trace = `/proc/self/status:
+VmPeak:    25876 kB
+VmSize:    25876 kB
+VmHWM:      4232 kB
+VmRSS:      4232 kB
+VmStk:        32 kB
+VmExe:        64 kB
+VmLib:       128 kB`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_proc_status");
+  });
+
+  it("does NOT fire on a trace with no /proc/self/status section at all", () => {
+    const ids = detectStructuralFabrication(SYMBOL_RICH_TRACE).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_proc_status");
+  });
+});
+
+describe("detectStructuralFabrication — Task #455 ARM64 / RISC-V register dumps", () => {
+  it("flags a textbook-round ARM64 register dump (X0..X4 on page boundaries)", () => {
+    // Same suspicion shape as the existing x86 fab dump: ≥4 register
+    // entries, each value ≤6 hex digits with ≥3 trailing zeros. The
+    // Task #455 regex extension (X0..X30 / W0..W30 / PSTATE) is what
+    // makes the dump visible to the existing predicate at all.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+ARM64 register state at SIGSEGV:
+X0: 0x0000000000001000
+X1: 0x0000000000002000
+X2: 0x0000000000003000
+X3: 0x0000000000004000
+X4: 0x0000000000005000`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_register_state");
+  });
+
+  it("flags repeated identical values across ARM64 registers (X10..X13)", () => {
+    // Mirror of the existing x86 `RAX = RBX = RCX = ... = 0x4141...`
+    // tell, but expressed against the ARM64 register file. Three or
+    // more entries sharing the same value is the trip condition.
+    const trace = `==31415==ERROR: AddressSanitizer
+    #0 0x4001000 in foo src/foo.c:1
+X10 = 0x4141414141414141
+X11 = 0x4141414141414141
+X12 = 0x4141414141414141
+X13 = 0x4141414141414141`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_register_state");
+  });
+
+  it("flags a textbook-round RISC-V register dump (x10..x14 / a0..a4 aliases)", () => {
+    // RISC-V xN form is what the regex matches; the dump uses x10
+    // through x14 (the a0..a4 ABI registers) all on textbook page
+    // boundaries.
+    const trace = `==99999==ERROR: AddressSanitizer
+    #0 0x4001000 in foo src/foo.c:1
+RISC-V register state at trap:
+x10: 0x0000000000001000
+x11: 0x0000000000002000
+x12: 0x0000000000003000
+x13: 0x0000000000004000
+x14: 0x0000000000005000`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("fabricated_register_state");
+  });
+
+  it("does NOT flag a realistic ARM64 gdb register dump (mixed ASLR pointers)", () => {
+    // Real ARM64 ASLR pointers are 12 hex digits long and do not sit
+    // on small page boundaries — they fail both the trailing-zero and
+    // the length predicates and so are NOT considered suspicious.
+    const trace = `(gdb) info registers
+X0: 0x0000aaaab8c2f3d1
+X1: 0x0000ffffd0a1c310
+X2: 0x0000ffffd0a1c2e0
+X3: 0x0000aaaab8c2e210
+X29: 0x0000ffffd0a1c2a0
+X30: 0x0000aaaab8c2d100
+PSTATE: 0x0000000060001000`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_register_state");
+  });
+
+  it("does NOT flag fewer than 4 ARM64 register lines (insufficient sample)", () => {
+    const trace = `Only X0: 0x0000000000001000 and X1: 0x0000000000002000 were captured.`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("fabricated_register_state");
+  });
+});
+
 // --- Task #434: ASan shadow-bytes detector --------------------------------
 
 describe("detectStructuralFabrication — Task #434 shadow-bytes detector", () => {

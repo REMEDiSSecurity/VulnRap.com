@@ -82,7 +82,17 @@ export interface StructuralMarker {
     // thread IDs disagree with each other across roles, which real
     // sanitizer output never does (the same thread typically dominates,
     // and the IDs cluster in a small range).
-    | "thread_id_mismatch";
+    | "thread_id_mismatch"
+    // Task #455: shape check against `/proc/self/status` excerpts (the
+    // `VmPeak` / `VmSize` / `VmRSS` block). Real kernels emit
+    // pseudo-random page-aligned kB counts (e.g. `VmRSS: 4232 kB`); LLM
+    // fabrications routinely pick textbook power-of-two kB values
+    // (`VmRSS: 1024 kB`, `VmSize: 65536 kB`) across multiple Vm fields.
+    // The `fabricated_register_state` marker is also extended in this
+    // task to recognise ARM64 (X0..X30, W0..W30, PSTATE) and RISC-V
+    // (x0..x31) register names so non-x86 fabricated dumps are caught
+    // by the same predicate rather than slipping through entirely.
+    | "fabricated_proc_status";
   description: string;
 }
 
@@ -406,14 +416,24 @@ function detectRegionSizeVsAccessSize(text: string): StructuralMarker | null {
 // textbook-round register values and zero/overlapping/impossibly-low map
 // ranges. These two detectors catch those patterns.
 
-// x86 / x86-64 general-purpose register names. Matches `RAX: 0x...`,
-// `rax = 0x...`, `RAX 0x...`, `EIP=0x...` and the lowercase variants. The
-// optional `:`/`=`/whitespace separator covers the most common dump shapes
-// (gdb `info registers`, sigaction handler `ucontext_t` print, ASan abort
-// banner). RFLAGS / EFLAGS are included so a fab dump that pads them too
-// counts toward the entry total.
+// x86 / x86-64 / ARM64 / RISC-V general-purpose register names. Matches
+// `RAX: 0x...`, `rax = 0x...`, `RAX 0x...`, `EIP=0x...`, `X0: 0x...`,
+// `x10 = 0x...`, `W3: 0x...`, `PSTATE: 0x...` and the lowercase variants.
+// The optional `:`/`=`/whitespace separator covers the most common dump
+// shapes (gdb `info registers`, sigaction handler `ucontext_t` print,
+// ASan/HWASan abort banner). RFLAGS / EFLAGS / PSTATE are included so a
+// fab dump that pads the status word too counts toward the entry total.
+//
+// Task #455 extends this from x86-only to also accept the ARM64 X0..X30 /
+// W0..W30 register file (with PSTATE) and the RISC-V x0..x31 register
+// file. The case-insensitive `[XW]` covers ARM64 X/W and RISC-V x in one
+// alternative; the digit subgroup `(?:[0-9]|[12][0-9]|3[01])` includes
+// 31 for RISC-V (ARM64 maxes out at 30, so X31 simply never appears in
+// real ARM64 traces). This is the cheapest way to make the existing
+// `detectFabricatedRegisterState` predicate fire on the ARM64 / RISC-V
+// dumps LLMs reach for when fabricating non-x86 crash reports.
 const REGISTER_DUMP_RE =
-  /\b(R[ABCD]X|R[SD]I|R[BS]P|R(?:8|9|1[0-5])|RIP|RFLAGS|E[ABCD]X|E[SD]I|E[BS]P|EIP|EFLAGS)\b\s*[:=]?\s*0x([0-9a-fA-F]+)\b/gi;
+  /\b(R[ABCD]X|R[SD]I|R[BS]P|R(?:8|9|1[0-5])|RIP|RFLAGS|E[ABCD]X|E[SD]I|E[BS]P|EIP|EFLAGS|[XW](?:[0-9]|[12][0-9]|3[01])|PSTATE)\b\s*[:=]?\s*0x([0-9a-fA-F]+)\b/gi;
 
 /** A register value is "suspiciously round" when it sits on a 16-bit
  * (≥3 trailing hex zeros) page boundary AND is short enough that it cannot
@@ -559,6 +579,62 @@ function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
     }
   }
 
+  return null;
+}
+
+// Task #455 /proc/self/status detector --------------------------------
+//
+// LLMs that pad a fabricated crash report beyond the stack and the
+// register dump frequently reach for a `/proc/self/status` excerpt next.
+// The kernel emits a stable line shape — `<Vm field>:<whitespace><N> kB` —
+// so the section is easy to mimic, but the actual values are pseudo-random
+// page-aligned kB counts (e.g. `VmRSS: 4232 kB`, `VmPeak: 25876 kB`) that
+// are very rarely exact powers of two. Fabricated excerpts almost always
+// reach for textbook values like `VmRSS: 1024 kB`, `VmSize: 65536 kB`,
+// `VmHWM: 16384 kB` — values that look "neat" but the kernel essentially
+// never emits.
+//
+// We require ≥3 Vm-field lines before judging (so a one-off `VmRSS: 1024
+// kB` mention in prose can't trigger the rule) and ≥2 of those lines must
+// carry an exact power-of-two kB value at or above 1 MiB. The 1 MiB floor
+// keeps the rule from firing on small fields like `VmStk: 132 kB` or
+// `VmExe: 36 kB`, where small powers of two (4, 8, 16, 32, 64, 128, 256,
+// 512) can show up legitimately for tiny processes.
+const PROC_STATUS_VM_RE =
+  /^[ \t]*(VmPeak|VmSize|VmLck|VmPin|VmHWM|VmRSS|VmData|VmStk|VmExe|VmLib|VmPTE|VmSwap)\s*:\s*(\d+)\s*kB\b/gim;
+const VM_POWER_OF_TWO_FLOOR_KB = 1024; // 1 MiB
+
+function isPowerOfTwo(n: number): boolean {
+  if (!Number.isFinite(n) || n <= 0) return false;
+  // JS bitwise operators truncate to int32; use log2 so we stay correct
+  // for VmSize values that legitimately exceed 2 GiB (≥ 2_097_152 kB).
+  const log = Math.log2(n);
+  return Number.isInteger(log);
+}
+
+function detectFabricatedProcStatus(text: string): StructuralMarker | null {
+  PROC_STATUS_VM_RE.lastIndex = 0;
+  const entries: { name: string; value: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = PROC_STATUS_VM_RE.exec(text)) !== null) {
+    const v = Number(m[2]);
+    if (Number.isFinite(v)) entries.push({ name: m[1], value: v });
+  }
+  if (entries.length < 3) return null;
+
+  const suspicious = entries.filter(
+    (e) => e.value >= VM_POWER_OF_TWO_FLOOR_KB && isPowerOfTwo(e.value),
+  );
+  if (suspicious.length >= 2) {
+    const summary = suspicious
+      .slice(0, 4)
+      .map((s) => `${s.name}: ${s.value} kB`)
+      .join(", ");
+    return {
+      id: "fabricated_proc_status",
+      description: `${suspicious.length}/${entries.length} /proc/self/status Vm fields are exact powers of two ≥ 1 MiB (${summary}); real kernels emit pseudo-random page-aligned kB counts`,
+    };
+  }
   return null;
 }
 
@@ -752,6 +828,11 @@ export function detectStructuralFabrication(text: string): StructuralMarker[] {
   // Task #433 thread-ID-mismatch detector.
   const j2 = detectThreadIdMismatch(text);
   if (j2) markers.push(j2);
+  // Task #455 /proc/self/status detector. The companion ARM64/RISC-V
+  // register-name extension is wired in via the shared REGISTER_DUMP_RE
+  // and so is already exercised by `detectFabricatedRegisterState` above.
+  const k = detectFabricatedProcStatus(text);
+  if (k) markers.push(k);
   return markers;
 }
 

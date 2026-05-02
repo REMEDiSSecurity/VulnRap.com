@@ -134,6 +134,61 @@ left as an exercise. CVSS 9.8.`,
     expectMaxScore: 35,
     claimedCwes: ["CWE-416"],
   },
+  {
+    // Task #455. Companion to slop-13 but on ARM64. The narrative looks
+    // crash-y on first read — ASan ERROR header, READ-of-size frame,
+    // realistic 12-digit ASLR-style frame addresses, plausible function
+    // offsets — but pads the report with the two report sections LLMs
+    // commonly fabricate when they branch off x86: an ARM64 register
+    // dump (X0..X4) whose values all sit on textbook page boundaries
+    // (every register suspicious), and a `/proc/self/status` excerpt
+    // whose VmPeak / VmSize / VmHWM / VmRSS are all exact powers of two
+    // ≥ 1 MiB.
+    //
+    // The Task #455 changes make BOTH detectors fire on this trace:
+    // `fabricated_register_state` via the extended REGISTER_DUMP_RE
+    // (ARM64 X0..X30 / W0..W30 / PSTATE were invisible to it before
+    // this task), and the new `fabricated_proc_status` via the
+    // power-of-two-kB shape detector. Together they clear the
+    // ≥2-marker structural-fabrication threshold and revoke the AVRI
+    // crash-trace gold signal so the composite stays in slop range.
+    // The frame offsets and PID anchor are deliberately realistic so
+    // the existing seven detectors stay quiet — the new pair is what
+    // catches this trace.
+    name: "slop-15-fabricated-arm64-registers-and-proc-status",
+    text: `Heap-use-after-free crash in libserver on the production
+aarch64 box. We attached gdb to the crashing worker, captured the
+AddressSanitizer dump, and pulled the ARM64 register state plus
+the /proc/self/status snapshot at the moment of the crash. The
+full evidence is reproduced below.
+
+==31415==ERROR: AddressSanitizer: heap-use-after-free on address 0xaaaab8c2a1c0
+READ of size 8 at 0xaaaab8c2a1c0 thread T0
+    #0 0xaaaab8c2f3d1 in handle_request+0x4abf1a src/server.c:412
+    #1 0xaaaab8c2e210 in worker_loop+0x1c4d3 src/worker.c:88
+    #2 0xaaaab8c2d100 in dispatch+0x2af80 src/dispatch.c:42
+
+ARM64 General Purpose Registers (captured at SIGSEGV):
+X0: 0x0000000000001000
+X1: 0x0000000000002000
+X2: 0x0000000000003000
+X3: 0x0000000000004000
+X4: 0x0000000000005000
+
+/proc/self/status excerpt (captured at fault time):
+VmPeak:    65536 kB
+VmSize:    65536 kB
+VmHWM:     16384 kB
+VmRSS:     16384 kB
+VmData:    32768 kB
+
+Severity: Critical. Use-after-free, sanitizer crash, segmentation
+fault. The crash is reproducible against the shipped aarch64
+binary which is the realistic attack surface; rebuilding with
+debug symbols is left as an exercise. CVSS 9.8.`,
+    expectMaxScore: 35,
+    claimedCwes: ["CWE-416"],
+  },
   // Sprint 13B-3 calibration fixture: slop report whose primary
   // "evidence" is a fabricated server response. The narrative names a
   // class of issue and shows a side-by-side baseline / vulnerable
