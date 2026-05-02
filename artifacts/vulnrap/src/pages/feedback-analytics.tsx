@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Link, useNavigate, useSearchParams, type NavigateFunction } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquare, Star, ThumbsUp, ThumbsDown, TrendingUp, AlertTriangle,
@@ -3808,6 +3809,85 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       historyHighlightTimeoutRef.current = null;
     }, 2500);
   };
+  // Task #487 — multi-phrase variant for the bulk-undo "skipped" toast
+  // action. Drift-skipped phrases (the ones that came back as
+  // non-window-expired failures from `undoHandwavyPhrasesBatch`) get
+  // their matching removal-history rows pulse-highlighted in one shot.
+  // Keyed only on phrase (not phrase + removedAt) because the toast
+  // hint surfaces the latest drift event and we want to light up
+  // whatever rows the reviewer can see for that phrase right now,
+  // mirroring the existing active-list `jumpToActivePhrase` behavior.
+  const [highlightedHistoryPhrases, setHighlightedHistoryPhrases] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const historyPhrasesHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  useEffect(() => {
+    return () => {
+      if (historyPhrasesHighlightTimeoutRef.current !== null) {
+        clearTimeout(historyPhrasesHighlightTimeoutRef.current);
+      }
+    };
+  }, []);
+  const jumpToHistoryPhrases = (targetPhrases: string[]) => {
+    if (targetPhrases.length === 0) return;
+    if (historyPhrasesHighlightTimeoutRef.current !== null) {
+      clearTimeout(historyPhrasesHighlightTimeoutRef.current);
+      historyPhrasesHighlightTimeoutRef.current = null;
+    }
+    setHighlightedHistoryPhrases(new Set(targetPhrases));
+    setShowHistory(true);
+    if (typeof window !== "undefined") {
+      // Defer the DOM lookup so the panel + nested <details> have a
+      // chance to render the rows before we query them, mirroring
+      // `jumpToHistoryRow` and `jumpToActivePhrase`.
+      window.requestAnimationFrame(() => {
+        try {
+          const escapeFn =
+            typeof CSS !== "undefined" && typeof CSS.escape === "function"
+              ? (s: string) => CSS.escape(s)
+              : (s: string) => s.replace(/(["\\])/g, "\\$1");
+          // Scroll to the FIRST matching row so the reviewer's eye lands
+          // on a highlighted entry instead of an arbitrary panel offset.
+          // The other matched rows still pulse via the highlight set;
+          // they're just not the scroll target.
+          let firstMatch: HTMLElement | null = null;
+          for (const phrase of targetPhrases) {
+            const el = document.querySelector(
+              `[data-handwavy-history-phrase="${escapeFn(phrase)}"]`,
+            ) as HTMLElement | null;
+            if (el) {
+              firstMatch = el;
+              break;
+            }
+          }
+          if (firstMatch) {
+            firstMatch.scrollIntoView({ behavior: "smooth", block: "center" });
+          } else {
+            // Fallback: no matching row is visible (e.g. the row is
+            // beyond the cap and not pinned) — scroll the panel header
+            // into view so at minimum the reviewer sees the panel
+            // they were directed to.
+            const panel = document.querySelector(
+              `[data-testid="handwavy-history-list"]`,
+            ) as HTMLElement | null;
+            if (panel) {
+              panel.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }
+        } catch {
+          // querySelector can throw on exotic phrase content; the
+          // highlight still pulses on matching rows even if scroll
+          // fails.
+        }
+      });
+    }
+    historyPhrasesHighlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedHistoryPhrases(new Set());
+      historyPhrasesHighlightTimeoutRef.current = null;
+    }, 2500);
+  };
   const CATEGORY_LABELS: Record<"absence" | "hedging" | "buzzword", string> = {
     absence: "Self-admitted absence of evidence",
     hedging: "Generic hedging",
@@ -6295,9 +6375,32 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       if (failureResults.length > 0) {
         parts.push("Check the removal history below for the per-phrase audit row.");
       }
+      // Task #487 — when at least one phrase was skipped for a
+      // non-window-expired reason (drift between the captured candidate
+      // list and the active list), wire a toast `action` button that
+      // scrolls the removal-history panel into view and pulse-highlights
+      // every matching audit row. Window-expired-only failures don't
+      // get the affordance because the per-phrase audit row carries the
+      // same "no longer in window" signal the toast already states; the
+      // action is for the cases that genuinely warrant investigation.
+      const driftPhrases = failureResults
+        .filter((r) => r.reason !== "window-expired")
+        .map((r) => r.phrase)
+        .filter((p): p is string => typeof p === "string" && p.length > 0);
+      const action =
+        driftPhrases.length > 0 ? (
+          <ToastAction
+            altText={`View ${driftPhrases.length} skipped phrase${driftPhrases.length === 1 ? "" : "s"} in the removal history`}
+            data-testid="handwavy-undo-all-toast-jump-skipped"
+            onClick={() => jumpToHistoryPhrases(driftPhrases)}
+          >
+            View skipped
+          </ToastAction>
+        ) : undefined;
       toast({
         title: undoneCount > 0 ? `Undid ${undoneCount} ${noun}` : "Nothing to undo",
         description: parts.join(" "),
+        ...(action ? { action } : {}),
         ...(undoneCount === 0 ? { variant: "destructive" as const } : {}),
       });
       refresh();
@@ -9803,9 +9906,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     // phrase + removedAt so a remove → reinstate → remove
                     // cycle only lights the exact retirement entry.
                     const isHistoryHighlighted =
-                      highlightedHistoryRow !== null &&
-                      highlightedHistoryRow.phrase === h.phrase &&
-                      highlightedHistoryRow.removedAt === removedAtKey;
+                      (highlightedHistoryRow !== null &&
+                        highlightedHistoryRow.phrase === h.phrase &&
+                        highlightedHistoryRow.removedAt === removedAtKey) ||
+                      // Task #487 — bulk-undo "skipped" toast action
+                      // pulses every row matching a drift-skipped phrase
+                      // in one shot.
+                      highlightedHistoryPhrases.has(h.phrase);
                     return (
                       <div
                         key={`${h.phrase}-${removedAtKey}-${rowIdx}`}

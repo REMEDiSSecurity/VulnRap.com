@@ -4,6 +4,7 @@ import {
   cleanup,
   injectCalibrationTokenIntoPage,
   newApiContext,
+  removeSingle,
   uniquePhrases,
 } from "./helpers/handwavy";
 
@@ -205,6 +206,112 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
         (h) => h.undone === true && phrases.includes(h.phrase),
       );
       expect(undoneRows).toHaveLength(0);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #487 — when a non-window-expired failure shows up in the
+  // bulk-undo summary toast (i.e. drift between the captured candidate
+  // list and the active list), the toast carries a "View skipped"
+  // action button that scrolls the removal-history panel into view and
+  // pulse-highlights the matching audit row(s). This spec drives the
+  // drift case end-to-end: seed two phrases, open the confirm dialog,
+  // remove one phrase out-of-band via the API (so the captured
+  // candidate is now stale), confirm the dialog, and assert the toast's
+  // action button jumps + highlights the dropped phrase's history row.
+  test("toast `View skipped` action scrolls + pulse-highlights drift-skipped phrase rows in removal history", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task487 undo-all drift");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      // Both rows live on the active list before we open the dialog.
+      for (const p of phrases) {
+        await expect(
+          page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),
+        ).toHaveCount(1, { timeout: 15_000 });
+      }
+
+      const undoAll = page.getByTestId("handwavy-undo-all");
+      await expect(undoAll).toBeVisible({ timeout: 15_000 });
+      await undoAll.click();
+
+      const dialog = page.getByTestId("handwavy-undo-all-confirm");
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+
+      // Drift seed: out-of-band remove ONE of the captured-candidate
+      // phrases via the API while the dialog is open. The dialog
+      // already snapshotted both phrases as in-window candidates, so
+      // the impending bulk-undo will return a non-window-expired
+      // failure ("not-found") for the drifted phrase and a successful
+      // undo for the other.
+      const driftedPhrase = phrases[0];
+      const survivingPhrase = phrases[1];
+      await removeSingle(apiCtx, driftedPhrase, {
+        reviewer: `${REVIEWER}-drift`,
+      });
+
+      // Confirm the bulk-undo round-trip while the captured-candidate
+      // list is now stale.
+      await dialog.getByTestId("handwavy-undo-all-confirm-confirm").click();
+      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+      // The summary toast splits the count and surfaces the skipped
+      // breakdown including the drift ("other") count.
+      await expect(
+        page
+          .getByText("Undid 1 add. Skipped 1", { exact: false })
+          .first(),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page.getByText("0 no longer in window, 1 other", { exact: false }).first(),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // The drift case carries the toast action affordance.
+      const jumpButton = page.getByTestId("handwavy-undo-all-toast-jump-skipped");
+      await expect(jumpButton).toBeVisible({ timeout: 15_000 });
+      await expect(jumpButton).toHaveText(/View skipped/);
+
+      await jumpButton.click();
+
+      // The removal-history panel is now open (the action force-opens
+      // the collapsed panel) and the drifted phrase's audit row is
+      // pulse-highlighted via the shared amber `data-highlighted`
+      // attribute that the per-row jump UX (Task #412) also uses.
+      await expect(page.getByTestId("handwavy-history-list")).toBeVisible({
+        timeout: 15_000,
+      });
+      const driftedHistoryRow = page.locator(
+        `[data-handwavy-history-phrase="${driftedPhrase}"]`,
+      );
+      await expect(driftedHistoryRow).toHaveCount(1, { timeout: 15_000 });
+      await expect(driftedHistoryRow).toHaveAttribute(
+        "data-highlighted",
+        "true",
+        { timeout: 15_000 },
+      );
+
+      // The successfully-undone phrase's row exists too (its audit
+      // entry is the per-phrase `undone:true` row from the bulk undo)
+      // but it is NOT lit up — only drift-skipped phrases get the
+      // pulse so the reviewer's eye lands on the rows that actually
+      // need investigation.
+      const survivingHistoryRow = page.locator(
+        `[data-handwavy-history-phrase="${survivingPhrase}"]`,
+      );
+      await expect(survivingHistoryRow).toHaveCount(1, { timeout: 15_000 });
+      await expect(survivingHistoryRow).not.toHaveAttribute(
+        "data-highlighted",
+        "true",
+      );
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
