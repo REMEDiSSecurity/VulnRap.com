@@ -5838,8 +5838,19 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     suppressNavGuardRef.current = true;
     const target = pendingNavigation;
     setPendingNavigation(null);
+    // Re-enable the guard on the next tick — by then either the route
+    // change has flushed and this component has unmounted, or the
+    // reviewer cancelled out and we want the guard back. Wrapped in a
+    // helper because Task #444 needs to defer it until after the
+    // back-then-replace dance for `navigate(path, { replace: true })`.
+    const releaseSuppression = () => {
+      window.setTimeout(() => {
+        suppressNavGuardRef.current = false;
+      }, 0);
+    };
     if (target.kind === "link") {
       navigate(target.href);
+      releaseSuppression();
     } else if (target.kind === "imperative") {
       // Task #310 — replay the reviewer's original `navigate(...)` call
       // verbatim so list state, `replace: true`, numeric deltas, etc.
@@ -5848,19 +5859,60 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       // the bypass actually fires — `suppressNavGuardRef` is also set
       // above as belt-and-braces in case the consumer re-routes through
       // the guarded wrapper later.
-      (navigate as (...a: unknown[]) => void | Promise<void>)(...target.args);
+      //
+      // Task #444 — verbatim replay is wrong for two of the
+      // NavigateFunction overloads because the popstate sentinel sits
+      // on top of the history stack while the reviewer is interacting:
+      //   • `navigate(-N)` (numeric back-delta) is `history.go(-N)`,
+      //     which from the sentinel position would just pop the
+      //     sentinel itself — leaving the URL unchanged and the
+      //     reviewer staring at the same page they thought they had
+      //     navigated away from. We compensate by stepping one extra
+      //     entry back so the literal `navigate(-N)` call moves the
+      //     reviewer N user-visible entries back from /feedback-
+      //     analytics, not from the sentinel state on top of it.
+      //   • `navigate(path, { replace: true })` is `replaceState(...)`,
+      //     which would replace the SENTINEL — leaving /feedback-
+      //     analytics dangling in the back stack and defeating the
+      //     whole point of `replace: true`. We pop the sentinel first
+      //     (history.back is async — wait for its popstate to flush
+      //     before re-issuing the call) so the verbatim replay
+      //     overwrites /feedback-analytics instead.
+      // Plain pushes (`navigate(path)` and `navigate(path, { state })`)
+      // are left at the existing verbatim-replay path: the sentinel
+      // becomes a phantom back-stack entry, but that already mirrors
+      // what the link-click branch above does and changing it here
+      // would diverge the two branches without a behavioural payoff.
+      const args = target.args;
+      const isNumericDelta = typeof args[0] === "number";
+      const isReplace =
+        args.length >= 2 &&
+        typeof args[1] === "object" &&
+        args[1] !== null &&
+        (args[1] as { replace?: unknown }).replace === true;
+      if (isNumericDelta) {
+        const delta = args[0] as number;
+        window.history.go(delta < 0 ? delta - 1 : delta);
+        releaseSuppression();
+      } else if (isReplace) {
+        const onPop = () => {
+          window.removeEventListener("popstate", onPop);
+          (navigate as (...a: unknown[]) => void | Promise<void>)(...args);
+          releaseSuppression();
+        };
+        window.addEventListener("popstate", onPop);
+        window.history.back();
+      } else {
+        (navigate as (...a: unknown[]) => void | Promise<void>)(...args);
+        releaseSuppression();
+      }
     } else {
       // Pop the re-pushed sentinel AND the entry the reviewer's
       // original Back press was aimed at, so a single click of
       // "Leave anyway" lands them where they actually wanted to go.
       window.history.go(-2);
+      releaseSuppression();
     }
-    // Re-enable the guard on the next tick — by then either the route
-    // change has flushed and this component has unmounted, or the
-    // reviewer cancelled out and we want the guard back.
-    window.setTimeout(() => {
-      suppressNavGuardRef.current = false;
-    }, 0);
   };
 
   const handleUndo = async (phrase: string, addedAtIso: string) => {
@@ -6251,6 +6303,47 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               data-testid="handwavy-back-home"
             >
               Done
+            </Button>
+            {/* Task #444 — sr-only test surfaces that exercise the rest of the
+                NavigateFunction overload set so a regression that drops the
+                options arg or mishandles the numeric-delta path cannot slip
+                past CI. The plain `navigate(path)` form is already covered by
+                the visible "Done" button above (Task #310); these two cover
+                `navigate(-1)` (numeric back-delta) and
+                `navigate(path, { replace: true })`. They are rendered sr-only
+                so they do not clutter the panel header for sighted reviewers
+                but remain in the DOM (and clickable via Playwright with
+                { force: true }) so the guard's replay logic for those forms
+                is exercised end-to-end. The targets — `-1` and `/stats` with
+                replace — are chosen so the assertions can probe history
+                depth: a regression that drops the numeric arg would land on
+                "/" instead of the previous entry, and a regression that drops
+                `{ replace: true }` would leave /feedback-analytics dangling
+                in the back stack so `page.goBack()` would land on it
+                instead of the entry below. */}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="sr-only"
+              onClick={() => guardedNavigate(-1)}
+              data-testid="handwavy-back-delta"
+              aria-hidden="true"
+              tabIndex={-1}
+            >
+              Back (test-only)
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="sr-only"
+              onClick={() => guardedNavigate("/stats", { replace: true })}
+              data-testid="handwavy-back-replace"
+              aria-hidden="true"
+              tabIndex={-1}
+            >
+              Stats with replace (test-only)
             </Button>
           </div>
         </div>

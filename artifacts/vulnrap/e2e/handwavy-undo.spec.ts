@@ -495,6 +495,201 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
     }
   });
 
+  // Task #444 — Task #310 only exercises the plain `navigate(path)`
+  // form of the NavigateFunction overload set (the visible "Done"
+  // button calls `guardedNavigate("/")`). The wrapper captures
+  // arguments verbatim via `(...args)`, so it is generic enough to
+  // handle `navigate(-N)` and `navigate(path, { replace: true })` too —
+  // but a future refactor that forgets `NavigateFunction` has two
+  // signatures (e.g. silently dropping the options arg, or special-
+  // casing strings only and breaking the numeric-delta branch) would
+  // slip past the existing suite. This test drives the sr-only
+  // `handwavy-back-delta` button (which calls `guardedNavigate(-1)`)
+  // and verifies that "Leave anyway" actually navigates ONE entry
+  // back from /feedback-analytics — not forward to "/" (the regression
+  // shape that would surface if the args were dropped and a default
+  // destination filled in) and not nowhere (the regression shape that
+  // would surface if the popstate sentinel that sits on top of the
+  // stack were not compensated for and the literal `history.go(-1)`
+  // just popped it).
+  test("clicking an in-page button that calls guardedNavigate(-1) while an undo window is active pops the same confirm dialog and 'Leave anyway' actually goes back one entry (not forward to '/')", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task444 navguard", "delta");
+
+    try {
+      // Seed two real entries below /feedback-analytics so the
+      // numeric-delta replay has somewhere meaningful to land. Using
+      // /stats (rather than /) makes the assertion strict: a
+      // regression that dropped the numeric arg and re-routed through
+      // a default destination of "/" would land on "/" instead of
+      // "/stats" and this test would fail loudly.
+      await page.goto("/", { waitUntil: "networkidle" });
+      await page.goto("/stats", { waitUntil: "networkidle" });
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const reviewer = page.getByTestId("handwavy-reviewer");
+      await expect(reviewer).toBeVisible({ timeout: 15_000 });
+      await reviewer.fill("e2e-task444-delta");
+
+      await addPhraseViaUi(page, phrase);
+
+      // Sanity: the row carries an Undo button so the guard has
+      // something to protect — same belt-and-braces check the other
+      // imperative-nav variant of this spec does for the same reason.
+      const newRow = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
+
+      // The sr-only `handwavy-back-delta` button calls
+      // `guardedNavigate(-1)`. We dispatch the click event directly
+      // rather than calling .click(): sr-only positioning (clip
+      // rect(0,0,0,0) + 1×1 box) means a real Playwright click — even
+      // with { force: true } — has no reliable hit target, but a
+      // dispatched MouseEvent still fires React's synthetic onClick
+      // through the normal delegation path. This exercises exactly the
+      // same wrapper code path a real-button onClick would.
+      const backDelta = page.getByTestId("handwavy-back-delta");
+      await expect(backDelta).toBeAttached();
+      await backDelta.dispatchEvent("click");
+
+      const dialog = page.getByTestId("handwavy-undo-leave-confirm");
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+      await expect(
+        dialog.getByTestId("handwavy-undo-leave-confirm-phrase"),
+      ).toContainText(phrase);
+      const remainingText = await dialog
+        .getByTestId("handwavy-undo-leave-confirm-remaining")
+        .textContent();
+      expect(remainingText ?? "").toMatch(/^\d+m \d{2}s$/);
+
+      // "Stay on this page" must dismiss the dialog WITHOUT navigating.
+      // Under the pre-#444 code path the imperative `navigate(-1)`
+      // would not even have been reached yet (the wrapper short-
+      // circuits to the dialog), so this branch should pass on either
+      // build — it's the Leave-anyway branch below that exercises the
+      // actual replay logic.
+      await dialog.getByTestId("handwavy-undo-leave-confirm-cancel").click();
+      await expect(dialog).not.toBeVisible();
+      expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+      ).toHaveCount(1);
+      await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
+
+      // Re-clicking the back-delta button must re-arm the dialog —
+      // the guard isn't a one-shot, it stays active for as long as a
+      // candidate is inside its window.
+      await backDelta.dispatchEvent("click");
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+      // "Leave anyway" must replay the original `navigate(-1)` call
+      // and actually move us one user-visible entry back. The entry
+      // immediately below /feedback-analytics is /stats (we visited
+      // it as the second goto above), so the URL pathname must
+      // become exactly "/stats" — NOT "/feedback-analytics" (the
+      // regression shape from the sentinel popping in place of the
+      // intended back step) and NOT "/" (the regression shape from
+      // the args being dropped and a default destination filled in).
+      await dialog.getByTestId("handwavy-undo-leave-confirm-confirm").click();
+      await expect(dialog).not.toBeVisible();
+      await expect
+        .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
+        .toBe("/stats");
+    } finally {
+      await cleanup(apiCtx, phrase, { reviewer: "e2e-task444-delta-cleanup" });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #444 — companion test for the `{ replace: true }` overload of
+  // `useNavigate`. Same regression class as the numeric-delta test
+  // above: a refactor that silently drops the options arg would still
+  // navigate to the right URL but turn the call into a push instead
+  // of a replace, leaving /feedback-analytics dangling in the back
+  // stack. This test seeds a known previous entry ("/"), drives the
+  // sr-only `handwavy-back-replace` button (which calls
+  // `guardedNavigate("/stats", { replace: true })`), and after Leave-
+  // anyway lands on /stats it issues `page.goBack()`. The assertion
+  // is that we land on the entry that was BELOW /feedback-analytics
+  // ("/"), not on /feedback-analytics itself — proving the replay
+  // honored the `{ replace: true }` option and did NOT push a new
+  // entry on top of /feedback-analytics.
+  test("clicking an in-page button that calls guardedNavigate(path, { replace: true }) while an undo window is active replays with the replace option intact (page.goBack lands where the original entry was, not on /feedback-analytics)", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task444 navguard", "replace");
+
+    try {
+      // We need a known previous history entry below /feedback-
+      // analytics so `page.goBack()` after the replace has somewhere
+      // unambiguous to land. Without this the assertion below would
+      // be meaningless — there'd be no way to tell whether the entry
+      // we land on came from the replace honoring the option or from
+      // a stale history slot we don't control.
+      await page.goto("/", { waitUntil: "networkidle" });
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const reviewer = page.getByTestId("handwavy-reviewer");
+      await expect(reviewer).toBeVisible({ timeout: 15_000 });
+      await reviewer.fill("e2e-task444-replace");
+
+      await addPhraseViaUi(page, phrase);
+
+      // Sanity: the row carries an Undo button so the guard has
+      // something to protect.
+      const newRow = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: phrase });
+      await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
+
+      // The sr-only `handwavy-back-replace` button calls
+      // `guardedNavigate("/stats", { replace: true })`. We dispatch
+      // the click event directly for the same sr-only hit-target
+      // reason explained on the back-delta test above.
+      const backReplace = page.getByTestId("handwavy-back-replace");
+      await expect(backReplace).toBeAttached();
+      await backReplace.dispatchEvent("click");
+
+      const dialog = page.getByTestId("handwavy-undo-leave-confirm");
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+      await expect(
+        dialog.getByTestId("handwavy-undo-leave-confirm-phrase"),
+      ).toContainText(phrase);
+
+      // Leave anyway: the replay must honor BOTH the path AND the
+      // `{ replace: true }` option. We assert the URL change first
+      // (proving the path reached react-router) and then probe
+      // history depth via `page.goBack()` (proving the option
+      // reached react-router too).
+      await dialog.getByTestId("handwavy-undo-leave-confirm-confirm").click();
+      await expect(dialog).not.toBeVisible();
+      await expect
+        .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
+        .toBe("/stats");
+
+      // Now hit Back. Because /feedback-analytics was REPLACED (not
+      // pushed) by the imperative navigate, the entry immediately
+      // below /stats in the back stack is the original "/" we visited
+      // at the top of the test — NOT /feedback-analytics. A
+      // regression that dropped the `{ replace: true }` options arg
+      // (the exact shape this test is meant to catch) would push
+      // /stats on top of /feedback-analytics instead, and Back would
+      // land on /feedback-analytics — the assertion below would then
+      // fail loudly.
+      await page.goBack({ waitUntil: "networkidle" });
+      await expect
+        .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
+        .toBe("/");
+    } finally {
+      await cleanup(apiCtx, phrase, { reviewer: "e2e-task444-replace-cleanup" });
+      await apiCtx.dispose();
+    }
+  });
+
   // Task #222 — suppression contract. Clicking the row-level Undo
   // button must NOT pop the navigate-away dialog: the reviewer is the
   // one initiating the rollback, and the panel's instant refresh +

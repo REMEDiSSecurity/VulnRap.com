@@ -139,6 +139,23 @@
       "lastTickNewFlagCount": null,
       "nextTickAt": null,
       "ticksCompleted": 0
+    },
+    "260c720c37f0-d93bf27a": {
+      "replicaId": "260c720c37f0-d93bf27a",
+      "hostname": "260c720c37f0",
+      "heartbeatAt": "2026-05-02T12:19:23.367Z",
+      "schedulerStarted": true,
+      "startedAt": "2026-05-02T12:19:23.367Z",
+      "intervalMs": 21600000,
+      "retryIntervalMs": 300000,
+      "webhookConfigured": false,
+      "lastTickAt": null,
+      "lastTickOk": null,
+      "lastTickRanCheck": null,
+      "lastTickDispatched": null,
+      "lastTickNewFlagCount": null,
+      "nextTickAt": "2026-05-02T12:20:23.367Z",
+      "ticksCompleted": 0
     }
   }
 }
