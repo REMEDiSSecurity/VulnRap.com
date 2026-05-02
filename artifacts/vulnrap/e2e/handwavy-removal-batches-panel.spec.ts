@@ -477,6 +477,75 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     }
   });
 
+  // Task #481 — sibling of Task #340's active-phrase jump. Each "removed
+  // again on <date>" entry in the conflict-detail popover should also be
+  // a click target that scrolls + pulse-highlights the matching row in
+  // the full removal-history panel below (mirrors `jumpToHistoryRow`,
+  // the same helper Task #412's "Previously removed" hint uses). Without
+  // this, reviewers who notice a conflict for an already-retired phrase
+  // had no quick way to inspect *which* newer removal entry was at play.
+  test("clicking a 'removed again' conflict phrase highlights the matching history row", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task481 batch");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
+      const removedAt = batch.historyEntry!.removedAt;
+
+      // Re-add ONE of the two phrases and immediately remove it again so
+      // it owns a removal-history row whose `removedAt` is strictly newer
+      // than the original batch — that newer entry is the row the click
+      // should jump to.
+      await addPhrase(apiCtx, phrases[0], { reviewer: REVIEWER });
+      const followUp = await batchRemove(apiCtx, [phrases[0]], { reviewer: REVIEWER });
+      const laterRemovedAt = followUp.historyEntry!.removedAt;
+      expect(laterRemovedAt > removedAt).toBe(true);
+
+      const row = await openPanelAndFindBatch(page, removedAt);
+      const chip = row.getByTestId("handwavy-removal-batches-conflict-chip");
+      await expect(chip).toBeVisible({ timeout: 15_000 });
+      await chip.click();
+
+      const detail = row.getByTestId("handwavy-removal-batches-conflict-detail");
+      await expect(detail).toBeVisible();
+
+      const historyJumpButton = detail.getByTestId(
+        "handwavy-removal-batches-conflict-jump-history",
+      );
+      await expect(historyJumpButton).toHaveCount(1);
+      await expect(historyJumpButton).toContainText(phrases[0]);
+
+      // The newer history row that the click should target — keyed by
+      // phrase + the LATER removedAt, not the original batch's.
+      const historyRow = page.locator(
+        `[data-handwavy-history-phrase="${phrases[0]}"][data-handwavy-history-removed-at="${laterRemovedAt}"]`,
+      );
+      // The history panel is collapsed by default; the row isn't even
+      // mounted yet, so it has zero count. Clicking the jump button
+      // expands the panel AND highlights the row.
+      await expect(historyRow).toHaveCount(0);
+
+      await historyJumpButton.click();
+      await expect(historyRow).toHaveAttribute("data-highlighted", "true", {
+        timeout: 5_000,
+      });
+
+      // The OLDER history row (matching the original batch's removedAt)
+      // is NOT the one we jumped to, so it should not carry the highlight
+      // even after the panel is open.
+      const olderHistoryRow = page.locator(
+        `[data-handwavy-history-phrase="${phrases[0]}"][data-handwavy-history-removed-at="${removedAt}"]`,
+      );
+      await expect(olderHistoryRow).not.toHaveAttribute("data-highlighted", "true");
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
   // Task #339 — the same "N of M may overwrite recent edits" chip Task
   // #242 added to the picker rows must also surface on the OLDER
   // "Removal & undo history" panel's batch-group header (the row that

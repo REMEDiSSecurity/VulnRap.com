@@ -9563,11 +9563,18 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                         // entries become click targets that scroll +
                         // pulse-highlight the matching active-list row
                         // (mirrors `jumpToActivePhrase`, the same helper
-                        // the draft-overlap hint uses). "Removed again"
-                        // entries are plain text — there's no live row
-                        // to jump to — and surface the date the phrase
-                        // was last retired so the reviewer can decide
-                        // whether the bulk reinstate is safe.
+                        // the draft-overlap hint uses). Task #481 — the
+                        // sibling "removed again on <date>" entries are
+                        // ALSO clickable now: they scroll + pulse-
+                        // highlight the matching row in the full
+                        // removal-history panel below (via
+                        // `jumpToHistoryRow`, the same helper Task #412
+                        // wired up for the "Previously removed" hint),
+                        // so reviewers can inspect the newer retirement
+                        // entry without hand-scrolling the history list.
+                        // The trailing date stays in the label so the
+                        // popover still tells the reviewer when the
+                        // phrase was last retired without a click.
                         <div
                           id={conflictDetailId}
                           className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-amber-100"
@@ -9592,6 +9599,18 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                     className="font-mono break-all underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm text-left"
                                     data-testid="handwavy-removal-batches-conflict-jump"
                                     aria-label={`Jump to "${c.phrase}" in the active phrase list`}
+                                  >
+                                    &ldquo;{c.phrase}&rdquo;
+                                  </button>
+                                ) : c.laterRemovedAt ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      jumpToHistoryRow(c.phrase, c.laterRemovedAt as string)
+                                    }
+                                    className="font-mono break-all underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm text-left"
+                                    data-testid="handwavy-removal-batches-conflict-jump-history"
+                                    aria-label={`Jump to the newer removal-history entry for "${c.phrase}" (removed again on ${formatAuditTimestamp(c.laterRemovedAt) ?? "unknown date"})`}
                                   >
                                     &ldquo;{c.phrase}&rdquo;
                                   </button>
