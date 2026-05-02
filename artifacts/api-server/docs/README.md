@@ -1,0 +1,51 @@
+# `artifacts/api-server/docs/` — index
+
+Reference documentation for the VulnRap backend. Most files here are
+hand-written; one (the state-of-platform doc) is regenerated from
+source.
+
+## Top-level
+
+- **[`2026-05-02-state-of-platform.md`](./2026-05-02-state-of-platform.md)**
+  Living reference for the current platform state — overview, scoring
+  pipeline, full per-family signal catalog, calibration / drift,
+  public API surface, reviewer surface, fixture battery, known
+  limitations, roadmap pointers.
+
+  Regenerate (writes the file):
+
+  ```bash
+  node scripts/regenerate-state-of-platform.mjs
+  ```
+
+  CI-friendly check (exit non-zero if regenerating would change the
+  file; the time-sensitive `Generated:` line is ignored):
+
+  ```bash
+  node scripts/regenerate-state-of-platform.mjs --check
+  ```
+
+  The script has no external dependencies and is safe to run before
+  `pnpm install`. Hand-written narrative lives inline in the
+  generator script — edit there, never edit the generated `.md`
+  directly.
+
+## `calibration/`
+
+- `2026-04-30-avri-blend-calibration.md` — substance/legacy ratio
+  decision and the production-trace prerequisite for re-tuning.
+- `2026-04-30-llm-cost-gate-audit.md` — LLM cost-gate audit.
+- `2026-05-02-real-reports-sourcing.md` — real-reports corpus the
+  synthetic battery is calibrated against.
+- `disagreement-floor-audit.md`, `substance-prompt-audit.md` —
+  point-in-time audits.
+- `avri-drift-runbook.md` — drift response runbook.
+- `avri-scoring-rubric.md` — AVRI rubric reference.
+- `calibration-reviewer-token.md` — reviewer auth token mechanics.
+- `diagnostics-stripped-crash-trace.md` — stripped-trace handling
+  notes.
+
+## `marketing/`
+
+- `2026-05-02-llm-rewrite-prompt.md` — published rewrite prompt with
+  before/after example and "why VulnRap still catches faked detail."
