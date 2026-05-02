@@ -10,6 +10,7 @@ import {
   getDiagnosticsQueryKey,
   DIAGNOSTICS_STALE_TIME_MS,
   type DiagnosticsResponse,
+  type AvriMarkerScrollTarget,
 } from "./diagnostics-panel";
 
 const REPORT_ID = 4242;
@@ -88,7 +89,10 @@ const SAMPLE_DIAGNOSTICS = {
 };
 
 function renderWithClient(
-  props: { onStructuralMarkerClick?: (line: number) => void } = {},
+  props: {
+    onStructuralMarkerClick?: (line: number) => void;
+    avriMarkerScrollTarget?: AvriMarkerScrollTarget | null;
+  } = {},
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -99,6 +103,7 @@ function renderWithClient(
         <DiagnosticsPanel
           reportId={REPORT_ID}
           onStructuralMarkerClick={props.onStructuralMarkerClick}
+          avriMarkerScrollTarget={props.avriMarkerScrollTarget}
         />
       </QueryClientProvider>
     </MemoryRouter>,
@@ -758,6 +763,142 @@ describe("DiagnosticsPanel smoke test", () => {
       screen.queryByTestId("structural-marker-round_function_offsets"),
     ).not.toBeInTheDocument();
     expect(onStructuralMarkerClick).not.toHaveBeenCalled();
+  });
+
+  it("auto-expands, scrolls, and flashes the matching STRUCTURAL_FABRICATION marker when avriMarkerScrollTarget changes (Task #611)", async () => {
+    // Closes the loop between the Evidence Signals card (which renders
+    // marker bullets) and this diagnostics panel (which renders the
+    // matching marker bullet inside the AVRI structural-fabrication
+    // block). When the parent page bumps `avriMarkerScrollTarget`, the
+    // panel must:
+    //   1. Auto-expand if collapsed (so the AVRI block is mounted).
+    //   2. Scroll the matching `<li data-marker-id="...">` into view.
+    //   3. Flash the row briefly so the reviewer's eye lands on it.
+    //   4. Re-fire on every nonce bump so re-clicking the same marker
+    //      still works.
+    fetchSpy.mockImplementation(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "MEMORY_CORRUPTION",
+          familyName: "Memory corruption / unsafe C",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-787",
+            evidence: ["CWE-787"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 28,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 28,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "MEMORY_CORRUPTION",
+                  familyName: "Memory corruption / unsafe C",
+                  baseScore: 22,
+                  goldHitCount: 0,
+                  goldTotalCount: 8,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  crashTrace: {
+                    framesAnalyzed: 6,
+                    goodFrames: 5,
+                    placeholderFrames: 0,
+                    isStripped: false,
+                    reason: null,
+                    revokedGoldHits: [],
+                    penalty: 0,
+                    hasStructuralFabrication: true,
+                    structuralFabricationPenalty: -12,
+                    structuralMarkers: [
+                      {
+                        id: "round_function_offsets",
+                        description:
+                          "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000)",
+                        range: { start: 120, end: 140, line: 7 },
+                      },
+                      {
+                        id: "implausible_thread_id",
+                        description:
+                          "Thread id `T9999` outside realistic kernel pid range",
+                        range: { start: 250, end: 285, line: 14 },
+                      },
+                    ],
+                  },
+                  rawAvriScore: 10,
+                  legacyScore: 45,
+                  blendedScore: 28,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    // happy-dom doesn't implement scrollIntoView; spy on it so we can
+    // verify the panel called it on the matching row.
+    const scrollSpy = vi
+      .spyOn(window.HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+
+    // Start collapsed with no scroll target — proves auto-expand works.
+    const { rerender } = renderWithClient();
+    expect(screen.queryByText(/Composite Breakdown/i)).not.toBeInTheDocument();
+
+    // Parent page bumps the scroll target (e.g. reviewer clicked the
+    // `implausible_thread_id` bullet in the Evidence Signals card).
+    rerender(
+      <MemoryRouter>
+        <QueryClientProvider
+          client={
+            new QueryClient({
+              defaultOptions: { queries: { retry: false } },
+            })
+          }
+        >
+          <DiagnosticsPanel
+            reportId={REPORT_ID}
+            avriMarkerScrollTarget={{ id: "implausible_thread_id", nonce: 1 }}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    // Panel auto-expands and the AVRI block renders once the fetch settles.
+    const targetRow = await screen.findByTestId(
+      "structural-marker-implausible_thread_id-row",
+    );
+    expect(targetRow).toHaveAttribute("data-marker-id", "implausible_thread_id");
+
+    // The non-target marker is also rendered but should not flash.
+    const otherRow = await screen.findByTestId(
+      "structural-marker-round_function_offsets-row",
+    );
+    expect(otherRow.className).not.toMatch(/ring-yellow-400/);
+
+    // Wait for the requestAnimationFrame-deferred scroll/flash to land.
+    await waitFor(() => {
+      expect(targetRow.className).toMatch(/ring-yellow-400/);
+    });
+    expect(scrollSpy).toHaveBeenCalled();
+
+    scrollSpy.mockRestore();
   });
 
   it("renders STRUCTURAL_FABRICATION with subsumed-penalty wording when stripped-trace already fired (Task #317)", async () => {

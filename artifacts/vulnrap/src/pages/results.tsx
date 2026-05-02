@@ -17,7 +17,7 @@ import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCust
 import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport, type ReportScrollTarget } from "@/components/evidence-highlighter";
-import { DiagnosticsPanel, STRUCTURAL_MARKER_LABELS, buildMarkdownSummary, loadDiagnosticsForExport as loadCachedDiagnosticsForExport, type DiagnosticsResponse } from "@/components/diagnostics-panel";
+import { DiagnosticsPanel, STRUCTURAL_MARKER_LABELS, buildMarkdownSummary, loadDiagnosticsForExport as loadCachedDiagnosticsForExport, type DiagnosticsResponse, type AvriMarkerScrollTarget } from "@/components/diagnostics-panel";
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { TriageEngineCard, type VulnrapEngineResultPanel } from "@/components/triage-engine-card";
@@ -1183,6 +1183,27 @@ export default function Results() {
       nonce: (prev?.nonce ?? 0) + 1,
     }));
   };
+  // Task #611: companion scroll-target state for the diagnostics panel's
+  // STRUCTURAL_FABRICATION bullets. Clicking a marker in the Evidence
+  // Signals card bumps this nonce; the `<DiagnosticsPanel>` then expands
+  // (if collapsed), scrolls the matching bullet into view, and flashes it
+  // — closing the loop between "what looks fake" (Evidence card) and
+  // "where it appears in the trace" (AVRI structural-markers panel).
+  const [avriMarkerScrollTarget, setAvriMarkerScrollTarget] =
+    useState<AvriMarkerScrollTarget | null>(null);
+  const handleEvidenceMarkerClick = (markerId: string, line?: number) => {
+    setAvriMarkerScrollTarget((prev) => ({
+      id: markerId,
+      nonce: (prev?.nonce ?? 0) + 1,
+    }));
+    // Markers with a `range` also scroll the report panel to the offending
+    // line, mirroring the Task #451 behavior of clicking the diagnostics
+    // panel's bullet directly. Markers without a range still jump to the
+    // diagnostics panel — they just can't point at a report line.
+    if (typeof line === "number") {
+      handleStructuralMarkerClick(line);
+    }
+  };
   const handleSensitivityChange = (preset: SensitivityPreset) => {
     setSensitivity(preset);
     saveSettings({ sensitivityPreset: preset });
@@ -1762,6 +1783,7 @@ export default function Results() {
         <DiagnosticsPanel
           reportId={report.id}
           onStructuralMarkerClick={handleStructuralMarkerClick}
+          avriMarkerScrollTarget={avriMarkerScrollTarget}
         />
       )}
 
@@ -2082,14 +2104,18 @@ export default function Results() {
                         data-testid="hallucination-structural-fabrication-markers"
                       >
                         {markers.map((m) => {
-                          // Task #451: mirror the diagnostics-panel
-                          // affordance — when the marker carries a `range`
+                          // Task #451 + #611: every marker bullet is
+                          // clickable. When the marker carries a `range`
                           // (newer detectors do, older persisted reports
-                          // may not), render the bullet as a clickable
-                          // button that scrolls the report panel below to
-                          // the offending line. Without a range we fall
-                          // back to the existing static `<li>` so legacy
-                          // payloads keep rendering as they did pre-#451.
+                          // may not), the click both scrolls the report
+                          // panel below to the offending line *and* jumps
+                          // the diagnostics panel to the matching AVRI
+                          // structural-fabrication bullet. Without a
+                          // range, the click still jumps to the AVRI
+                          // bullet — closing the loop between "what looks
+                          // fake" (this card) and "where it appears in
+                          // the trace" (diagnostics panel) even for
+                          // legacy payloads that lack a line anchor.
                           const range = m.range;
                           const body = (
                             <>
@@ -2111,33 +2137,26 @@ export default function Results() {
                               </div>
                             </>
                           );
-                          if (range) {
-                            return (
-                              <li
-                                key={m.id}
-                                className="text-[11px] font-mono space-y-0.5"
-                              >
-                                <button
-                                  type="button"
-                                  data-testid={`evidence-structural-marker-${m.id}`}
-                                  data-marker-line={range.line}
-                                  onClick={() =>
-                                    handleStructuralMarkerClick(range.line)
-                                  }
-                                  className="w-full text-left rounded-sm space-y-0.5 px-1 -mx-1 py-0.5 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400/60 transition-colors cursor-pointer"
-                                  title={`Jump to line ${range.line} in the report`}
-                                >
-                                  {body}
-                                </button>
-                              </li>
-                            );
-                          }
+                          const title = range
+                            ? `Jump to line ${range.line} in the report and the matching AVRI marker below`
+                            : `Jump to the matching AVRI marker below`;
                           return (
                             <li
                               key={m.id}
                               className="text-[11px] font-mono space-y-0.5"
                             >
-                              {body}
+                              <button
+                                type="button"
+                                data-testid={`evidence-structural-marker-${m.id}`}
+                                data-marker-line={range?.line}
+                                onClick={() =>
+                                  handleEvidenceMarkerClick(m.id, range?.line)
+                                }
+                                className="w-full text-left rounded-sm space-y-0.5 px-1 -mx-1 py-0.5 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400/60 transition-colors cursor-pointer"
+                                title={title}
+                              >
+                                {body}
+                              </button>
                             </li>
                           );
                         })}

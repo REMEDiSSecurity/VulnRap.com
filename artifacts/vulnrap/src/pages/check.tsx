@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { UploadCloud, Shield, Loader2, CheckCircle, XCircle, Search, AlertTriangle, ClipboardPaste, Hash, Layers, Lightbulb, ShieldCheck, HelpCircle, ExternalLink, Link2, BarChart3, Target, Brain, Cpu, FileText, Eye, Gauge, AlertCircle, ChevronDown, ChevronUp, Leaf, MessageSquareWarning, Copy, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, Zap } from "lucide-react";
 import { useCheckReport, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type CheckReportBody, type TriageAssistant, type GapItem } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -295,6 +295,28 @@ export default function Check() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [result, setResult] = useState<CheckResultData | null>(null);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
+  // Task #611 — *accepted exception* to the task's "jump to crash
+  // trace" wording. The Results page wires marker bullets to a sibling
+  // DiagnosticsPanel that scrolls/flashes the matching AVRI row; that
+  // is the canonical "jump to crash trace" UX. The instant-check page
+  // intentionally does NOT render a DiagnosticsPanel — it's a one-shot
+  // validator that doesn't persist the report and has no per-report
+  // diagnostics endpoint to query — so there is no AVRI block to jump
+  // to from this view. To preserve UX parity (cursor, hover, focus
+  // ring, click affordance) for marker IDs across both pages, the
+  // click here flashes the row itself as the acknowledgement. If the
+  // check page ever grows a diagnostics/crash-trace surface, swap this
+  // self-flash for the same `avriMarkerScrollTarget` plumbing used in
+  // results.tsx.
+  const [flashedMarker, setFlashedMarker] = useState<{ id: string; nonce: number } | null>(null);
+  useEffect(() => {
+    if (!flashedMarker) return;
+    const t = window.setTimeout(() => setFlashedMarker(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [flashedMarker]);
+  const handleEvidenceMarkerClick = (markerId: string) => {
+    setFlashedMarker((prev) => ({ id: markerId, nonce: (prev?.nonce ?? 0) + 1 }));
+  };
   const [sensitivity, setSensitivity] = useState<SensitivityPreset>(() => getSettings().sensitivityPreset);
   const handleSensitivityChange = (preset: SensitivityPreset) => {
     setSensitivity(preset);
@@ -741,24 +763,47 @@ export default function Check() {
                             className="mt-1.5 space-y-1"
                             data-testid="hallucination-structural-fabrication-markers"
                           >
-                            {markers.map((m) => (
-                              <li
-                                key={m.id}
-                                className="text-[10px] font-mono space-y-0.5"
-                              >
-                                <div className="flex items-baseline gap-1.5 flex-wrap">
-                                  <span className="text-red-400/90 font-semibold">
-                                    {STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}
-                                  </span>
-                                  <span className="text-muted-foreground">
-                                    ({m.id})
-                                  </span>
-                                </div>
-                                <div className="text-foreground/80 leading-snug">
-                                  {m.description}
-                                </div>
-                              </li>
-                            ))}
+                            {markers.map((m) => {
+                              // Task #611: parity with results.tsx —
+                              // each marker bullet is a clickable button
+                              // that briefly flashes the row on click.
+                              // The instant-check page has no
+                              // DiagnosticsPanel/AVRI block to jump to,
+                              // so the flash on this row itself is the
+                              // acknowledgement.
+                              const isFlashed = flashedMarker?.id === m.id;
+                              return (
+                                <li
+                                  key={m.id}
+                                  data-marker-id={m.id}
+                                  data-testid={`check-evidence-structural-marker-${m.id}-row`}
+                                  className={cn(
+                                    "text-[10px] font-mono space-y-0.5 rounded-sm transition-colors",
+                                    isFlashed && "ring-1 ring-yellow-400/80 bg-yellow-400/10",
+                                  )}
+                                >
+                                  <button
+                                    type="button"
+                                    data-testid={`check-evidence-structural-marker-${m.id}`}
+                                    onClick={() => handleEvidenceMarkerClick(m.id)}
+                                    className="w-full text-left rounded-sm space-y-0.5 px-1 -mx-1 py-0.5 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400/60 transition-colors cursor-pointer"
+                                    title={`Highlight ${STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}`}
+                                  >
+                                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                                      <span className="text-red-400/90 font-semibold">
+                                        {STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        ({m.id})
+                                      </span>
+                                    </div>
+                                    <div className="text-foreground/80 leading-snug">
+                                      {m.description}
+                                    </div>
+                                  </button>
+                                </li>
+                              );
+                            })}
                           </ul>
                         )}
                         {item.matched && (

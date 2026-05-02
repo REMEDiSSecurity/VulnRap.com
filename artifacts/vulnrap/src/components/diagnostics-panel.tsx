@@ -1,5 +1,5 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ChevronDown, ChevronUp, Activity, AlertCircle, Download, ClipboardCopy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import {
   AVRI_OVERRIDE_LABELS,
   buildAvriRubricMarkdown,
@@ -17,6 +18,15 @@ import {
   type AvriEngine2Block,
   type AvriHandwavyCategory,
 } from "@workspace/avri-rubric";
+
+/** Task #611: target marker in the AVRI structural-fabrication block for the
+ * Evidence Signals card to scroll/flash. The `nonce` lets a caller request
+ * the same `id` twice in a row (clicking the same marker bullet) and still
+ * re-trigger the scroll+flash animation. */
+export interface AvriMarkerScrollTarget {
+  id: string;
+  nonce: number;
+}
 
 // Task 62: keep in sync with VerificationMode in
 // artifacts/api-server/src/lib/engines/avri/families.ts.
@@ -229,6 +239,7 @@ export async function loadDiagnosticsForExport(
 export function DiagnosticsPanel({
   reportId,
   onStructuralMarkerClick,
+  avriMarkerScrollTarget,
 }: {
   reportId: number;
   /** Task #451: invoked when a STRUCTURAL_FABRICATION marker bullet that
@@ -239,9 +250,24 @@ export function DiagnosticsPanel({
    * not clickable — preserving the existing diagnostics-panel test
    * fixtures that pass markers without ranges. */
   onStructuralMarkerClick?: (line: number) => void;
+  /** Task #611: when set, expand the panel, scroll the matching
+   * STRUCTURAL_FABRICATION marker bullet into view, and apply a brief flash
+   * highlight. Driven by clicks on the matching Evidence Signals bullet so
+   * reviewers can jump from "what looks fake" (Evidence card) to "where it
+   * appears in the trace" (this panel). */
+  avriMarkerScrollTarget?: AvriMarkerScrollTarget | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
+
+  // Task #611: expand the panel automatically when the parent page asks us
+  // to scroll to a marker — the AVRI block is only mounted while the panel
+  // is expanded, so without this the scroll target would have nothing to
+  // land on. Mirrors the auto-expand effect in `<HighlightedReport>`.
+  useEffect(() => {
+    if (!avriMarkerScrollTarget) return;
+    setExpanded(true);
+  }, [avriMarkerScrollTarget]);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: getDiagnosticsQueryKey(reportId),
@@ -408,6 +434,7 @@ export function DiagnosticsPanel({
                 overrides={overrides}
                 cachedFamily={data.cachedAvriFamily ?? null}
                 onStructuralMarkerClick={onStructuralMarkerClick}
+                avriMarkerScrollTarget={avriMarkerScrollTarget}
               />
 
               {signalsSummary && (
@@ -675,6 +702,7 @@ function AvriFamilySection({
   overrides,
   cachedFamily,
   onStructuralMarkerClick,
+  avriMarkerScrollTarget,
 }: {
   avri: AvriDiagnosticsBlock | null;
   engines: EngineResult[];
@@ -690,9 +718,74 @@ function AvriFamilySection({
    * STRUCTURAL_FABRICATION marker that has a `range` renders as a clickable
    * button that scrolls the report panel above to the offending line. */
   onStructuralMarkerClick?: (line: number) => void;
+  /** Task #611: forwarded from `<DiagnosticsPanel>`. When this changes, the
+   * matching STRUCTURAL_FABRICATION marker is scrolled into view and given a
+   * brief flash highlight so the reviewer's eye lands on the row. */
+  avriMarkerScrollTarget?: AvriMarkerScrollTarget | null;
 }) {
   const e2 = engines.find((e) => /Technical Substance/i.test(e.engine));
   const e2Avri = (e2?.signalBreakdown?.avri ?? null) as AvriEngine2Block | null;
+
+  // Task #611: scroll/flash the matching STRUCTURAL_FABRICATION marker bullet
+  // when the parent page (currently `results.tsx`'s Evidence Signals card)
+  // bumps `avriMarkerScrollTarget`. The marker rows mount as `<li
+  // data-marker-id="...">` so we can find them by selector regardless of
+  // whether they rendered as a clickable button (Task #451 — markers with a
+  // `range`) or a static bullet (legacy persisted reports without a range).
+  // The effect re-runs when the markers list changes too, so the first
+  // request after the panel auto-expands and the diagnostics fetch settles
+  // still finds its target. The lookup is scoped to this section's root via
+  // `sectionRef` so a stray `data-marker-id` elsewhere on the page (a future
+  // reuse of the attribute) can't hijack the scroll target.
+  //
+  // These hooks are declared *before* any early-return branch below so React's
+  // rules-of-hooks ordering stays stable across renders that toggle between
+  // the cached-family-only branch and the full rubric branch on the same
+  // mounted instance.
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [flashMarkerId, setFlashMarkerId] = useState<string | null>(null);
+  const structuralMarkerIdsKey = (e2Avri?.crashTrace?.structuralMarkers ?? [])
+    .map((m) => m.id)
+    .join("|");
+  useEffect(() => {
+    if (!avriMarkerScrollTarget) return;
+    // Defer to a microtask so the panel's `expanded`/data-fetch flush has
+    // landed before we query the DOM for the target row.
+    const raf = requestAnimationFrame(() => {
+      const root = sectionRef.current ?? document;
+      // `CSS.escape` is not in the very oldest browsers; guard so a runtime
+      // without it (e.g. a stripped-down test environment) falls back to the
+      // raw id rather than crashing the panel.
+      const escaped =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function"
+          ? CSS.escape(avriMarkerScrollTarget.id)
+          : avriMarkerScrollTarget.id;
+      const node = root.querySelector<HTMLElement>(
+        `[data-marker-id="${escaped}"]`,
+      );
+      if (!node) return;
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFlashMarkerId(avriMarkerScrollTarget.id);
+    });
+    return () => cancelAnimationFrame(raf);
+    // `structuralMarkerIdsKey` is in the dep list so a request that arrives
+    // before the markers have mounted retries once the data settles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    avriMarkerScrollTarget?.id,
+    avriMarkerScrollTarget?.nonce,
+    structuralMarkerIdsKey,
+  ]);
+
+  // Clear the flash class after ~1.6s so the highlight pulse fades. Re-keyed
+  // on `avriMarkerScrollTarget?.nonce` so re-clicking the same marker resets
+  // the timer rather than letting the previous timeout clear it early.
+  useEffect(() => {
+    if (flashMarkerId === null) return;
+    const t = window.setTimeout(() => setFlashMarkerId(null), 1600);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flashMarkerId, avriMarkerScrollTarget?.nonce]);
 
   // Nothing to show if AVRI didn't run *and* we don't have a cached family on
   // the row. Keep the cached-family-only branch lightweight rather than going
@@ -743,6 +836,7 @@ function AvriFamilySection({
   const goldTotalCount = e2Avri?.goldTotalCount ?? goldHits.length + goldMisses.length;
   const crashTrace = e2Avri?.crashTrace ?? null;
   const rawHttp = e2Avri?.rawHttp ?? null;
+
   // Task #428 — surface the Task #300 AI self-disclosure detector output
   // (matched phrases + applied penalty) so reviewers can see *which* phrase
   // fired without dropping into the JSON. Optional on the Engine 2 block —
@@ -767,7 +861,7 @@ function AvriFamilySection({
   return (
     <>
       <Separator className="bg-border/30" />
-      <section className="space-y-3">
+      <section ref={sectionRef} className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
             <span>AVRI Family Rubric</span>
@@ -1079,11 +1173,24 @@ function AvriFamilySection({
                           </div>
                         </>
                       );
+                      // Task #611: `data-marker-id` lets the parent page
+                      // (Evidence Signals card) scroll/flash the matching
+                      // bullet here. The flash class is applied to the
+                      // wrapping `<li>` so both the clickable-button row
+                      // and the legacy plain bullet share the visual.
+                      const isFlashing = flashMarkerId === m.id;
+                      const flashClasses =
+                        "bg-yellow-400/30 ring-1 ring-yellow-400/60 -mx-1 px-1";
                       if (clickable) {
                         return (
                           <li
                             key={m.id}
-                            className="text-[11px] font-mono space-y-0.5"
+                            data-marker-id={m.id}
+                            data-testid={`structural-marker-${m.id}-row`}
+                            className={cn(
+                              "text-[11px] font-mono space-y-0.5 rounded-sm transition-colors duration-300",
+                              isFlashing && flashClasses,
+                            )}
                           >
                             <button
                               type="button"
@@ -1103,7 +1210,12 @@ function AvriFamilySection({
                       return (
                         <li
                           key={m.id}
-                          className="text-[11px] font-mono space-y-0.5"
+                          data-marker-id={m.id}
+                          data-testid={`structural-marker-${m.id}-row`}
+                          className={cn(
+                            "text-[11px] font-mono space-y-0.5 rounded-sm transition-colors duration-300",
+                            isFlashing && flashClasses,
+                          )}
                         >
                           {body}
                         </li>
