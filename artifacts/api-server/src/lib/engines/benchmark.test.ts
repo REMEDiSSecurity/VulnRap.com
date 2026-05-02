@@ -168,6 +168,65 @@ Compare baseline response to injection response above. The
 difference proves the SQL injection. Please award bounty.`,
     expectMaxScore: 35,
   },
+  // Task #449. Multi-key padded variant of slop-10. Same INJECTION
+  // narrative + fabricated `HTTP/1.1 200 OK` response shape, but two
+  // things are deliberately different from slop-10:
+  //   1. The response carries plausible Date + Server headers, so the
+  //      `missingDate` and `missingServer` plausibility markers in
+  //      `evaluateRawHttpResponse` do NOT fire. The only "absence"
+  //      marker still firing is `missingIncidentals` (no
+  //      X-Request-Id / Content-Length / Cache-Control / Set-Cookie).
+  //   2. The JSON body now carries THREE top-level keys (`status`,
+  //      `code`, `error`) — the padded form slop authors reach for to
+  //      dodge a key-count threshold. The narrative phrase is smuggled
+  //      into the `error` value; no incidental keys
+  //      (id/uuid/timestamp/links/meta) and no realistic incidental
+  //      data values (no UUID, ISO timestamp, or IP address) appear,
+  //      so Task #320's multi-key branch in `isSuspiciousJsonBody`
+  //      fires.
+  // With (1) gating away the easy markers, the multi-key padding
+  // detector is the decisive 2nd marker that pushes the response over
+  // the `markerCount >= 2` threshold. The response is flagged
+  // FAKE_RAW_HTTP, `stripFakeResponses` blanks the fabricated bytes,
+  // and the INJECTION `request_response_diff` gold hit is revoked,
+  // keeping the composite ≤35.
+  //
+  // Regression boundary: before Task #320's tightening landed,
+  // `isSuspiciousJsonBody` returned `false` for any body with ≥3 top-
+  // level keys, so the suspicious-body marker would NOT have fired
+  // here. With only `missingIncidentals` left firing
+  // (markerCount = 1, below the ≥2 threshold) the response would have
+  // been treated as legitimate, the INJECTION `request_response_diff`
+  // gold signal would have kept its points, and the composite would
+  // have scored well above the ≤35 LIKELY-INVALID cap (locally
+  // observed as 40 / NEEDS REVIEW when the multi-key branch is
+  // disabled). If a future change ever reverts the multi-key padding
+  // rule, this fixture surfaces the regression in CI alongside the
+  // unit-level coverage in raw-http.test.ts.
+  {
+    name: "slop-10b-fabricated-http-response-multi-key-padding",
+    forceAvri: true,
+    claimedCwes: ["CWE-89"],
+    text: `# SQL injection report with multi-key response evidence
+
+There is a SQL injection in the application. I sent a baseline
+request and an injection request and saw the difference in
+behavior — the response below is what the server returned for the
+attack.
+
+\`\`\`http
+HTTP/1.1 200 OK
+Date: Thu, 30 Apr 2026 10:11:12 GMT
+Server: nginx/1.24.0
+Content-Type: application/json
+
+{"status": "error", "code": 500, "error": "sql injection exposed in user lookup endpoint via the id parameter"}
+\`\`\`
+
+Compare baseline response to injection response above. The
+difference proves the SQL injection. Please award bounty.`,
+    expectMaxScore: 35,
+  },
   // Sprint 13B-3 (Task #321) WEB_CLIENT companion to slop-10. Claims
   // CWE-79 and pastes a fabricated `HTTP/1.1 200 OK` whose HTML body
   // is the ONLY source of the WEB_CLIENT `reflection_or_dom_proof`

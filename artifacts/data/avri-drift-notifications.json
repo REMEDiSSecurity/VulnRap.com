@@ -71,6 +71,40 @@
       "lastTickNewFlagCount": null,
       "nextTickAt": null,
       "ticksCompleted": 0
+    },
+    "e222d3f8d11a-d8dd3958": {
+      "replicaId": "e222d3f8d11a-d8dd3958",
+      "hostname": "e222d3f8d11a",
+      "heartbeatAt": "2026-05-02T12:11:53.701Z",
+      "schedulerStarted": true,
+      "startedAt": "2026-05-02T12:11:53.544Z",
+      "intervalMs": 21600000,
+      "retryIntervalMs": 300000,
+      "webhookConfigured": false,
+      "lastTickAt": null,
+      "lastTickOk": null,
+      "lastTickRanCheck": null,
+      "lastTickDispatched": null,
+      "lastTickNewFlagCount": null,
+      "nextTickAt": null,
+      "ticksCompleted": 0
+    },
+    "e222d3f8d11a-65e823f9": {
+      "replicaId": "e222d3f8d11a-65e823f9",
+      "hostname": "e222d3f8d11a",
+      "heartbeatAt": "2026-05-02T12:11:57.831Z",
+      "schedulerStarted": true,
+      "startedAt": "2026-05-02T12:11:56.431Z",
+      "intervalMs": 21600000,
+      "retryIntervalMs": 300000,
+      "webhookConfigured": false,
+      "lastTickAt": null,
+      "lastTickOk": null,
+      "lastTickRanCheck": null,
+      "lastTickDispatched": null,
+      "lastTickNewFlagCount": null,
+      "nextTickAt": null,
+      "ticksCompleted": 0
     }
   }
 }
