@@ -4927,6 +4927,88 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     setRemovePreview(null);
     await handleRemove(phrase);
   };
+  // Task #494 — explicit "Re-scan" affordance that the cached badge
+  // exposes inside the open preview panel. Reviewers who landed on a
+  // cached preview (because they backed out of a previous Trash click
+  // and re-clicked while the active list was unchanged) can now force a
+  // ground-truth dry-run without dismissing the panel and re-opening it
+  // from another row. Reuses the same DELETE dry-run + cache-write path
+  // as `requestRemoveWithImpactPreview` so the next cache hit on this
+  // phrase shows the fresh `scannedAt`. Uses a distinct busy key
+  // (`rm-rescan:${phrase}`) so the inline spinner / disabled state lives
+  // on the Re-scan button itself; the existing per-row Trash + preview
+  // confirm paths fold this key into their `inFlight` check below so
+  // confirming mid-rescan can't fire a DELETE against partially-replaced
+  // panel state. Unlike the Trash-click entry point this never short-
+  // circuits to a one-click DELETE on zero-impact: the reviewer is in
+  // the panel asking for ground-truth numbers, not asking to commit.
+  const rescanRemovePreview = async () => {
+    const current = removePreview;
+    if (!current) return;
+    const { phrase } = current;
+    if (bailOnCooldown("Re-scan preview")) return;
+    setBusy(`rm-rescan:${phrase}`);
+    try {
+      const resp = await removeHandwavyPhrase({
+        phrase,
+        dryRun: true,
+        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+          ? { productionScanLimit: effectiveProductionScanLimit }
+          : {}),
+      });
+      if (
+        !("dryRun" in resp) ||
+        resp.dryRun !== true ||
+        !("dryRunImpact" in resp) ||
+        ("batch" in resp && resp.batch !== false)
+      ) {
+        toast({
+          title: "Re-scan unavailable",
+          description:
+            "The server did not return a fresh removal preview. The cached numbers are still shown — please retry.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const single = resp as HandwavyPhraseSingleRemoveDryRunResponse;
+      removeDryRunCacheRef.current.set(
+        phrase,
+        effectiveProductionScanLimit,
+        handwavyActiveListVersion,
+        single,
+      );
+      const freshScannedAt =
+        removeDryRunCacheRef.current.getEntry(
+          phrase,
+          effectiveProductionScanLimit,
+          handwavyActiveListVersion,
+        )?.scannedAt ?? Date.now();
+      // Functional update so a stale closure (e.g. a panel dismissed
+      // between dispatch and resolve) doesn't accidentally re-open the
+      // panel: only flip when the panel is still showing this phrase.
+      setRemovePreview((prev) =>
+        prev && prev.phrase === phrase
+          ? {
+              phrase,
+              data: single,
+              // Reset acknowledgment — the impact numbers may have
+              // changed between cached and fresh, so the reviewer
+              // should re-confirm against the new totals.
+              acknowledged: false,
+              source: "fresh",
+              scannedAt: freshScannedAt,
+            }
+          : prev,
+      );
+    } catch (err) {
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg = err instanceof Error ? err.message : "Failed to re-scan removal preview.";
+        toast({ title: "Re-scan failed", description: msg, variant: "destructive" });
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
 
   // Task #134 — bulk-remove helpers. The selection set lives independently of
   // the active list so an in-flight refresh doesn't visually flicker the
@@ -8068,8 +8150,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           const productionLost = production?.validDetectionsLost ?? 0;
           const totalValidLost = corpusLost + productionLost;
           const requireAck = totalValidLost > 0;
+          const rescanInFlight = busy === `rm-rescan:${phrase}`;
           const inFlight =
-            busy === `rm:${phrase}` || busy === `rm-preview:${phrase}`;
+            busy === `rm:${phrase}` ||
+            busy === `rm-preview:${phrase}` ||
+            // Task #494 — fold the dedicated re-scan key into the
+            // panel-wide `inFlight` so a mid-rescan reviewer can't
+            // confirm against half-replaced data. The button itself
+            // also reads `rescanInFlight` directly to render its own
+            // inline spinner / disabled state.
+            rescanInFlight;
           // Task #349 — fresh-vs-cached badge for the preview header.
           const sourceBadge = describeRemovePreviewSource(
             source,
@@ -8088,25 +8178,62 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     <div className="font-semibold text-foreground">
                       Remove "{phrase}"?
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[9px] uppercase tracking-wide whitespace-nowrap shrink-0",
-                        sourceBadge.tone === "fresh"
-                          ? "border-emerald-500/40 text-emerald-200"
-                          : "border-amber-500/40 text-amber-200",
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[9px] uppercase tracking-wide whitespace-nowrap",
+                          sourceBadge.tone === "fresh"
+                            ? "border-emerald-500/40 text-emerald-200"
+                            : "border-amber-500/40 text-amber-200",
+                        )}
+                        data-testid="handwavy-remove-preview-source"
+                        data-source={source}
+                        data-scanned-at={scannedAt}
+                        title={
+                          source === "fresh"
+                            ? "These impact numbers came from a fresh corpus + production-archive scan."
+                            : `Served from cache, scanned ${formatRemovePreviewScannedAgo(scannedAt, removePreviewNow)}. Adding, removing, reinstating, or editing any phrase invalidates the cache so the next Trash click re-scans.`
+                        }
+                      >
+                        {sourceBadge.label}
+                      </Badge>
+                      {/* Task #494 — explicit "Re-scan" affordance next to
+                          the cached badge. Only rendered while the panel
+                          is showing a cached preview; once the re-scan
+                          lands the badge flips to "Fresh scan" and this
+                          button unmounts (a fresh preview has nothing to
+                          re-scan from the reviewer's perspective). The
+                          button drives `rescanRemovePreview`, which uses
+                          a dedicated busy key so its inline spinner /
+                          disabled state stays scoped to this control. */}
+                      {source === "cached" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px] gap-1 border-amber-500/40 text-amber-200 hover:text-amber-100"
+                          onClick={rescanRemovePreview}
+                          disabled={rescanInFlight || !mutationsAllowed}
+                          title={
+                            !mutationsAllowed
+                              ? MUTATIONS_BLOCKED_TITLE
+                              : "Force a fresh corpus + production-archive dry-run for this phrase."
+                          }
+                          data-testid="handwavy-remove-preview-rescan"
+                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                        >
+                          <RefreshCw
+                            className={cn(
+                              "w-3 h-3",
+                              rescanInFlight && "animate-spin",
+                            )}
+                            data-testid="handwavy-remove-preview-rescan-icon"
+                            data-spinning={rescanInFlight ? "true" : "false"}
+                          />
+                          {rescanInFlight ? "Re-scanning…" : "Re-scan"}
+                        </Button>
                       )}
-                      data-testid="handwavy-remove-preview-source"
-                      data-source={source}
-                      data-scanned-at={scannedAt}
-                      title={
-                        source === "fresh"
-                          ? "These impact numbers came from a fresh corpus + production-archive scan."
-                          : `Served from cache, scanned ${formatRemovePreviewScannedAgo(scannedAt, removePreviewNow)}. Adding, removing, reinstating, or editing any phrase invalidates the cache so the next Trash click re-scans.`
-                      }
-                    >
-                      {sourceBadge.label}
-                    </Badge>
+                    </div>
                   </div>
                   <div
                     className="text-[10px] text-muted-foreground mt-0.5"

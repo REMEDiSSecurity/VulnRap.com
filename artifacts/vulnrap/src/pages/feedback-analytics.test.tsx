@@ -2235,6 +2235,317 @@ describe("HandwavyPhrasesAdmin — productionScanLimit attached on remove dry-ru
 });
 
 // =====================================================================
+// Task #494 — regression test for the per-row Trash preview's "Re-scan"
+// affordance. Task #349 added a cached-vs-fresh badge to the open
+// preview but offered no way to ask for ground-truth numbers without
+// dismissing the panel; Task #494 adds an inline Re-scan button next
+// to the cached badge that re-fires the same DELETE dry-run and flips
+// the badge back to "Fresh scan" on completion.
+//
+// To reach a cached preview without leaving the page we Trash the same
+// phrase twice in a row: the first click populates the per-row dry-run
+// cache and opens the panel with `source: "fresh"`; backing out and
+// re-clicking the Trash short-circuits to the cached entry and re-
+// opens the panel with `source: "cached"`. Pressing the Re-scan
+// button must then issue another DELETE dry-run and flip the badge
+// back to "Fresh scan" — the regression we're guarding against is a
+// silent revert to the "back-out and re-Trash from another row" hack.
+// =====================================================================
+
+describe("HandwavyPhrasesAdmin — Re-scan from cached preview (Task #494)", () => {
+  const ACTIVE_PHRASE = "vague handwavy phrase";
+
+  const REVIEWER_KEY = "vulnrap.handwavy.reviewer";
+  const PRODUCTION_SCAN_LIMIT_KEY = "vulnrap.calibration.productionScanLimit";
+  const LEGACY_PRODUCTION_SCAN_LIMIT_KEY =
+    "vulnrap.handwavy.productionScanLimit";
+
+  type CapturedRequest = {
+    method: string;
+    url: string;
+    body: Record<string, unknown> | null;
+  };
+
+  const HIGH_IMPACT_DRY_RUN: HandwavyPhraseSingleRemoveDryRunResponse = {
+    dryRun: true,
+    batch: false,
+    wouldRemove: 1,
+    notFound: 0,
+    duplicateInBatch: 0,
+    phrase: ACTIVE_PHRASE,
+    raw: ACTIVE_PHRASE,
+    removed: false,
+    total: 1,
+    projectedTotal: 0,
+    results: [{ raw: ACTIVE_PHRASE, phrase: ACTIVE_PHRASE, removed: true }],
+    dryRunImpact: {
+      corpus: {
+        total: 4,
+        byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 3, t4Hallucinated: 1 },
+        // Non-zero so the preview panel actually opens (zero-impact
+        // dry-runs short-circuit straight to the live DELETE and never
+        // reach the panel we're testing).
+        validDetectionsLost: 4,
+        falsePositivesDropped: 0,
+        corpusSize: 50,
+        sampleMatches: [],
+        warning: "would un-flag 4 valid detections",
+        oldestCreatedAt: null,
+        newestCreatedAt: null,
+        archiveTotal: null,
+      } satisfies HandwavyPhraseBatchRemoveDryRunImpact,
+      production: null,
+      productionError: null,
+      // Default production-scan window — the actual value is irrelevant
+      // for this test (we never read it back), but the wire schema
+      // requires a number, not null.
+      productionLimit: 2000,
+    },
+    phrases: [
+      {
+        phrase: ACTIVE_PHRASE,
+        category: "hedging",
+        addedBy: "tester@example.com",
+        addedAt: "2026-04-01T10:00:00.000Z",
+        rationale: "test fixture",
+      },
+    ],
+  };
+
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  function installFetchMock(): {
+    spy: ReturnType<typeof vi.spyOn>;
+    captured: CapturedRequest[];
+  } {
+    const captured: CapturedRequest[] = [];
+    const spy = vi.spyOn(globalThis, "fetch");
+    spy.mockImplementation(async (input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      const method = (init?.method ?? "GET").toUpperCase();
+
+      if (
+        method === "DELETE" &&
+        url.includes("/api/feedback/calibration/handwavy-phrases") &&
+        !url.includes("/handwavy-phrases/")
+      ) {
+        let parsed: Record<string, unknown> | null = null;
+        if (typeof init?.body === "string") {
+          try {
+            parsed = JSON.parse(init.body) as Record<string, unknown>;
+          } catch {
+            parsed = null;
+          }
+        }
+        captured.push({ method, url, body: parsed });
+        return jsonResponse(HIGH_IMPACT_DRY_RUN);
+      }
+
+      if (url.includes("/api/feedback/calibration/auth-status")) {
+        return jsonResponse({
+          serverRequiresToken: false,
+          tokenPresented: false,
+          tokenValid: false,
+          mutationsAllowed: true,
+        });
+      }
+
+      if (
+        url.includes(
+          "/api/feedback/calibration/handwavy-phrases/removal-batches",
+        )
+      ) {
+        return jsonResponse({ batches: [], total: 0, hasMore: false });
+      }
+
+      if (url.includes("/api/feedback/calibration/handwavy-phrases")) {
+        return jsonResponse({
+          phrases: [
+            {
+              phrase: ACTIVE_PHRASE,
+              category: "hedging",
+              addedBy: "tester@example.com",
+              addedAt: "2026-04-01T10:00:00.000Z",
+              rationale: "test fixture",
+            },
+          ],
+          history: [],
+        });
+      }
+
+      return jsonResponse({});
+    });
+    return { spy, captured };
+  }
+
+  function renderAdmin() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/feedback-analytics"]}>
+          <HandwavyPhrasesAdmin mutationsAllowed={true} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  let fetchMock: ReturnType<typeof installFetchMock>;
+
+  beforeEach(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+    fetchMock = installFetchMock();
+  });
+
+  afterEach(() => {
+    fetchMock.spy.mockRestore();
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+  });
+
+  function countRemoveDryRunRequests(): number {
+    return fetchMock.captured.filter(
+      (r) => r.method === "DELETE" && r.body?.dryRun === true,
+    ).length;
+  }
+
+  it("flips a cached preview back to 'Fresh scan' when the reviewer clicks Re-scan, without dismissing the panel", async () => {
+    renderAdmin();
+
+    // Step 1 — first Trash click populates the per-row cache and opens
+    // the panel with `source: "fresh"` (one DELETE dry-run on the wire).
+    const trashButton = await screen.findByTestId(
+      "handwavy-remove",
+      {},
+      { timeout: 5_000 },
+    );
+    fireEvent.click(trashButton);
+
+    const panel = await screen.findByTestId(
+      "handwavy-remove-preview",
+      {},
+      { timeout: 5_000 },
+    );
+    await waitFor(() => {
+      expect(within(panel).getByTestId("handwavy-remove-preview-source"))
+        .toHaveAttribute("data-source", "fresh");
+    });
+    await waitFor(() => {
+      expect(countRemoveDryRunRequests()).toBe(1);
+    });
+    // Fresh preview must NOT render a Re-scan button — there's nothing
+    // to refresh from the reviewer's perspective when the numbers are
+    // already ground truth.
+    expect(
+      within(panel).queryByTestId("handwavy-remove-preview-rescan"),
+    ).not.toBeInTheDocument();
+
+    // Step 2 — back out and re-click Trash. The active list is
+    // unchanged so the cached entry is reused and the panel re-opens
+    // with `source: "cached"`. No second DELETE dry-run on the wire.
+    fireEvent.click(within(panel).getByTestId("handwavy-remove-preview-cancel"));
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("handwavy-remove-preview"),
+      ).not.toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId("handwavy-remove"));
+    const cachedPanel = await screen.findByTestId(
+      "handwavy-remove-preview",
+      {},
+      { timeout: 5_000 },
+    );
+    await waitFor(() => {
+      expect(within(cachedPanel).getByTestId("handwavy-remove-preview-source"))
+        .toHaveAttribute("data-source", "cached");
+    });
+    expect(countRemoveDryRunRequests()).toBe(1);
+
+    // Step 3 — the Re-scan button is rendered next to the cached
+    // badge. Capture the cached badge's `data-scanned-at` so we can
+    // assert it advances after the re-scan lands.
+    const rescanButton = within(cachedPanel).getByTestId(
+      "handwavy-remove-preview-rescan",
+    );
+    expect(rescanButton).toBeVisible();
+    const cachedScannedAt = Number(
+      within(cachedPanel)
+        .getByTestId("handwavy-remove-preview-source")
+        .getAttribute("data-scanned-at"),
+    );
+    expect(Number.isFinite(cachedScannedAt)).toBe(true);
+
+    // Step 4 — click Re-scan. Fires a fresh DELETE dry-run and the
+    // panel re-renders with the badge flipped back to "Fresh scan",
+    // the Re-scan button itself unmounts, and the cached `scannedAt`
+    // anchor advances (or stays equal — the fake timer resolution
+    // means we only assert non-decreasing).
+    await act(async () => {
+      fireEvent.click(rescanButton);
+    });
+
+    await waitFor(() => {
+      expect(countRemoveDryRunRequests()).toBe(2);
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("handwavy-remove-preview-source"),
+      ).toHaveAttribute("data-source", "fresh");
+    });
+    expect(
+      screen.queryByTestId("handwavy-remove-preview-rescan"),
+    ).not.toBeInTheDocument();
+    const freshScannedAt = Number(
+      screen
+        .getByTestId("handwavy-remove-preview-source")
+        .getAttribute("data-scanned-at"),
+    );
+    expect(freshScannedAt).toBeGreaterThanOrEqual(cachedScannedAt);
+
+    // The panel itself must still be open — the whole point of the
+    // affordance is that the reviewer never had to back out.
+    expect(screen.getByTestId("handwavy-remove-preview")).toBeInTheDocument();
+
+    // The Re-scan dry-run must carry the same shape as the original
+    // Trash dry-run (same phrase, dryRun: true). The default scan
+    // window is omitted on the wire (Task #452 contract).
+    const rescanRequest = fetchMock.captured.filter(
+      (r) => r.method === "DELETE" && r.body?.dryRun === true,
+    )[1];
+    expect(rescanRequest).toBeDefined();
+    expect(rescanRequest?.body).toMatchObject({
+      phrase: ACTIVE_PHRASE,
+      dryRun: true,
+    });
+    expect(rescanRequest?.body).not.toHaveProperty("productionScanLimit");
+  });
+});
+
+// =====================================================================
 // Task #460 — regression test for the "About the production scan window"
 // reviewer cheat-sheet block that Task #326 added under the shared scan-
 // window input (data-testid `handwavy-production-scan-limit-help`).
