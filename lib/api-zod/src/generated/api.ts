@@ -2235,6 +2235,25 @@ export const GetReportFeedResponse = zod.object({
 });
 
 /**
+ * Stores a SHA-256 HMAC of the email address (keyed with VISITOR_HMAC_KEY)
+so duplicate signups can be detected without persisting the raw address.
+When NEWSLETTER_FORWARD_URL is configured, the raw email is forwarded to
+that destination as a best-effort POST. Per-IP rate limited to 20
+signups per hour.
+
+ * @summary Subscribe to the VulnRap community mailing list
+ */
+export const subscribeNewsletterBodyEmailMax = 254;
+
+export const SubscribeNewsletterBody = zod.object({
+  email: zod
+    .string()
+    .email()
+    .max(subscribeNewsletterBodyEmailMax)
+    .describe("Email address to subscribe to the community mailing list."),
+});
+
+/**
  * Returns a SHA-256 proof-of-work challenge that must be solved before submitting feedback. This prevents automated spam.
  * @summary Get a proof-of-work challenge for feedback submission
  */

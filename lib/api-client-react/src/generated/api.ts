@@ -62,6 +62,8 @@ import type {
   HashLookupResult,
   HealthStatus,
   ListHandwavyPhraseRemovalBatchesParams,
+  NewsletterSubscribeBody,
+  NewsletterSubscribeResponse,
   PlatformStats,
   RecentActivity,
   ReportAnalysis,
@@ -996,6 +998,98 @@ export function useGetReportFeed<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Stores a SHA-256 HMAC of the email address (keyed with VISITOR_HMAC_KEY)
+so duplicate signups can be detected without persisting the raw address.
+When NEWSLETTER_FORWARD_URL is configured, the raw email is forwarded to
+that destination as a best-effort POST. Per-IP rate limited to 20
+signups per hour.
+
+ * @summary Subscribe to the VulnRap community mailing list
+ */
+export const getSubscribeNewsletterUrl = () => {
+  return `/api/newsletter/subscribe`;
+};
+
+export const subscribeNewsletter = async (
+  newsletterSubscribeBody: NewsletterSubscribeBody,
+  options?: RequestInit,
+): Promise<NewsletterSubscribeResponse> => {
+  return customFetch<NewsletterSubscribeResponse>(getSubscribeNewsletterUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(newsletterSubscribeBody),
+  });
+};
+
+export const getSubscribeNewsletterMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof subscribeNewsletter>>,
+    TError,
+    { data: BodyType<NewsletterSubscribeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof subscribeNewsletter>>,
+  TError,
+  { data: BodyType<NewsletterSubscribeBody> },
+  TContext
+> => {
+  const mutationKey = ["subscribeNewsletter"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof subscribeNewsletter>>,
+    { data: BodyType<NewsletterSubscribeBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return subscribeNewsletter(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubscribeNewsletterMutationResult = NonNullable<
+  Awaited<ReturnType<typeof subscribeNewsletter>>
+>;
+export type SubscribeNewsletterMutationBody = BodyType<NewsletterSubscribeBody>;
+export type SubscribeNewsletterMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Subscribe to the VulnRap community mailing list
+ */
+export const useSubscribeNewsletter = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof subscribeNewsletter>>,
+    TError,
+    { data: BodyType<NewsletterSubscribeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof subscribeNewsletter>>,
+  TError,
+  { data: BodyType<NewsletterSubscribeBody> },
+  TContext
+> => {
+  return useMutation(getSubscribeNewsletterMutationOptions(options));
+};
 
 /**
  * Returns a SHA-256 proof-of-work challenge that must be solved before submitting feedback. This prevents automated spam.

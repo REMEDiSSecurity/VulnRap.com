@@ -10,3 +10,4 @@ export * from "./user_feedback";
 // api-server's startup migration instead.
 export * from "./api_cache";
 export * from "./analysis_traces";
+export * from "./newsletter_subscriptions";

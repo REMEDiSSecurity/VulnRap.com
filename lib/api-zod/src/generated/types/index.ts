@@ -144,6 +144,8 @@ export * from "./lLMClaims";
 export * from "./lLMClaimsComplianceRelevance";
 export * from "./lLMSubstanceScores";
 export * from "./lLMTriageGuidance";
+export * from "./newsletterSubscribeBody";
+export * from "./newsletterSubscribeResponse";
 export * from "./platformStats";
 export * from "./platformStatsReportsByMode";
 export * from "./recentActivity";

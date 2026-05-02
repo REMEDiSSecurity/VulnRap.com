@@ -1415,6 +1415,21 @@ export interface ReportComparison {
   totalSections: number;
 }
 
+export interface NewsletterSubscribeBody {
+  /**
+   * Email address to subscribe to the community mailing list.
+   * @maxLength 254
+   */
+  email: string;
+}
+
+export interface NewsletterSubscribeResponse {
+  ok: boolean;
+  /** True when the HMAC of this address was already on file. */
+  alreadySubscribed: boolean;
+  message: string;
+}
+
 export interface SubmitFeedbackBody {
   /** The report ID this feedback is about (optional) */
   reportId?: number;

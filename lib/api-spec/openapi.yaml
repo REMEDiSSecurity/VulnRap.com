@@ -16,6 +16,8 @@ tags:
     description: User feedback
   - name: stats
     description: Platform statistics
+  - name: newsletter
+    description: Community newsletter signup
 paths:
   /healthz:
     get:
@@ -391,6 +393,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReportFeed"
+
+  /newsletter/subscribe:
+    post:
+      operationId: subscribeNewsletter
+      tags: [newsletter]
+      summary: Subscribe to the VulnRap community mailing list
+      description: |
+        Stores a SHA-256 HMAC of the email address (keyed with VISITOR_HMAC_KEY)
+        so duplicate signups can be detected without persisting the raw address.
+        When NEWSLETTER_FORWARD_URL is configured, the raw email is forwarded to
+        that destination as a best-effort POST. Per-IP rate limited to 20
+        signups per hour.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsletterSubscribeBody"
+      responses:
+        "201":
+          description: Subscription accepted (or already on the list)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterSubscribeResponse"
+        "400":
+          description: Invalid email address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many signups from this IP
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /feedback/challenge:
     get:
@@ -3118,6 +3157,32 @@ components:
         - dontMiss
         - reporterFeedback
         - reporterFeedbackSummary
+
+    NewsletterSubscribeBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: Email address to subscribe to the community mailing list.
+      required:
+        - email
+
+    NewsletterSubscribeResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        alreadySubscribed:
+          type: boolean
+          description: True when the HMAC of this address was already on file.
+        message:
+          type: string
+      required:
+        - ok
+        - alreadySubscribed
+        - message
 
     SubmitFeedbackBody:
       type: object

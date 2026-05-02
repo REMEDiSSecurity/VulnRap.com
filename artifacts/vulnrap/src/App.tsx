@@ -41,6 +41,7 @@ const Batch = lazyRetry(() => import("@/pages/batch"));
 const FeedbackAnalytics = lazyRetry(() => import("@/pages/feedback-analytics"));
 const ReportsExplorer = lazyRetry(() => import("@/pages/reports"));
 const Transparency = lazyRetry(() => import("@/pages/transparency"));
+const Community = lazyRetry(() => import("@/pages/community"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -79,6 +80,7 @@ function AppRoutes() {
             <Route path="/feedback-analytics" element={<FeedbackAnalytics />} />
             <Route path="/reports" element={<ReportsExplorer />} />
             <Route path="/transparency" element={<Transparency />} />
+            <Route path="/community" element={<Community />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
