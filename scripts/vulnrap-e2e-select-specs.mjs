@@ -69,6 +69,13 @@ export const FULL_SUITE_PATTERNS = [
   /^scripts\/vulnrap-e2e-select-specs\.test\.mjs$/,
   /^scripts\/vulnrap-e2e-register\.mjs$/,
   /^scripts\/vulnrap-e2e-register\.test\.mjs$/,
+  // Task #497 — the release-gate wrapper + its diff-aware narrower share
+  // the same selector output here. A change to either of them can flip
+  // whether a release run skips or runs the curated RELEASE_SPECS list,
+  // so any diff that touches them must rerun the full suite to verify
+  // the gate itself still works end-to-end.
+  /^scripts\/release-e2e-check\.sh$/,
+  /^scripts\/release-e2e-select\.mjs$/,
   // The build helper the Playwright webServer chains in front of every
   // start/serve. A regression here changes whether dist/ gets rebuilt and
   // therefore which code the browser actually exercises.
@@ -162,6 +169,70 @@ export function selectSpecs(changedFiles, allSpecs) {
     return { mode: "none", reason: "no vulnrap e2e surface area touched" };
   }
   return { mode: "subset", specs: [...touched].sort() };
+}
+
+/**
+ * Task #497 -- Narrow a `selectSpecs` result down to a release-gate decision.
+ *
+ * The release gate (scripts/release-e2e-check.sh) only ever runs a curated
+ * `RELEASE_SPECS` subset of the full e2e suite. Once the diff-aware
+ * selector has classified a diff, we can decide whether the release gate
+ * has anything to do at all:
+ *
+ *   - selectorResult == null            -> RUN  (git diff unavailable; safe
+ *                                                 default mirrors selectSpecs)
+ *   - selectorResult.mode === "all"     -> RUN  (a shared file changed;
+ *                                                 every release spec could
+ *                                                 be affected)
+ *   - selectorResult.mode === "subset"  -> RUN  iff any touched spec is in
+ *                                          RELEASE_SPECS, otherwise SKIP
+ *                                          (the touched specs are real but
+ *                                          aren't release-blocking)
+ *   - selectorResult.mode === "none"    -> SKIP (no e2e surface area at all)
+ *
+ * Note: when overlap exists we deliberately RUN the full RELEASE_SPECS
+ * list (not just the overlapping subset). The release gate is a single
+ * curated suite -- partial runs would change its semantics and hide
+ * regressions in the unrun specs that share the bundled webservers.
+ *
+ * @param {{mode:"all"|"none"|"subset", reason?:string, specs?:string[]} | null} selectorResult
+ *   selectSpecs() output, or null if the diff itself was unavailable.
+ * @param {string[]} releaseSpecs  RELEASE_SPECS basenames (one per line).
+ * @returns {{mode:"run"|"skip", reason:string, overlap?:string[]}}
+ */
+export function selectReleaseSpecs(selectorResult, releaseSpecs) {
+  if (selectorResult == null) {
+    return {
+      mode: "run",
+      reason: "git diff unavailable -- running full RELEASE_SPECS",
+    };
+  }
+  if (selectorResult.mode === "all") {
+    return {
+      mode: "run",
+      reason: selectorResult.reason ?? "full suite required",
+    };
+  }
+  if (selectorResult.mode === "none") {
+    return {
+      mode: "skip",
+      reason: selectorResult.reason ?? "no vulnrap e2e surface area touched",
+    };
+  }
+  // mode === "subset"
+  const releaseSet = new Set(releaseSpecs);
+  const overlap = (selectorResult.specs ?? []).filter((s) => releaseSet.has(s));
+  if (overlap.length > 0) {
+    return {
+      mode: "run",
+      reason: `${overlap.length} change-affected spec(s) overlap RELEASE_SPECS: ${overlap.join(", ")}`,
+      overlap,
+    };
+  }
+  return {
+    mode: "skip",
+    reason: `change-affected spec(s) [${(selectorResult.specs ?? []).join(", ")}] do not overlap RELEASE_SPECS`,
+  };
 }
 
 /**

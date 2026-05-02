@@ -1,35 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RELEASE_SELECTOR="${SCRIPT_DIR}/release-e2e-select.mjs"
+
 echo "[release-e2e-check] Running e2e smoke tests against the PRODUCTION builds of vulnrap and api-server..."
 echo "[release-e2e-check] (vite preview + bundled dist/index.mjs, not the dev servers)"
-# By default the Playwright webServer chains scripts/build-if-stale.mjs in
-# front of `start`/`serve`, so the vite + esbuild builds are reused when
-# dist/ is newer than every watched source (saves ~15s on back-to-back runs).
-# Task #351 also wires in a cross-restart persistent cache: when dist/ is
-# missing or stale (e.g. on a cold container), build-if-stale.mjs first
-# tries to restore a content-addressed snapshot from
-# `.cache/build-if-stale/<target>/<hash>/` before paying for a full build,
-# and snapshots the resulting dist/ post-build for the next cold start.
-# CI callers that already produced an up-to-date dist/ in a separate stage
-# can short-circuit the freshness check entirely with E2E_SKIP_PROD_BUILD=1;
-# E2E_FORCE_PROD_BUILD=1 forces a rebuild (and skips the persistent cache
-# restore) if the heuristic ever looks stale; BUILD_IF_STALE_DISABLE_CACHE=1
-# disables only the persistent cache while keeping the per-container
-# freshness check.
-if [ "${E2E_SKIP_PROD_BUILD:-0}" = "1" ]; then
-  echo "[release-e2e-check] E2E_SKIP_PROD_BUILD=1 — trusting existing dist/ (no rebuild)"
-elif [ "${E2E_FORCE_PROD_BUILD:-0}" = "1" ]; then
-  echo "[release-e2e-check] E2E_FORCE_PROD_BUILD=1 — rebuilding both bundles"
-fi
-
-CHROMIUM_PATH="${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-${REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE:-}}"
-if [ -z "${CHROMIUM_PATH}" ] || [ ! -x "${CHROMIUM_PATH}" ]; then
-  echo "[release-e2e-check] ERROR: No Chromium binary available." >&2
-  echo "  Set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE to a runnable Chromium build before retrying." >&2
-  exit 1
-fi
-echo "[release-e2e-check] Using Chromium at: ${CHROMIUM_PATH}"
 
 # Specs that must pass against the PRODUCTION builds before a release ships.
 # Keep this list in sync with the user flows we consider release-blocking:
@@ -70,6 +46,60 @@ RELEASE_SPECS=(
   handwavy-remove-preview.spec.ts
   handwavy-revert-disabled.spec.ts
 )
+
+# Task #497 -- Diff-aware fast-path.
+# Run scripts/release-e2e-select.mjs FIRST so a SKIP outcome bails before
+# the Chromium check / build-cache log lines / parallel-worker setup
+# below (mirrors the Task #353 short-circuit in scripts/vulnrap-e2e-check.sh).
+# The selector reuses the same change-aware logic as the validation step
+# (scripts/vulnrap-e2e-select-specs.mjs) and additionally narrows against
+# RELEASE_SPECS, so:
+#   - a doc-only or unrelated-artifact diff       -> SKIP (selector NONE)
+#   - a touched spec that isn't release-blocking  -> SKIP (no overlap)
+#   - any shared file / overlapping spec / no diff -> RUN  (full list)
+# Operators can force the full gate with E2E_RUN_ALL_SPECS=1 (the same
+# escape hatch the validation-step selector honors).
+echo "[release-e2e-check] Selecting whether the release gate has work to do for the current diff..."
+RELEASE_SELECTOR_OUTPUT="$(node "${RELEASE_SELECTOR}" "${RELEASE_SPECS[@]}")"
+RELEASE_DECISION="$(printf '%s\n' "${RELEASE_SELECTOR_OUTPUT}" | head -n1 | tr -d '[:space:]')"
+if [ "${RELEASE_DECISION}" = "SKIP" ]; then
+  echo "[release-e2e-check] No release-blocking surface area was touched -- skipping suite."
+  echo "[release-e2e-check] (set E2E_RUN_ALL_SPECS=1 to force the full RELEASE_SPECS list)"
+  exit 0
+fi
+if [ "${RELEASE_DECISION}" != "RUN" ]; then
+  echo "[release-e2e-check] ERROR: Unexpected release selector output: ${RELEASE_SELECTOR_OUTPUT}" >&2
+  echo "  Expected the first line of stdout to be 'RUN' or 'SKIP'. Refusing to silently run or skip the gate." >&2
+  exit 1
+fi
+
+# By default the Playwright webServer chains scripts/build-if-stale.mjs in
+# front of `start`/`serve`, so the vite + esbuild builds are reused when
+# dist/ is newer than every watched source (saves ~15s on back-to-back runs).
+# Task #351 also wires in a cross-restart persistent cache: when dist/ is
+# missing or stale (e.g. on a cold container), build-if-stale.mjs first
+# tries to restore a content-addressed snapshot from
+# `.cache/build-if-stale/<target>/<hash>/` before paying for a full build,
+# and snapshots the resulting dist/ post-build for the next cold start.
+# CI callers that already produced an up-to-date dist/ in a separate stage
+# can short-circuit the freshness check entirely with E2E_SKIP_PROD_BUILD=1;
+# E2E_FORCE_PROD_BUILD=1 forces a rebuild (and skips the persistent cache
+# restore) if the heuristic ever looks stale; BUILD_IF_STALE_DISABLE_CACHE=1
+# disables only the persistent cache while keeping the per-container
+# freshness check.
+if [ "${E2E_SKIP_PROD_BUILD:-0}" = "1" ]; then
+  echo "[release-e2e-check] E2E_SKIP_PROD_BUILD=1 — trusting existing dist/ (no rebuild)"
+elif [ "${E2E_FORCE_PROD_BUILD:-0}" = "1" ]; then
+  echo "[release-e2e-check] E2E_FORCE_PROD_BUILD=1 — rebuilding both bundles"
+fi
+
+CHROMIUM_PATH="${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-${REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE:-}}"
+if [ -z "${CHROMIUM_PATH}" ] || [ ! -x "${CHROMIUM_PATH}" ]; then
+  echo "[release-e2e-check] ERROR: No Chromium binary available." >&2
+  echo "  Set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH or REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE to a runnable Chromium build before retrying." >&2
+  exit 1
+fi
+echo "[release-e2e-check] Using Chromium at: ${CHROMIUM_PATH}"
 
 # Task #385 — Run the curated RELEASE_SPECS list in parallel against the
 # shared production webservers. The Playwright config under

@@ -20,12 +20,14 @@ import { fileURLToPath } from "node:url";
 
 import {
   FULL_SUITE_PATTERNS,
+  selectReleaseSpecs,
   selectSpecs,
   listSpecs,
 } from "./vulnrap-e2e-select-specs.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(__dirname, "vulnrap-e2e-select-specs.mjs");
+const RELEASE_SELECT_SCRIPT = path.join(__dirname, "release-e2e-select.mjs");
 
 let failed = 0;
 function check(label, cond, detail = "") {
@@ -63,6 +65,8 @@ const SHARED_FILE_SAMPLES = [
   "scripts/vulnrap-e2e-select-specs.test.mjs",
   "scripts/vulnrap-e2e-register.mjs",
   "scripts/vulnrap-e2e-register.test.mjs",
+  "scripts/release-e2e-check.sh",
+  "scripts/release-e2e-select.mjs",
   "scripts/build-if-stale.mjs",
   "artifacts/vulnrap/playwright.config.ts",
   "artifacts/vulnrap/e2e/helpers/handwavy.ts",
@@ -207,6 +211,212 @@ for (const pat of FULL_SUITE_PATTERNS) {
     "CLI: E2E_RUN_ALL_SPECS=1 prints exactly 'ALL' on stdout",
     res.status === 0 && res.stdout.trim() === "ALL",
     `status=${res.status} stdout=${JSON.stringify(res.stdout)} stderr=${JSON.stringify(res.stderr)}`,
+  );
+}
+
+// --- Task #497: selectReleaseSpecs() narrowing logic ---
+//
+// Re-uses the same canonical RELEASE_SPECS list as
+// scripts/release-e2e-check.sh. Keep these in sync if that bash list
+// changes -- the test below intentionally hard-codes the expected
+// release-blocking set so a silent bash edit is caught here.
+const RELEASE_SPECS = [
+  "diagnostics-panel.spec.ts",
+  "handwavy-undo.spec.ts",
+  "handwavy-reinstate-batch.spec.ts",
+  "handwavy-production-scan-limit.spec.ts",
+  "handwavy-bulk-preview.spec.ts",
+  "handwavy-bulk-undo.spec.ts",
+  "handwavy-preview-side-by-side.spec.ts",
+  "handwavy-reinstate-batch-preview.spec.ts",
+  "handwavy-reinstate-batch-thrash.spec.ts",
+  "handwavy-reinstate-confirm.spec.ts",
+  "handwavy-removal-batches-panel.spec.ts",
+  "handwavy-remove-confirm.spec.ts",
+  "handwavy-remove-preview.spec.ts",
+  "handwavy-revert-disabled.spec.ts",
+];
+
+// Sanity: every name in RELEASE_SPECS must exist on disk -- if a release
+// spec gets deleted/renamed without updating release-e2e-check.sh, the
+// release gate would silently lose coverage, so fail loud here too.
+for (const spec of RELEASE_SPECS) {
+  check(
+    `RELEASE_SPECS entry exists on disk: ${spec}`,
+    ALL_SPECS.includes(spec),
+  );
+}
+
+// (a) selectorResult == null -> RUN (safe default mirrors selectSpecs)
+{
+  const r = selectReleaseSpecs(null, RELEASE_SPECS);
+  check(
+    "selectReleaseSpecs(null) -> RUN with 'git diff unavailable' reason",
+    r.mode === "run" && /git diff unavailable/.test(r.reason),
+    JSON.stringify(r),
+  );
+}
+
+// (b) selector mode=all -> RUN, carrying the upstream reason
+{
+  const r = selectReleaseSpecs(
+    { mode: "all", reason: "shared file changed: foo" },
+    RELEASE_SPECS,
+  );
+  check(
+    "selectReleaseSpecs(all) -> RUN, reason carried",
+    r.mode === "run" && /shared file changed: foo/.test(r.reason),
+    JSON.stringify(r),
+  );
+}
+
+// (c) selector mode=none -> SKIP, carrying the upstream reason
+{
+  const r = selectReleaseSpecs(
+    { mode: "none", reason: "no vulnrap e2e surface area touched" },
+    RELEASE_SPECS,
+  );
+  check(
+    "selectReleaseSpecs(none) -> SKIP, reason carried",
+    r.mode === "skip" && /no vulnrap e2e surface area touched/.test(r.reason),
+    JSON.stringify(r),
+  );
+}
+
+// (d) subset that overlaps RELEASE_SPECS -> RUN (full list, not just overlap)
+{
+  const r = selectReleaseSpecs(
+    {
+      mode: "subset",
+      specs: ["handwavy-undo.spec.ts", "handwavy-revert-disabled.spec.ts"],
+    },
+    RELEASE_SPECS,
+  );
+  check(
+    "selectReleaseSpecs(subset overlapping RELEASE_SPECS) -> RUN",
+    r.mode === "run" &&
+      Array.isArray(r.overlap) &&
+      r.overlap.length === 2 &&
+      r.overlap.includes("handwavy-undo.spec.ts") &&
+      r.overlap.includes("handwavy-revert-disabled.spec.ts"),
+    JSON.stringify(r),
+  );
+  check(
+    "selectReleaseSpecs(subset overlap) reason names overlapping spec(s)",
+    /handwavy-undo\.spec\.ts/.test(r.reason ?? ""),
+    JSON.stringify(r),
+  );
+}
+
+// (e) subset that overlaps even one RELEASE_SPECS entry -> RUN
+{
+  const r = selectReleaseSpecs(
+    {
+      mode: "subset",
+      specs: [
+        "handwavy-undo.spec.ts",                     // in RELEASE_SPECS
+        "totally-unrelated-non-release.spec.ts",     // not in RELEASE_SPECS
+      ],
+    },
+    RELEASE_SPECS,
+  );
+  check(
+    "selectReleaseSpecs(partial overlap) -> RUN (any overlap is enough)",
+    r.mode === "run" &&
+      r.overlap?.length === 1 &&
+      r.overlap[0] === "handwavy-undo.spec.ts",
+    JSON.stringify(r),
+  );
+}
+
+// (f) subset that does NOT overlap RELEASE_SPECS -> SKIP
+{
+  // Find a real on-disk spec that isn't in RELEASE_SPECS so the test
+  // exercises a realistic non-release-blocking touch.
+  const releaseSet = new Set(RELEASE_SPECS);
+  const nonRelease = ALL_SPECS.find((s) => !releaseSet.has(s));
+  check(
+    "fixture: at least one on-disk spec exists outside RELEASE_SPECS",
+    Boolean(nonRelease),
+  );
+  const r = selectReleaseSpecs(
+    { mode: "subset", specs: [nonRelease] },
+    RELEASE_SPECS,
+  );
+  check(
+    "selectReleaseSpecs(subset with no overlap) -> SKIP",
+    r.mode === "skip" &&
+      new RegExp(nonRelease.replace(/\./g, "\\.")).test(r.reason ?? ""),
+    JSON.stringify(r),
+  );
+}
+
+// (g) subset with empty specs array (defensive) -> SKIP
+{
+  const r = selectReleaseSpecs({ mode: "subset", specs: [] }, RELEASE_SPECS);
+  check(
+    "selectReleaseSpecs(subset with empty specs) -> SKIP",
+    r.mode === "skip",
+    JSON.stringify(r),
+  );
+}
+
+// (h) Empty releaseSpecs argument: nothing can overlap -> any subset SKIPs.
+// Guards against a future caller mistakenly passing [] (e.g. a bash
+// `${RELEASE_SPECS[@]}` expansion against an unset array). The function
+// MUST NOT silently flip to RUN when the curated list is empty.
+{
+  const r = selectReleaseSpecs(
+    { mode: "subset", specs: ["handwavy-undo.spec.ts"] },
+    [],
+  );
+  check(
+    "selectReleaseSpecs(subset, releaseSpecs=[]) -> SKIP (no overlap possible)",
+    r.mode === "skip",
+    JSON.stringify(r),
+  );
+}
+
+// --- Task #497: scripts/release-e2e-select.mjs CLI integration ---
+// Force the upstream selector to ALL via E2E_RUN_ALL_SPECS=1 so the
+// subprocess outcome doesn't depend on the test runner's git state.
+{
+  const env = { ...process.env, E2E_RUN_ALL_SPECS: "1" };
+  const res = spawnSync(
+    "node",
+    [RELEASE_SELECT_SCRIPT, ...RELEASE_SPECS],
+    { encoding: "utf8", env },
+  );
+  check(
+    "release-e2e-select CLI: E2E_RUN_ALL_SPECS=1 prints exactly 'RUN' on stdout",
+    res.status === 0 && res.stdout.trim() === "RUN",
+    `status=${res.status} stdout=${JSON.stringify(res.stdout)} stderr=${JSON.stringify(res.stderr)}`,
+  );
+  check(
+    "release-e2e-select CLI: stderr carries [release-e2e-select] breadcrumb",
+    /\[release-e2e-select\] -> RUN/.test(res.stderr ?? ""),
+    `stderr=${JSON.stringify(res.stderr)}`,
+  );
+}
+
+// release-e2e-select CLI: missing RELEASE_SPECS argv must fail-safe to RUN
+// (an empty argv would otherwise let every diff classify as "no overlap"
+// and silently skip the gate forever).
+{
+  const env = { ...process.env, E2E_RUN_ALL_SPECS: "1" };
+  const res = spawnSync("node", [RELEASE_SELECT_SCRIPT], {
+    encoding: "utf8",
+    env,
+  });
+  check(
+    "release-e2e-select CLI: empty argv -> fail-safe RUN (not SKIP)",
+    res.status === 0 && res.stdout.trim() === "RUN",
+    `status=${res.status} stdout=${JSON.stringify(res.stdout)} stderr=${JSON.stringify(res.stderr)}`,
+  );
+  check(
+    "release-e2e-select CLI: empty argv warns on stderr",
+    /no RELEASE_SPECS basenames provided/.test(res.stderr ?? ""),
+    `stderr=${JSON.stringify(res.stderr)}`,
   );
 }
 
