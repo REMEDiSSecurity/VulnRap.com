@@ -23,9 +23,18 @@ export interface EvidenceItem {
   description: string;
   weight: number;
   matched?: string;
-  // Optional structured marker IDs forwarded from signals that
-  // aggregate multiple tells (e.g. impossible_http_response).
+  // Task #431: optional structured marker IDs (string[]) forwarded from
+  // signals that aggregate multiple tells (e.g. impossible_http_response).
   markers?: string[];
+  /**
+   * Task #435: optional structured payload for richer rendering. Only
+   * `hallucination_structural_fabrication` populates this today — the
+   * `markers` array is the same shape as `StructuralMarker` from
+   * `crash-trace.ts` (id + human-readable description), persisted so the
+   * results UI can render one bullet per fabrication tell that fired
+   * without re-running detectors.
+   */
+  context?: { markers?: Array<{ id: string; description: string }> };
 }
 
 export interface HumanIndicatorItem {

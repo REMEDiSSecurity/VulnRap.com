@@ -1,13 +1,31 @@
-import { detectStructuralFabrication } from "./engines/avri/crash-trace";
+import { detectStructuralFabrication, type StructuralMarker } from "./engines/avri/crash-trace";
+
+/**
+ * Optional structured payload for a hallucination signal. Lets the diagnostics
+ * UI render per-marker bullets without regex-parsing the human-readable
+ * `description`. Today only `structural_fabrication` populates this — the
+ * `markers` array carries every {@link StructuralMarker} that fired (id +
+ * one-line description). Future signals can extend this union.
+ */
+export type HallucinationSignalContext = { markers: StructuralMarker[] };
 
 export interface HallucinationSignal {
   type: string;
   description: string;
   weight: number;
-  // Optional structured marker IDs for signals that aggregate multiple
-  // tells; the UI renders one badge per marker. Description string
-  // remains the canonical fallback for non-UI surfaces.
+  // Task #431: optional structured marker IDs (string[]) for signals
+  // that aggregate multiple tells (e.g. `impossible_http_response`).
+  // The triage UI renders one badge per marker; description remains
+  // the canonical fallback for non-UI surfaces (logs, exports).
   markers?: string[];
+  /**
+   * Task #435: structured payload for reviewers. Diagnostics UI should
+   * prefer rendering bullets from `context` over parsing `description`,
+   * because `description` is a human-readable summary that may change.
+   * Today only `structural_fabrication` populates this with a richer
+   * `{ id, description }[]` payload than the flat `markers` array above.
+   */
+  context?: HallucinationSignalContext;
 }
 
 export interface HallucinationResult {
@@ -48,6 +66,11 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
       type: "structural_fabrication",
       description: `Crash trace has ${structuralMarkers.length} structural fabrication markers — ${structuralMarkers.map((m) => m.id).join(", ")}`,
       weight: structuralMarkers.length * 8,
+      // Task #435: surface the structured marker objects so the
+      // diagnostics panel can render one bullet per marker (with its
+      // human-readable description) without regex-parsing the joined
+      // description string above.
+      context: { markers: structuralMarkers },
     });
   }
 

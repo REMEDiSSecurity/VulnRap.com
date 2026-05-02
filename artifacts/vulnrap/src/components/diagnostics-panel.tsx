@@ -603,7 +603,7 @@ const AVRI_OVERRIDE_TONES: Record<string, string> = {
 // `description` field already includes the offending excerpt (e.g. the
 // round offsets, the frame numbers, the hex region size); these labels are
 // the one-line headline reviewers see above each excerpt.
-const STRUCTURAL_MARKER_LABELS: Record<string, string> = {
+export const STRUCTURAL_MARKER_LABELS: Record<string, string> = {
   round_function_offsets: "Round/zero function offsets",
   frame_numbering_gaps: "Frame-numbering gap inside a block",
   thread_id_inconsistency: "Thread block without `==<pid>==` anchor",
@@ -611,6 +611,9 @@ const STRUCTURAL_MARKER_LABELS: Record<string, string> = {
   implausible_function_offset: "Function offsets outside realistic bounds",
   implausible_thread_id: "PID or thread id outside realistic range",
   region_size_vs_access_size: "Region size incompatible with access size",
+  // Task #316: register dump and /proc/self/maps shape detectors.
+  fabricated_register_state: "Fabricated x86/x64 register dump",
+  fabricated_memory_map: "Fabricated /proc/self/maps listing",
 };
 
 function AvriFamilySection({

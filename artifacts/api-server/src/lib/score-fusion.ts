@@ -37,10 +37,17 @@ export interface EvidenceItem {
   description: string;
   weight: number;
   matched?: string;
-  // Optional structured marker IDs forwarded from signals that
-  // aggregate multiple tells (e.g. impossible_http_response). The UI
-  // renders one badge per marker; description remains the fallback.
+  // Task #431: optional structured marker IDs (string[]) forwarded from
+  // signals that aggregate multiple tells (e.g. impossible_http_response).
+  // The UI renders one badge per marker; description remains the fallback.
   markers?: string[];
+  /**
+   * Task #435: optional structured payload for richer rendering. Today only
+   * `hallucination_structural_fabrication` populates this — the diagnostics
+   * UI uses `context.markers` to render one bullet per fabrication tell that
+   * fired, with each marker's id + human-readable description.
+   */
+  context?: { markers?: Array<{ id: string; description: string }> };
 }
 
 export type Quadrant = "AI_SLOP" | "AI_ASSISTED" | "WEAK_HUMAN" | "STRONG_HUMAN";
@@ -363,7 +370,14 @@ export function fuseScores(
       type: "hallucination_" + signal.type,
       description: signal.description,
       weight: signal.weight,
+      // Task #431: forward the flat string[] marker IDs for signals that
+      // aggregate multiple tells (e.g. impossible_http_response) — the
+      // triage UI renders one badge per id.
       ...(signal.markers && signal.markers.length > 0 ? { markers: signal.markers } : {}),
+      // Task #435: forward the structured marker payload (today only set on
+      // `structural_fabrication`) so the diagnostics UI can render each
+      // marker as its own bullet with its description.
+      ...(signal.context ? { context: signal.context } : {}),
     });
   }
   for (const marker of claimSpec.markers) {

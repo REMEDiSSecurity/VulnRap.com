@@ -971,3 +971,54 @@ describe("Task #303: bounds-based structural detectors", () => {
     }
   });
 });
+
+describe("Task #435: structural_fabrication signal carries marker context", () => {
+  // Each fixture below trips ≥2 structural detectors so the
+  // `structural_fabrication` signal fires. The new contract is that the
+  // signal carries the structured `StructuralMarker[]` in `context.markers`
+  // — same array `detectStructuralFabrication` returns, in the same order.
+  // Diagnostics UI can render one bullet per marker (id + description)
+  // without regex-parsing the joined-id summary in `description`.
+  for (const id of [
+    "T4-12-fake-prologue-offsets",
+    "T4-13-fake-thread-id-out-of-range",
+    "T4-14-fake-region-vs-access",
+  ]) {
+    it(`${id} populates context.markers on the structural_fabrication signal`, () => {
+      const text = findFixture(id).text;
+      const r = detectHallucinationSignals(text);
+      const sig = r.signals.find((s) => s.type === "structural_fabrication");
+      expect(sig, "structural_fabrication signal should fire").toBeDefined();
+
+      // Context shape: { markers: StructuralMarker[] }, mirroring the helper.
+      const expected = detectStructuralFabrication(text);
+      expect(sig!.context).toBeDefined();
+      expect(Array.isArray(sig!.context!.markers)).toBe(true);
+      expect(sig!.context!.markers).toHaveLength(expected.length);
+
+      // Each marker round-trips id + description verbatim — diagnostics UI
+      // prefers context-array reads over parsing `description`.
+      for (let i = 0; i < expected.length; i++) {
+        expect(sig!.context!.markers[i].id).toBe(expected[i].id);
+        expect(sig!.context!.markers[i].description).toBe(expected[i].description);
+      }
+
+      // Weight remains marker-count * 8, matching the legacy aggregation.
+      expect(sig!.weight).toBe(expected.length * 8);
+    });
+  }
+
+  it("does NOT attach context when the signal is below the firing threshold", () => {
+    // A symbol-rich legit trace trips zero structural detectors, so no
+    // structural_fabrication signal is emitted at all (and therefore no
+    // context to assert on). Pin this so a future regression that emits the
+    // signal at <2 markers also surfaces here.
+    const legit = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a1c0
+READ of size 8 at 0x60200000a1c0 thread T0
+    #0 0x55e9b8c2f3d1 in foo_finalize parser/parse.c:418
+    #1 0x55e9b8c2e210 in foo_main parser/main.c:88`;
+    const r = detectHallucinationSignals(legit);
+    const types = r.signals.map((s) => s.type);
+    expect(types).not.toContain("structural_fabrication");
+  });
+});

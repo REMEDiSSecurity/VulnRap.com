@@ -17,7 +17,7 @@ import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCust
 import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport } from "@/components/evidence-highlighter";
-import { DiagnosticsPanel, buildMarkdownSummary, loadDiagnosticsForExport as loadCachedDiagnosticsForExport, type DiagnosticsResponse } from "@/components/diagnostics-panel";
+import { DiagnosticsPanel, STRUCTURAL_MARKER_LABELS, buildMarkdownSummary, loadDiagnosticsForExport as loadCachedDiagnosticsForExport, type DiagnosticsResponse } from "@/components/diagnostics-panel";
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { TriageEngineCard, type VulnrapEngineResultPanel } from "@/components/triage-engine-card";
@@ -1373,7 +1373,19 @@ export default function Results() {
   const sectionMatches = report.sectionMatches as Array<{ sectionTitle: string; matchedReportId: number; matchedSectionTitle: string; similarity: number }> | undefined;
   const redactionSummary = report.redactionSummary as { totalRedactions: number; categories: Record<string, number> } | undefined;
   const breakdown = report.breakdown as { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number } | undefined;
-  const evidence = report.evidence as Array<{ type: string; description: string; weight: number; matched?: string | null; markers?: string[] | null }> | undefined;
+  const evidence = report.evidence as Array<{
+    type: string;
+    description: string;
+    weight: number;
+    matched?: string | null;
+    // Task #431: optional flat marker IDs (string[]) for signals that
+    // aggregate multiple impossibility tells (e.g. impossible_http_response).
+    markers?: string[] | null;
+    // Task #435: structured marker payload populated for the
+    // hallucination_structural_fabrication evidence row, so each fabrication
+    // tell can be rendered as its own bullet (id label + description).
+    context?: { markers?: Array<{ id: string; description: string }> };
+  }> | undefined;
   const activeVerification = report.verification as Verification | null | undefined;
   const triage = report.triageRecommendation as TriageRecommendation | null | undefined;
   const triageAssistant = report.triageAssistant as TriageAssistant | null | undefined;
@@ -1923,39 +1935,72 @@ export default function Results() {
             <CardDescription>Specific indicators detected during multi-axis analysis</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {visibleEvidence.map((item, i) => (
-              <div key={i} className="glass-card rounded-lg p-3 flex items-start gap-3">
-                <div className="flex-shrink-0 mt-0.5">
-                  <Badge
-                    variant={item.weight >= 10 ? "destructive" : "secondary"}
-                    className="text-[9px] px-1.5 py-0 h-4 font-mono"
-                  >
-                    w:{item.weight}
-                  </Badge>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                      {EVIDENCE_TYPE_LABELS[item.type] || item.type}
-                    </span>
+            {visibleEvidence.map((item, i) => {
+              // Task #435: when an evidence row carries a structured marker
+              // payload (today only `hallucination_structural_fabrication`),
+              // render one bullet per marker with its description so
+              // reviewers see exactly which fabrication tells fired without
+              // having to regex-parse the joined-id summary in `description`.
+              const markers = item.context?.markers ?? [];
+              return (
+                <div key={i} className="glass-card rounded-lg p-3 flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <Badge
+                      variant={item.weight >= 10 ? "destructive" : "secondary"}
+                      className="text-[9px] px-1.5 py-0 h-4 font-mono"
+                    >
+                      w:{item.weight}
+                    </Badge>
                   </div>
-                  <p className="text-sm leading-relaxed">{item.description}</p>
-                  {item.matched && (
-                    <span className="inline-block mt-1 text-xs font-mono text-primary/70 bg-primary/5 rounded px-1.5 py-0.5 truncate max-w-full">
-                      {item.matched}
-                    </span>
-                  )}
-                  {item.type === "hallucination_impossible_http_response" &&
-                    item.markers &&
-                    item.markers.length > 0 && (
-                      <ImpossibleHttpMarkers
-                        markers={item.markers}
-                        testIdPrefix={`evidence-${i}-marker`}
-                      />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                        {EVIDENCE_TYPE_LABELS[item.type] || item.type}
+                      </span>
+                    </div>
+                    <p className="text-sm leading-relaxed">{item.description}</p>
+                    {markers.length > 0 && (
+                      <ul
+                        className="mt-2 space-y-1.5"
+                        data-testid="hallucination-structural-fabrication-markers"
+                      >
+                        {markers.map((m) => (
+                          <li
+                            key={m.id}
+                            className="text-[11px] font-mono space-y-0.5"
+                          >
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-red-400/90 font-semibold">
+                                {STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}
+                              </span>
+                              <span className="text-muted-foreground">
+                                ({m.id})
+                              </span>
+                            </div>
+                            <div className="text-foreground/80 leading-snug">
+                              {m.description}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     )}
+                    {item.matched && (
+                      <span className="inline-block mt-1 text-xs font-mono text-primary/70 bg-primary/5 rounded px-1.5 py-0.5 truncate max-w-full">
+                        {item.matched}
+                      </span>
+                    )}
+                    {item.type === "hallucination_impossible_http_response" &&
+                      item.markers &&
+                      item.markers.length > 0 && (
+                        <ImpossibleHttpMarkers
+                          markers={item.markers}
+                          testIdPrefix={`evidence-${i}-marker`}
+                        />
+                      )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {evidence.length > 6 && (
               <Button
                 variant="ghost"

@@ -15,6 +15,7 @@ import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCust
 import { AnalysisStepper } from "@/components/analysis-stepper";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
+import { STRUCTURAL_MARKER_LABELS } from "@/components/diagnostics-panel";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
@@ -252,7 +253,18 @@ interface CheckResultData {
   qualityScore?: number;
   confidence?: number;
   breakdown?: { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number };
-  evidence?: Array<{ type: string; description: string; weight: number; matched?: string | null; markers?: string[] | null }>;
+  evidence?: Array<{
+    type: string;
+    description: string;
+    weight: number;
+    matched?: string | null;
+    // Task #431: optional flat marker IDs (string[]) for signals that
+    // aggregate multiple impossibility tells (e.g. impossible_http_response).
+    markers?: string[] | null;
+    // Task #435: structured marker payload, populated for the
+    // hallucination_structural_fabrication evidence row.
+    context?: { markers?: Array<{ id: string; description: string }> };
+  }>;
   humanIndicators?: Array<{ type: string; description: string; weight: number; matched?: string | null }>;
   llmBreakdown?: { claimSpecificity?: number; evidenceQuality?: number; internalConsistency?: number; hallucinationSignals?: number; validityScore?: number; verdict?: string; redFlags?: string[]; greenFlags?: string[]; specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number };
   llmEnhanced?: boolean;
@@ -707,35 +719,65 @@ export default function Check() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {visibleEvidence.map((item, i) => (
-                  <div key={i} className="glass-card rounded-lg p-2.5 flex items-start gap-2.5">
-                    <Badge
-                      variant={item.weight >= 10 ? "destructive" : "secondary"}
-                      className="text-[9px] px-1 py-0 h-4 font-mono flex-shrink-0 mt-0.5"
-                    >
-                      w:{item.weight}
-                    </Badge>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                        {EVIDENCE_TYPE_LABELS[item.type] || item.type}
-                      </span>
-                      <p className="text-xs leading-relaxed">{item.description}</p>
-                      {item.matched && (
-                        <span className="inline-block mt-0.5 text-[10px] font-mono text-primary/70 bg-primary/5 rounded px-1 py-0.5 truncate max-w-full">
-                          {item.matched}
+                {visibleEvidence.map((item, i) => {
+                  // Task #435: render one bullet per structural-fabrication
+                  // marker when the evidence row carries a structured payload.
+                  const markers = item.context?.markers ?? [];
+                  return (
+                    <div key={i} className="glass-card rounded-lg p-2.5 flex items-start gap-2.5">
+                      <Badge
+                        variant={item.weight >= 10 ? "destructive" : "secondary"}
+                        className="text-[9px] px-1 py-0 h-4 font-mono flex-shrink-0 mt-0.5"
+                      >
+                        w:{item.weight}
+                      </Badge>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                          {EVIDENCE_TYPE_LABELS[item.type] || item.type}
                         </span>
-                      )}
-                      {item.type === "hallucination_impossible_http_response" &&
-                        item.markers &&
-                        item.markers.length > 0 && (
-                          <ImpossibleHttpMarkers
-                            markers={item.markers}
-                            testIdPrefix={`check-evidence-${i}-marker`}
-                          />
+                        <p className="text-xs leading-relaxed">{item.description}</p>
+                        {markers.length > 0 && (
+                          <ul
+                            className="mt-1.5 space-y-1"
+                            data-testid="hallucination-structural-fabrication-markers"
+                          >
+                            {markers.map((m) => (
+                              <li
+                                key={m.id}
+                                className="text-[10px] font-mono space-y-0.5"
+                              >
+                                <div className="flex items-baseline gap-1.5 flex-wrap">
+                                  <span className="text-red-400/90 font-semibold">
+                                    {STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    ({m.id})
+                                  </span>
+                                </div>
+                                <div className="text-foreground/80 leading-snug">
+                                  {m.description}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
                         )}
+                        {item.matched && (
+                          <span className="inline-block mt-0.5 text-[10px] font-mono text-primary/70 bg-primary/5 rounded px-1 py-0.5 truncate max-w-full">
+                            {item.matched}
+                          </span>
+                        )}
+                        {item.type === "hallucination_impossible_http_response" &&
+                          item.markers &&
+                          item.markers.length > 0 && (
+                            <ImpossibleHttpMarkers
+                              markers={item.markers}
+                              testIdPrefix={`check-evidence-${i}-marker`}
+                            />
+                          )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {result.evidence.length > 5 && (
                   <Button
                     variant="ghost"

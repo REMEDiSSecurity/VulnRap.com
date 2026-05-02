@@ -5,6 +5,7 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { EvidenceItemContext } from "./evidenceItemContext";
 
 export interface EvidenceItem {
   /** Evidence type identifier (e.g. ai_phrase, placeholder_url, severity_inflation) */
@@ -18,10 +19,18 @@ export interface EvidenceItem {
    * @nullable
    */
   matched?: string | null;
-  /** Optional structured per-marker IDs for evidence types that aggregate multiple impossibility tells
+  /** Task #431: optional structured per-marker IDs for evidence types that aggregate multiple impossibility tells
 into a single signal (today: `hallucination_impossible_http_response`). The triage UI renders one
 badge plus a plain-language tooltip per marker; non-UI surfaces (logs, exports, markdown reports)
 keep using `description`. Omitted when the signal does not aggregate per-marker tells.
  */
   markers?: string[];
+  /** Task #435: optional structured payload for richer rendering. Today
+only `hallucination_structural_fabrication` populates this — the
+results UI uses `context.markers` to render one bullet per
+fabrication tell that fired (with each marker's id +
+human-readable description), without regex-parsing the joined
+description string.
+ */
+  context?: EvidenceItemContext;
 }

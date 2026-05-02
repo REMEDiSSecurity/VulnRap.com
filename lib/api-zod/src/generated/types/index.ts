@@ -62,6 +62,8 @@ export * from "./detectedProject";
 export * from "./dontMissItem";
 export * from "./errorResponse";
 export * from "./evidenceItem";
+export * from "./evidenceItemContext";
+export * from "./evidenceItemContextMarkersItem";
 export * from "./feedbackAnalytics";
 export * from "./feedbackAnalyticsDailyTrendItem";
 export * from "./feedbackAnalyticsOutliersItem";

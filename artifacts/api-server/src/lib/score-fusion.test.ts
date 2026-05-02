@@ -303,3 +303,71 @@ describe("loadThresholds", () => {
     expect(t.high).toBeLessThanOrEqual(100);
   });
 });
+
+describe("Task #435: structural fabrication marker forwarding", () => {
+  // End-to-end check that fuseScores propagates the structural-fabrication
+  // marker payload from detectHallucinationSignals all the way onto the
+  // `hallucination_structural_fabrication` evidence row, so the diagnostics
+  // UI can render one bullet per marker without re-running the detector.
+  // The fixture below trips ≥2 structural detectors (round_function_offsets,
+  // frame_numbering_gaps, region_size_vs_access_size).
+  const FAB_TRACE = `# Heap-use-after-free in libserver
+\`\`\`asan
+ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 by thread T0
+    #0 0x4001000 in handle_request+0x0 src/server.c:412
+    #1 0x4001100 in worker_loop+0x100 src/worker.c:88
+    #2 0x4001200 in dispatch+0x1000 src/dispatch.c:42
+    #4 0x4001300 in main+0x100 src/main.c:99
+0x60200000a000 is located 0 bytes inside of region size: 0x100
+\`\`\``;
+
+  it("hallucination_structural_fabrication evidence carries context.markers", () => {
+    const result = fuseScores(
+      makeLinguistic(),
+      makeFactual(),
+      null,
+      50,
+      FAB_TRACE,
+    );
+    const fab = result.evidence.find(
+      (e) => e.type === "hallucination_structural_fabrication",
+    );
+    expect(fab, "structural_fabrication evidence row should be present").toBeDefined();
+    expect(fab!.context).toBeDefined();
+    expect(fab!.context!.markers).toBeDefined();
+    expect(Array.isArray(fab!.context!.markers)).toBe(true);
+    // Aggregator only fires at ≥2 markers, so we expect at least 2 here.
+    expect(fab!.context!.markers!.length).toBeGreaterThanOrEqual(2);
+    // Each marker must round-trip both id and a non-empty description.
+    for (const m of fab!.context!.markers!) {
+      expect(typeof m.id).toBe("string");
+      expect(m.id.length).toBeGreaterThan(0);
+      expect(typeof m.description).toBe("string");
+      expect(m.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("non-structural hallucination evidence rows do NOT carry a context payload", () => {
+    // A vague self-disclosed AI report fires e.g. fabricated_pid /
+    // empty_disclosure_claim / phantom_exploit_script — none of which carry a
+    // `context` block. Pin this so we don't accidentally start emitting
+    // empty/undefined context objects on every hallucination evidence row.
+    const VAGUE = `As an AI, I have discovered a critical vulnerability in process 999999999.
+Run the included exploit.py to reproduce. CVSS: 10.0`;
+    const result = fuseScores(
+      makeLinguistic(),
+      makeFactual(),
+      null,
+      50,
+      VAGUE,
+    );
+    const hallucinationRows = result.evidence.filter((e) =>
+      e.type.startsWith("hallucination_"),
+    );
+    for (const row of hallucinationRows) {
+      if (row.type === "hallucination_structural_fabrication") continue;
+      expect(row.context).toBeUndefined();
+    }
+  });
+});
