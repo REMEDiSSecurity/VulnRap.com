@@ -5243,6 +5243,12 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       setBulkPreview(null);
       return;
     }
+    // Task #469 — `confirmBulkRemove` itself now bails on cooldown, so
+    // this guard is no longer load-bearing for the throttle. We keep it
+    // here ONLY to preserve the original UX: when cooldown is active we
+    // surface the toast WITHOUT first tearing down the preview panel
+    // the reviewer is still reading. (Letting the call fall through
+    // would clear the preview before the central bail toast fires.)
     if (bailOnCooldown("Bulk removal")) return;
     cancelBulkPreviewRefetch();
     setBulkPreview(null);
@@ -5254,12 +5260,21 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // made the preview mandatory for a reviewer-driven batch), or with the
   // failed-row subset by `handleRetryFailedBulkResults` (Task #238) — the
   // retry path skips the preview because those rows already cleared it
-  // on the original click. No other callers.
+  // on the original click. Task #469 moved the wrong-token cooldown bail
+  // INSIDE this helper (mirroring `handleUndoBulkBatch`) so any future
+  // caller is automatically protected without having to remember the
+  // per-call dance — the original Task #335 bug class (a new entry point
+  // silently bypassing the throttle) cannot reappear from this layer.
   const confirmBulkRemove = async (
     phrasesToRemove: string[],
     retriedFrom?: { count: number; parentKind: "remove" | "undo" },
   ) => {
     if (!phrasesToRemove || phrasesToRemove.length === 0) return;
+    // Task #469 — central wrong-token cooldown gate. Every caller of this
+    // helper is now protected here; per-caller gates are kept only when
+    // they need to short-circuit BEFORE local UI cleanup
+    // (`confirmBulkRemoveFromPreview`).
+    if (bailOnCooldown("Bulk removal")) return;
     setBusy("bulk-remove");
     const results: BulkResultRow[] = [];
     let authFailedSticky = false;
@@ -5396,15 +5411,14 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       parentKind: bulkResults.kind,
     };
     if (bulkResults.kind === "remove") {
-      // Task #335 — `confirmBulkRemove` does NOT call `bailOnCooldown`
-      // itself (the original entry point `confirmBulkRemoveFromPreview`
-      // is what gates the preview-confirm path). Without this guard the
-      // Retry button would quietly bypass the wrong-token throttle that
-      // every other mutation handler in the panel respects. The undo
-      // branch below routes through `handleUndoBulkBatch`, which already
-      // calls `bailOnCooldown("Undo this batch")` itself, so we only
-      // gate the remove branch here to keep the existing toast labels.
-      if (bailOnCooldown("Retry failed")) return;
+      // Task #469 — the wrong-token cooldown bail now lives INSIDE
+      // `confirmBulkRemove` (mirroring `handleUndoBulkBatch`), so the
+      // Retry path no longer needs its own `bailOnCooldown("Retry
+      // failed")` gate to avoid the Task #335 bypass. The toast label
+      // surfaces as "Bulk removal" now (the central label) instead of
+      // "Retry failed"; that's intentional — it matches the helper this
+      // path actually invokes and keeps every entry point on a single,
+      // unified label so future grep/audit work is straightforward.
       // confirmBulkRemove builds a fresh banner ({ kind: "remove", rows })
       // from the new per-phrase outcomes, which is exactly the "replace
       // the banner with the new per-phrase outcomes" behaviour the task

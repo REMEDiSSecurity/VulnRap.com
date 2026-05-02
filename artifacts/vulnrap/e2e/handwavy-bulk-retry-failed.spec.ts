@@ -325,10 +325,14 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
 
       // Defense-in-depth: even forcing a click while the button is
       // disabled must NOT fire another DELETE. This pins down both
-      // halves of the gate — `disabled={... || cooldown.active}` and the
-      // `bailOnCooldown("Retry failed")` guard at the top of the
-      // handler. A regression that drops either one would let the
-      // forced click through and bump the post-cooldown DELETE counter.
+      // halves of the gate — `disabled={... || cooldown.active}` and
+      // the `bailOnCooldown("Bulk removal")` guard at the top of
+      // `confirmBulkRemove` itself (Task #469 centralized the bail
+      // inside the helper so any future caller is automatically
+      // protected — the original Task #335 per-caller guard is no
+      // longer needed in the Retry handler). A regression that drops
+      // either half would let the forced click through and bump the
+      // post-cooldown DELETE counter.
       await retryBtn.click({ force: true }).catch(() => undefined);
       await page.waitForTimeout(300);
       expect(postCooldownDeletes).toBe(deletesBeforeForceClick);
