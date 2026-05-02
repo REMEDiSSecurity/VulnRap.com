@@ -1,5 +1,17 @@
-import { describe, it, expect } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  render,
+  screen,
+  within,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { setCalibrationToken } from "@workspace/api-client-react";
+import { resetCalibrationCooldown } from "@/lib/calibration-cooldown";
+import { resetCalibrationTokenRejection } from "@/lib/calibration-token-rejection";
 import {
   revertWouldBeNoop,
   productionScanStalenessDays,
@@ -30,6 +42,7 @@ import {
   AVRI_DRIFT_LOOKBACK_STORAGE_KEY,
   describeHandwavyDisabledReason,
   BulkRemovalImpactBlock,
+  HandwavyPhrasesAdmin,
 } from "./feedback-analytics";
 import type {
   HandwavyEditEntry,
@@ -1869,3 +1882,354 @@ describe("describeHandwavyDisabledReason (Task #337 — visible disabled-reason 
   });
 });
 
+// =====================================================================
+// Task #452 — calibration UI render-level coverage of the
+// `productionScanLimit` wire field on the per-row Trash and the
+// rename-edit preview paths.
+//
+// Both call sites in HandwavyPhrasesAdmin (handleSaveEdit's rename branch
+// at the top of the file, and requestRemoveWithImpactPreview that backs
+// the per-row Trash button) issue a `removeHandwavyPhrase` DELETE with
+// `dryRun: true`. The reviewer-tunable production-scan window is spread
+// into the body ONLY when it's been changed away from the
+// CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT (2000), preserving the legacy
+// "omit when default" wire shape so existing back-end consumers see no
+// behavior change for un-tuned reviewers.
+//
+// Backend tests already pin the request schema; what was missing was a
+// UI assertion that the React layer actually attaches (or omits) the
+// field correctly. This block renders the real HandwavyPhrasesAdmin
+// against a fetch mock that captures the DELETE body and asserts both
+// arms of the conditional spread.
+// =====================================================================
+
+describe("HandwavyPhrasesAdmin — productionScanLimit attached on remove dry-run (Task #452)", () => {
+  const ACTIVE_PHRASE = "vague handwavy phrase";
+  const RENAMED_PHRASE = "tuned renamed phrase";
+  const TUNED_LIMIT = 500;
+  const DEFAULT_LIMIT = 2000;
+
+  // localStorage keys read at HandwavyPhrasesAdmin mount; clear them so
+  // each test starts from a known default of "2000" / no reviewer.
+  const REVIEWER_KEY = "vulnrap.handwavy.reviewer";
+  const PRODUCTION_SCAN_LIMIT_KEY = "vulnrap.calibration.productionScanLimit";
+  const LEGACY_PRODUCTION_SCAN_LIMIT_KEY =
+    "vulnrap.handwavy.productionScanLimit";
+
+  type CapturedRequest = {
+    method: string;
+    url: string;
+    body: Record<string, unknown> | null;
+  };
+
+  const HIGH_IMPACT_DRY_RUN: HandwavyPhraseSingleRemoveDryRunResponse = {
+    dryRun: true,
+    batch: false,
+    wouldRemove: 1,
+    notFound: 0,
+    duplicateInBatch: 0,
+    phrase: ACTIVE_PHRASE,
+    raw: ACTIVE_PHRASE,
+    removed: false,
+    total: 1,
+    projectedTotal: 0,
+    results: [{ raw: ACTIVE_PHRASE, phrase: ACTIVE_PHRASE, removed: true }],
+    dryRunImpact: {
+      corpus: {
+        total: 4,
+        byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 3, t4Hallucinated: 1 },
+        // Non-zero so the preview panel opens (and the live DELETE branch
+        // is NOT taken). The point of the test is to assert the dry-run
+        // body, not what happens after it.
+        validDetectionsLost: 4,
+        falsePositivesDropped: 0,
+        corpusSize: 50,
+        sampleMatches: [],
+        warning: "would un-flag 4 valid detections",
+        oldestCreatedAt: null,
+        newestCreatedAt: null,
+        archiveTotal: null,
+      } satisfies HandwavyPhraseBatchRemoveDryRunImpact,
+      production: null,
+      productionError: null,
+      productionLimit: TUNED_LIMIT,
+    },
+    phrases: [
+      {
+        phrase: ACTIVE_PHRASE,
+        category: "hedging",
+        addedBy: "tester@example.com",
+        addedAt: "2026-04-01T10:00:00.000Z",
+        rationale: "test fixture",
+      },
+    ],
+  };
+
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  function installFetchMock(): {
+    spy: ReturnType<typeof vi.spyOn>;
+    captured: CapturedRequest[];
+  } {
+    const captured: CapturedRequest[] = [];
+    const spy = vi.spyOn(globalThis, "fetch");
+    spy.mockImplementation(async (input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      const method = (init?.method ?? "GET").toUpperCase();
+
+      // Capture every DELETE on the handwavy-phrases collection so the
+      // test can assert the body shape that the per-row Trash and the
+      // rename-edit preview pushed onto the wire.
+      if (
+        method === "DELETE" &&
+        url.includes("/api/feedback/calibration/handwavy-phrases") &&
+        !url.includes("/handwavy-phrases/")
+      ) {
+        let parsed: Record<string, unknown> | null = null;
+        if (typeof init?.body === "string") {
+          try {
+            parsed = JSON.parse(init.body) as Record<string, unknown>;
+          } catch {
+            parsed = null;
+          }
+        }
+        captured.push({ method, url, body: parsed });
+        return jsonResponse(HIGH_IMPACT_DRY_RUN);
+      }
+
+      if (url.includes("/api/feedback/calibration/auth-status")) {
+        return jsonResponse({
+          serverRequiresToken: false,
+          tokenPresented: false,
+          tokenValid: false,
+          mutationsAllowed: true,
+        });
+      }
+
+      if (
+        url.includes(
+          "/api/feedback/calibration/handwavy-phrases/removal-batches",
+        )
+      ) {
+        return jsonResponse({ batches: [], total: 0, hasMore: false });
+      }
+
+      if (url.includes("/api/feedback/calibration/handwavy-phrases")) {
+        // Single active phrase so the per-row Trash + Edit affordances
+        // render. No history, no edits — keeps the row in the simple
+        // "no thrash, no rename badges" branch so the click goes
+        // straight through requestRemove → requestRemoveWithImpactPreview
+        // (cycles.length === 0 < 2 skips the thrash gate).
+        return jsonResponse({
+          phrases: [
+            {
+              phrase: ACTIVE_PHRASE,
+              category: "hedging",
+              addedBy: "tester@example.com",
+              addedAt: "2026-04-01T10:00:00.000Z",
+              rationale: "test fixture",
+            },
+          ],
+          history: [],
+        });
+      }
+
+      // Anything else gets a benign 200 so a missed mock doesn't blow
+      // up the render with an unhandled rejection.
+      return jsonResponse({});
+    });
+    return { spy, captured };
+  }
+
+  function renderAdmin() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/feedback-analytics"]}>
+          <HandwavyPhrasesAdmin mutationsAllowed={true} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  let fetchMock: ReturnType<typeof installFetchMock>;
+
+  beforeEach(() => {
+    // Per-test isolation — every test must see the documented defaults
+    // (no reviewer, no persisted production-scan limit, no leftover
+    // calibration cooldown / rejected-token state from a sibling test).
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+    fetchMock = installFetchMock();
+  });
+
+  afterEach(() => {
+    fetchMock.spy.mockRestore();
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+  });
+
+  it("attaches the tuned productionScanLimit to the per-row Trash dry-run when the reviewer changed it away from the default", async () => {
+    renderAdmin();
+
+    // Wait for the active list to land so the Trash button is rendered.
+    const trashButton = await screen.findByTestId(
+      "handwavy-remove",
+      {},
+      { timeout: 5_000 },
+    );
+
+    // Tune the shared production-scan window away from the default.
+    const limitInput = screen.getByTestId(
+      "handwavy-production-scan-limit",
+    ) as HTMLInputElement;
+    fireEvent.change(limitInput, { target: { value: String(TUNED_LIMIT) } });
+    expect(limitInput.value).toBe(String(TUNED_LIMIT));
+
+    fireEvent.click(trashButton);
+
+    // The DELETE dry-run is async; wait for the captured-request log
+    // to pick up the call.
+    await waitFor(() => {
+      expect(
+        fetchMock.captured.some(
+          (r) => r.method === "DELETE" && r.body?.dryRun === true,
+        ),
+      ).toBe(true);
+    });
+
+    const removeRequest = fetchMock.captured.find(
+      (r) => r.method === "DELETE" && r.body?.dryRun === true,
+    );
+    expect(removeRequest).toBeDefined();
+    expect(removeRequest?.body).toMatchObject({
+      phrase: ACTIVE_PHRASE,
+      dryRun: true,
+      productionScanLimit: TUNED_LIMIT,
+    });
+  });
+
+  it("attaches the tuned productionScanLimit to the rename-edit preview dry-run", async () => {
+    renderAdmin();
+
+    // Wait for the row to render.
+    const editButton = await screen.findByTestId(
+      "handwavy-edit",
+      {},
+      { timeout: 5_000 },
+    );
+
+    // Tune the shared production-scan window away from the default
+    // BEFORE entering edit mode (the input gets disabled while the
+    // single-phrase preview is open, but it's enabled here).
+    const limitInput = screen.getByTestId(
+      "handwavy-production-scan-limit",
+    ) as HTMLInputElement;
+    fireEvent.change(limitInput, { target: { value: String(TUNED_LIMIT) } });
+    expect(limitInput.value).toBe(String(TUNED_LIMIT));
+
+    // Enter edit mode and rewrite the phrase to a different normalized
+    // form so handleSaveEdit takes the rename branch (which is the
+    // path that issues the DELETE dry-run).
+    fireEvent.click(editButton);
+    const phraseInput = (await screen.findByTestId(
+      "handwavy-edit-phrase",
+    )) as HTMLInputElement;
+    fireEvent.change(phraseInput, { target: { value: RENAMED_PHRASE } });
+    expect(phraseInput.value).toBe(RENAMED_PHRASE);
+
+    const saveButton = screen.getByTestId("handwavy-edit-save");
+    await act(async () => {
+      fireEvent.click(saveButton);
+    });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.captured.some(
+          (r) => r.method === "DELETE" && r.body?.dryRun === true,
+        ),
+      ).toBe(true);
+    });
+
+    const renameRequest = fetchMock.captured.find(
+      (r) => r.method === "DELETE" && r.body?.dryRun === true,
+    );
+    expect(renameRequest).toBeDefined();
+    // The rename preview always sends the ORIGINAL phrase as the
+    // dry-run target — that's the marker the server has to look up
+    // before deciding whether the rename would un-flag detections.
+    expect(renameRequest?.body).toMatchObject({
+      phrase: ACTIVE_PHRASE,
+      dryRun: true,
+      productionScanLimit: TUNED_LIMIT,
+    });
+  });
+
+  it("OMITS productionScanLimit from the dry-run body when the reviewer leaves the input at the default 2000", async () => {
+    renderAdmin();
+
+    const trashButton = await screen.findByTestId(
+      "handwavy-remove",
+      {},
+      { timeout: 5_000 },
+    );
+
+    // Sanity-check that the rendered input is at the documented default
+    // — this is the regression we're guarding against. If a future
+    // refactor changed the default, the conditional spread would no
+    // longer match and the legacy "omit when default" wire shape
+    // would silently break.
+    const limitInput = screen.getByTestId(
+      "handwavy-production-scan-limit",
+    ) as HTMLInputElement;
+    expect(limitInput.value).toBe(String(DEFAULT_LIMIT));
+
+    fireEvent.click(trashButton);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.captured.some(
+          (r) => r.method === "DELETE" && r.body?.dryRun === true,
+        ),
+      ).toBe(true);
+    });
+
+    const removeRequest = fetchMock.captured.find(
+      (r) => r.method === "DELETE" && r.body?.dryRun === true,
+    );
+    expect(removeRequest).toBeDefined();
+    expect(removeRequest?.body).toMatchObject({
+      phrase: ACTIVE_PHRASE,
+      dryRun: true,
+    });
+    // Critical assertion: the field must NOT be present when the
+    // reviewer hasn't tuned the window. Object-key check (not just
+    // value === undefined) so an explicit `productionScanLimit:
+    // undefined` would still fail.
+    expect(removeRequest?.body).not.toHaveProperty("productionScanLimit");
+  });
+});
