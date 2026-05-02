@@ -90,6 +90,7 @@ import {
   HandwavyRenameBadge,
   getRenameEdits,
 } from "@/components/handwavy-rename-badge";
+import { HandwavyRemovalBatchConflictChip } from "@/components/handwavy-removal-batch-conflict-chip";
 import {
   useCalibrationTokenRejection,
   type CalibrationTokenRejectionState,
@@ -9227,25 +9228,22 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           // conflict-detail list below so reviewers can see
                           // exactly WHICH phrases would overwrite newer
                           // state without scrolling into the full
-                          // removal-history panel. Styled to match the
-                          // original Badge but rendered as a button so
-                          // aria-expanded / aria-controls and keyboard
-                          // activation work out of the box.
-                          <button
-                            type="button"
-                            onClick={() => toggleConflictExpanded(removedAtIso)}
-                            className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 px-2 py-0.5 text-[10px] text-amber-300 hover:border-amber-400/60 hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70"
-                            data-testid="handwavy-removal-batches-conflict-chip"
-                            data-conflict-count={conflict.conflictCount}
-                            data-conflict-total={conflict.total}
-                            aria-expanded={isConflictExpanded}
-                            aria-controls={conflictDetailId}
-                            title={`${conflict.conflictCount} of ${conflict.total} phrase${conflict.total === 1 ? "" : "s"} in this batch ${conflict.conflictCount === 1 ? "is" : "are"} either back on the active list or have a newer removal entry — reinstating this batch will overwrite that newer state. Click to see which.`}
-                            aria-label={`${conflict.conflictCount} of ${conflict.total} phrases in this batch may overwrite recent edits — click to expand`}
-                          >
-                            <AlertTriangle className="w-3 h-3" />
-                            {conflict.conflictCount} of {conflict.total} may overwrite recent edits
-                          </button>
+                          // removal-history panel. Task #471 — chip JSX,
+                          // styling, icon, and base copy live in the shared
+                          // `HandwavyRemovalBatchConflictChip`; this site
+                          // just supplies the toggle wiring + the
+                          // picker-specific trailing sentence ("Click to
+                          // see which.").
+                          <HandwavyRemovalBatchConflictChip
+                            testId="handwavy-removal-batches-conflict-chip"
+                            conflictCount={conflict.conflictCount}
+                            total={conflict.total}
+                            onToggle={() => toggleConflictExpanded(removedAtIso)}
+                            isExpanded={isConflictExpanded}
+                            controlsId={conflictDetailId}
+                            titleSuffix="Click to see which."
+                            ariaLabelSuffix="click to expand"
+                          />
                         )}
                         {b.reinstated ? (
                           <Badge
@@ -9755,18 +9753,18 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           )}
                         </span>
                         {historyBatchConflict && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] border-amber-500/40 text-amber-300 gap-1"
-                            data-testid="handwavy-history-batch-conflict-chip"
-                            data-conflict-count={historyBatchConflict.conflictCount}
-                            data-conflict-total={historyBatchConflict.total}
-                            title={`${historyBatchConflict.conflictCount} of ${historyBatchConflict.total} phrase${historyBatchConflict.total === 1 ? "" : "s"} in this batch ${historyBatchConflict.conflictCount === 1 ? "is" : "are"} either back on the active list or have a newer removal entry — reinstating this batch will overwrite that newer state. Use the per-phrase rows below for a finer-grained decision.`}
-                            aria-label={`${historyBatchConflict.conflictCount} of ${historyBatchConflict.total} phrases in this batch may overwrite recent edits`}
-                          >
-                            <AlertTriangle className="w-3 h-3" />
-                            {historyBatchConflict.conflictCount} of {historyBatchConflict.total} may overwrite recent edits
-                          </Badge>
+                          // Task #471 — same shared chip the picker row
+                          // uses (Task #242 / #340), rendered in static
+                          // (non-toggle) mode here because the
+                          // history-panel header sits directly above the
+                          // per-phrase rows so reviewers already see the
+                          // detail without an inline expander.
+                          <HandwavyRemovalBatchConflictChip
+                            testId="handwavy-history-batch-conflict-chip"
+                            conflictCount={historyBatchConflict.conflictCount}
+                            total={historyBatchConflict.total}
+                            titleSuffix="Use the per-phrase rows below for a finer-grained decision."
+                          />
                         )}
                         {group.allReinstated ? (
                           <Badge
