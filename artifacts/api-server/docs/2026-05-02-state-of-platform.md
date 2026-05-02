@@ -182,6 +182,219 @@ whose CWE classification is unknown or contested; it is deliberately
 shallow so that "we don't know what this is" doesn't get scored as
 "this passes."
 
+#### Per-family signal inventory (every signal id with description)
+
+The full per-family rubric is enumerated below — every `goldSignals[].id`
+and `absencePenalties[].id` from `families.ts`, with its description
+and point value. The regex pattern that backs each signal lives in the
+source; the doc lists the human-readable contract.
+
+#### `MEMORY_CORRUPTION` — Memory corruption / unsafe C
+
+Verification mode: `SOURCE_CODE`. Gold signals: 8. Absence penalties: 3.
+
+**Gold signals (added when present):**
+
+| Signal id | Description | Points |
+| --------- | ----------- | -----: |
+| `asan_or_sanitizer` | AddressSanitizer / MSan / UBSan / TSAN crash output | +22 |
+| `valgrind` | Valgrind error trace | +18 |
+| `stack_trace_with_offset` | Crash stack trace with hex offsets | +12 |
+| `specific_alloc_function` | Reference to specific allocator function (malloc/calloc/strdup/g_malloc/free) | +8 |
+| `memory_op_with_size` | memcpy/memmove/strncpy/snprintf with explicit size | +8 |
+| `specific_struct_field` | Specific C struct field access (e.g. obj->buf, ptr->len) | +6 |
+| `code_diff_in_c` | Diff/patch hunk against a .c/.h/.cpp file | +12 |
+| `cwe_correct_class` | Mentions CWE-119/120/121/122/125/787/416/590/672/762 | +4 |
+
+**Absence penalties (deducted when missing):**
+
+| Signal id | Description | Penalty |
+| --------- | ----------- | ------: |
+| `no_crash_or_sanitizer` | No sanitizer/valgrind crash output | −8 |
+| `no_size_or_offset` | No explicit byte/size/offset value | −5 |
+| `no_c_source_reference` | No C/C++ source file reference | −5 |
+
+
+#### `INJECTION` — Injection (SQLi / Command / LDAP / NoSQL)
+
+Verification mode: `ENDPOINT`. Gold signals: 6. Absence penalties: 2.
+
+**Gold signals (added when present):**
+
+| Signal id | Description | Points |
+| --------- | ----------- | -----: |
+| `concrete_payload` | Concrete injection payload | +22 |
+| `vulnerable_query_construction` | Shows the unsafe query/exec construction | +14 |
+| `request_response_diff` | Side-by-side normal vs injected request showing differing behavior | +10 |
+| `specific_endpoint_param` | Names a specific endpoint + parameter | +8 |
+| `cwe_correct_class` | Mentions CWE-89/77/78/91/943/917 | +4 |
+| `code_diff_for_fix` | Diff showing parameterized fix | +6 |
+
+**Absence penalties (deducted when missing):**
+
+| Signal id | Description | Penalty |
+| --------- | ----------- | ------: |
+| `no_payload` | No concrete injection payload | −12 |
+| `no_endpoint` | No specific URL or endpoint named | −6 |
+
+
+#### `WEB_CLIENT` — Web client (XSS / CSRF / clickjacking / open redirect)
+
+Verification mode: `ENDPOINT`. Gold signals: 11. Absence penalties: 2.
+
+**Gold signals (added when present):**
+
+| Signal id | Description | Points |
+| --------- | ----------- | -----: |
+| `concrete_payload` | Concrete XSS/JS payload | +22 |
+| `reflection_or_dom_proof` | Shows the response/DOM where the payload is reflected | +12 |
+| `specific_dom_sink` | Names a specific DOM sink/source | +10 |
+| `endpoint_with_param` | Specific endpoint and reflected parameter | +8 |
+| `csrf_specific_request` | (CSRF) shows the cross-origin request being forged | +8 |
+| `ssrf_internal_metadata` | Concrete cloud-metadata or RFC1918 SSRF target URL | +20 |
+| `path_traversal_payload` | Concrete path-traversal payload reaching a sensitive file | +18 |
+| `ssrf_or_traversal_sink` | Sink that fetches a URL or reads a file from user input | +8 |
+| `code_diff_for_fix` | Diff/patch hunk | +10 |
+| `file_with_line` | File path with line number reference | +6 |
+| `cwe_correct_class` | Mentions a WEB_CLIENT-family CWE | +4 |
+
+**Absence penalties (deducted when missing):**
+
+| Signal id | Description | Penalty |
+| --------- | ----------- | ------: |
+| `no_payload` | No concrete XSS/CSRF/redirect/SSRF/traversal payload | −10 |
+| `no_url` | No real URL or endpoint | −4 |
+
+
+#### `AUTHN_AUTHZ` — Authentication / Authorization / Session
+
+Verification mode: `ENDPOINT`. Gold signals: 6. Absence penalties: 2.
+
+**Gold signals (added when present):**
+
+| Signal id | Description | Points |
+| --------- | ----------- | -----: |
+| `two_account_proof` | Demonstrates access between two distinct accounts/users | +16 |
+| `authorization_header_swap` | Shows swapping authorization headers/tokens | +12 |
+| `idor_object_id` | Shows changing an object id to access another resource | +10 |
+| `specific_endpoint` | Names a specific authenticated endpoint | +8 |
+| `policy_or_check_function` | References specific authz policy/check function | +6 |
+| `cwe_correct_class` | Mentions CWE-285/287/306/639/862/863/284 | +4 |
+
+**Absence penalties (deducted when missing):**
+
+| Signal id | Description | Penalty |
+| --------- | ----------- | ------: |
+| `no_two_account_proof` | No proof that ≥2 accounts/sessions are involved | −8 |
+| `no_endpoint` | No protected endpoint named | −5 |
+
+
+#### `CRYPTO` — Cryptography
+
+Verification mode: `SOURCE_CODE`. Gold signals: 5. Absence penalties: 2.
+
+**Gold signals (added when present):**
+
+| Signal id | Description | Points |
+| --------- | ----------- | -----: |
+| `specific_algo_or_lib` | Names a specific algorithm/mode/library | +14 |
+| `kat_or_test_vector` | Provides KAT/test vector/known plaintext-ciphertext pair | +12 |
+| `specific_misuse` | Names a specific misuse pattern | +10 |
+| `code_reference` | Specific source/file reference for crypto call | +8 |
+| `cwe_correct_class` | Mentions CWE-327/328/330/338/759/760/916 | +4 |
+
+**Absence penalties (deducted when missing):**
+
+| Signal id | Description | Penalty |
+| --------- | ----------- | ------: |
+| `no_algo_named` | No specific algorithm/mode named | −8 |
+| `no_kat` | No test vector / observable misuse demonstration | −6 |
+
+
+#### `DESERIALIZATION` — Insecure deserialization / unsafe parsing
+
+Verification mode: `SOURCE_CODE`. Gold signals: 8. Absence penalties: 2.
+
+**Gold signals (added when present):**
+
+| Signal id | Description | Points |
+| --------- | ----------- | -----: |
+| `concrete_gadget_or_payload` | Concrete gadget chain/payload (ysoserial, marshalsec, pickle, yaml.load) | +18 |
+| `exec_or_rce_evidence` | Shows arbitrary code/command execution result | +12 |
+| `specific_class_or_lib` | Names a specific deserialized class/library | +8 |
+| `code_reference` | Source code showing the deserialization sink | +8 |
+| `xxe_doctype_entity` | Concrete XXE DOCTYPE/ENTITY declaration with file:/http: URI | +18 |
+| `xml_parser_lib` | Specific XML parser library/API | +10 |
+| `xxe_entity_load_flag` | Parser flag enabling external entity loading | +12 |
+| `cwe_correct_class` | Mentions CWE-502/611/776/827 | +4 |
+
+**Absence penalties (deducted when missing):**
+
+| Signal id | Description | Penalty |
+| --------- | ----------- | ------: |
+| `no_payload_or_gadget` | No payload or gadget chain shown | −10 |
+| `no_lib_named` | No specific library/format named | −6 |
+
+
+#### `RACE_CONCURRENCY` — Race condition / TOCTOU / concurrency
+
+Verification mode: `MANUAL_ONLY`. Gold signals: 6. Absence penalties: 2.
+
+**Gold signals (added when present):**
+
+| Signal id | Description | Points |
+| --------- | ----------- | -----: |
+| `two_thread_or_request_proof` | Shows two interleaved threads/requests/transactions | +14 |
+| `tsan_or_helgrind` | ThreadSanitizer / Helgrind / DRD output | +16 |
+| `lock_or_atomic_reference` | References a specific lock/mutex/atomic primitive | +8 |
+| `filesystem_toctou` | (File-TOCTOU) shows access(2)/stat(2) followed by open(2) | +10 |
+| `specific_function` | Names the specific racing function/handler | +6 |
+| `cwe_correct_class` | Mentions CWE-362/363/364/367/833 | +4 |
+
+**Absence penalties (deducted when missing):**
+
+| Signal id | Description | Penalty |
+| --------- | ----------- | ------: |
+| `no_concurrent_proof` | No demonstration of two interleaved actors | −10 |
+| `no_function_or_path` | No specific function/file path named | −5 |
+
+
+#### `REQUEST_SMUGGLING` — HTTP request smuggling / desync / parser confusion
+
+Verification mode: `MANUAL_ONLY`. Gold signals: 5. Absence penalties: 2.
+
+**Gold signals (added when present):**
+
+| Signal id | Description | Points |
+| --------- | ----------- | -----: |
+| `raw_http_request` | Raw HTTP/1.1 request bytes with explicit headers | +18 |
+| `te_or_cl_conflict` | Both Transfer-Encoding and Content-Length present (TE.CL/CL.TE) | +14 |
+| `smuggled_second_request` | Shows the smuggled second request (e.g. GPOST / on a new pipeline) | +12 |
+| `specific_proxy_or_server` | Names the specific proxy/server combo | +8 |
+| `cwe_correct_class` | Mentions CWE-444/436/116 | +4 |
+
+**Absence penalties (deducted when missing):**
+
+| Signal id | Description | Penalty |
+| --------- | ----------- | ------: |
+| `no_raw_request` | No raw HTTP request bytes provided | −10 |
+| `no_proxy_named` | No specific proxy/server identified | −6 |
+
+
+#### `FLAT` — Generic / unclassified
+
+Verification mode: `GENERIC`. Gold signals: 4. Absence penalties: 0.
+
+**Gold signals (added when present):**
+
+| Signal id | Description | Points |
+| --------- | ----------- | -----: |
+| `code_block` | Any fenced code block ≥3 lines | +10 |
+| `real_url` | Real URL with path | +6 |
+| `file_with_line` | File path with line number | +8 |
+| `code_diff` | Diff/patch hunk | +12 |
+
+
 ### Family-agnostic slop signals
 
 The penalties in `src/lib/engines/avri/slop-signals.ts` (currently

@@ -74,6 +74,29 @@ function extractEndpoints() {
   return endpoints;
 }
 
+// Parse a goldSignals[] / absencePenalties[] block into entries
+// { id, description, points }. The block is the inner array body
+// captured between `[` and the matching `]`. We do not try to evaluate
+// the regex pattern field — only id, description, and points are needed
+// for the doc.
+function parseSignalEntries(blockBody) {
+  if (!blockBody) return [];
+  const entries = [];
+  // Split on the entry boundary `\n    { id:` (allowing leading whitespace).
+  // The trailing `},` of each entry is the unambiguous record terminator.
+  const recordRe =
+    /\{\s*id:\s*"([^"]+)"\s*,\s*description:\s*"([^"]+)"\s*,[\s\S]*?points:\s*(-?\d+)\s*,?\s*\}/g;
+  let m;
+  while ((m = recordRe.exec(blockBody)) !== null) {
+    entries.push({
+      id: m[1],
+      description: m[2],
+      points: Number(m[3]),
+    });
+  }
+  return entries;
+}
+
 function extractFamilies() {
   const src = read("artifacts/api-server/src/lib/engines/avri/families.ts");
   const blocks = src.split(/^const\s+/m).slice(1);
@@ -85,21 +108,19 @@ function extractFamilies() {
     const vm = b.match(/verificationMode:\s*"(\w+)"/);
     const re = b.match(/reproductionExpectation:\s*"([^"]+)"/);
     const goldBlock = b.match(/goldSignals:\s*\[([\s\S]*?)\n\s*\],/);
-    const goldCount = goldBlock
-      ? (goldBlock[1].match(/\{\s*id:/g) || []).length
-      : 0;
     const absBlock = b.match(/absencePenalties:\s*\[([\s\S]*?)\n\s*\],/);
-    const absCount = absBlock
-      ? (absBlock[1].match(/\{\s*id:/g) || []).length
-      : 0;
+    const goldSignals = parseSignalEntries(goldBlock ? goldBlock[1] : "");
+    const absencePenalties = parseSignalEntries(absBlock ? absBlock[1] : "");
     if (!dn) continue;
     families.push({
       id: idMatch[1],
       displayName: dn[1],
       verificationMode: vm ? vm[1] : "(unknown)",
       reproductionExpectation: re ? re[1] : null,
-      goldSignalCount: goldCount,
-      absencePenaltyCount: absCount,
+      goldSignals,
+      absencePenalties,
+      goldSignalCount: goldSignals.length,
+      absencePenaltyCount: absencePenalties.length,
     });
   }
   return families;
@@ -218,6 +239,40 @@ function renderFamiliesReproductionList(families) {
   for (const f of families) {
     if (!f.reproductionExpectation) continue;
     out.push(`- **\`${f.id}\` — ${f.displayName}**: ${f.reproductionExpectation}`);
+  }
+  return out.join("\n");
+}
+
+function renderSignalCatalog(families) {
+  const out = [];
+  for (const f of families) {
+    out.push(`\n#### \`${f.id}\` — ${f.displayName}\n`);
+    out.push(
+      `Verification mode: \`${f.verificationMode}\`. Gold signals: ${f.goldSignalCount}. Absence penalties: ${f.absencePenaltyCount}.\n`,
+    );
+    if (f.goldSignals.length > 0) {
+      out.push(`**Gold signals (added when present):**\n`);
+      out.push("| Signal id | Description | Points |");
+      out.push("| --------- | ----------- | -----: |");
+      for (const s of f.goldSignals) {
+        const desc = s.description.replace(/\|/g, "\\|");
+        out.push(`| \`${s.id}\` | ${desc} | +${s.points} |`);
+      }
+      out.push("");
+    }
+    if (f.absencePenalties.length > 0) {
+      out.push(`**Absence penalties (deducted when missing):**\n`);
+      out.push("| Signal id | Description | Penalty |");
+      out.push("| --------- | ----------- | ------: |");
+      for (const s of f.absencePenalties) {
+        const desc = s.description.replace(/\|/g, "\\|");
+        out.push(`| \`${s.id}\` | ${desc} | −${s.points} |`);
+      }
+      out.push("");
+    }
+    if (f.goldSignals.length === 0 && f.absencePenalties.length === 0) {
+      out.push(`*(No per-family rubric entries; family is the catch-all and relies entirely on cross-family slop signals and other engines.)*\n`);
+    }
   }
   return out.join("\n");
 }
@@ -402,6 +457,14 @@ ${families.length} families. The \`FLAT\` family is the catch-all for reports
 whose CWE classification is unknown or contested; it is deliberately
 shallow so that "we don't know what this is" doesn't get scored as
 "this passes."
+
+#### Per-family signal inventory (every signal id with description)
+
+The full per-family rubric is enumerated below — every \`goldSignals[].id\`
+and \`absencePenalties[].id\` from \`families.ts\`, with its description
+and point value. The regex pattern that backs each signal lives in the
+source; the doc lists the human-readable contract.
+${renderSignalCatalog(families)}
 
 ### Family-agnostic slop signals
 
