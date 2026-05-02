@@ -458,21 +458,21 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
   // inside its collapsed `<details>` ("Sample {sourceNoun}s that would
   // lose their flag (N)") was extended in Task #496 to render the same
   // snippet inline next to each ID with the matched phrase wrapped in
-  // a `<mark>`. The bulk-retire flow already passes
-  // `hideSampleMatchesDetails` to suppress that legacy block (Task
-  // #344, asserted just above) — the inline matches block above it
-  // already shows the same IDs and snippets, so duplicating into the
-  // legacy block would render the same data twice. This test pins
-  // both halves of that design on the bulk-flow:
+  // a `<mark>`. Task #491 then deleted that legacy `<details>` block
+  // entirely once all three callers (per-row Trash, batch-confirm,
+  // edit-rename) wired the inline `HandwavyRemovePreviewMatches`
+  // renderer in directly — the duplicated rendering inside
+  // `BulkRemovalImpactBlock` was redundant once every caller drew the
+  // inline matches block above it. This test pins both halves of the
+  // surviving design on the bulk-flow:
   //   * the bulk-flow's INLINE matches block surfaces the per-tier
   //     snippet next to each ID with the matched phrase highlighted
   //     in a real `<mark>` element (the actual surfaced behavior here),
-  //   * the BulkRemovalImpactBlock's legacy collapsed `<details>`
-  //     sample-match list with the Task #496 snippet support stays
-  //     suppressed on this flow on both the curated and production
-  //     blocks (so the same `handwavy-bulk-preview-{kind}-sample-snippet-…`
-  //     testids the legacy block emits do NOT appear here, even with
-  //     a snippet-bearing dryRun response).
+  //   * the legacy `<details>` block on the shared
+  //     `BulkRemovalImpactBlock` is gone for good, so the
+  //     `handwavy-bulk-preview-{kind}-sample-snippet-…` testids the
+  //     deleted block used to emit do NOT appear anywhere — neither
+  //     side renders them, even with a snippet-bearing dryRun response.
   test("Bulk-flow surfaces sample-match snippets via the inline block while the legacy `<details>` stays suppressed (Task #496)", async ({
     page,
   }) => {

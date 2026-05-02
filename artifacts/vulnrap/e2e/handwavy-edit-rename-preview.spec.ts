@@ -95,9 +95,14 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
-      const row = page
-        .locator(`[data-testid="handwavy-row"]`)
-        .filter({ hasText: original });
+      // Use the stable `data-handwavy-phrase` attribute (Task #491)
+      // rather than `hasText: original` so the locator keeps matching
+      // after Edit click — once edit mode swaps the phrase span for a
+      // textbox, the phrase only lives in the input value (not in
+      // textContent), and a `hasText` filter would lose its match.
+      const row = page.locator(
+        `[data-testid="handwavy-row"][data-handwavy-phrase="${original}"]`,
+      );
       await expect(row).toHaveCount(1, { timeout: 15_000 });
 
       // Open Edit, rewrite the phrase, save.
@@ -244,9 +249,14 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
-      const row = page
-        .locator(`[data-testid="handwavy-row"]`)
-        .filter({ hasText: original });
+      // Use the stable `data-handwavy-phrase` attribute (Task #491)
+      // rather than `hasText: original` so the locator keeps matching
+      // after Edit click — once edit mode swaps the phrase span for a
+      // textbox, the phrase only lives in the input value (not in
+      // textContent), and a `hasText` filter would lose its match.
+      const row = page.locator(
+        `[data-testid="handwavy-row"][data-handwavy-phrase="${original}"]`,
+      );
       await expect(row).toHaveCount(1, { timeout: 15_000 });
 
       // Open Edit, rename, save — the preview panel should appear
@@ -276,6 +286,40 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       await expect(
         panel.getByTestId("handwavy-edit-preview-production-error"),
       ).toContainText("Production scan unavailable");
+
+      // Task #491 — the inline per-tier sample-match block must be in the
+      // DOM (no expand-the-<details> friction) and must surface the
+      // curated fixture IDs grouped by tier, mirroring the per-row
+      // Trash (Task #245) and batch-confirm (Task #344) previews.
+      const matches = panel.getByTestId("handwavy-edit-preview-matches");
+      await expect(matches).toBeVisible();
+      const curatedMatches = matches.getByTestId(
+        "handwavy-remove-preview-matches-curated",
+      );
+      await expect(curatedMatches).toBeVisible();
+      await expect(curatedMatches).toContainText("Curated fixtures");
+      await expect(
+        curatedMatches.getByTestId(
+          "handwavy-remove-preview-matches-curated-tier-T1_LEGIT",
+        ),
+      ).toContainText("fixture-001");
+      await expect(
+        curatedMatches.getByTestId(
+          "handwavy-remove-preview-matches-curated-tier-T3_SLOP",
+        ),
+      ).toContainText("fixture-002");
+
+      // The shared `BulkRemovalImpactBlock` renderer's collapsed
+      // <details> sample-match list MUST no longer render alongside
+      // the inline block — Task #491 deleted the legacy default-true
+      // branch once all three callers wired the inline renderer in.
+      await expect(
+        panel
+          .getByTestId("handwavy-bulk-preview-curated")
+          .locator("details", {
+            hasText: "fixtures that would lose their flag",
+          }),
+      ).toHaveCount(0);
 
       // Acknowledgment checkbox is present, unchecked, and the
       // destructive confirm is disabled until the reviewer ticks it.
@@ -440,9 +484,14 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
-      const row = page
-        .locator(`[data-testid="handwavy-row"]`)
-        .filter({ hasText: original });
+      // Use the stable `data-handwavy-phrase` attribute (Task #491)
+      // rather than `hasText: original` so the locator keeps matching
+      // after Edit click — once edit mode swaps the phrase span for a
+      // textbox, the phrase only lives in the input value (not in
+      // textContent), and a `hasText` filter would lose its match.
+      const row = page.locator(
+        `[data-testid="handwavy-row"][data-handwavy-phrase="${original}"]`,
+      );
       await expect(row).toHaveCount(1, { timeout: 15_000 });
 
       // Open Edit, rename, save — the panel should appear because the
@@ -480,21 +529,19 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
     }
   });
 
-  // Task #496 — Task #345 added inline context snippets next to each
-  // sample-match ID on the per-row Trash preview's
+  // Task #496 (rebased onto Task #491) — Task #345 added inline context
+  // snippets next to each sample-match ID on the per-row Trash preview's
   // `HandwavyRemovePreviewMatches` block so reviewers can judge an
-  // un-flag in place without leaving the page. The shared
-  // `BulkRemovalImpactBlock` renderer's OWN, older sample-match list
-  // inside its collapsed `<details>` ("Sample {sourceNoun}s that would
-  // lose their flag (N)") only displayed bare IDs. The bulk-retire
-  // and per-row Trash flows already pass `hideSampleMatchesDetails`
-  // to suppress that legacy block (they render the inline matches
-  // block separately), so the only flow that surfaces the legacy
-  // `<details>` in real usage today is the per-row edit-then-rename
-  // preview. This test stubs the rename dryRun=true DELETE response
-  // with a sampleMatches array carrying snippets on the curated side
-  // (one with a snippet, one without) and on the synthetic production
-  // side, expands the curated `<details>`, and asserts that:
+  // un-flag in place without leaving the page. Task #496 originally
+  // ALSO extended the shared `BulkRemovalImpactBlock` renderer's own
+  // collapsed `<details>` sample-match list ("Sample {sourceNoun}s that
+  // would lose their flag (N)") to render the snippet inline. Task
+  // #491 then deleted that legacy `<details>` block entirely once all
+  // three callers (per-row Trash, batch-confirm, edit-rename) wired
+  // the inline `HandwavyRemovePreviewMatches` renderer in directly.
+  // The judge-in-place affordance therefore now lives exclusively on
+  // the inline block — this test pins the same Task #496 contract
+  // against that inline renderer on the rename flow:
   //   * the snippet renders next to its ID with the surrounding text
   //     (`before`/`after`) plain and the matched phrase wrapped in a
   //     <mark> for highlighting (matching the per-row Trash treatment),
@@ -502,8 +549,9 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
   //     dangling snippet element next to its ID,
   //   * React text-rendering escapes raw HTML in the snippet body so
   //     the literal text appears (no SVG element is injected),
-  //   * the production `<details>` rendering follows the same shape.
-  test("rename impact preview's collapsed sample-match `<details>` renders the snippet with the matched phrase highlighted (Task #496)", async ({
+  //   * the production half follows the same shape,
+  //   * the legacy `<details>` block stays out of the DOM (Task #491).
+  test("rename impact preview's inline sample-match block renders the snippet with the matched phrase highlighted (Task #496 / Task #491)", async ({
     page,
   }) => {
     const apiCtx = await request.newContext({ baseURL: API_BASE });
@@ -621,9 +669,14 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
-      const row = page
-        .locator(`[data-testid="handwavy-row"]`)
-        .filter({ hasText: original });
+      // Use the stable `data-handwavy-phrase` attribute (Task #491)
+      // rather than `hasText: original` so the locator keeps matching
+      // after Edit click — once edit mode swaps the phrase span for a
+      // textbox, the phrase only lives in the input value (not in
+      // textContent), and a `hasText` filter would lose its match.
+      const row = page.locator(
+        `[data-testid="handwavy-row"][data-handwavy-phrase="${original}"]`,
+      );
       await expect(row).toHaveCount(1, { timeout: 15_000 });
 
       // Open Edit, rename, save — the panel mounts because the synthetic
@@ -635,26 +688,30 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       const panel = page.getByTestId("handwavy-edit-preview");
       await expect(panel).toBeVisible({ timeout: 15_000 });
 
-      // Curated half — expand the legacy `<details>` and assert the
-      // snippet renders next to its ID with the matched phrase wrapped
-      // in a <mark>. The snippetless sibling must NOT render a snippet
-      // element.
-      const curatedBlock = panel.getByTestId("handwavy-bulk-preview-curated");
-      const curatedDetails = curatedBlock.locator("details", {
-        hasText: "fixtures that would lose their flag",
-      });
-      await expect(curatedDetails).toHaveCount(1);
-      await curatedDetails.locator("summary").click();
+      // Task #491 — the inline `HandwavyRemovePreviewMatches` block now
+      // renders right under the impact summary and is the SOLE surface
+      // for sample-match snippets on the rename preview (the legacy
+      // `<details>` was deleted from `BulkRemovalImpactBlock`).
+      const matches = panel.getByTestId("handwavy-edit-preview-matches");
+      await expect(matches).toBeVisible();
 
-      const curatedSnippet = curatedBlock.getByTestId(
-        "handwavy-bulk-preview-curated-sample-snippet-fixture-T1-alpha",
+      // Curated half — assert the snippet renders next to its ID with
+      // the matched phrase wrapped in a <mark>. The snippetless sibling
+      // must NOT render a snippet element.
+      const curatedMatches = matches.getByTestId(
+        "handwavy-remove-preview-matches-curated",
+      );
+      await expect(curatedMatches).toBeVisible();
+
+      const curatedSnippet = curatedMatches.getByTestId(
+        "handwavy-remove-preview-matches-curated-snippet-fixture-T1-alpha",
       );
       await expect(curatedSnippet).toBeVisible();
       await expect(curatedSnippet).toContainText("the report says");
       await expect(curatedSnippet).toContainText("has fired here");
 
-      const curatedMark = curatedBlock.getByTestId(
-        "handwavy-bulk-preview-curated-sample-snippet-mark-fixture-T1-alpha",
+      const curatedMark = curatedMatches.getByTestId(
+        "handwavy-remove-preview-matches-curated-snippet-mark-fixture-T1-alpha",
       );
       await expect(curatedMark).toBeVisible();
       await expect(curatedMark).toHaveText("MAGIC PHRASE");
@@ -662,41 +719,67 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       // user CSS targeting the highlight get the correct semantics.
       await expect(curatedMark).toHaveJSProperty("tagName", "MARK");
 
-      // Snippetless sibling — its bare ID is in the list but no snippet
-      // element is rendered next to it.
-      await expect(curatedDetails).toContainText("fixture-T2-beta");
+      // Snippetless sibling — its bare ID still renders inside the
+      // inline list but no snippet element is rendered next to it.
+      await expect(curatedMatches).toContainText("fixture-T2-beta");
       await expect(
-        curatedBlock.getByTestId(
-          "handwavy-bulk-preview-curated-sample-snippet-fixture-T2-beta",
+        curatedMatches.getByTestId(
+          "handwavy-remove-preview-matches-curated-snippet-fixture-T2-beta",
         ),
       ).toHaveCount(0);
 
-      // Production half — expand its legacy `<details>` and assert the
-      // same shape, plus the React-escaping guard for the literal `<svg>`
+      // Production half — assert the same shape on the inline production
+      // block, plus the React-escaping guard for the literal `<svg>`
       // substring in the snippet's `before` field (a naive innerHTML
       // render would inject an SVG element into the DOM).
-      const productionBlock = panel.getByTestId(
-        "handwavy-bulk-preview-production",
+      const productionMatches = matches.getByTestId(
+        "handwavy-remove-preview-matches-production",
       );
-      const productionDetails = productionBlock.locator("details", {
-        hasText: "reports that would lose their flag",
-      });
-      await expect(productionDetails).toHaveCount(1);
-      await productionDetails.locator("summary").click();
+      await expect(productionMatches).toBeVisible();
 
-      const productionSnippet = productionBlock.getByTestId(
-        "handwavy-bulk-preview-production-sample-snippet-9001",
+      const productionSnippet = productionMatches.getByTestId(
+        "handwavy-remove-preview-matches-production-snippet-9001",
       );
       await expect(productionSnippet).toBeVisible();
       await expect(productionSnippet).toContainText("about CVE-1234");
       await expect(productionSnippet).toContainText("<svg>");
       await expect(productionSnippet.locator("svg")).toHaveCount(0);
 
-      const productionMark = productionBlock.getByTestId(
-        "handwavy-bulk-preview-production-sample-snippet-mark-9001",
+      const productionMark = productionMatches.getByTestId(
+        "handwavy-remove-preview-matches-production-snippet-mark-9001",
       );
       await expect(productionMark).toHaveText("fishy claim");
       await expect(productionMark).toHaveJSProperty("tagName", "MARK");
+
+      // Task #491 — the legacy `<details>` block on either side of the
+      // shared `BulkRemovalImpactBlock` MUST no longer render — its
+      // snippet rendering migrated to the inline block above.
+      await expect(
+        panel
+          .getByTestId("handwavy-bulk-preview-curated")
+          .locator("details", {
+            hasText: "fixtures that would lose their flag",
+          }),
+      ).toHaveCount(0);
+      await expect(
+        panel
+          .getByTestId("handwavy-bulk-preview-production")
+          .locator("details", {
+            hasText: "reports that would lose their flag",
+          }),
+      ).toHaveCount(0);
+      // The legacy testids the deleted block used to emit must NOT
+      // appear anywhere in the panel.
+      await expect(
+        panel.getByTestId(
+          "handwavy-bulk-preview-curated-sample-snippet-fixture-T1-alpha",
+        ),
+      ).toHaveCount(0);
+      await expect(
+        panel.getByTestId(
+          "handwavy-bulk-preview-production-sample-snippet-9001",
+        ),
+      ).toHaveCount(0);
     } finally {
       await cleanup(apiCtx, [original, renamed]);
       await apiCtx.dispose();
@@ -780,9 +863,14 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
-      const row = page
-        .locator(`[data-testid="handwavy-row"]`)
-        .filter({ hasText: original });
+      // Use the stable `data-handwavy-phrase` attribute (Task #491)
+      // rather than `hasText: original` so the locator keeps matching
+      // after Edit click — once edit mode swaps the phrase span for a
+      // textbox, the phrase only lives in the input value (not in
+      // textContent), and a `hasText` filter would lose its match.
+      const row = page.locator(
+        `[data-testid="handwavy-row"][data-handwavy-phrase="${original}"]`,
+      );
       await expect(row).toHaveCount(1, { timeout: 15_000 });
       await row.getByTestId("handwavy-edit").click();
       await row.getByTestId("handwavy-edit-phrase").fill(renamed);

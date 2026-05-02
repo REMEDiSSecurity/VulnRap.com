@@ -2127,16 +2127,6 @@ export function BulkRemovalImpactBlock({
   subtitle,
   impact,
   emptyHint,
-  // Task #245 / Task #344 — both the per-row Trash preview and the
-  // batch-confirm preview now render the same `sampleMatches` array
-  // inline (grouped by tier, with linkified production report IDs)
-  // directly underneath this block. Passing `hideSampleMatchesDetails`
-  // from those callers suppresses the collapsed `<details>` list here
-  // so the IDs don't appear twice. Defaults to `false` so the
-  // edit-rename preview (Task #247) and any future caller that hasn't
-  // wired the inline renderer in keep their existing affordance
-  // unchanged.
-  hideSampleMatchesDetails = false,
   // Task #323 — the chosen production-scan window (from the dry-run
   // response's `dryRunImpact.productionLimit`). Combined with the response's
   // `archiveTotal` it powers the coverage-gap banner: when a reviewer
@@ -2164,7 +2154,6 @@ export function BulkRemovalImpactBlock({
   subtitle: string;
   impact: HandwavyPhraseBatchRemoveDryRunImpact;
   emptyHint: string;
-  hideSampleMatchesDetails?: boolean;
   productionLimit?: number | null;
   onRescanFullArchive?: () => void;
   rescanning?: boolean;
@@ -2328,49 +2317,16 @@ export function BulkRemovalImpactBlock({
           negative
         />
       </div>
-      {!hideSampleMatchesDetails && impact.sampleMatches.length > 0 && (
-        <details className="text-[10px] text-muted-foreground">
-          <summary className="cursor-pointer hover:text-foreground">
-            Sample {sourceNoun}s that would lose their flag ({impact.sampleMatches.length})
-          </summary>
-          <ul className="mt-1 ml-3 list-disc space-y-0.5 font-mono">
-            {impact.sampleMatches.map((s) => (
-              <li key={s.id}>
-                {kind === "production" ? `report #${s.id}` : s.id}{" "}
-                <span className="opacity-60">[{s.tier}]</span>
-                {/* Task #496 — render the per-match context snippet inline
-                    next to its ID with the matched phrase highlighted,
-                    mirroring the visual treatment the per-row Trash
-                    preview's `HandwavyRemovePreviewMatchSnippet` uses on
-                    the inline-matches block (Task #345). The server now
-                    sends `snippet` on every removal-preview response, so
-                    the legacy collapsed list — currently surfaced by the
-                    edit-rename preview, which doesn't render the inline
-                    `HandwavyRemovePreviewMatches` block — gets the same
-                    judge-in-place affordance reviewers already have on
-                    the per-row Trash flow. `font-sans` overrides the
-                    parent `font-mono` so the natural-language snippet
-                    text reads naturally next to the monospaced ID. */}
-                {s.snippet && (
-                  <span
-                    className="ml-1 text-muted-foreground italic break-words font-sans"
-                    data-testid={`handwavy-bulk-preview-${kind}-sample-snippet-${s.id}`}
-                  >
-                    {s.snippet.before}
-                    <mark
-                      className="bg-amber-500/30 text-amber-100 not-italic font-semibold px-0.5 rounded-sm"
-                      data-testid={`handwavy-bulk-preview-${kind}-sample-snippet-mark-${s.id}`}
-                    >
-                      {s.snippet.match}
-                    </mark>
-                    {s.snippet.after}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+      {/* Task #491 — the inline `HandwavyRemovePreviewMatches` block
+          rendered by every caller of this component (per-row Trash,
+          batch-confirm, edit-rename) now surfaces the per-tier
+          `sampleMatches` directly underneath this block, so the
+          legacy collapsed `<details>` list that used to live here was
+          redundant and has been removed. The Task #496 per-match
+          snippet rendering it carried lives on inside the shared
+          `HandwavyRemovePreviewMatches` renderer (Task #345's
+          `HandwavyRemovePreviewMatchSnippet`), so reviewers keep the
+          inline judge-in-place affordance. */}
     </div>
   );
 }
@@ -7771,7 +7727,6 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 subtitle={`${corpus.corpusSize} fixtures`}
                 impact={corpus}
                 emptyHint="No curated detections would be lost"
-                hideSampleMatchesDetails
               />
               {production ? (
                 <BulkRemovalImpactBlock
@@ -7784,7 +7739,6 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   }
                   impact={production}
                   emptyHint="No production detections would be lost"
-                  hideSampleMatchesDetails
                   productionLimit={productionLimit}
                   // Task #464 — wire up the in-banner rescan affordance
                   // for the coverage-gap notice so reviewers can widen
@@ -8349,7 +8303,6 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   subtitle={`${corpus.corpusSize} fixtures`}
                   impact={corpus}
                   emptyHint="No curated detections would be lost"
-                  hideSampleMatchesDetails
                 />
                 {production ? (
                   <BulkRemovalImpactBlock
@@ -8362,7 +8315,6 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     }
                     impact={production}
                     emptyHint="No production detections would be lost"
-                    hideSampleMatchesDetails
                     productionLimit={productionLimit}
                   />
                 ) : (
@@ -8816,6 +8768,40 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   </div>
                 )}
               </div>
+              {/* Task #491 — render the per-tier `sampleMatches` inline so a
+                  reviewer renaming a phrase from inside the per-row Edit
+                  panel sees the same affordance the per-row Trash (Task
+                  #245) and batch-confirm (Task #344) previews already
+                  ship: curated fixture + production report IDs grouped by
+                  tier with the production IDs linkified to `/verify/:id`
+                  opened in a new tab. The shared
+                  `HandwavyRemovePreviewMatches` renderer keeps all three
+                  flows visually consistent. The block stays out of the
+                  DOM entirely when the dry-run returned no samples on
+                  either side, so zero-impact previews keep their lean
+                  visual footprint. */}
+              {(corpus.sampleMatches.length > 0 ||
+                (production?.sampleMatches.length ?? 0) > 0) && (
+                <div
+                  className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                  data-testid="handwavy-edit-preview-matches"
+                >
+                  {corpus.sampleMatches.length > 0 && (
+                    <HandwavyRemovePreviewMatches
+                      kind="curated"
+                      title={`Curated fixtures that would lose their flag (${corpus.sampleMatches.length})`}
+                      matches={corpus.sampleMatches}
+                    />
+                  )}
+                  {production && production.sampleMatches.length > 0 && (
+                    <HandwavyRemovePreviewMatches
+                      kind="production"
+                      title={`Production reports that would lose their flag (${production.sampleMatches.length})`}
+                      matches={production.sampleMatches}
+                    />
+                  )}
+                </div>
+              )}
               {requireAck && (
                 <label
                   className="flex items-start gap-2 text-[11px] text-foreground/90 cursor-pointer select-none"
