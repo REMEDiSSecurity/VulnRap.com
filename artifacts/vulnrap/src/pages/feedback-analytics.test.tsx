@@ -2429,3 +2429,488 @@ describe("HandwavyPhrasesAdmin — production-scan-window help block (Task #460 
     ).toBe(true);
   });
 });
+
+// =====================================================================
+// Task #474 — vitest-level coverage of the per-row Undo stack behavior
+// originally added by Task #237 / Task #332. The stack-of-undos UX is
+// otherwise only covered by artifacts/vulnrap/e2e/handwavy-single-undo
+// .spec.ts, which needs a live API server + browser and is skipped in
+// inner-loop runs. The four tests below pin:
+//   1. SINGLE_UNDO_MAX cap (drops the OLDEST when a 6th remove lands).
+//   2. Dedupe-by-phrase on push (a re-Trash on the same phrase
+//      replaces the older entry's removedAt instead of stacking a
+//      duplicate that would 404 on Undo).
+//   3. Undoing a MIDDLE entry leaves only that entry — older AND
+//      newer stacked entries stay put.
+//   4. The per-entry auto-clear effect — once a phrase reappears on
+//      the active list (external reinstate) ONLY its entry leaves;
+//      sibling entries for other phrases are untouched.
+//
+// The mock's request-routing mirrors the existing Task #452 fixture so
+// new contributors editing one file see a familiar shape in the other.
+// =====================================================================
+
+describe("HandwavyPhrasesAdmin — per-row Undo stack (Task #237 / #332 / #474)", () => {
+  const REVIEWER_KEY = "vulnrap.handwavy.reviewer";
+  const PRODUCTION_SCAN_LIMIT_KEY = "vulnrap.calibration.productionScanLimit";
+  const LEGACY_PRODUCTION_SCAN_LIMIT_KEY =
+    "vulnrap.handwavy.productionScanLimit";
+
+  type ActiveMarker = {
+    phrase: string;
+    category: "absence" | "hedging" | "buzzword";
+    addedBy: string;
+    addedAt: string;
+    rationale: string;
+  };
+
+  type Controller = {
+    active: Map<string, ActiveMarker>;
+    history: Array<Record<string, unknown>>;
+    removedAtCounter: number;
+    // When false, a live DELETE leaves the active map untouched. The
+    // dedupe-by-phrase test uses this to keep the row visible across
+    // back-to-back Trash clicks (mirrors the race between a remove
+    // and the active-list refetch the dedupe was added to guard).
+    autoRemoveOnDelete: boolean;
+  };
+
+  let controller: Controller;
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  function makeMarker(phrase: string): ActiveMarker {
+    return {
+      phrase,
+      category: "hedging",
+      addedBy: "tester@example.com",
+      addedAt: "2026-04-01T10:00:00.000Z",
+      rationale: "test fixture",
+    };
+  }
+
+  function makeZeroImpactDryRun(
+    phrase: string,
+  ): HandwavyPhraseSingleRemoveDryRunResponse {
+    // Zero-impact dry-run so requestRemoveWithImpactPreview short-
+    // circuits straight to the live DELETE — the path that pushes onto
+    // the singleUndo stack.
+    return {
+      dryRun: true,
+      batch: false,
+      wouldRemove: 1,
+      notFound: 0,
+      duplicateInBatch: 0,
+      phrase,
+      raw: phrase,
+      removed: false,
+      total: controller.active.size,
+      projectedTotal: Math.max(0, controller.active.size - 1),
+      results: [{ raw: phrase, phrase, removed: true }],
+      dryRunImpact: {
+        corpus: {
+          total: 0,
+          byTier: {
+            t1Legit: 0,
+            t2Borderline: 0,
+            t3Slop: 0,
+            t4Hallucinated: 0,
+          },
+          validDetectionsLost: 0,
+          falsePositivesDropped: 0,
+          corpusSize: 50,
+          sampleMatches: [],
+          warning: null,
+          oldestCreatedAt: null,
+          newestCreatedAt: null,
+          archiveTotal: null,
+        } satisfies HandwavyPhraseBatchRemoveDryRunImpact,
+        production: null,
+        productionError: null,
+        productionLimit: 2000,
+      },
+      phrases: Array.from(controller.active.values()),
+    };
+  }
+
+  function nextRemovedAt(): string {
+    controller.removedAtCounter += 1;
+    const ss = String(controller.removedAtCounter).padStart(2, "0");
+    return `2026-05-01T00:00:${ss}.000Z`;
+  }
+
+  function installFetchMock(): ReturnType<typeof vi.spyOn> {
+    const spy = vi.spyOn(globalThis, "fetch");
+    spy.mockImplementation(async (input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      const method = (init?.method ?? "GET").toUpperCase();
+      let body: Record<string, unknown> | null = null;
+      if (typeof init?.body === "string") {
+        try {
+          body = JSON.parse(init.body) as Record<string, unknown>;
+        } catch {
+          body = null;
+        }
+      }
+
+      if (url.includes("/api/feedback/calibration/auth-status")) {
+        return jsonResponse({
+          serverRequiresToken: false,
+          tokenPresented: false,
+          tokenValid: false,
+          mutationsAllowed: true,
+        });
+      }
+
+      if (
+        url.includes(
+          "/api/feedback/calibration/handwavy-phrases/removal-batches",
+        )
+      ) {
+        return jsonResponse({ batches: [], total: 0, hasMore: false });
+      }
+
+      if (
+        url.includes(
+          "/api/feedback/calibration/handwavy-phrases/reinstate",
+        )
+      ) {
+        const phrase = String(body?.phrase ?? "");
+        const removedAt = String(body?.removedAt ?? "");
+        const histIdx = controller.history.findIndex(
+          (h) =>
+            h.phrase === phrase &&
+            h.removedAt === removedAt &&
+            !h.reinstated,
+        );
+        if (histIdx === -1) {
+          return jsonResponse({ error: "Not found" }, 404);
+        }
+        controller.history[histIdx] = {
+          ...controller.history[histIdx],
+          reinstated: true,
+          reinstatedBy: "tester@example.com",
+          reinstatedAt: "2026-05-01T00:01:00.000Z",
+        };
+        controller.active.set(phrase, makeMarker(phrase));
+        return jsonResponse(
+          {
+            reinstated: true,
+            phrase,
+            category: "hedging",
+            total: controller.active.size,
+            marker: controller.active.get(phrase),
+            historyEntry: controller.history[histIdx],
+            phrases: Array.from(controller.active.values()),
+            history: [...controller.history],
+          },
+          201,
+        );
+      }
+
+      if (url.includes("/api/feedback/calibration/handwavy-phrases")) {
+        if (method === "DELETE") {
+          const phrase = String(body?.phrase ?? "");
+          if (body?.dryRun === true) {
+            return jsonResponse(makeZeroImpactDryRun(phrase));
+          }
+          if (controller.autoRemoveOnDelete) {
+            controller.active.delete(phrase);
+          }
+          const removedAt = nextRemovedAt();
+          const historyEntry = {
+            phrase,
+            category: "hedging",
+            addedBy: "tester@example.com",
+            addedAt: "2026-04-01T10:00:00.000Z",
+            rationale: "test fixture",
+            removedBy: "tester@example.com",
+            removedAt,
+            reinstated: false,
+          };
+          controller.history.push(historyEntry);
+          return jsonResponse({
+            removed: true,
+            phrase,
+            category: "hedging",
+            total: controller.active.size,
+            historyEntry,
+            phrases: Array.from(controller.active.values()),
+            history: [...controller.history],
+          });
+        }
+        // GET — return the current active list + history snapshot.
+        return jsonResponse({
+          phrases: Array.from(controller.active.values()),
+          history: [...controller.history],
+        });
+      }
+
+      // Anything else — benign empty payload so a missed mock doesn't
+      // blow up the render with an unhandled rejection.
+      return jsonResponse({});
+    });
+    return spy;
+  }
+
+  beforeEach(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+    controller = {
+      active: new Map(),
+      history: [],
+      removedAtCounter: 0,
+      autoRemoveOnDelete: true,
+    };
+    fetchSpy = installFetchMock();
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+  });
+
+  function renderAdmin() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const utils = render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/feedback-analytics"]}>
+          <HandwavyPhrasesAdmin mutationsAllowed={true} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    return { ...utils, client };
+  }
+
+  async function clickTrashFor(phrase: string): Promise<void> {
+    const trashBtn = await screen.findByLabelText(
+      `Remove phrase ${phrase}`,
+      {},
+      { timeout: 5_000 },
+    );
+    await act(async () => {
+      fireEvent.click(trashBtn);
+    });
+  }
+
+  async function waitForStackCount(
+    expected: number,
+    timeout = 5_000,
+  ): Promise<void> {
+    if (expected === 0) {
+      await waitFor(
+        () => {
+          expect(
+            screen.queryByTestId("handwavy-single-undo-stack"),
+          ).toBeNull();
+        },
+        { timeout },
+      );
+      return;
+    }
+    await waitFor(
+      () => {
+        const stack = screen.getByTestId("handwavy-single-undo-stack");
+        expect(stack.getAttribute("data-count")).toBe(String(expected));
+      },
+      { timeout },
+    );
+  }
+
+  it("caps the stack at SINGLE_UNDO_MAX (5) and drops the OLDEST entry when a 6th remove lands", async () => {
+    // Six distinct phrases so a sequential Trash on each pushes six
+    // independent entries with their own removedAt — the cap must
+    // drop the very first one once the 6th lands.
+    const phrases = [
+      "task474 cap alpha",
+      "task474 cap bravo",
+      "task474 cap charlie",
+      "task474 cap delta",
+      "task474 cap echo",
+      "task474 cap foxtrot",
+    ];
+    for (const p of phrases) controller.active.set(p, makeMarker(p));
+
+    renderAdmin();
+    await screen.findByLabelText(`Remove phrase ${phrases[0]}`);
+
+    for (let i = 0; i < phrases.length; i++) {
+      await clickTrashFor(phrases[i]);
+      await waitForStackCount(Math.min(i + 1, 5));
+    }
+
+    const stack = screen.getByTestId("handwavy-single-undo-stack");
+    expect(stack.getAttribute("data-max")).toBe("5");
+    expect(stack.getAttribute("data-count")).toBe("5");
+
+    // The five most-recent phrases must still be in the stack — the
+    // very first one (alpha) is the only entry that should have been
+    // dropped by the cap.
+    const phrasesInStack = within(stack)
+      .getAllByTestId("handwavy-single-undo")
+      .map((e) => e.getAttribute("data-phrase"));
+    expect(phrasesInStack).not.toContain(phrases[0]);
+    for (const p of phrases.slice(1)) {
+      expect(phrasesInStack).toContain(p);
+    }
+  });
+
+  it("dedupes the stack by phrase when the same phrase is re-Trashed (older entry's removedAt is replaced, count stays at 1)", async () => {
+    // Disable the mock's auto-delete so the active list keeps the row
+    // visible after the first DELETE — that's what makes a back-to-
+    // back Trash on the same phrase reachable, and is exactly the
+    // race the dedupe-by-phrase guard was added for. Without dedupe,
+    // a remove → re-remove cycle on the same phrase would leave a
+    // stale entry whose removedAt no longer matches a live history
+    // row and whose Undo would 404.
+    controller.autoRemoveOnDelete = false;
+    const phrase = "task474 dedupe phrase";
+    controller.active.set(phrase, makeMarker(phrase));
+
+    renderAdmin();
+    await screen.findByLabelText(`Remove phrase ${phrase}`);
+
+    await clickTrashFor(phrase);
+    await waitForStackCount(1);
+    const firstRemovedAt = screen
+      .getByTestId("handwavy-single-undo")
+      .getAttribute("data-removed-at");
+    expect(firstRemovedAt).toBeTruthy();
+
+    // Second click on the same phrase. The row is still rendered
+    // because the mock's active list never dropped it, and the
+    // dedupe-by-phrase guard inside handleRemove must replace the
+    // older entry instead of stacking a second one.
+    await clickTrashFor(phrase);
+    await waitFor(() => {
+      const entry = screen.getByTestId("handwavy-single-undo");
+      expect(entry.getAttribute("data-removed-at")).not.toBe(firstRemovedAt);
+    });
+
+    const stack = screen.getByTestId("handwavy-single-undo-stack");
+    expect(stack.getAttribute("data-count")).toBe("1");
+    const entries = within(stack).getAllByTestId("handwavy-single-undo");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].getAttribute("data-phrase")).toBe(phrase);
+  });
+
+  it("undoing a MIDDLE stacked entry rolls back only that entry — older AND newer entries stay put", async () => {
+    const phrases = [
+      "task474 mid older",
+      "task474 mid middle",
+      "task474 mid newer",
+    ];
+    for (const p of phrases) controller.active.set(p, makeMarker(p));
+
+    renderAdmin();
+    await screen.findByLabelText(`Remove phrase ${phrases[0]}`);
+    for (const p of phrases) {
+      await clickTrashFor(p);
+    }
+    await waitForStackCount(3);
+
+    // Click Undo on the MIDDLE entry. Each banner's Undo button is
+    // keyed by phrase via aria-label, so the test can target it
+    // unambiguously without depending on render order.
+    const stackBefore = screen.getByTestId("handwavy-single-undo-stack");
+    const middleEntry = stackBefore.querySelector(
+      `[data-phrase="${phrases[1]}"]`,
+    );
+    expect(middleEntry).not.toBeNull();
+    const middleUndoBtn = within(middleEntry as HTMLElement).getByTestId(
+      "handwavy-single-undo-button",
+    );
+    await act(async () => {
+      fireEvent.click(middleUndoBtn);
+    });
+
+    // Stack drops to 2, and the surviving entries are exactly the
+    // older + newer ones the reviewer never undid.
+    await waitForStackCount(2);
+    const stackAfter = screen.getByTestId("handwavy-single-undo-stack");
+    const remaining = within(stackAfter)
+      .getAllByTestId("handwavy-single-undo")
+      .map((e) => e.getAttribute("data-phrase"));
+    expect(remaining).toEqual(expect.arrayContaining([phrases[0], phrases[2]]));
+    expect(remaining).not.toContain(phrases[1]);
+
+    // The middle phrase was reinstated server-side too — the row
+    // should reappear on the active list once the post-reinstate
+    // refresh lands.
+    await waitFor(() => {
+      expect(
+        screen.queryByLabelText(`Remove phrase ${phrases[1]}`),
+      ).not.toBeNull();
+    });
+    // And the OTHER two phrases must still be removed (their Undo
+    // buttons were never clicked) — the active list must NOT have
+    // brought them back.
+    expect(
+      screen.queryByLabelText(`Remove phrase ${phrases[0]}`),
+    ).toBeNull();
+    expect(
+      screen.queryByLabelText(`Remove phrase ${phrases[2]}`),
+    ).toBeNull();
+  });
+
+  it("auto-clears ONLY the entry whose phrase reappears on the active list (external reinstate); other entries stay", async () => {
+    const phrases = ["task474 auto first", "task474 auto second"];
+    for (const p of phrases) controller.active.set(p, makeMarker(p));
+
+    const { client } = renderAdmin();
+    await screen.findByLabelText(`Remove phrase ${phrases[0]}`);
+
+    for (const p of phrases) {
+      await clickTrashFor(p);
+    }
+    await waitForStackCount(2);
+
+    // Simulate an external reinstate: the first phrase becomes active
+    // again via some other path (the history-panel Reinstate, the
+    // CLI in another tab, etc.). The auto-clear effect must drop ONLY
+    // the entry for that phrase, leaving the entry for the second
+    // phrase intact (its phrase is still removed).
+    controller.active.set(phrases[0], makeMarker(phrases[0]));
+    await act(async () => {
+      await client.invalidateQueries();
+    });
+
+    await waitFor(() => {
+      const stack = screen.getByTestId("handwavy-single-undo-stack");
+      expect(stack.getAttribute("data-count")).toBe("1");
+    });
+
+    const stack = screen.getByTestId("handwavy-single-undo-stack");
+    const remaining = within(stack)
+      .getAllByTestId("handwavy-single-undo")
+      .map((e) => e.getAttribute("data-phrase"));
+    expect(remaining).toEqual([phrases[1]]);
+    expect(remaining).not.toContain(phrases[0]);
+  });
+});
