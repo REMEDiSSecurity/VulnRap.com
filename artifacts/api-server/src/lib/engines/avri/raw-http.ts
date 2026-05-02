@@ -55,6 +55,29 @@ export type ProsePlaceholderCategory =
   | "promise"
   | "bracket";
 
+/** Task #450 — stable id for each request-side fabrication signal that
+ * `evaluateRawHttpRequest` can fire. Mirrors the structural-fabrication
+ * marker id contract from `crash-trace.ts` so the diagnostics panel can
+ * map ids onto plain-English headlines and the AVRI rubric markdown
+ * export can list each fired signal alongside its description. The
+ * `prose_placeholder_payload` id is added by `engine2-avri.ts` when the
+ * placeholder-body strip-and-retest fallback fires (the surrounding
+ * header check didn't trip but the prose carried a placeholder gesture
+ * at a payload). */
+export type RawHttpRequestSignalId =
+  | "placeholder_headers"
+  | "broken_te_cl_conflict"
+  | "missing_crlf"
+  | "no_real_header_values"
+  | "fake_credential_token"
+  | "placeholder_body"
+  | "prose_placeholder_payload";
+
+export interface RawHttpRequestSignal {
+  id: RawHttpRequestSignalId;
+  description: string;
+}
+
 export interface RawHttpEvaluation {
   /** Number of `METHOD /path HTTP/1.x` request-lines detected. */
   requestsAnalyzed: number;
@@ -104,6 +127,17 @@ export interface RawHttpEvaluation {
   isFake: boolean;
   /** Human-readable explanation, set when isFake. */
   reason: string | null;
+  /** Task #450 — per-signal fabrication tells that fired against this
+   * request, each carrying a stable id and the same wording surfaced in
+   * `reason`. The diagnostics panel maps each id onto a plain-English
+   * headline; the AVRI rubric markdown export emits one bullet per
+   * entry. Empty when `isFake` is false. The current request-side
+   * decision logic is an if/else chain (one reason wins) so this is
+   * either empty or holds a single entry — but the field is shaped as
+   * an array to mirror the response side and to leave room for future
+   * multi-signal request-side detectors without a second contract
+   * break. */
+  signals: ReadonlyArray<RawHttpRequestSignal>;
 }
 
 // Request-line: METHOD SP request-target SP HTTP/1.x. We accept any 3–10
@@ -864,6 +898,9 @@ export function evaluateRawHttpRequest(
       })),
       isFake: false,
       reason: null,
+      // Task #450 — empty-eval path never fires any of the per-branch
+      // detectors, so the persisted signals list is always empty here.
+      signals: [],
     };
   }
 
@@ -970,6 +1007,12 @@ export function evaluateRawHttpRequest(
   // Decide. We fire isFake when any one of these strong signals is true.
   let isFake = false;
   let reason: string | null = null;
+  // Task #450 — every branch that flips `isFake` true also pushes a
+  // matching `{id, description}` signal entry so the diagnostics panel
+  // and the AVRI rubric markdown export can surface a per-signal
+  // headline (the panel maps the id onto a plain-English label; the
+  // markdown emits the description verbatim alongside the id).
+  const signals: RawHttpRequestSignal[] = [];
 
   const placeholderRatio =
     totalHeaders > 0 ? placeholderHeaders / totalHeaders : 0;
@@ -977,10 +1020,12 @@ export function evaluateRawHttpRequest(
   if (totalHeaders >= 2 && placeholderRatio >= 0.5) {
     isFake = true;
     reason = `Raw HTTP request has ${placeholderHeaders}/${totalHeaders} headers with placeholder or missing values`;
+    signals.push({ id: "placeholder_headers", description: reason });
   } else if (teClConflicts > 0 && teClBroken === teClConflicts) {
     isFake = true;
     reason =
       "Claimed TE/CL conflict has incoherent values (Content-Length is not a plain integer or Transfer-Encoding is not \"chunked\")";
+    signals.push({ id: "broken_te_cl_conflict", description: reason });
   } else if (strictCrlf && crlfRequired && !crlfPresent && totalHeaders >= 2) {
     // Smuggling depends on byte-precise framing. A request-shaped block
     // that spans multiple header lines without a single CRLF is either
@@ -992,9 +1037,11 @@ export function evaluateRawHttpRequest(
     isFake = true;
     reason =
       "Raw HTTP request has no CRLF line endings — smuggling depends on byte-precise framing";
+    signals.push({ id: "missing_crlf", description: reason });
   } else if (totalHeaders >= 3 && goodHeaders === 0) {
     isFake = true;
     reason = "Raw HTTP request has no header with a real value";
+    signals.push({ id: "no_real_header_values", description: reason });
   } else if (fakeCredentialHeaders > 0 && firstFakeCredentialReason !== null) {
     // Credential-value tell: the surrounding bytes look real (no
     // placeholder ratio, real Host/UA/etc.) but the Authorization or
@@ -1005,6 +1052,7 @@ export function evaluateRawHttpRequest(
     // the audit.
     isFake = true;
     reason = firstFakeCredentialReason;
+    signals.push({ id: "fake_credential_token", description: reason });
   } else if (placeholderBodies > 0 && placeholderBodies === blocks.length) {
     // Every detected request block has a placeholder body (`<sql payload
     // here>`, `q=<inject>`, `{ "q": "<inject>" }`). The request bytes are
@@ -1012,6 +1060,7 @@ export function evaluateRawHttpRequest(
     // who actually sent the payload would paste the bytes that were sent.
     isFake = true;
     reason = `Raw HTTP request body is a placeholder (${placeholderBodies}/${blocks.length} request block(s))`;
+    signals.push({ id: "placeholder_body", description: reason });
   }
 
   // Merge prose-level placeholder payload ranges into placeholderBodyRanges
@@ -1040,6 +1089,7 @@ export function evaluateRawHttpRequest(
     placeholderBodyRanges,
     isFake,
     reason,
+    signals,
   };
 }
 
@@ -1223,6 +1273,22 @@ export function rawHttpBodyPayloadGoldSignalIdsFor(
 // points; matches that only existed inside the fabricated bytes get
 // revoked.
 
+/** Task #450 — stable id for each response-side fabrication signal.
+ * Mirrors the request-side `RawHttpRequestSignalId` contract. The
+ * response-side decision logic aggregates ≥2 markers per response block
+ * (so multiple ids may fire on the same evaluation), and we dedupe
+ * across all flagged blocks. */
+export type RawHttpResponseSignalId =
+  | "missing_date_header"
+  | "missing_server_header"
+  | "suspicious_json_body"
+  | "missing_incidental_headers";
+
+export interface RawHttpResponseSignal {
+  id: RawHttpResponseSignalId;
+  description: string;
+}
+
 export interface RawHttpResponseEvaluation {
   /** Number of `HTTP/1.x NNN ReasonPhrase` response blocks detected
    * with at least one parseable header line following. */
@@ -1245,6 +1311,12 @@ export interface RawHttpResponseEvaluation {
    * through end of body) flagged as fabricated. Used by the engine to
    * strip and re-test response-class gold signals. */
   fakeResponseRanges: ReadonlyArray<{ start: number; end: number }>;
+  /** Task #450 — per-signal fabrication tells aggregated (and
+   * deduplicated by id) across every flagged response block. The
+   * diagnostics panel maps each id onto a plain-English headline; the
+   * AVRI rubric markdown export emits one bullet per entry. Empty when
+   * `isFake` is false. */
+  signals: ReadonlyArray<RawHttpResponseSignal>;
 }
 
 // HTTP/1.x status-line: `HTTP/1.x SP NNN SP Reason-Phrase CRLF`.
@@ -1578,6 +1650,7 @@ export function evaluateRawHttpResponse(
     isFake: false,
     reason: null,
     fakeResponseRanges: [],
+    signals: [],
   };
   if (blocks.length === 0) return empty;
 
@@ -1590,6 +1663,20 @@ export function evaluateRawHttpResponse(
   let respMissingIncidentals = 0;
   const fakeResponseRanges: Array<{ start: number; end: number }> = [];
   let firstReason: string | null = null;
+  // Task #450 — collect every response-side fabrication tell that fired
+  // on at least one flagged block, deduplicated by id. The diagnostics
+  // panel maps each id onto a plain-English headline; the AVRI rubric
+  // markdown export emits one bullet per entry.
+  const seenSignalIds = new Set<RawHttpResponseSignalId>();
+  const signals: RawHttpResponseSignal[] = [];
+  const noteSignal = (
+    id: RawHttpResponseSignalId,
+    description: string,
+  ): void => {
+    if (seenSignalIds.has(id)) return;
+    seenSignalIds.add(id);
+    signals.push({ id, description });
+  };
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -1652,23 +1739,42 @@ export function evaluateRawHttpResponse(
 
     let markerCount = 0;
     const fired: string[] = [];
+    const firedSignals: RawHttpResponseSignal[] = [];
     if (missingDate) {
       markerCount++;
       fired.push("missing Date header");
+      firedSignals.push({
+        id: "missing_date_header",
+        description: "Response is missing the Date header",
+      });
     }
     if (missingServer) {
       markerCount++;
       fired.push("missing Server header");
+      firedSignals.push({
+        id: "missing_server_header",
+        description: "Response is missing the Server header",
+      });
     }
     if (suspiciousJson) {
       markerCount++;
       fired.push("suspiciously clean JSON body");
+      firedSignals.push({
+        id: "suspicious_json_body",
+        description:
+          "JSON response body reads as a vulnerability narrative with no real-API incidentals",
+      });
     }
     if (missingIncidentals) {
       markerCount++;
       fired.push(
         "no X-Request-Id/Content-Length/Cache-Control/Set-Cookie",
       );
+      firedSignals.push({
+        id: "missing_incidental_headers",
+        description:
+          "Response carries no X-Request-Id / Content-Length / Cache-Control / Set-Cookie",
+      });
     }
 
     if (markerCount >= 2) {
@@ -1677,6 +1783,11 @@ export function evaluateRawHttpResponse(
       if (firstReason === null) {
         firstReason = `Raw HTTP response is fabricated (${fired.join(", ")})`;
       }
+      // Task #450 — only roll fired tells into the persisted `signals`
+      // list when the block actually flagged (≥2 markers). Tells from
+      // sub-threshold blocks would be misleading (the block didn't
+      // actually trip the fabrication verdict) so we leave them out.
+      for (const s of firedSignals) noteSignal(s.id, s.description);
     }
   }
 
@@ -1692,6 +1803,7 @@ export function evaluateRawHttpResponse(
     isFake,
     reason: firstReason,
     fakeResponseRanges,
+    signals,
   };
 }
 

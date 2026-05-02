@@ -303,6 +303,165 @@ describe("buildAvriRubricMarkdown", () => {
     );
   });
 
+  // Task #450 — when the engine persists `rawHttp.signals`, the markdown
+  // export emits a `description (id)` sub-bullet per fabrication tell
+  // (placeholder headers, broken TE/CL conflict, missing CRLF, fake
+  // credential token, placeholder body, prose placeholder payload),
+  // mirroring the structural-fabrication marker bullet shape introduced
+  // by Task #317. The bullets land at the same indent (2 spaces) as the
+  // existing "Gold signals revoked" line so reviewers see the per-signal
+  // evidence under the FAKE_RAW_HTTP block in the printable report.
+  it("renders per-signal request-side fabrication bullets when rawHttp.signals is populated (Task #450)", () => {
+    const lines = buildAvriRubricMarkdown({
+      composite: {
+        family: "REQUEST_SMUGGLING",
+        familyName: "HTTP request smuggling / desync",
+      },
+      engine2: {
+        family: "REQUEST_SMUGGLING",
+        familyName: "HTTP request smuggling / desync",
+        rawHttp: {
+          requestsAnalyzed: 1,
+          totalHeaders: 7,
+          placeholderHeaders: 4,
+          crlfPresent: false,
+          teClConflicts: 1,
+          teClBroken: 1,
+          isFake: true,
+          reason:
+            "Fabricated raw HTTP request (no CRLFs, placeholder header values)",
+          revokedGoldHits: [],
+          penalty: -18,
+          signals: [
+            {
+              id: "placeholder_headers",
+              description:
+                "4 of 7 header values look like placeholders (e.g. `<token>`, `example.com`)",
+            },
+            {
+              id: "broken_te_cl_conflict",
+              description:
+                "Transfer-Encoding/Content-Length conflict declared in prose but the headers don't actually carry the conflicting values",
+            },
+            {
+              id: "missing_crlf",
+              description:
+                "Request bytes use LF-only line endings; real raw HTTP uses CRLF",
+            },
+          ],
+        },
+      },
+    });
+    expect(lines).toContain(
+      "  - 4 of 7 header values look like placeholders (e.g. `<token>`, `example.com`) (placeholder_headers)",
+    );
+    expect(lines).toContain(
+      "  - Transfer-Encoding/Content-Length conflict declared in prose but the headers don't actually carry the conflicting values (broken_te_cl_conflict)",
+    );
+    expect(lines).toContain(
+      "  - Request bytes use LF-only line endings; real raw HTTP uses CRLF (missing_crlf)",
+    );
+  });
+
+  // Task #450 — response-side counterpart: per-signal bullets nest one
+  // indent deeper (4 spaces) so they live under the "Response
+  // Plausibility" sub-section, mirroring the existing per-marker
+  // counters and the response gold-signal revocation line shape.
+  it("renders per-signal response-side fabrication bullets under Response Plausibility (Task #450)", () => {
+    const lines = buildAvriRubricMarkdown({
+      composite: { family: "INJECTION", familyName: "Injection" },
+      engine2: {
+        family: "INJECTION",
+        familyName: "Injection",
+        rawHttp: {
+          requestsAnalyzed: 0,
+          totalHeaders: 0,
+          placeholderHeaders: 0,
+          crlfPresent: false,
+          teClConflicts: 0,
+          teClBroken: 0,
+          isFake: true,
+          reason: null,
+          revokedGoldHits: [],
+          penalty: -12,
+          response: {
+            responsesAnalyzed: 1,
+            responsesFlagged: 1,
+            totalHeaders: 2,
+            responsesMissingDate: 1,
+            responsesMissingServer: 1,
+            responsesWithSuspiciousJsonBody: 1,
+            responsesMissingIncidentals: 1,
+            isFake: true,
+            reason: null,
+            signals: [
+              {
+                id: "missing_date_header",
+                description:
+                  "Response is missing the Date header (real HTTP/1.1 responses always carry one)",
+              },
+              {
+                id: "suspicious_json_body",
+                description:
+                  "JSON response body reads as a vulnerability narrative with no real-API incidentals",
+              },
+              {
+                id: "missing_incidental_headers",
+                description:
+                  "Response carries no X-Request-Id / Content-Length / Cache-Control / Set-Cookie",
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(lines).toContain(
+      "    - Response is missing the Date header (real HTTP/1.1 responses always carry one) (missing_date_header)",
+    );
+    expect(lines).toContain(
+      "    - JSON response body reads as a vulnerability narrative with no real-API incidentals (suspicious_json_body)",
+    );
+    expect(lines).toContain(
+      "    - Response carries no X-Request-Id / Content-Length / Cache-Control / Set-Cookie (missing_incidental_headers)",
+    );
+  });
+
+  // Task #450 — legacy persisted reports analyzed before the `signals`
+  // field shipped continue to render normally (no per-signal bullets,
+  // no crash). The existing inline snapshots above cover this implicitly,
+  // but pin it here so a future change to the loop can't accidentally
+  // emit blank "  -  ()" rows.
+  it("does not emit per-signal bullets when rawHttp.signals is absent (legacy persisted reports) (Task #450)", () => {
+    const lines = buildAvriRubricMarkdown({
+      composite: {
+        family: "REQUEST_SMUGGLING",
+        familyName: "HTTP request smuggling / desync",
+      },
+      engine2: {
+        family: "REQUEST_SMUGGLING",
+        familyName: "HTTP request smuggling / desync",
+        rawHttp: {
+          requestsAnalyzed: 1,
+          totalHeaders: 4,
+          placeholderHeaders: 2,
+          crlfPresent: false,
+          teClConflicts: 0,
+          teClBroken: 0,
+          isFake: true,
+          reason: "Fabricated raw HTTP request",
+          revokedGoldHits: [],
+          penalty: -18,
+          // signals intentionally omitted to simulate a legacy persisted
+          // report from before Task #450 shipped.
+        },
+      },
+    });
+    // No bullet of the form "  - <something> (<id>)" should be emitted.
+    expect(
+      lines.some((l) => /^  - .+\([a-z_]+\)$/.test(l)),
+    ).toBe(false);
+  });
+
   it("renders the Sprint 13B-2 / Task #303 structural-fabrication markers when crashTrace.hasStructuralFabrication is true (Task #317)", () => {
     const lines = buildAvriRubricMarkdown({
       composite: { family: "MEMORY_CORRUPTION" },

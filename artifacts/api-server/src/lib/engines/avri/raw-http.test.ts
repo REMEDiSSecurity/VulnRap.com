@@ -154,6 +154,37 @@ describe("evaluateRawHttpRequest", () => {
     expect(r.requestsAnalyzed).toBe(0);
     expect(r.isFake).toBe(false);
   });
+
+  // Task #450 — every fired branch under `isFake` must push a stable
+  // `signal` entry onto `result.signals` so the diagnostics panel and
+  // the markdown export can render plain-English headlines per
+  // fabrication tell. Pin the signal-id shape (no duplicates, only
+  // known ids) so future detector additions don't accidentally drift.
+  it("populates a `signals` list with stable ids when isFake is true (Task #450)", () => {
+    const r = evaluateRawHttpRequest(SLOP_SMUGGLING_FIXTURE);
+    expect(r.isFake).toBe(true);
+    expect(Array.isArray(r.signals)).toBe(true);
+    expect(r.signals.length).toBeGreaterThan(0);
+    const known = new Set([
+      "placeholder_headers",
+      "broken_te_cl_conflict",
+      "missing_crlf",
+      "no_real_header_values",
+      "fake_credential_token",
+      "placeholder_body",
+    ]);
+    for (const s of r.signals) {
+      expect(known.has(s.id)).toBe(true);
+      expect(typeof s.description).toBe("string");
+      expect(s.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("returns an empty `signals` list when the request is legitimate (Task #450)", () => {
+    const r = evaluateRawHttpRequest(LEGIT_SMUGGLING_FIXTURE);
+    expect(r.isFake).toBe(false);
+    expect(r.signals).toEqual([]);
+  });
 });
 
 // AUTHN_AUTHZ slop fixture: looks like an authorization-header-swap

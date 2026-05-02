@@ -397,8 +397,17 @@ export function runEngine2Avri(
       // indicator and out-of-cap penalty fire too.
       if (!rawHttp.isFake && revokedRawHttpHits.length > 0) {
         let fallbackReason: string;
+        // Task #450 — the same fallback that flips `isFake` true also
+        // pushes a `placeholder_body` / `prose_placeholder_payload`
+        // signal entry into the evaluation so the diagnostics panel
+        // and the AVRI rubric markdown export render a per-signal
+        // headline for this fabrication tell. The id picks the same
+        // branch as the reason text below so panel/markdown stay in
+        // lock-step with the human-readable explanation.
+        let fallbackSignalId: "placeholder_body" | "prose_placeholder_payload";
         if (rawHttp.placeholderBodies > 0 && rawHttp.requestsAnalyzed > 0) {
           fallbackReason = `Raw HTTP request body is a placeholder (${rawHttp.placeholderBodies}/${rawHttp.requestsAnalyzed} request block(s))`;
+          fallbackSignalId = "placeholder_body";
         } else if (rawHttp.prosePlaceholderPayloads > 0) {
           // Prose-only path: no fake bytes, just placeholder gestures in
           // the prose that point at a payload without naming one. The
@@ -417,13 +426,26 @@ export function runEngine2Avri(
           } else {
             fallbackReason = `Prose payload reference is a placeholder (${count} mention(s) with no concrete payload)`;
           }
+          fallbackSignalId = "prose_placeholder_payload";
         } else {
           fallbackReason = "Raw HTTP request body is a placeholder";
+          fallbackSignalId = "placeholder_body";
         }
+        const finalReason = rawHttp.reason ?? fallbackReason;
         rawHttp = {
           ...rawHttp,
           isFake: true,
-          reason: rawHttp.reason ?? fallbackReason,
+          reason: finalReason,
+          // Append the fallback signal only when no equivalent signal
+          // already fired in `evaluateRawHttpRequest` (defensive — this
+          // branch only runs when rawHttp.isFake was false above, so
+          // signals is empty in practice).
+          signals: rawHttp.signals.some((s) => s.id === fallbackSignalId)
+            ? rawHttp.signals
+            : [
+                ...rawHttp.signals,
+                { id: fallbackSignalId, description: finalReason },
+              ],
         };
       }
     }
@@ -792,6 +814,21 @@ export function runEngine2Avri(
                     : (rawHttp?.reason ?? null),
             revokedGoldHits: revokedRawHttpHits.map((r) => ({ id: r.id, points: r.points })),
             penalty: -fakeRawHttpPenalty,
+            // Task #450 — forward the per-signal fabrication tells from
+            // `evaluateRawHttpRequest` (and the engine's prose-payload
+            // fallback above) so the diagnostics panel and the AVRI
+            // rubric markdown export can render plain-English headlines
+            // for each signal that fired. Only persisted when the
+            // request side is actually fake; legacy reports without
+            // this list parse fine because the field is optional in
+            // the @workspace/avri-rubric type.
+            signals:
+              rawHttp?.isFake && rawHttp.signals.length > 0
+                ? rawHttp.signals.map((s) => ({
+                    id: s.id,
+                    description: s.description,
+                  }))
+                : undefined,
             response: rawHttpResponse
               ? {
                   responsesAnalyzed: rawHttpResponse.responsesAnalyzed,
@@ -812,6 +849,16 @@ export function runEngine2Avri(
                     id: r.id,
                     points: r.points,
                   })),
+                  // Task #450 — per-signal response-side fabrication
+                  // tells, deduplicated across flagged blocks. Optional
+                  // for legacy persisted reports.
+                  signals:
+                    rawHttpResponse.isFake && rawHttpResponse.signals.length > 0
+                      ? rawHttpResponse.signals.map((s) => ({
+                          id: s.id,
+                          description: s.description,
+                        }))
+                      : undefined,
                 }
               : null,
           }

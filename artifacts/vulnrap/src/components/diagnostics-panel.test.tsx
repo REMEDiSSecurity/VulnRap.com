@@ -1035,6 +1035,352 @@ describe("DiagnosticsPanel smoke test", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Task #450 — when the API persists a `rawHttp.signals` array, the panel
+  // surfaces each request-side fabrication tell as a plain-English headline
+  // (`RAW_HTTP_SIGNAL_LABELS[id]`), the signal id, and the engine's exact
+  // description string. Mirrors the STRUCTURAL_FABRICATION marker block
+  // introduced by Task #317 so reviewers learn the "fabricated raw HTTP"
+  // pattern at a glance without scrolling for the underlying excerpts.
+  it("renders the FAKE_RAW_HTTP block with each request-side signal label, id, and description (Task #450)", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "REQUEST_SMUGGLING",
+          familyName: "HTTP request smuggling / desync",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-444",
+            evidence: ["CWE-444"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 22,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "REQUEST_SMUGGLING",
+                  familyName: "HTTP request smuggling / desync",
+                  baseScore: 18,
+                  goldHitCount: 0,
+                  goldTotalCount: 6,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  rawHttp: {
+                    requestsAnalyzed: 1,
+                    totalHeaders: 7,
+                    placeholderHeaders: 4,
+                    crlfPresent: false,
+                    teClConflicts: 1,
+                    teClBroken: 1,
+                    isFake: true,
+                    reason:
+                      "Fabricated raw HTTP request (no CRLFs, placeholder header values)",
+                    revokedGoldHits: [],
+                    penalty: -18,
+                    signals: [
+                      {
+                        id: "placeholder_headers",
+                        description:
+                          "4 of 7 header values look like placeholders (e.g. `<token>`, `example.com`)",
+                      },
+                      {
+                        id: "broken_te_cl_conflict",
+                        description:
+                          "Transfer-Encoding/Content-Length conflict declared in prose but the headers don't actually carry the conflicting values",
+                      },
+                      {
+                        id: "missing_crlf",
+                        description:
+                          "Request bytes use LF-only line endings; real raw HTTP uses CRLF",
+                      },
+                    ],
+                  },
+                  rawAvriScore: 0,
+                  legacyScore: 30,
+                  blendedScore: 22,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("FAKE_RAW_HTTP")).toBeInTheDocument();
+    });
+
+    // Scope queries to the FAKE_RAW_HTTP block so we don't collide with
+    // the parent counters table that also shows the raw byte stats.
+    const block = screen.getByTestId("fake-raw-http-block");
+
+    // Each signal renders its plain-English label, the id in parens, and
+    // the engine's description string carrying the offending excerpt.
+    expect(within(block).getByText("Placeholder header values")).toBeInTheDocument();
+    expect(within(block).getByText("(placeholder_headers)")).toBeInTheDocument();
+    expect(
+      within(block).getByText(
+        /4 of 7 header values look like placeholders/i,
+      ),
+    ).toBeInTheDocument();
+
+    expect(
+      within(block).getByText(
+        "Broken Transfer-Encoding/Content-Length conflict",
+      ),
+    ).toBeInTheDocument();
+    expect(within(block).getByText("(broken_te_cl_conflict)")).toBeInTheDocument();
+
+    expect(within(block).getByText("Missing CRLF line endings")).toBeInTheDocument();
+    expect(within(block).getByText("(missing_crlf)")).toBeInTheDocument();
+    expect(
+      within(block).getByText(
+        /Request bytes use LF-only line endings/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // Task #450 — response-side counterpart: per-signal tells inside the
+  // FAKE_RAW_HTTP_RESPONSE sub-block. Same plain-English headline +
+  // `(id)` + description shape as the request-side list above.
+  it("renders the FAKE_RAW_HTTP_RESPONSE sub-block with each response-side signal label, id, and description (Task #450)", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "INJECTION",
+          familyName: "Injection",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-79",
+            evidence: ["CWE-79"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 22,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "INJECTION",
+                  familyName: "Injection",
+                  baseScore: 18,
+                  goldHitCount: 0,
+                  goldTotalCount: 6,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  rawHttp: {
+                    requestsAnalyzed: 1,
+                    totalHeaders: 4,
+                    placeholderHeaders: 0,
+                    crlfPresent: true,
+                    teClConflicts: 0,
+                    teClBroken: 0,
+                    isFake: true,
+                    reason:
+                      "Fake raw HTTP response (fabricated `HTTP/1.1 200 OK` block missing Date/Server headers)",
+                    revokedGoldHits: [],
+                    penalty: -12,
+                    response: {
+                      responsesAnalyzed: 1,
+                      responsesFlagged: 1,
+                      totalHeaders: 2,
+                      responsesMissingDate: 1,
+                      responsesMissingServer: 1,
+                      responsesWithSuspiciousJsonBody: 1,
+                      responsesMissingIncidentals: 1,
+                      isFake: true,
+                      reason: null,
+                      signals: [
+                        {
+                          id: "missing_date_header",
+                          description:
+                            "Response is missing the Date header (real HTTP/1.1 responses always carry one)",
+                        },
+                        {
+                          id: "suspicious_json_body",
+                          description:
+                            "JSON response body reads as a vulnerability narrative with no real-API incidentals",
+                        },
+                        {
+                          id: "missing_incidental_headers",
+                          description:
+                            "Response carries no X-Request-Id / Content-Length / Cache-Control / Set-Cookie",
+                        },
+                      ],
+                    },
+                  },
+                  rawAvriScore: 0,
+                  legacyScore: 30,
+                  blendedScore: 22,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("FAKE_RAW_HTTP_RESPONSE")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Missing Date response header")).toBeInTheDocument();
+    expect(screen.getByText("(missing_date_header)")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Response is missing the Date header/i,
+      ),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText("Suspiciously clean JSON response body"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("(suspicious_json_body)")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /JSON response body reads as a vulnerability narrative/i,
+      ),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText(
+        "Missing incidental response headers (X-Request-Id / Content-Length / Cache-Control / Set-Cookie)",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("(missing_incidental_headers)"),
+    ).toBeInTheDocument();
+  });
+
+  // Task #450 — unknown signal ids (e.g. a future detector that the panel
+  // hasn't shipped a label for yet) must fall back to displaying the raw
+  // id as the headline so reviewers still see *something* they can grep
+  // for, instead of an empty cell.
+  it("falls back to the raw signal id when RAW_HTTP_SIGNAL_LABELS has no entry (Task #450)", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "REQUEST_SMUGGLING",
+          familyName: "HTTP request smuggling / desync",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-444",
+            evidence: ["CWE-444"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 22,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "REQUEST_SMUGGLING",
+                  familyName: "HTTP request smuggling / desync",
+                  baseScore: 18,
+                  goldHitCount: 0,
+                  goldTotalCount: 6,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  rawHttp: {
+                    requestsAnalyzed: 1,
+                    totalHeaders: 4,
+                    placeholderHeaders: 0,
+                    crlfPresent: false,
+                    teClConflicts: 0,
+                    teClBroken: 0,
+                    isFake: true,
+                    reason: "Fabricated raw HTTP request",
+                    revokedGoldHits: [],
+                    penalty: -12,
+                    signals: [
+                      {
+                        id: "future_unknown_signal",
+                        description: "Some future detector fired here",
+                      },
+                    ],
+                  },
+                  rawAvriScore: 0,
+                  legacyScore: 30,
+                  blendedScore: 22,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("FAKE_RAW_HTTP")).toBeInTheDocument();
+    });
+
+    const block = screen.getByTestId("fake-raw-http-block");
+    // Headline AND parenthesised id are both the raw id when no label
+    // exists — see `RAW_HTTP_SIGNAL_LABELS[id] ?? id` in the panel.
+    expect(within(block).getAllByText(/future_unknown_signal/)).toHaveLength(2);
+    expect(
+      within(block).getByText("Some future detector fired here"),
+    ).toBeInTheDocument();
+  });
+
   it("does not render the FAKE_RAW_HTTP block when rawHttp.isFake is false", async () => {
     fetchSpy.mockImplementationOnce(async () => new Response(
       JSON.stringify({

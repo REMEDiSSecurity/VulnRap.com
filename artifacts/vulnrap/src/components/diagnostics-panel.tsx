@@ -627,6 +627,33 @@ export const STRUCTURAL_MARKER_LABELS: Record<string, string> = {
   fabricated_memory_map: "Fabricated /proc/self/maps listing",
 };
 
+// Task #450: short, plain-English label for each FAKE_RAW_HTTP fabrication
+// signal. Keep the keys in sync with the `RawHttpRequestSignalId` and
+// `RawHttpResponseSignalId` unions in
+// `artifacts/api-server/src/lib/engines/avri/raw-http.ts` (and the
+// `prose_placeholder_payload` id added by `engine2-avri.ts` when the
+// payload-class strip-and-retest fallback fires). The signal's
+// `description` field already includes the offending excerpt (e.g. the
+// header counts, the credential reason, the prose snippet); these labels
+// are the one-line headline reviewers see above each excerpt — same
+// pattern Task #317 introduced for STRUCTURAL_MARKER_LABELS.
+export const RAW_HTTP_SIGNAL_LABELS: Record<string, string> = {
+  // Request-side fabrication tells.
+  placeholder_headers: "Placeholder header values",
+  broken_te_cl_conflict: "Broken Transfer-Encoding/Content-Length conflict",
+  missing_crlf: "Missing CRLF line endings",
+  no_real_header_values: "No header carries a real value",
+  fake_credential_token: "Fabricated credential token",
+  placeholder_body: "Placeholder request body",
+  prose_placeholder_payload: "Prose-only placeholder payload reference",
+  // Response-side fabrication tells.
+  missing_date_header: "Missing Date response header",
+  missing_server_header: "Missing Server response header",
+  suspicious_json_body: "Suspiciously clean JSON response body",
+  missing_incidental_headers:
+    "Missing incidental response headers (X-Request-Id / Content-Length / Cache-Control / Set-Cookie)",
+};
+
 function AvriFamilySection({
   avri,
   engines,
@@ -1032,7 +1059,10 @@ function AvriFamilySection({
               Indicators table.
             */}
             {rawHttp?.isFake && (
-              <div className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 space-y-2">
+              <div
+                className="rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 space-y-2"
+                data-testid="fake-raw-http-block"
+              >
                 <div className="flex items-center gap-2">
                   <Badge
                     variant="outline"
@@ -1062,6 +1092,42 @@ function AvriFamilySection({
                     TE/CL conflicts: {rawHttp.teClConflicts} (broken {rawHttp.teClBroken})
                   </span>
                 </div>
+                {/*
+                  Task #450 — surface the per-signal request-side
+                  fabrication tells (placeholder headers / broken TE-CL
+                  conflict / missing CRLF / no real header values / fake
+                  credential token / placeholder body / prose
+                  placeholder payload) under a plain-English headline
+                  followed by the signal id and the engine's exact
+                  description string. Mirrors the STRUCTURAL_FABRICATION
+                  layout introduced by Task #317 so the two red-box
+                  blocks teach the same shape. `signals` is optional on
+                  AvriEngine2RawHttp (legacy persisted reports won't
+                  carry it) so we default to an empty list and skip the
+                  list when empty.
+                */}
+                {(rawHttp.signals ?? []).length > 0 && (
+                  <ul className="space-y-1.5">
+                    {rawHttp.signals!.map((s) => (
+                      <li
+                        key={s.id}
+                        className="text-[11px] font-mono space-y-0.5"
+                      >
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                          <span className="text-red-400/90 font-semibold">
+                            {RAW_HTTP_SIGNAL_LABELS[s.id] ?? s.id}
+                          </span>
+                          <span className="text-muted-foreground">
+                            ({s.id})
+                          </span>
+                        </div>
+                        <div className="text-foreground/80 leading-snug">
+                          {s.description}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {/*
                   Sprint 13B-3: response-side plausibility sub-block. Surfaces
                   WHY a fabricated `HTTP/1.1 200 OK` block was rejected so
@@ -1099,6 +1165,38 @@ function AvriFamilySection({
                         no incidentals: {rawHttp.response.responsesMissingIncidentals}
                       </span>
                     </div>
+                    {/*
+                      Task #450 — response-side per-signal fabrication
+                      tells, mirroring the request-side layout above and
+                      the STRUCTURAL_FABRICATION block. Each entry shows
+                      the plain-English headline, the signal id, and the
+                      engine's description string. `signals` is optional
+                      on `AvriEngine2RawHttpResponse` (legacy persisted
+                      reports won't carry it) so we default to an empty
+                      list and skip the list when empty.
+                    */}
+                    {(rawHttp.response.signals ?? []).length > 0 && (
+                      <ul className="space-y-1.5">
+                        {rawHttp.response.signals!.map((s) => (
+                          <li
+                            key={s.id}
+                            className="text-[11px] font-mono space-y-0.5"
+                          >
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-red-400/90 font-semibold">
+                                {RAW_HTTP_SIGNAL_LABELS[s.id] ?? s.id}
+                              </span>
+                              <span className="text-muted-foreground">
+                                ({s.id})
+                              </span>
+                            </div>
+                            <div className="text-foreground/80 leading-snug">
+                              {s.description}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {/*
                       Task #447: surface the response-class revoked gold
                       signal id(s) inside the FAKE_RAW_HTTP_RESPONSE

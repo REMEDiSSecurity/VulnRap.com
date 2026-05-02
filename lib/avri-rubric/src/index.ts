@@ -88,6 +88,12 @@ export interface AvriEngine2RawHttpResponse {
   // because legacy persisted reports analyzed before this field shipped
   // won't carry it; consumers default to an empty list.
   revokedGoldHits?: Array<{ id: string; points: number }>;
+  // Task #450 — per-signal response-side fabrication tells (e.g.
+  // `missing_date_header`, `suspicious_json_body`), each with the
+  // exact wording surfaced under the "Response Plausibility"
+  // sub-section. Optional because legacy persisted reports analyzed
+  // before this field shipped won't carry it.
+  signals?: Array<{ id: string; description: string }>;
 }
 
 export interface AvriEngine2RawHttp {
@@ -105,6 +111,15 @@ export interface AvriEngine2RawHttp {
   // (but possibly with isFake=false) when the family declares response-
   // class gold signals (INJECTION, WEB_CLIENT). Null otherwise.
   response?: AvriEngine2RawHttpResponse | null;
+  // Task #450 — per-signal request-side fabrication tells (e.g.
+  // `placeholder_headers`, `broken_te_cl_conflict`, `missing_crlf`,
+  // `no_real_header_values`, `fake_credential_token`,
+  // `placeholder_body`, `prose_placeholder_payload`). Each entry has a
+  // stable id (the diagnostics panel maps it onto a plain-English
+  // headline) and a description carrying the exact wording shown to
+  // reviewers. Optional because legacy persisted reports analyzed
+  // before this field shipped won't carry it.
+  signals?: Array<{ id: string; description: string }>;
 }
 
 // Task #300 — AI self-disclosure detector. Surfaced on the AVRI Engine 2
@@ -374,6 +389,18 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
     lines.push(
       `- **${title}** (penalty ${rh.penalty}): ${rh.reason ?? "fabricated raw HTTP bytes"} — requests ${rh.requestsAnalyzed}, headers ${goodHeaders}/${rh.totalHeaders} good, placeholder ${rh.placeholderHeaders}, CRLF ${rh.crlfPresent ? "yes" : "no"}, TE/CL conflicts ${rh.teClConflicts} (broken ${rh.teClBroken})`,
     );
+    // Task #450 — surface every request-side fabrication signal that
+    // fired (placeholder headers, broken TE/CL conflict, missing CRLF,
+    // no real header values, fake credential token, placeholder body,
+    // prose placeholder payload) as `description (id)` sub-bullets,
+    // mirroring the structural-fabrication marker lines emitted above.
+    // Skipped for legacy persisted reports without `signals`.
+    const reqSignals = rh.signals ?? [];
+    if (reqSignals.length > 0) {
+      for (const s of reqSignals) {
+        lines.push(`  - ${s.description} (${s.id})`);
+      }
+    }
     // Task #319 — surface the response-side plausibility evidence as a
     // proper "Response Plausibility" sub-section under the raw-HTTP block
     // (per-marker counters + response-class revoked gold signal ids) so the
@@ -396,6 +423,17 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
       lines.push(
         `    - Missing incidental headers: ${r.responsesMissingIncidentals}`,
       );
+      // Task #450 — per-signal response-side fabrication tells, listed
+      // as `description (id)` sub-bullets so the printable triage
+      // report carries the same per-signal evidence the diagnostics
+      // panel renders. Skipped for legacy persisted reports without
+      // `signals`.
+      const respSignals = r.signals ?? [];
+      if (respSignals.length > 0) {
+        for (const s of respSignals) {
+          lines.push(`    - ${s.description} (${s.id})`);
+        }
+      }
       const respRevoked = r.revokedGoldHits ?? [];
       if (respRevoked.length > 0) {
         lines.push(
