@@ -9,7 +9,7 @@ import os from "node:os";
 import { promises as fs } from "node:fs";
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 interface ArchetypeFixture {
   id: string;
@@ -668,9 +668,23 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     });
   }
 
+  // Task #456 — sibling specs in this describe block PUT a persisted
+  // window via the route, and the file lives for the lifetime of the
+  // suite. Without an explicit reset the "default when nothing is
+  // configured" case below depends on file-execution order — if a
+  // PUT-only spec runs first (e.g. under `vitest --sequence.shuffle`)
+  // the persisted row sticks and the assertion flips from
+  // "default" to "persisted". DELETE the persisted config before each
+  // spec so every case starts from the same "no persisted setting"
+  // baseline regardless of order.
+  beforeEach(async () => {
+    await deleteJson<CompactWindow>("/api/test/archetype-history/config");
+  });
+
   it("GET reports the default window when nothing is configured", async () => {
     // The shared beforeAll points ARCHETYPE_HISTORY_CONFIG_PATH at a fresh
-    // tmpdir file that doesn't exist yet, so source must be "default".
+    // tmpdir file, and the describe-level beforeEach DELETEs any persisted
+    // row, so source must be "default" regardless of test execution order.
     const cfg = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
     expect(cfg.source).toBe("default");
     expect(cfg.effectiveDays).toBe(cfg.defaultDays);
