@@ -86,6 +86,14 @@ export interface ValidityFusionAudit {
   disagreementThreshold: number;
   /** Which side scored higher when both signals are present; null when only one side ran. */
   higherSide: "heuristic" | "llm" | "tied" | null;
+  /**
+   * Task #446 — true when the LLM's own claim extraction confirms the
+   * report is evidence-free (no PoC, no files, no functions, no CVEs, no
+   * line numbers) AND llmRaw was therefore capped at the heuristic so the
+   * LLM signal cannot push validity UP on well-shaped slop. The LLM can
+   * still pull validity DOWN normally.
+   */
+  evidenceFreeCapApplied: boolean;
 }
 
 export interface FusionResult {
@@ -284,7 +292,7 @@ function computeValidityScore(
   claimSpec: ClaimSpecificityResult,
   consistency: InternalConsistencyResult,
   verification: VerificationResult | null,
-): { final: number; heuristic: number; llmRaw: number | null } {
+): { final: number; heuristic: number; llmRaw: number | null; evidenceFreeCapApplied: boolean } {
   const heuristic = computeHeuristicValidity(factual, evidenceQuality, hallucination, claimSpec, consistency, verification);
 
   if (llm && llm.llmBreakdown) {
@@ -297,11 +305,45 @@ function computeValidityScore(
       llmRaw = Math.min(100, Math.max(0, Math.round(llmRaw + substanceModifier + coherenceModifier)));
     }
 
+    // Task #446 — evidence-free post-check. The substance prompt audit
+    // (docs/calibration/substance-prompt-audit.md) showed the LLM
+    // consistently rates `domainCoherence` ≈ 70 for slop reports that
+    // simply name a well-known bug class (SSRF, XSS, SQLi, memory
+    // corruption) without providing any concrete material — no PoC, no
+    // captured request/response, no file/function/CVE/line, no payload.
+    // The LLM also rates `internalConsistency` and `hallucinationSignals`
+    // high for these reports because vague prose is trivially consistent
+    // with itself and there is nothing to hallucinate against. The net
+    // effect on T3_SLOP fixtures is an llmRaw 10-25 points above the
+    // heuristic — just under the 30-point disagreement floor — silently
+    // inflating blended validity. When the LLM's OWN claim extraction
+    // confirms the report is evidence-free, cap llmRaw at the heuristic
+    // so the LLM signal can still pull validity DOWN normally but cannot
+    // push it UP above what the heuristic already justified. Prompt
+    // tightening alone is best-effort; this post-check is the load-
+    // bearing guarantee.
+    let evidenceFreeCapApplied = false;
+    if (llm.llmClaims && llm.llmSubstance) {
+      const claims = llm.llmClaims;
+      const sub = llm.llmSubstance;
+      const evidenceFree =
+        claims.hasPoC === false &&
+        sub.pocValidity <= 20 &&
+        claims.claimedFiles.length === 0 &&
+        claims.claimedFunctions.length === 0 &&
+        claims.claimedCVEs.length === 0 &&
+        claims.claimedLineNumbers.length === 0;
+      if (evidenceFree && llmRaw > heuristic) {
+        llmRaw = heuristic;
+        evidenceFreeCapApplied = true;
+      }
+    }
+
     const final = Math.min(100, Math.max(0, Math.round(heuristic * 0.50 + llmRaw * 0.50)));
-    return { final, heuristic, llmRaw };
+    return { final, heuristic, llmRaw, evidenceFreeCapApplied };
   }
 
-  return { final: heuristic, heuristic, llmRaw: null };
+  return { final: heuristic, heuristic, llmRaw: null, evidenceFreeCapApplied: false };
 }
 
 export function fuseScores(
@@ -437,6 +479,7 @@ export function fuseScores(
     delta: validityDelta,
     disagreementThreshold,
     higherSide,
+    evidenceFreeCapApplied: validityResult.evidenceFreeCapApplied,
   };
 
   const { quadrant, archetype } = classifyQuadrant(authenticityScore, finalValidityScore);

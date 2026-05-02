@@ -98,3 +98,18 @@ therefore cannot regress slop-tier composite/E2/triage assertions on
 the fabricated-report side. Confirmed by re-running the baseline
 calibration after the docs change: every T3_SLOP fixture remained
 within its expected composite range.
+
+## Follow-up audits
+
+- **Task #446 — substance-prompt audit + evidence-free cap.** The 6
+  T3_SLOP "LLM-higher" rows from run 2 above were investigated and
+  the failure mode was traced to the substance prompt over-rewarding
+  vulnerability-class plausibility (`domainCoherence` ≈ 70) for
+  prose-only reports. The fix tightens
+  `SYSTEM_PROMPT_FULL`/`SYSTEM_PROMPT_COMPACT` and adds a heuristic
+  post-check in `computeValidityScore` that caps `llmRaw` at the
+  heuristic when the LLM's own claim extraction confirms the report
+  is evidence-free. Post-fix `auditTelemetry.validityFusion`:
+  `llmHigherByTier.T3_SLOP = 1`, `evidenceFreeCapAppliedByTier =
+  { T3_SLOP: 3 }`, T1_LEGIT cap fires 0 times. Details in
+  [`substance-prompt-audit.md`](./substance-prompt-audit.md).

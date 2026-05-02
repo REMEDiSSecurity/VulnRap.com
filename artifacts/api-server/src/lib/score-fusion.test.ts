@@ -201,6 +201,188 @@ describe("fuseScores", () => {
     expect(result.breakdown.substanceAxis).toBeGreaterThanOrEqual(60);
   });
 
+  // Task #446 — when the LLM's own claim extraction confirms the report is
+  // evidence-free (no PoC, no files, no functions, no CVEs, no line numbers)
+  // the LLM's validityScore must NOT be allowed to push the blended validity
+  // above the heuristic. Without this cap, "well-shaped slop" reports that
+  // simply name a well-known bug class (SSRF in cloud services, XSS in
+  // marketing pages, generic memory corruption) score llmRaw 10-25 points
+  // above heuristic — silently inflating blended validity just under the
+  // 30-point disagreement floor. See docs/calibration/substance-prompt-audit.md.
+  describe("Task #446 evidence-free cap", () => {
+    function makeEvidenceFreeSlopLlm(): LLMSlopResult {
+      // Mirrors the live-LLM probe results for T3-AVRI-ssrf-template /
+      // T3-21-no-gold-memory-corruption / T3-20-no-gold-web-client: prose-only
+      // report naming a real bug class with no concrete material. The LLM
+      // honestly reports hasPoC=false, no files, no functions, no CVEs — yet
+      // still rates validityScore moderately because vague prose is
+      // "internally consistent" with itself and there's nothing to hallucinate.
+      return {
+        llmSlopScore: 50,
+        llmFeedback: ["No PoC, prose-only"],
+        llmBreakdown: {
+          claimSpecificity: 12,
+          evidenceQuality: 10,
+          internalConsistency: 18,
+          hallucinationSignals: 18,
+          validityScore: 55,
+          redFlags: ["No PoC", "No specific endpoint or file"],
+          greenFlags: ["Vulnerability class is plausible"],
+          verdict: "UNCERTAIN",
+        },
+        llmRedFlags: ["No PoC"],
+        llmTriageGuidance: null,
+        llmReproRecipe: null,
+        llmClaims: {
+          claimedProject: null,
+          claimedVersion: null,
+          claimedFiles: [],
+          claimedFunctions: [],
+          claimedLineNumbers: [],
+          claimedCVEs: [],
+          claimedImpact: "RCE",
+          cvssScore: 9.1,
+          hasPoC: false,
+          pocTargetsClaimedLibrary: false,
+          hasAsanOutput: false,
+          asanFromClaimedProject: false,
+          selfDisclosesAI: false,
+          complianceBuzzwords: [],
+          complianceRelevance: "none",
+        },
+        llmSubstance: {
+          pocValidity: 0,
+          claimSpecificity: 30,
+          domainCoherence: 70,
+          substanceScore: 33,
+          coherenceScore: 60,
+        },
+      };
+    }
+
+    it("caps llmRaw at heuristic when the LLM's own claim extraction confirms evidence-free report", () => {
+      const result = fuseScores(
+        makeLinguistic({ score: 20, lexicalScore: 15, statisticalScore: 15, templateScore: 10 }),
+        makeFactual({ score: 15, evidence: [] }),
+        makeEvidenceFreeSlopLlm(),
+        70,
+        "Generic SSRF risk assessment with no concrete endpoint, payload, or PoC.",
+      );
+
+      expect(result.validityFusion.evidenceFreeCapApplied).toBe(true);
+      // The cap forces llmRaw down to the heuristic, so blended validity
+      // cannot sit above the heuristic on these evidence-free reports.
+      expect(result.validityFusion.llmRaw).toBe(result.validityFusion.heuristic);
+      expect(result.validityFusion.higherSide).toBe("tied");
+      expect(result.validityScore).toBe(result.validityFusion.heuristic);
+    });
+
+    it("does NOT cap when the LLM rates validity below the heuristic (LLM can still pull DOWN normally)", () => {
+      const lowLlm: LLMSlopResult = {
+        ...makeEvidenceFreeSlopLlm(),
+        llmBreakdown: {
+          ...makeEvidenceFreeSlopLlm().llmBreakdown!,
+          validityScore: 5,
+        },
+        llmSubstance: {
+          pocValidity: 0,
+          claimSpecificity: 5,
+          domainCoherence: 10,
+          substanceScore: 5,
+          coherenceScore: 10,
+        },
+      };
+      const result = fuseScores(
+        makeLinguistic({ score: 20 }),
+        makeFactual({ score: 15, evidence: [] }),
+        lowLlm,
+        70,
+        "Empty report — LLM also rates very low.",
+      );
+      // LLM is below heuristic, so the cap is a no-op (cap only triggers
+      // when llmRaw > heuristic).
+      expect(result.validityFusion.evidenceFreeCapApplied).toBe(false);
+      expect(result.validityFusion.llmRaw).toBeLessThanOrEqual(result.validityFusion.heuristic);
+    });
+
+    it("does NOT cap legitimate reports that present concrete evidence", () => {
+      const result = fuseScores(
+        makeLinguistic({ score: 5, lexicalScore: 3, statisticalScore: 3, templateScore: 2 }),
+        makeFactual({ score: 5, evidence: [] }),
+        makeLegitLlm(),
+        90,
+        "Clean legitimate vulnerability report with real details and valid PoC.",
+      );
+      // Legit LLM has hasPoC=true + claimedFiles + claimedFunctions +
+      // claimedCVEs + claimedLineNumbers — none of the evidence-free
+      // preconditions hold.
+      expect(result.validityFusion.evidenceFreeCapApplied).toBe(false);
+    });
+
+    it("does NOT cap when the report names a CVE (concrete material to evaluate)", () => {
+      const llmWithCve: LLMSlopResult = {
+        ...makeEvidenceFreeSlopLlm(),
+        llmClaims: {
+          ...makeEvidenceFreeSlopLlm().llmClaims!,
+          claimedCVEs: ["CVE-2024-12345"],
+        },
+      };
+      const result = fuseScores(
+        makeLinguistic({ score: 20 }),
+        makeFactual({ score: 15, evidence: [] }),
+        llmWithCve,
+        70,
+        "Report referencing a specific CVE.",
+      );
+      expect(result.validityFusion.evidenceFreeCapApplied).toBe(false);
+    });
+
+    it("does NOT cap a minimalist legit report whose only concrete evidence is a captured request/response (hasPoC=true, no file/func/CVE/line)", () => {
+      // Code-review follow-up regression test: a real third-party advisory
+      // or responsible-disclosure summary may carry a captured curl/HTTP
+      // request as its sole concrete artefact — no source file, no
+      // function name, no CVE assigned yet, no line number. The substance
+      // LLM should report hasPoC=true (the captured request IS a PoC),
+      // which alone disqualifies the evidence-free cap. We must NOT clip
+      // the LLM signal in this case.
+      const minimalistLegitLlm: LLMSlopResult = {
+        ...makeEvidenceFreeSlopLlm(),
+        llmBreakdown: {
+          ...makeEvidenceFreeSlopLlm().llmBreakdown!,
+          validityScore: 65,
+        },
+        llmClaims: {
+          ...makeEvidenceFreeSlopLlm().llmClaims!,
+          hasPoC: true,
+          pocTargetsClaimedLibrary: true,
+          claimedFiles: [],
+          claimedFunctions: [],
+          claimedCVEs: [],
+          claimedLineNumbers: [],
+        },
+        llmSubstance: {
+          pocValidity: 70,
+          claimSpecificity: 45,
+          domainCoherence: 60,
+          substanceScore: 60,
+          coherenceScore: 60,
+        },
+      };
+      const result = fuseScores(
+        makeLinguistic({ score: 20, lexicalScore: 15, statisticalScore: 15, templateScore: 10 }),
+        makeFactual({ score: 15, evidence: [] }),
+        minimalistLegitLlm,
+        70,
+        "Captured HTTP request demonstrating SSRF; vendor not yet assigned a CVE.",
+      );
+      // hasPoC=true alone disqualifies the cap — even though
+      // claimedFiles/Functions/CVEs/LineNumbers are all empty.
+      expect(result.validityFusion.evidenceFreeCapApplied).toBe(false);
+      // And the LLM signal must still be allowed to pull validity UP.
+      expect(result.validityFusion.llmRaw).toBeGreaterThan(result.validityFusion.heuristic);
+    });
+  });
+
   it("legitimate report with valid LLM substance scores low — no false positives", () => {
     const result = fuseScores(
       makeLinguistic({ score: 5, lexicalScore: 3, statisticalScore: 3, templateScore: 2 }),

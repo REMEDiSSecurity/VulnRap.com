@@ -377,6 +377,14 @@ CRITICAL RULES:
 - DO penalize reports that cite compliance frameworks irrelevant to the project type
 - If the reporter admits AI assistance, this alone is NOT disqualifying — but combined with low pocValidity or low domainCoherence, it is a strong signal
 
+EVIDENCE-FREE REPORT RULES (Task #446 — guard against rewarding "well-shaped slop"):
+- Naming a well-known vulnerability class (SSRF, XSS, SQL injection, memory corruption, path traversal, IDOR) is NECESSARY BUT NOT SUFFICIENT for substance. Class-name plausibility alone MUST NOT push domainCoherence above 50.
+- domainCoherence above 60 requires specific evidence the report understands THIS project's architecture: a real file/function name, a real endpoint, a real config flag, a real protocol-level detail, or a captured request/response — not just "this class of bug commonly affects this kind of system".
+- A "suggested patch", "here's the fix", or "recommended remediation" written in prose with no actual diff, no code block, and no concrete call site is NOT evidence — score it as no PoC.
+- A symbolless / placeholder sanitizer trace (frames stripped, offsets like "0xZZZZ", no SUMMARY/shadow-bytes/READ/WRITE-of-size header, no resolved file:line) is NOT a real PoC — pocValidity MUST stay ≤ 25 even if the trace format looks structurally familiar.
+- Absence of fabricated specifics is NOT positive evidence. A report that names no files, no functions, no CVEs, no line numbers, and provides no PoC, no payload, and no captured request/response cannot score above 25 on internalConsistency or hallucinationSignals — there is nothing concrete to be consistent with or to hallucinate against.
+- If the report contains NO PoC, NO captured request/response, NO sanitizer trace, NO specific file/function/CVE/line reference, AND only describes the vulnerability in terms of its class name plus standard mitigations, validityScore MUST be ≤ 30 regardless of how internally consistent the prose reads.
+
 ## Triage Guidance
 Produce actionable triage guidance for the PSIRT team:
 - repro_steps: 2-5 concrete steps to reproduce (reference report details)
@@ -467,6 +475,14 @@ Rules:
 - CVE IDs, commit SHAs, advisory URLs are POSITIVE signals
 - DO NOT penalize politeness or templates
 - DO penalize fabricated specifics, PoC not exercising claimed library, irrelevant compliance refs
+
+Evidence-free report rules (Task #446 — guard against rewarding "well-shaped slop"):
+- Naming a well-known bug class (SSRF, XSS, SQLi, memory corruption, IDOR, path traversal) is NECESSARY BUT NOT SUFFICIENT — class-name plausibility alone MUST NOT push domainCoherence above 50.
+- domainCoherence above 60 requires concrete project-specific evidence (real file/function, real endpoint, real config flag, captured request/response), not just "this class commonly affects this kind of system".
+- Prose-only "suggested patch" / "recommended remediation" with no actual diff or call site is NOT a PoC.
+- Symbolless / placeholder sanitizer trace (frames stripped, "0xZZZZ", no SUMMARY/READ-of-size/shadow-bytes header, no resolved file:line) is NOT a real PoC — pocValidity MUST stay ≤ 25.
+- Absence of fabricated specifics is NOT positive evidence. A report with no files, no functions, no CVEs, no line numbers, no PoC, no payload, no captured request/response cannot score above 25 on internalConsistency or hallucinationSignals — there is nothing concrete to evaluate.
+- If the report has NO PoC, NO captured request/response, NO sanitizer trace, NO specific file/function/CVE/line, AND only describes the bug by class name + standard mitigations, validityScore MUST be ≤ 30.
 
 Return ONLY JSON:
 {"claims":{...},"substance":{...},"claimSpecificity":<0-25>,"evidenceQuality":<0-25>,"internalConsistency":<0-25>,"hallucinationSignals":<0-25>,"validityScore":<0-100>,"red_flags":["..."],"green_flags":["..."],"verdict":"LIKELY_VALID"|"UNCERTAIN"|"LIKELY_FABRICATED","reasoning":"<2-3 sentences>"}`;

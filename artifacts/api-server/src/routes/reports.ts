@@ -386,6 +386,7 @@ async function performAnalysis(
         delta: null,
         disagreementThreshold: 30,
         higherSide: null,
+        evidenceFreeCapApplied: false,
       },
     };
 
@@ -497,6 +498,7 @@ async function performAnalysis(
         delta: null,
         disagreementThreshold: 30,
         higherSide: null,
+        evidenceFreeCapApplied: false,
       },
       feedback: [],
       llmResult: null,
@@ -531,6 +533,7 @@ async function performAnalysis(
           delta: null,
           disagreementThreshold: 30,
           higherSide: null,
+          evidenceFreeCapApplied: false,
         },
       },
     };

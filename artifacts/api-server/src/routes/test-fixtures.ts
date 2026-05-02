@@ -2836,6 +2836,10 @@ interface ValidityFusionRunSample {
   blended: number | null;
   finalApplied: number | null;
   conservativeFloorApplied: boolean;
+  // Task #446 — per-run flag for the evidence-free post-check (LLM's own
+  // claim extraction confirmed no PoC + no files + no functions + no
+  // CVEs + no line numbers; llmRaw was capped at the heuristic).
+  evidenceFreeCapApplied: boolean;
   delta: number | null;
   higherSide: "heuristic" | "llm" | "tied" | null;
 }
@@ -2904,6 +2908,21 @@ interface ValidityFusionAggregate {
     floorFireCountStdDev: number | null;
     rangeAcrossRuns: number;
   };
+  // Task #446 — track how often the LLM scored validity higher than
+  // the heuristic across all sampled (fixture × run) successful samples
+  // (not just floor rows). This is the metric the substance-prompt
+  // audit aims to drive down for T3_SLOP fixtures without harming
+  // T1_LEGIT. Counts are summed across all runs so they vary like the
+  // other variance-bearing counters above.
+  llmHigherCount: number;
+  llmHigherByTier: Record<string, number>;
+  // Task #446 — count how often the new evidence-free cap fired
+  // (LLM's own claim extraction confirmed no PoC + no files +
+  // no functions + no CVEs + no line numbers; llmRaw was capped at
+  // the heuristic). Observation-only audit signal. Summed across all
+  // runs.
+  evidenceFreeCapAppliedCount: number;
+  evidenceFreeCapAppliedByTier: Record<string, number>;
   note: string;
 }
 
@@ -2926,9 +2945,15 @@ async function buildAuditAggregate(
   }, {});
   const shouldCallCount = rows.filter(r => r.gateShouldCall).length;
 
-  const sampledRows = rows
-    .map(r => r.validity)
-    .filter((v): v is AuditAggregateRowValidity => v !== null);
+  // Task #445 — sampledRows is the per-fixture validity audit (one
+  // entry per fixture, with `perRun` carrying the N runs).
+  // Task #446 — keep the parallel `sampledRowsWithMeta` view that also
+  // carries the row's tier so the new per-tier aggregates can attribute
+  // counts back to fixture tiers.
+  const sampledRowsWithMeta = rows.filter(
+    (r): r is AuditAggregateRow & { validity: AuditAggregateRowValidity } => r.validity !== null,
+  );
+  const sampledRows = sampledRowsWithMeta.map(r => r.validity);
   const fixtureCount = sampledRows.length;
   const attemptCount = sampledRows.reduce((acc, v) => acc + v.runs, 0);
   const llmFailureCount = sampledRows.reduce((acc, v) => acc + v.failureCount, 0);
@@ -3003,6 +3028,29 @@ async function buildAuditAggregate(
     else sometimesFired++;
   }
 
+  // Task #446 — count "LLM rated validity higher than the heuristic"
+  // and "evidence-free cap fired" across all (fixture × run) successful
+  // samples, attributing each occurrence to the row's tier. Walking the
+  // tier-aware row view keeps the per-tier breakdowns aligned with the
+  // multi-run aggregation introduced by Task #445.
+  let llmHigherCount = 0;
+  let evidenceFreeCapAppliedCount = 0;
+  const llmHigherByTier: Record<string, number> = {};
+  const evidenceFreeCapAppliedByTier: Record<string, number> = {};
+  for (const r of sampledRowsWithMeta) {
+    for (const s of r.validity.perRun) {
+      if (s.status !== "ok") continue;
+      if (s.higherSide === "llm") {
+        llmHigherCount++;
+        llmHigherByTier[r.tier] = (llmHigherByTier[r.tier] ?? 0) + 1;
+      }
+      if (s.evidenceFreeCapApplied) {
+        evidenceFreeCapAppliedCount++;
+        evidenceFreeCapAppliedByTier[r.tier] = (evidenceFreeCapAppliedByTier[r.tier] ?? 0) + 1;
+      }
+    }
+  }
+
   let note: string;
   if (!llmRequested) {
     note =
@@ -3023,7 +3071,10 @@ async function buildAuditAggregate(
       + "\"no LLM signal\" bucket. Stable counters: `runs`, `attemptCount`, "
       + "`fixtureCount`, `llmFailureCount`, "
       + "`fixtureFloorFireDistribution.{alwaysFired,neverFired}`. Variable "
-      + "counters: everything else in this block.";
+      + "counters: everything else in this block, including the Task #446 "
+      + "`llmHigherCount`/`llmHigherByTier` and "
+      + "`evidenceFreeCapAppliedCount`/`evidenceFreeCapAppliedByTier` "
+      + "(both summed across all runs; observation-only).";
   }
 
   return {
@@ -3056,6 +3107,10 @@ async function buildAuditAggregate(
         floorFireCountStdDev: stdDev === null ? null : Number(stdDev.toFixed(2)),
         rangeAcrossRuns: minFires === null || maxFires === null ? 0 : maxFires - minFires,
       },
+      llmHigherCount,
+      llmHigherByTier,
+      evidenceFreeCapAppliedCount,
+      evidenceFreeCapAppliedByTier,
       note,
     },
   };
@@ -3180,6 +3235,9 @@ router.get("/test/run", async (req, res) => {
               blended: v.blended,
               finalApplied: v.finalApplied,
               conservativeFloorApplied: v.conservativeFloorApplied,
+              // Task #446 — surface the evidence-free post-check so the
+              // route-level aggregate can count fires per tier.
+              evidenceFreeCapApplied: v.evidenceFreeCapApplied,
               delta: v.delta,
               higherSide: v.higherSide,
             };
@@ -3198,6 +3256,7 @@ router.get("/test/run", async (req, res) => {
               blended: null,
               finalApplied: null,
               conservativeFloorApplied: false,
+              evidenceFreeCapApplied: false,
               delta: null,
               higherSide: null,
             };
@@ -3212,6 +3271,7 @@ router.get("/test/run", async (req, res) => {
             blended: null,
             finalApplied: null,
             conservativeFloorApplied: false,
+            evidenceFreeCapApplied: false,
             delta: null,
             higherSide: null,
           };
