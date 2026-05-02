@@ -2233,3 +2233,199 @@ describe("HandwavyPhrasesAdmin — productionScanLimit attached on remove dry-ru
     expect(removeRequest?.body).not.toHaveProperty("productionScanLimit");
   });
 });
+
+// =====================================================================
+// Task #460 — regression test for the "About the production scan window"
+// reviewer cheat-sheet block that Task #326 added under the shared scan-
+// window input (data-testid `handwavy-production-scan-limit-help`).
+//
+// The block is pure documentation: it has no behavior, no event handlers,
+// and no state. Its value is *informational* — it tells the reviewer that
+// the input is shared across every production-archive preview, what the
+// accepted bounds and default are, and that any pre-#230 legacy
+// localStorage value is migrated automatically. Because nothing else in
+// the test suite touches it, a future refactor that accidentally deleted
+// the block (or stripped one of its bullets) would land silently and
+// reviewers would lose the documentation.
+//
+// This block renders the real `HandwavyPhrasesAdmin` (so the JSX path
+// that mounts the help block is exercised end-to-end) and asserts:
+//   1. The container with `handwavy-production-scan-limit-help` is in
+//      the DOM and visible alongside the input it documents.
+//   2. The three documented bullets are each present, by matching on
+//      their distinguishing substrings (shared scope, the 100/10000
+//      bounds plus 2000 default, and the legacy → calibration key
+//      migration). String matches are deliberately loose enough to
+//      survive minor copy-edits but tight enough to catch a bullet
+//      being silently removed.
+// =====================================================================
+
+describe("HandwavyPhrasesAdmin — production-scan-window help block (Task #460 regression for the Task #326 cheat-sheet)", () => {
+  const REVIEWER_KEY = "vulnrap.handwavy.reviewer";
+  const PRODUCTION_SCAN_LIMIT_KEY = "vulnrap.calibration.productionScanLimit";
+  const LEGACY_PRODUCTION_SCAN_LIMIT_KEY =
+    "vulnrap.handwavy.productionScanLimit";
+
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+
+    // Minimal fetch mock — the help block is static markup, so we only
+    // need the page to mount without unhandled rejections. Every
+    // network call returns a benign empty payload.
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy.mockImplementation(async (input) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      if (url.includes("/api/feedback/calibration/auth-status")) {
+        return new Response(
+          JSON.stringify({
+            serverRequiresToken: false,
+            tokenPresented: false,
+            tokenValid: false,
+            mutationsAllowed: true,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (
+        url.includes(
+          "/api/feedback/calibration/handwavy-phrases/removal-batches",
+        )
+      ) {
+        return new Response(
+          JSON.stringify({ batches: [], total: 0, hasMore: false }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/feedback/calibration/handwavy-phrases")) {
+        return new Response(JSON.stringify({ phrases: [], history: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("{}", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+  });
+
+  function renderAdmin() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/feedback-analytics"]}>
+          <HandwavyPhrasesAdmin mutationsAllowed={true} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("renders the cheat-sheet block alongside the shared scan-window input", () => {
+    renderAdmin();
+
+    // The input the block documents must be present and visible
+    // (anchors the block visually and proves we're testing the real
+    // form, not a stub).
+    const limitInput = screen.getByTestId("handwavy-production-scan-limit");
+    expect(limitInput).toBeInTheDocument();
+    expect(limitInput).toBeVisible();
+
+    const help = screen.getByTestId("handwavy-production-scan-limit-help");
+    expect(help).toBeInTheDocument();
+    // Visibility assertion mirrors the task's "asserts the block is
+    // visible" requirement — toBeVisible() also catches `hidden`,
+    // `display: none`, and zero-opacity regressions that
+    // toBeInTheDocument() alone would let through.
+    expect(help).toBeVisible();
+
+    // Heading line is what makes the block recognizable to reviewers
+    // skimming the form; assert it explicitly so a refactor that kept
+    // the container but dropped the title still trips the test.
+    expect(
+      within(help).getByText(/About the production scan window/i),
+    ).toBeInTheDocument();
+  });
+
+  it("documents the shared-scope, bounds/default, and legacy-key migration bullets", () => {
+    renderAdmin();
+
+    const help = screen.getByTestId("handwavy-production-scan-limit-help");
+    const bullets = within(help).getAllByRole("listitem");
+
+    // Three bullets is the contract — the help block exists to convey
+    // exactly these three points. Asserting the count guards against a
+    // bullet being silently removed (the per-bullet substring matches
+    // below would still pass if a fourth bullet were added, but never
+    // if one of the three were dropped).
+    expect(bullets).toHaveLength(3);
+
+    const bulletTexts = bullets.map((li) => li.textContent ?? "");
+
+    // Bullet 1 — the shared-scope point: one preference reused by every
+    // production-archive preview on the page.
+    expect(
+      bulletTexts.some(
+        (t) =>
+          /shared/i.test(t) &&
+          /add-phrase/i.test(t) &&
+          /single-phrase removal/i.test(t) &&
+          /bulk-removal/i.test(t),
+      ),
+    ).toBe(true);
+
+    // Bullet 2 — the 100..10000 bounds with the 2000 default. The
+    // numbers come straight from CALIBRATION_PRODUCTION_SCAN_LIMIT_*,
+    // so the regex looks for all three literal values appearing
+    // together in the same bullet.
+    expect(
+      bulletTexts.some(
+        (t) =>
+          /\b100\b/.test(t) &&
+          /\b10000\b/.test(t) &&
+          /\b2000\b/.test(t) &&
+          /default/i.test(t),
+      ),
+    ).toBe(true);
+
+    // Bullet 3 — the one-time migration from the pre-#230 per-tool
+    // localStorage key to the calibration-namespaced one. Both literal
+    // key names must appear so the regression catches either name
+    // being silently dropped or rewritten.
+    expect(
+      bulletTexts.some(
+        (t) =>
+          t.includes("vulnrap.handwavy.productionScanLimit") &&
+          t.includes("vulnrap.calibration.productionScanLimit") &&
+          /migrat/i.test(t),
+      ),
+    ).toBe(true);
+  });
+});
