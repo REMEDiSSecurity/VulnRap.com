@@ -14,6 +14,7 @@ import { addHistoryEntry } from "@/lib/history";
 import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCustom, adjustScore, adjustTier, SENSITIVITY_PRESETS, type SensitivityPreset } from "@/lib/settings";
 import { AnalysisStepper } from "@/components/analysis-stepper";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
+import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
@@ -242,6 +243,7 @@ const EVIDENCE_TYPE_LABELS: Record<string, string> = {
   human_commit_refs: "Human Signal: Commit References",
   human_patched_version: "Human Signal: Patched Version",
   human_no_pleasantries: "Human Signal: Advisory Format",
+  hallucination_impossible_http_response: "Impossible HTTP Response",
 };
 
 interface CheckResultData {
@@ -250,7 +252,7 @@ interface CheckResultData {
   qualityScore?: number;
   confidence?: number;
   breakdown?: { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number };
-  evidence?: Array<{ type: string; description: string; weight: number; matched?: string | null }>;
+  evidence?: Array<{ type: string; description: string; weight: number; matched?: string | null; markers?: string[] | null }>;
   humanIndicators?: Array<{ type: string; description: string; weight: number; matched?: string | null }>;
   llmBreakdown?: { claimSpecificity?: number; evidenceQuality?: number; internalConsistency?: number; hallucinationSignals?: number; validityScore?: number; verdict?: string; redFlags?: string[]; greenFlags?: string[]; specificity?: number; originality?: number; voice?: number; coherence?: number; hallucination?: number };
   llmEnhanced?: boolean;
@@ -723,6 +725,14 @@ export default function Check() {
                           {item.matched}
                         </span>
                       )}
+                      {item.type === "hallucination_impossible_http_response" &&
+                        item.markers &&
+                        item.markers.length > 0 && (
+                          <ImpossibleHttpMarkers
+                            markers={item.markers}
+                            testIdPrefix={`check-evidence-${i}-marker`}
+                          />
+                        )}
                     </div>
                   </div>
                 ))}

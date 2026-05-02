@@ -37,6 +37,10 @@ export interface EvidenceItem {
   description: string;
   weight: number;
   matched?: string;
+  // Optional structured marker IDs forwarded from signals that
+  // aggregate multiple tells (e.g. impossible_http_response). The UI
+  // renders one badge per marker; description remains the fallback.
+  markers?: string[];
 }
 
 export type Quadrant = "AI_SLOP" | "AI_ASSISTED" | "WEAK_HUMAN" | "STRONG_HUMAN";
@@ -355,7 +359,12 @@ export function fuseScores(
     allEvidence.push({ type: "evidence_" + marker.type, description: marker.description, weight: marker.weight });
   }
   for (const signal of hallucination.signals) {
-    allEvidence.push({ type: "hallucination_" + signal.type, description: signal.description, weight: signal.weight });
+    allEvidence.push({
+      type: "hallucination_" + signal.type,
+      description: signal.description,
+      weight: signal.weight,
+      ...(signal.markers && signal.markers.length > 0 ? { markers: signal.markers } : {}),
+    });
   }
   for (const marker of claimSpec.markers) {
     allEvidence.push({ type: "claim_" + marker.type, description: marker.description || marker.type, weight: marker.weight });

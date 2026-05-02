@@ -23,6 +23,9 @@ export interface EvidenceItem {
   description: string;
   weight: number;
   matched?: string;
+  // Optional structured marker IDs forwarded from signals that
+  // aggregate multiple tells (e.g. impossible_http_response).
+  markers?: string[];
 }
 
 export interface HumanIndicatorItem {

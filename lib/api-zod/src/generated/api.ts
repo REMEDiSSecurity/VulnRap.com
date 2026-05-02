@@ -172,6 +172,12 @@ export const GetReportResponse = zod.object({
           .string()
           .nullish()
           .describe("The specific text or pattern that was matched"),
+        markers: zod
+          .array(zod.string())
+          .optional()
+          .describe(
+            "Optional structured per-marker IDs for evidence types that aggregate multiple impossibility tells\ninto a single signal (today: `hallucination_impossible_http_response`). The triage UI renders one\nbadge plus a plain-language tooltip per marker; non-UI surfaces (logs, exports, markdown reports)\nkeep using `description`. Omitted when the signal does not aggregate per-marker tells.\n",
+          ),
       }),
     )
     .describe("Specific signals found during analysis with their weights"),
@@ -1331,6 +1337,12 @@ export const CheckReportResponse = zod.object({
         .string()
         .nullish()
         .describe("The specific text or pattern that was matched"),
+      markers: zod
+        .array(zod.string())
+        .optional()
+        .describe(
+          "Optional structured per-marker IDs for evidence types that aggregate multiple impossibility tells\ninto a single signal (today: `hallucination_impossible_http_response`). The triage UI renders one\nbadge plus a plain-language tooltip per marker; non-UI surfaces (logs, exports, markdown reports)\nkeep using `description`. Omitted when the signal does not aggregate per-marker tells.\n",
+        ),
     }),
   ),
   similarityMatches: zod.array(

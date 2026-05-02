@@ -215,6 +215,14 @@ describe("Task #304: impossible_http_response signal", () => {
     const markersInDesc = sig!.description.split("—")[1]?.split(",").length ?? 0;
     expect(markersInDesc).toBeGreaterThanOrEqual(minMarkers);
     expect(sig!.weight).toBeGreaterThanOrEqual(minMarkers * 8);
+    // The structured `markers` field must round-trip the same IDs the
+    // description joins, so UI badges and the description fallback stay
+    // in lockstep.
+    expect(sig!.markers, "markers field should be populated").toBeDefined();
+    expect(sig!.markers!.length).toBeGreaterThanOrEqual(minMarkers);
+    const tail = sig!.description.split("—")[1] ?? "";
+    const idsFromDesc = tail.split(",").map((s) => s.trim()).filter(Boolean);
+    expect(sig!.markers).toEqual(idsFromDesc);
     return sig!;
   };
 

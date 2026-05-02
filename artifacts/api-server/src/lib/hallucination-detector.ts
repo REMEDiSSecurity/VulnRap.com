@@ -4,6 +4,10 @@ export interface HallucinationSignal {
   type: string;
   description: string;
   weight: number;
+  // Optional structured marker IDs for signals that aggregate multiple
+  // tells; the UI renders one badge per marker. Description string
+  // remains the canonical fallback for non-UI surfaces.
+  markers?: string[];
 }
 
 export interface HallucinationResult {
@@ -68,6 +72,7 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
       type: "impossible_http_response",
       description: `HTTP excerpt is internally inconsistent — ${httpMarkers.join(", ")}`,
       weight: httpMarkers.length * 8,
+      markers: httpMarkers,
     });
   }
 

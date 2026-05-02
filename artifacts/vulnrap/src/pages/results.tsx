@@ -18,6 +18,7 @@ import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport } from "@/components/evidence-highlighter";
 import { DiagnosticsPanel, buildMarkdownSummary, loadDiagnosticsForExport as loadCachedDiagnosticsForExport, type DiagnosticsResponse } from "@/components/diagnostics-panel";
+import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { TriageEngineCard, type VulnrapEngineResultPanel } from "@/components/triage-engine-card";
 import { useQueryClient } from "@tanstack/react-query";
@@ -124,6 +125,7 @@ const EVIDENCE_TYPE_LABELS: Record<string, string> = {
   human_commit_refs: "Human Signal: Commit References",
   human_patched_version: "Human Signal: Patched Version",
   human_no_pleasantries: "Human Signal: Advisory Format",
+  hallucination_impossible_http_response: "Impossible HTTP Response",
 };
 
 function getDeleteToken(reportId: number): string | null {
@@ -1371,7 +1373,7 @@ export default function Results() {
   const sectionMatches = report.sectionMatches as Array<{ sectionTitle: string; matchedReportId: number; matchedSectionTitle: string; similarity: number }> | undefined;
   const redactionSummary = report.redactionSummary as { totalRedactions: number; categories: Record<string, number> } | undefined;
   const breakdown = report.breakdown as { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number } | undefined;
-  const evidence = report.evidence as Array<{ type: string; description: string; weight: number; matched?: string | null }> | undefined;
+  const evidence = report.evidence as Array<{ type: string; description: string; weight: number; matched?: string | null; markers?: string[] | null }> | undefined;
   const activeVerification = report.verification as Verification | null | undefined;
   const triage = report.triageRecommendation as TriageRecommendation | null | undefined;
   const triageAssistant = report.triageAssistant as TriageAssistant | null | undefined;
@@ -1943,6 +1945,14 @@ export default function Results() {
                       {item.matched}
                     </span>
                   )}
+                  {item.type === "hallucination_impossible_http_response" &&
+                    item.markers &&
+                    item.markers.length > 0 && (
+                      <ImpossibleHttpMarkers
+                        markers={item.markers}
+                        testIdPrefix={`evidence-${i}-marker`}
+                      />
+                    )}
                 </div>
               </div>
             ))}

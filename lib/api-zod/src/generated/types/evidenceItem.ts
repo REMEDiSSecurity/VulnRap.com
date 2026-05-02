@@ -18,4 +18,10 @@ export interface EvidenceItem {
    * @nullable
    */
   matched?: string | null;
+  /** Optional structured per-marker IDs for evidence types that aggregate multiple impossibility tells
+into a single signal (today: `hallucination_impossible_http_response`). The triage UI renders one
+badge plus a plain-language tooltip per marker; non-UI surfaces (logs, exports, markdown reports)
+keep using `description`. Omitted when the signal does not aggregate per-marker tells.
+ */
+  markers?: string[];
 }
