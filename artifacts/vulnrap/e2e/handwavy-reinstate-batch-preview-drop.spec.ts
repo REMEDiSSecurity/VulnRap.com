@@ -253,6 +253,16 @@ test.describe("FLAT hand-wavy phrase panel — batch reinstate dry-run preview '
       ).toContainText(
         `${phrases.length} phrases will stay on the removal-history list`,
       );
+      // Task #512 — the panel must surface an inline empty-state hint so
+      // the dead-end "all dropped" state is self-explanatory rather than
+      // just a greyed-out confirm button.
+      const allDroppedHint = panel.getByTestId(
+        "handwavy-reinstate-batch-preview-all-dropped",
+      );
+      await expect(allDroppedHint).toBeVisible();
+      await expect(allDroppedHint).toContainText(
+        "All rows dropped — nothing left to reinstate. Re-preview or cancel.",
+      );
 
       // Cancel — none of the phrases should have been reinstated.
       await panel

@@ -11079,6 +11079,23 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                 </Button>
                               </div>
                             )}
+                            {droppedCount > 0 && wouldReinstateCount === 0 && (
+                              // Task #512 — when the reviewer drops every
+                              // would-reinstate row, the confirm button
+                              // disables silently. Surface a short empty-state
+                              // hint so the dead-end state is self-explanatory
+                              // and the reviewer knows to re-preview or cancel.
+                              <div
+                                className="text-[11px] text-muted-foreground italic flex items-start gap-1"
+                                data-testid="handwavy-reinstate-batch-preview-all-dropped"
+                              >
+                                <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                                <span>
+                                  All rows dropped — nothing left to reinstate.
+                                  Re-preview or cancel.
+                                </span>
+                              </div>
+                            )}
                             <div className="flex items-center justify-end gap-2">
                               <Button
                                 variant="ghost"
