@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatAuditTimestamp } from "@/lib/audit-format";
 
 // Task #338 — single source of truth for the FLAT hand-wavy phrase panel's
 // "N category flips" badge. Both the active-phrase rows (Task #149) and the
@@ -41,15 +42,11 @@ export interface HandwavyCategoryFlipBadgeProps {
   // history badge ("handwavy-history") keep their existing selectors. This
   // is what the existing E2E specs latch onto.
   testIdPrefix: string;
-  // Formatter for the per-transition timestamps in the tooltip body. Passed
-  // in so the badge stays decoupled from the page-level audit-format helper.
-  formatTimestamp?: (iso: string | undefined | null) => string | null;
 }
 
 export function HandwavyCategoryFlipBadge({
   flips,
   testIdPrefix,
-  formatTimestamp,
 }: HandwavyCategoryFlipBadgeProps) {
   if (flips.length < HANDWAVY_CATEGORY_FLIP_MIN) return null;
   return (
@@ -81,7 +78,7 @@ export function HandwavyCategoryFlipBadge({
           </div>
           <ol className="space-y-1 text-[10px] leading-snug">
             {flips.map((e, i) => {
-              const at = formatTimestamp ? formatTimestamp(e.editedAt) : null;
+              const at = formatAuditTimestamp(e.editedAt);
               return (
                 <li key={`${e.editedAt}-${i}`} className="space-y-0.5">
                   <div>

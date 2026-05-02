@@ -5,7 +5,7 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { VulnrapEngineResultTriggeredIndicatorsItemStrength } from "./vulnrapEngineResultTriggeredIndicatorsItemStrength";
+import type { VulnrapEngineResultTriggeredIndicatorsItemStrength } from './vulnrapEngineResultTriggeredIndicatorsItemStrength';
 
 export type VulnrapEngineResultTriggeredIndicatorsItem = {
   signal?: string;

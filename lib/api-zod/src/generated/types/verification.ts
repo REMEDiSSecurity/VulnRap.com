@@ -5,10 +5,10 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { DetectedProject } from "./detectedProject";
-import type { VerificationCheck } from "./verificationCheck";
-import type { VerificationMode } from "./verificationMode";
-import type { VerificationSummary } from "./verificationSummary";
+import type { DetectedProject } from './detectedProject';
+import type { VerificationCheck } from './verificationCheck';
+import type { VerificationMode } from './verificationMode';
+import type { VerificationSummary } from './verificationSummary';
 
 export interface Verification {
   checks: VerificationCheck[];

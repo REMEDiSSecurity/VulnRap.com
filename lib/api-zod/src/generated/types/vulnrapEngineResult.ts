@@ -5,10 +5,10 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { VulnrapEngineResultConfidence } from "./vulnrapEngineResultConfidence";
-import type { VulnrapEngineResultSignalBreakdown } from "./vulnrapEngineResultSignalBreakdown";
-import type { VulnrapEngineResultTriggeredIndicatorsItem } from "./vulnrapEngineResultTriggeredIndicatorsItem";
-import type { VulnrapEngineResultVerdict } from "./vulnrapEngineResultVerdict";
+import type { VulnrapEngineResultConfidence } from './vulnrapEngineResultConfidence';
+import type { VulnrapEngineResultSignalBreakdown } from './vulnrapEngineResultSignalBreakdown';
+import type { VulnrapEngineResultTriggeredIndicatorsItem } from './vulnrapEngineResultTriggeredIndicatorsItem';
+import type { VulnrapEngineResultVerdict } from './vulnrapEngineResultVerdict';
 
 export interface VulnrapEngineResult {
   /** Human-readable engine name. */

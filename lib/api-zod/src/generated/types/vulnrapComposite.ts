@@ -5,10 +5,10 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { VulnrapCompositeCompositeBreakdown } from "./vulnrapCompositeCompositeBreakdown";
-import type { VulnrapCompositeLabel } from "./vulnrapCompositeLabel";
-import type { VulnrapCompositeRescoreHistoryItem } from "./vulnrapCompositeRescoreHistoryItem";
-import type { VulnrapEngineResult } from "./vulnrapEngineResult";
+import type { VulnrapCompositeCompositeBreakdown } from './vulnrapCompositeCompositeBreakdown';
+import type { VulnrapCompositeLabel } from './vulnrapCompositeLabel';
+import type { VulnrapCompositeRescoreHistoryItem } from './vulnrapCompositeRescoreHistoryItem';
+import type { VulnrapEngineResult } from './vulnrapEngineResult';
 
 /**
  * VulnRap multi-engine consensus score with per-engine breakdowns.

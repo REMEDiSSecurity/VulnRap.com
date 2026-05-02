@@ -6,12 +6,12 @@
  * OpenAPI spec version: 3.0.0
  */
 
-export type VulnrapEngineResultVerdict =
-  (typeof VulnrapEngineResultVerdict)[keyof typeof VulnrapEngineResultVerdict];
+export type VulnrapEngineResultVerdict = typeof VulnrapEngineResultVerdict[keyof typeof VulnrapEngineResultVerdict];
+
 
 export const VulnrapEngineResultVerdict = {
-  GREEN: "GREEN",
-  YELLOW: "YELLOW",
-  RED: "RED",
-  GREY: "GREY",
+  GREEN: 'GREEN',
+  YELLOW: 'YELLOW',
+  RED: 'RED',
+  GREY: 'GREY',
 } as const;

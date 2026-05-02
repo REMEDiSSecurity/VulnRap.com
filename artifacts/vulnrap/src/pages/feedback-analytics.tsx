@@ -78,6 +78,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCalibrationCooldown } from "@/lib/calibration-cooldown";
+import { formatAuditTimestamp } from "@/lib/audit-format";
 import {
   CalibrationCooldownBanner,
   CalibrationCooldownBannerProvider,
@@ -1206,20 +1207,6 @@ function formatUndoRemaining(ms: number): string {
     return `${m}m ${s.toString().padStart(2, "0")}s`;
   }
   return `${totalSec}s`;
-}
-
-function formatAuditTimestamp(iso: string | undefined | null): string | null {
-  if (!iso) return null;
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return null;
-  const d = new Date(t);
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 // Task #124 — Format the production scan's createdAt window into a compact
@@ -9063,7 +9050,6 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     <HandwavyCategoryFlipBadge
                       flips={categoryFlips}
                       testIdPrefix="handwavy"
-                      formatTimestamp={formatAuditTimestamp}
                     />
                     {/* Task #357 — rename badge sits next to the
                        category-flip badge so the audit-trail signal "this
@@ -9794,7 +9780,6 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           <HandwavyCategoryFlipBadge
                             flips={historyCategoryFlips}
                             testIdPrefix="handwavy-history"
-                            formatTimestamp={formatAuditTimestamp}
                           />
                           {/* Task #357 — rename badge mirrors the active-row
                               badge so a reviewer about to Reinstate sees the
