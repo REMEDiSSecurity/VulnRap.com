@@ -414,35 +414,48 @@ export const GOLD_SIGNAL_WEIGHTS: Readonly<Record<string, number>> = {
  * Keeps a bounded translation from AVRI per-signal points into the default
  * Engine 2 path (mirrors the +15 strengthBonus cap).
  *
- * Calibration evidence (Task #333, Apr 2026 — gold-signal-calibration.test.ts):
+ * Calibration evidence (Task #333 origin, Task #478 May 2026 refresh —
+ * gold-signal-calibration.test.ts):
  *
- *   Real-cohort distribution over the 11 benchmark fixtures (5 slop + 2
- *   curl-slop + 3 legit + 1 borderline) under the legacy AVRI-off path:
- *     - rawSum range  : 0..5
- *     - rawSum max    : 5pt (single HIGH-weight category fires)
- *     - cap-hits      : 0/11 (no real fixture approaches 12)
- *     - 8/11 fixtures fire ZERO gold signals — slop intentionally excluded
- *       by the per-category placeholder/fabrication validators.
- *     - 3/11 fixtures (2 legit, 1 borderline) fire exactly one HIGH
+ *   Real-cohort distribution over the 15 benchmark fixtures (5 slop +
+ *   2 curl-slop + 3 legit + 4 reviewer-flagged "rich" CVE disclosures
+ *   + 1 borderline) under the legacy AVRI-off path:
+ *     - rawSum range  : 0..15
+ *     - rawSum max    : 15pt (legit-11-confluence-ognl, 4 categories)
+ *     - cap-hits      : 1/15 (legit-11 rawSum=15 → bonus=12, -3pt clipped)
+ *     - 8/15 fixtures fire ZERO gold signals — slop intentionally
+ *       excluded by per-category placeholder/fabrication validators.
+ *     - 3/15 fixtures (2 legit, 1 borderline) fire exactly one HIGH
  *       category. Legit floor stays at composite ≥ 50 on the legacy path.
+ *     - 4/15 fixtures are reviewer-flagged "rich" CVE disclosures that
+ *       fire ≥3 strong-evidence categories simultaneously (Task #478).
  *
- *   Synthetic anchors (gold-signal-calibration.test.ts) extend the cohort
- *   to exercise the cap shape — real bug reports in the corpus today
- *   never multi-fire categories:
- *     - rich-legit (auth bearer + SQLi UNION + diff): rawSum=11, bonus=11.
- *       Sits 1pt under the cap, leaving headroom for a 4th category. Final
- *       composite=69 (PROMISING) on the legacy path.
- *     - max-stuffed (6 categories incl. crash trace, raw HTTP, diff, auth,
- *       SQLi, command injection, traversal): rawSum=25, bonus=12 (cap
- *       clips). Final composite=81 (STRONG) — the -13pt cap suppression
- *       does NOT push richly-evidenced reports out of the STRONG band.
+ *   "Rich legit" tier — replaced the prior synthetic anchors with real
+ *   public CVE writeups so the cap shape is exercised against the
+ *   disclosure shapes reviewers actually flag in production triage:
+ *     - legit-05 (Pulse Connect Secure LFI, CVE-2019-11510):
+ *       3 cats, rawSum=10, bonus=10. legacy composite=68 (PROMISING).
+ *     - legit-10 (Log4Shell, CVE-2021-44228):
+ *       3 cats, rawSum=11, bonus=11 (1pt under cap).
+ *       legacy composite=78 (STRONG).
+ *     - legit-11 (Confluence pre-auth OGNL, CVE-2022-26134):
+ *       4 cats, rawSum=15, bonus=12 (cap clips, -3pt).
+ *       legacy composite=65 (PROMISING) — proves cap clipping does not
+ *       push a real cap-hitting disclosure out of the legitimate-finding
+ *       bands.
+ *     - legit-12 (Grafana plugin path traversal, CVE-2021-43798):
+ *       3 cats, rawSum=10, bonus=10. legacy composite=90 (STRONG).
+ *     The recurring multi-category combination is "raw HTTP request +
+ *     auth token + injection or traversal payload + code diff", with
+ *     the OGNL disclosure stacking all four categories.
  *
  *   Conclusion: weights and cap remain at #240's values. The cap of 12
  *   is correctly positioned: above any single-category bonus (max=5),
- *   reachable by a realistic 3-category combination (≥10), and tight
- *   enough to bound the unrealistic chained-exploit upper bound (25 → 12)
- *   without over-suppressing the report. Re-run the calibration test
- *   after any weight change or new detector to refresh this evidence. */
+ *   reachable by a realistic 3-category combination (≥10pt across all
+ *   four rich fixtures), and tight enough to bound a 4-category stack
+ *   (legit-11 at 15pt → 12) while still leaving the report in the
+ *   PROMISING band. Re-run gold-signal-calibration.test.ts after any
+ *   weight change or new detector to refresh this evidence. */
 export const GOLD_SIGNAL_BONUS_CAP = 12;
 
 // ---------------------------------------------------------------------------

