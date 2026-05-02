@@ -1632,6 +1632,7 @@ export function PreviewOverlapsBlock({
   mutationsAllowed,
   removeBusyPhrase,
   bulkOverlappingBusy,
+  getCachedRemoveValidLost,
 }: {
   overlaps: HandwavyPhraseDryRunOverlaps | null;
   candidate: string;
@@ -1676,6 +1677,21 @@ export function PreviewOverlapsBlock({
   // "Remove all overlapping" button so a second click can't stack a
   // duplicate dry-run on top of an in-flight or open panel.
   bulkOverlappingBusy?: boolean;
+  // Task #453 — optional hook into the parent's per-row remove-impact
+  // dry-run cache (`removeDryRunCacheRef` on the live page). When every
+  // phrase eligible for the header bulk action already has a fresh
+  // entry in that cache (i.e. the reviewer has previewed each row's
+  // single-phrase removal individually since the last active-list
+  // change), we can sum the cached corpus + production
+  // `validDetectionsLost` totals here and surface a tiny inline
+  // "(would un-flag N reports)" hint next to the bulk button — no
+  // extra request, no spinner. The getter must return `undefined` for
+  // any phrase whose cache entry is missing or stale (version-mismatch
+  // eviction is the cache's job); the component falls back to omitting
+  // the hint as soon as a single phrase is uncached. Optional so unit
+  // tests and any caller without the cache can render the component
+  // unchanged.
+  getCachedRemoveValidLost?: (phrase: string) => number | undefined;
 }) {
   // Task #440 — lift each bucket's collapsed/expanded preference up here
   // so the reviewer's choice survives the per-keystroke overlap-snapshot
@@ -1752,6 +1768,28 @@ export function PreviewOverlapsBlock({
   })();
   const showRemoveAllOverlapping =
     !!onRequestRemoveAllOverlapping && overlappingForBulk.length >= 2;
+  // Task #453 — when every eligible overlap phrase already has a fresh
+  // entry in the parent's per-row remove-impact cache (Task #246), sum
+  // the cached corpus + production `validDetectionsLost` figures here so
+  // the reviewer sees the combined "would un-flag N reports" impact next
+  // to the bulk button BEFORE clicking through to the dry-run panel.
+  // Stop summing as soon as a single phrase comes back uncached so the
+  // hint is omitted (rather than under-reporting the impact) — the
+  // missing entry will land on its own when the reviewer next opens
+  // that row's per-row preview, and the next render will surface the
+  // hint then. We never trigger a request from here: the whole point of
+  // the hint is that it's free when the data is already on hand.
+  const cachedRemoveAllOverlappingValidLost: number | null = (() => {
+    if (!showRemoveAllOverlapping) return null;
+    if (!getCachedRemoveValidLost) return null;
+    let total = 0;
+    for (const phrase of overlappingForBulk) {
+      const value = getCachedRemoveValidLost(phrase);
+      if (value === undefined) return null;
+      total += value;
+    }
+    return total;
+  })();
   // Task #441 — bulk expand/collapse affordance. Layered on top of the
   // Task #440 collapse-persistence state above: we read the same
   // `collapsedByRelation` Map (treating "no entry" as the row-count
@@ -1857,6 +1895,20 @@ export function PreviewOverlapsBlock({
               : `Remove all overlapping (${overlappingForBulk.length})`}
           </button>
         )}
+        {showRemoveAllOverlapping &&
+          cachedRemoveAllOverlappingValidLost !== null && (
+            <span
+              className="shrink-0 self-center text-[10px] font-medium text-red-200/80"
+              data-testid="handwavy-preview-overlap-remove-all-cached-impact"
+              data-handwavy-overlap-remove-all-cached-valid-lost={
+                cachedRemoveAllOverlappingValidLost
+              }
+              title={`Combined corpus + production dry-run impact for the ${overlappingForBulk.length} eligible overlap phrases, summed from the per-row removal-impact preview cache. Open the bulk preview to confirm before removing.`}
+            >
+              (would un-flag {cachedRemoveAllOverlappingValidLost}{" "}
+              {cachedRemoveAllOverlappingValidLost === 1 ? "report" : "reports"})
+            </span>
+          )}
       </div>
       <div className="space-y-1.5">
         {buckets.map((bucket) => {
@@ -6550,6 +6602,31 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               // second click can't stack a duplicate request on top of an
               // existing one.
               bulkOverlappingBusy={busy === "bulk-preview" || bulkPreview !== null}
+              // Task #453 — surface the combined "would un-flag N reports"
+              // hint next to the bulk button when every eligible overlap
+              // phrase already has a fresh entry in the per-row remove-
+              // impact cache (Task #246). The cache is keyed by phrase +
+              // production-scan limit + active-list version, so a single
+              // miss (or a stale-version eviction) collapses the hint
+              // back to nothing — no extra request, no spinner. Sums the
+              // same corpus + production `validDetectionsLost` figures the
+              // single-phrase preview rounds up for its red-banner text,
+              // so the inline hint matches what the bulk preview will
+              // show once the reviewer opens it.
+              getCachedRemoveValidLost={(phrase) => {
+                const entry = removeDryRunCacheRef.current.getEntry(
+                  phrase,
+                  effectiveProductionScanLimit,
+                  handwavyActiveListVersion,
+                );
+                if (!entry) return undefined;
+                const corpusLost =
+                  entry.response.dryRunImpact.corpus.validDetectionsLost;
+                const productionLost =
+                  entry.response.dryRunImpact.production?.validDetectionsLost ??
+                  0;
+                return corpusLost + productionLost;
+              }}
             />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <PreviewMatchBlock

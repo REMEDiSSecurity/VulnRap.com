@@ -1091,6 +1091,194 @@ describe("PreviewOverlapsBlock — Remove all overlapping (Task #315)", () => {
   });
 });
 
+describe("PreviewOverlapsBlock — Remove all overlapping cached impact hint (Task #453)", () => {
+  it("renders the combined 'would un-flag N reports' hint when every eligible overlap phrase has a fresh cache entry", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "exact one", relation: "equal" }),
+      makeMatch({
+        phrase: "narrower one",
+        relation: "candidate-contains-existing",
+      }),
+      makeMatch({
+        phrase: "broader one",
+        relation: "existing-contains-candidate",
+      }),
+    ]);
+    const cache = new Map<string, number>([
+      ["exact one", 2],
+      ["narrower one", 1],
+      // Intentionally also stash a value for the broader-existing
+      // phrase to prove the hint sums ONLY the eligible phrases (the
+      // ones the bulk action would actually retire) and ignores any
+      // other cache entries that happen to be present.
+      ["broader one", 99],
+    ]);
+    const getCachedRemoveValidLost = vi.fn(
+      (phrase: string) => cache.get(phrase),
+    );
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={vi.fn()}
+        getCachedRemoveValidLost={getCachedRemoveValidLost}
+      />,
+    );
+
+    const hint = screen.getByTestId(
+      "handwavy-preview-overlap-remove-all-cached-impact",
+    );
+    expect(hint).toBeInTheDocument();
+    expect(hint).toHaveTextContent("(would un-flag 3 reports)");
+    expect(
+      hint.getAttribute(
+        "data-handwavy-overlap-remove-all-cached-valid-lost",
+      ),
+    ).toBe("3");
+    // Only the eligible (equal + candidate-contains-existing) phrases
+    // should have been queried — the broader-existing row is excluded
+    // for the same reason the per-row "Remove existing" action hides on
+    // it, so its cache entry must NOT be summed.
+    const queriedPhrases = getCachedRemoveValidLost.mock.calls.map(
+      (c) => c[0],
+    );
+    expect(queriedPhrases).toEqual(["exact one", "narrower one"]);
+  });
+
+  it("renders 'would un-flag 0 reports' (singularized 'report' when the total is 1) so a no-op bulk retire is obvious before opening the panel", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "zero one", relation: "equal" }),
+      makeMatch({
+        phrase: "zero two",
+        relation: "candidate-contains-existing",
+      }),
+    ]);
+    const cache = new Map<string, number>([
+      ["zero one", 0],
+      ["zero two", 0],
+    ]);
+
+    const { rerender } = render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={vi.fn()}
+        getCachedRemoveValidLost={(phrase) => cache.get(phrase)}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-remove-all-cached-impact"),
+    ).toHaveTextContent("(would un-flag 0 reports)");
+
+    // Re-render with a single-report total to pin the singular wording
+    // — the hint should read "1 report" (no trailing "s").
+    cache.set("zero one", 1);
+    rerender(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={vi.fn()}
+        getCachedRemoveValidLost={(phrase) => cache.get(phrase)}
+      />,
+    );
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-remove-all-cached-impact"),
+    ).toHaveTextContent("(would un-flag 1 report)");
+  });
+
+  it("omits the hint (no spinner, no extra request) when any eligible phrase is uncached", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "cached one", relation: "equal" }),
+      makeMatch({
+        phrase: "uncached one",
+        relation: "candidate-contains-existing",
+      }),
+    ]);
+    const cache = new Map<string, number>([
+      ["cached one", 4],
+      // "uncached one" deliberately missing — getter returns undefined.
+    ]);
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={vi.fn()}
+        getCachedRemoveValidLost={(phrase) => cache.get(phrase)}
+      />,
+    );
+
+    // Bulk button still renders — only the inline impact hint is omitted.
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-remove-all"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        "handwavy-preview-overlap-remove-all-cached-impact",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("omits the hint when no cache getter is wired up at all (the unit-test default render path)", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "exact one", relation: "equal" }),
+      makeMatch({
+        phrase: "narrower one",
+        relation: "candidate-contains-existing",
+      }),
+    ]);
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId(
+        "handwavy-preview-overlap-remove-all-cached-impact",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("omits the hint when the bulk button itself is hidden (single-eligible / no-eligible / no-handler) so the cache getter is never consulted", () => {
+    const overlaps = makeOverlaps([
+      makeMatch({ phrase: "exact one", relation: "equal" }),
+      makeMatch({
+        phrase: "broader one",
+        relation: "existing-contains-candidate",
+      }),
+    ]);
+    const getCachedRemoveValidLost = vi.fn(() => 7);
+
+    render(
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="something"
+        onRequestRemoveAllOverlapping={vi.fn()}
+        getCachedRemoveValidLost={getCachedRemoveValidLost}
+      />,
+    );
+
+    // Only one eligible phrase, so the bulk button is hidden — the hint
+    // must be hidden too, AND the getter must not be invoked (we don't
+    // want to spend cache lookups on a control that isn't even shown).
+    expect(
+      screen.queryByTestId("handwavy-preview-overlap-remove-all"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        "handwavy-preview-overlap-remove-all-cached-impact",
+      ),
+    ).not.toBeInTheDocument();
+    expect(getCachedRemoveValidLost).not.toHaveBeenCalled();
+  });
+});
+
 describe("describeOverlapRelation (Task #228)", () => {
   it("returns the documented phrase for each known relation", () => {
     expect(describeOverlapRelation("equal")).toBe("exact duplicate of");
