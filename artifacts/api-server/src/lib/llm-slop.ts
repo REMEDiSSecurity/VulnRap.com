@@ -480,10 +480,19 @@ function getSystemPrompt(model: string): string {
 
 const SYSTEM_PROMPT = SYSTEM_PROMPT_FULL;
 
+// Task #445 — outcome shape for the per-attempt LLM call so callers can
+// distinguish a failed call ("timeout", "no JSON in response", upstream
+// 500, etc.) from a "no LLM signal" path. Previously every failure mode
+// collapsed into `null`, which made the disagreement-floor audit unable
+// to tell silent LLM failures apart from "LLM gate skipped this fixture".
+type AnalyzeOnceOutcome =
+  | { kind: "ok"; result: LLMSlopResult }
+  | { kind: "failed"; error: string };
+
 async function analyzeSlopWithLLMOnce(
   client: OpenAI,
   truncatedText: string,
-): Promise<LLMSlopResult | null> {
+): Promise<AnalyzeOnceOutcome> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
@@ -524,7 +533,7 @@ async function analyzeSlopWithLLMOnce(
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       logger.warn({ raw: raw.slice(0, 200) }, "LLM slop: no JSON found in response");
-      return null;
+      return { kind: "failed", error: `no_json_in_response (finish_reason=${finishReason})` };
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as {
@@ -668,7 +677,7 @@ async function analyzeSlopWithLLMOnce(
       logger.info({ legacyScore }, "LLM slop: used legacy score format");
     } else {
       logger.warn("LLM slop: response missing all known fields");
-      return null;
+      return { kind: "failed", error: "response_missing_known_fields" };
     }
 
     const redFlags = breakdown.redFlags;
@@ -791,54 +800,98 @@ async function analyzeSlopWithLLMOnce(
       llmSubstance,
     };
 
-    setCachedResult(truncatedText, result);
-
-    return result;
+    return { kind: "ok", result };
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       logger.warn("LLM slop: timed out");
-    } else {
-      logger.warn({ err }, "LLM slop: analysis failed");
+      return { kind: "failed", error: "timeout" };
     }
-    return null;
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err }, "LLM slop: analysis failed");
+    return { kind: "failed", error: errMsg.slice(0, 200) };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-export async function analyzeSlopWithLLM(
-  text: string
-): Promise<LLMSlopResult | null> {
+// Task #445 — public outcome shape so callers (notably the
+// `?withLlm=1` audit on /api/test/run) can record explicitly *why* an
+// LLM call did not produce a substance score, instead of folding
+// "provider unavailable", "all retries exhausted", "JSON parse
+// failure", and "API key missing" into the same `null` return value
+// that "LLM gate skipped this fixture" already uses.
+export type LLMSlopOutcome =
+  | { kind: "ok"; result: LLMSlopResult; cached: boolean; attempts: number }
+  | { kind: "unavailable"; reason: "no_api_key" }
+  | { kind: "failed"; error: string; attempts: number };
+
+export interface AnalyzeSlopOptions {
+  /**
+   * Task #445 — when true, skip both the read-through cache lookup and
+   * the write-through cache update for this call. Used by the audit
+   * sweep so `runs=N` actually produces N independent samples per
+   * fixture instead of `N` cached copies of the first sample.
+   */
+  bypassCache?: boolean;
+}
+
+export async function analyzeSlopWithLLMDetailed(
+  text: string,
+  opts: AnalyzeSlopOptions = {},
+): Promise<LLMSlopOutcome> {
   const client = buildClient();
   if (!client) {
     logger.info("LLM slop: no API key configured, skipping LLM analysis");
-    return null;
+    return { kind: "unavailable", reason: "no_api_key" };
   }
 
   const truncatedText =
     text.length > 4000 ? text.slice(0, 4000) + "\n\n[truncated for analysis]" : text;
 
-  const cached = getCachedResult(truncatedText);
-  if (cached) {
-    logger.info("LLM slop: returning cached result");
-    return cached;
+  if (!opts.bypassCache) {
+    const cached = getCachedResult(truncatedText);
+    if (cached) {
+      logger.info("LLM slop: returning cached result");
+      return { kind: "ok", result: cached, cached: true, attempts: 0 };
+    }
   }
 
   const model = process.env.OPENAI_MODEL || "gpt-5-nano";
   const MAX_RETRIES = model.includes("nano") ? 1 : 2;
+  let attempts = 0;
+  let lastError = "unknown";
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const result = await analyzeSlopWithLLMOnce(client, truncatedText);
-    if (result) return result;
-
+    attempts++;
+    const outcome = await analyzeSlopWithLLMOnce(client, truncatedText);
+    if (outcome.kind === "ok") {
+      if (!opts.bypassCache) {
+        setCachedResult(truncatedText, outcome.result);
+      }
+      return { kind: "ok", result: outcome.result, cached: false, attempts };
+    }
+    lastError = outcome.error;
     if (attempt < MAX_RETRIES) {
       const delayMs = 1000 * Math.pow(2, attempt);
-      logger.info({ attempt: attempt + 1, delayMs }, "LLM slop: retrying after failure");
+      logger.info({ attempt: attempt + 1, delayMs, error: lastError }, "LLM slop: retrying after failure");
       await new Promise(r => setTimeout(r, delayMs));
     }
   }
 
-  logger.warn("LLM slop: all retry attempts exhausted");
-  return null;
+  logger.warn({ attempts, lastError }, "LLM slop: all retry attempts exhausted");
+  return { kind: "failed", error: lastError, attempts };
+}
+
+export async function analyzeSlopWithLLM(
+  text: string,
+): Promise<LLMSlopResult | null> {
+  // Back-compat wrapper. Existing call sites (POST /reports, the LLM
+  // gate path, the test mocks in routes/reports.*.test.ts) only need
+  // "did the LLM produce a result, yes/no" — they do not differentiate
+  // failed vs unavailable. Task #445 keeps this shape unchanged so the
+  // audit endpoint is the only consumer that opts into the detailed
+  // outcome.
+  const outcome = await analyzeSlopWithLLMDetailed(text);
+  return outcome.kind === "ok" ? outcome.result : null;
 }
 
 function clamp(val: number): number {

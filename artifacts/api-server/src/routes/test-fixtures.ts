@@ -13,7 +13,7 @@ import { classifyReport } from "../lib/engines/avri";
 import { analyzeSloppiness } from "../lib/sloppiness";
 import { analyzeLinguistic } from "../lib/linguistic-analysis";
 import { analyzeFactual } from "../lib/factual-verification";
-import { analyzeSlopWithLLM, evaluateLlmGate, isLLMAvailable, type LlmGateReason } from "../lib/llm-slop";
+import { analyzeSlopWithLLMDetailed, evaluateLlmGate, isLLMAvailable, type LlmGateReason } from "../lib/llm-slop";
 import { fuseScores, type ValidityFusionAudit } from "../lib/score-fusion";
 import {
   appendArchetypeSnapshots,
@@ -2813,18 +2813,104 @@ function summarizeDatasetCohorts(rows: DatasetSampleRow[]): DatasetCohortRow[] {
 // disagreement floor clips the blended score down to Math.min(heuristic,
 // llmRaw). Returned as the `auditTelemetry` block on /api/test/run. No
 // scoring or thresholds are changed by this code.
+//
+// Task #445 — extended to sweep N independent LLM samples per fixture
+// (the LLM is non-deterministic on borderline scores, so a single
+// sample makes the floor-fire count look like it's moving every time
+// the audit re-runs). Each per-run sample is captured separately, LLM
+// call failures are counted explicitly so they don't masquerade as
+// "no LLM signal", and the aggregate exposes per-run + per-fixture
+// variance so a reviewer can tell stable signal from sampling noise.
+//
+// Backwards-compat: the existing `sampledCount`, `floorAppliedCount`,
+// `floorAppliedRate`, `meanDeltaWhenApplied`, `higherSideWhenApplied`,
+// and `note` fields are preserved. Counts now aggregate over all
+// (fixture × run) successful samples; for the default (heuristic-only)
+// run no fixtures are sampled so the existing route-level contract
+// test in test-fixtures.route.test.ts still observes 0 across the
+// board — the variance fields are simply set to empty.
+interface ValidityFusionRunSample {
+  status: "ok" | "failed";
+  error: string | null;
+  llmRaw: number | null;
+  blended: number | null;
+  finalApplied: number | null;
+  conservativeFloorApplied: boolean;
+  delta: number | null;
+  higherSide: "heuristic" | "llm" | "tied" | null;
+}
+
+interface AuditAggregateRowValidity {
+  runs: number;
+  successCount: number;
+  failureCount: number;
+  floorFireCount: number;
+  heuristic: number;
+  disagreementThreshold: number;
+  perRun: ValidityFusionRunSample[];
+}
+
 interface AuditAggregateRow {
   fixtureId: string;
   tier: string;
   heuristicScore: number;
   gateReason: LlmGateReason;
   gateShouldCall: boolean;
-  validity: ValidityFusionAudit | null;
+  validity: AuditAggregateRowValidity | null;
+}
+
+interface ValidityFusionAggregate {
+  // Number of independent LLM samples taken per fixture (the `?runs=N`
+  // parameter, default 3 when `?withLlm=1` is set). 1 in heuristic-only
+  // runs because no LLM was invoked.
+  runs: number;
+  // Number of fixtures the audit attempted to sample (always FIXTURES.length
+  // when withLlm=1, 0 otherwise).
+  fixtureCount: number;
+  // Total LLM calls attempted (fixtureCount × runs). Failed attempts
+  // are counted here so the success rate is computable.
+  attemptCount: number;
+  // === Stable, deterministic counters (do not vary across audit runs) ===
+  llmFailureCount: number;
+  // === Variance-bearing counters (change run to run on borderline LLM scores) ===
+  // Total successful (fixture × run) samples, equal to attemptCount −
+  // llmFailureCount. Kept under the legacy `sampledCount` name so
+  // existing dashboards and the route contract test do not need to
+  // change shape; semantics are now "successful samples across all
+  // runs" rather than "fixtures with a sample".
+  sampledCount: number;
+  // Total floor-fires across all (fixture × run) successful samples.
+  floorAppliedCount: number;
+  floorAppliedRate: number;
+  meanDeltaWhenApplied: number | null;
+  higherSideWhenApplied: { heuristic: number; llm: number; tied: number };
+  // Per-run breakdown so a reviewer can see "run 1 had 4 fires, run 2
+  // had 7, run 3 had 5" rather than only a sum-across-runs total.
+  perRunFloorFireCount: number[];
+  perRunSuccessCount: number[];
+  perRunFloorFireRate: number[];
+  // Per-fixture stability: how many fixtures fire the floor on every
+  // run (stable signal), never (stable absence), and how many toggle
+  // partway through (the actual disagreement-floor noise).
+  fixtureFloorFireDistribution: {
+    alwaysFired: number;
+    neverFired: number;
+    sometimesFired: number;
+  };
+  variance: {
+    floorFireCountMean: number | null;
+    floorFireCountMin: number | null;
+    floorFireCountMax: number | null;
+    floorFireCountStdDev: number | null;
+    rangeAcrossRuns: number;
+  };
+  note: string;
 }
 
 async function buildAuditAggregate(
   rows: AuditAggregateRow[],
   llmRequested: boolean,
+  runs: number,
 ): Promise<{
   llmGating: {
     fixtureCount: number;
@@ -2832,14 +2918,7 @@ async function buildAuditAggregate(
     shouldCallRate: number;
     byReason: Record<LlmGateReason, number>;
   };
-  validityFusion: {
-    sampledCount: number;
-    floorAppliedCount: number;
-    floorAppliedRate: number;
-    meanDeltaWhenApplied: number | null;
-    higherSideWhenApplied: { heuristic: number; llm: number; tied: number };
-    note: string;
-  };
+  validityFusion: ValidityFusionAggregate;
 }> {
   const byReason = rows.reduce<Record<string, number>>((acc, r) => {
     acc[r.gateReason] = (acc[r.gateReason] ?? 0) + 1;
@@ -2847,18 +2926,104 @@ async function buildAuditAggregate(
   }, {});
   const shouldCallCount = rows.filter(r => r.gateShouldCall).length;
 
-  const sampledValidity = rows.map(r => r.validity).filter((v): v is ValidityFusionAudit => v !== null);
-  const floorRows = sampledValidity.filter(v => v.conservativeFloorApplied);
+  const sampledRows = rows
+    .map(r => r.validity)
+    .filter((v): v is AuditAggregateRowValidity => v !== null);
+  const fixtureCount = sampledRows.length;
+  const attemptCount = sampledRows.reduce((acc, v) => acc + v.runs, 0);
+  const llmFailureCount = sampledRows.reduce((acc, v) => acc + v.failureCount, 0);
+
+  // Flatten successful per-run samples for the cross-run aggregates.
+  const successSamples: ValidityFusionRunSample[] = [];
+  for (const v of sampledRows) {
+    for (const s of v.perRun) {
+      if (s.status === "ok") successSamples.push(s);
+    }
+  }
+  const successCount = successSamples.length;
+  const floorRows = successSamples.filter(s => s.conservativeFloorApplied);
+  const floorAppliedCount = floorRows.length;
   const meanDelta = floorRows.length === 0
     ? null
     : Number(
-        (floorRows.reduce((acc, v) => acc + (v.delta ?? 0), 0) / floorRows.length).toFixed(1),
+        (floorRows.reduce((acc, s) => acc + (s.delta ?? 0), 0) / floorRows.length).toFixed(1),
       );
   const higherSideWhenApplied = { heuristic: 0, llm: 0, tied: 0 };
-  for (const v of floorRows) {
-    if (v.higherSide && v.higherSide in higherSideWhenApplied) {
-      higherSideWhenApplied[v.higherSide as "heuristic" | "llm" | "tied"]++;
+  for (const s of floorRows) {
+    if (s.higherSide && s.higherSide in higherSideWhenApplied) {
+      higherSideWhenApplied[s.higherSide as "heuristic" | "llm" | "tied"]++;
     }
+  }
+
+  // Per-run counters: walk runs by index so a missing per-run slot
+  // (shouldn't happen unless validity.perRun is short) just contributes 0
+  // rather than throwing.
+  const perRunFloorFireCount: number[] = [];
+  const perRunSuccessCount: number[] = [];
+  for (let i = 0; i < runs; i++) {
+    let runFires = 0;
+    let runSucc = 0;
+    for (const v of sampledRows) {
+      const s = v.perRun[i];
+      if (!s) continue;
+      if (s.status === "ok") runSucc++;
+      if (s.conservativeFloorApplied) runFires++;
+    }
+    perRunFloorFireCount.push(runFires);
+    perRunSuccessCount.push(runSucc);
+  }
+  const perRunFloorFireRate = perRunFloorFireCount.map((c, i) => {
+    const n = perRunSuccessCount[i] ?? 0;
+    return n === 0 ? 0 : Number((c / n).toFixed(2));
+  });
+
+  // Variance across runs (population std-dev — we have the full N).
+  const meanFires = perRunFloorFireCount.length === 0
+    ? null
+    : perRunFloorFireCount.reduce((a, b) => a + b, 0) / perRunFloorFireCount.length;
+  const minFires = perRunFloorFireCount.length === 0 ? null : Math.min(...perRunFloorFireCount);
+  const maxFires = perRunFloorFireCount.length === 0 ? null : Math.max(...perRunFloorFireCount);
+  const stdDev = meanFires === null
+    ? null
+    : Math.sqrt(
+        perRunFloorFireCount.reduce((acc, c) => acc + (c - meanFires) ** 2, 0)
+          / perRunFloorFireCount.length,
+      );
+
+  // Fixture-level stability bucket. We only classify fixtures that
+  // produced at least one successful sample — fixtures with all-failed
+  // LLM calls land in llmFailureCount instead of polluting these counts.
+  let alwaysFired = 0;
+  let neverFired = 0;
+  let sometimesFired = 0;
+  for (const v of sampledRows) {
+    if (v.successCount === 0) continue;
+    if (v.floorFireCount === 0) neverFired++;
+    else if (v.floorFireCount === v.successCount) alwaysFired++;
+    else sometimesFired++;
+  }
+
+  let note: string;
+  if (!llmRequested) {
+    note =
+      "LLM not invoked — validityFusion sample skipped. Pass ?withLlm=1 to populate "
+      + "disagreement counters (warning: runs × LLM calls per fixture; default runs=3, "
+      + "max 10 — ?runs=N to override). Counters in this block are 0 by design when "
+      + "the LLM did not run.";
+  } else {
+    note =
+      `Sampled with live LLM calls (?withLlm=1, runs=${runs}). LLM responses are `
+      + "non-deterministic on borderline scores — `floorAppliedCount` is the SUM "
+      + "across all runs, which moves between sweeps. Use "
+      + "`perRunFloorFireCount` (per-sweep totals) and `variance.rangeAcrossRuns` "
+      + "(max − min across runs) to tell signal from noise; "
+      + "`fixtureFloorFireDistribution.sometimesFired` is the strict count of "
+      + "fixtures whose floor verdict toggled between runs. `llmFailureCount` is "
+      + "tracked separately so failed LLM calls do NOT collapse into the "
+      + "\"no LLM signal\" bucket. Stable counters: `runs`, `attemptCount`, "
+      + "`fixtureCount`, `llmFailureCount`, "
+      + "`fixtureFloorFireDistribution.{alwaysFired,neverFired}`. Variable "
+      + "counters: everything else in this block.";
   }
 
   return {
@@ -2869,16 +3034,29 @@ async function buildAuditAggregate(
       byReason: byReason as Record<LlmGateReason, number>,
     },
     validityFusion: {
-      sampledCount: sampledValidity.length,
-      floorAppliedCount: floorRows.length,
-      floorAppliedRate: sampledValidity.length === 0
+      runs,
+      fixtureCount,
+      attemptCount,
+      llmFailureCount,
+      sampledCount: successCount,
+      floorAppliedCount,
+      floorAppliedRate: successCount === 0
         ? 0
-        : Number((floorRows.length / sampledValidity.length).toFixed(2)),
+        : Number((floorAppliedCount / successCount).toFixed(2)),
       meanDeltaWhenApplied: meanDelta,
       higherSideWhenApplied,
-      note: llmRequested
-        ? "Sampled with live LLM calls (?withLlm=1). floorAppliedCount is observation-only."
-        : "LLM not invoked — validityFusion sample skipped. Pass ?withLlm=1 to populate disagreement counters (warning: 1 LLM call per fixture).",
+      perRunFloorFireCount,
+      perRunSuccessCount,
+      perRunFloorFireRate,
+      fixtureFloorFireDistribution: { alwaysFired, neverFired, sometimesFired },
+      variance: {
+        floorFireCountMean: meanFires === null ? null : Number(meanFires.toFixed(1)),
+        floorFireCountMin: minFires,
+        floorFireCountMax: maxFires,
+        floorFireCountStdDev: stdDev === null ? null : Number(stdDev.toFixed(2)),
+        rangeAcrossRuns: minFires === null || maxFires === null ? 0 : maxFires - minFires,
+      },
+      note,
     },
   };
 }
@@ -2894,6 +3072,19 @@ router.get("/test/run", async (req, res) => {
   // run; the gate-decision counters are still populated either way.
   const llmRequested = String(req.query.withLlm ?? "").toLowerCase() === "1"
     && isLLMAvailable();
+  // Task #445 — `?runs=N` (default 3, clamp 1..10) controls how many
+  // independent LLM samples to draw per fixture. The LLM is non-deterministic
+  // on borderline scores, so a single sample makes the disagreement-floor
+  // count drift across re-evaluations of this rule. Defaulting to 3
+  // matches the "average over N runs" path called out in the Task #445
+  // brief; reviewers can crank it up to 10 for higher-confidence audits at
+  // a proportionally higher cost. Has no effect when `?withLlm=1` is not set.
+  const auditRuns = (() => {
+    if (!llmRequested) return 1;
+    const raw = Number.parseInt(String(req.query.runs ?? ""), 10);
+    if (Number.isFinite(raw) && raw >= 1 && raw <= 10) return raw;
+    return 3;
+  })();
 
   // v3.6.0 §10: exercise the *live* report pipeline (active verification +
   // 3-engine composite + matrix triage) rather than just the engine layer.
@@ -2949,24 +3140,96 @@ router.get("/test/run", async (req, res) => {
     // Task #209 — observation-only audit telemetry per fixture. The
     // analyzeSloppiness call is local + cheap; LLM substance + fuseScores
     // only run when the caller passes ?withLlm=1.
+    //
+    // Task #445 — when ?withLlm=1, sweep `auditRuns` independent LLM
+    // samples per fixture (cache-bypassed so each call is a fresh draw).
+    // Each sample's validity-fusion outcome is recorded individually,
+    // and LLM call failures are kept distinct from "no LLM signal" so
+    // the aggregate can report `llmFailureCount` separately rather than
+    // silently shrinking `sampledCount`.
     const heuristicAudit = analyzeSloppiness(f.text);
     // Task #442 — feed the per-fixture composite into the gate evaluation so
     // the audit aggregator's gateReasonCounts reflect the new composite-driven
     // path (the whole point of the calibration battery is to monitor this).
     const gateDecision = evaluateLlmGate(heuristicAudit.score, 1.0, composite);
-    let validityAudit: ValidityFusionAudit | null = null;
+    let validityAudit: AuditAggregateRowValidity | null = null;
     if (llmRequested) {
+      const ling = analyzeLinguistic(f.text);
+      const fact = analyzeFactual(f.text);
+      // Compute heuristic-only fusion once so we can stamp the stable
+      // (deterministic) `heuristic` and `disagreementThreshold` on the
+      // per-fixture audit row regardless of how the LLM samples land.
+      let heuristicFusionRef: ValidityFusionAudit | null = null;
       try {
-        const ling = analyzeLinguistic(f.text);
-        const fact = analyzeFactual(f.text);
-        const llm = await analyzeSlopWithLLM(f.text);
-        const fused = fuseScores(ling, fact, llm, 50, f.text, undefined, verification);
-        validityAudit = fused.validityFusion;
+        heuristicFusionRef = fuseScores(ling, fact, null, 50, f.text, undefined, verification).validityFusion;
       } catch {
-        // LLM/fusion failure is non-fatal for the smoke endpoint; the
-        // counters just report a smaller sampledCount than fixtureCount.
-        validityAudit = null;
+        heuristicFusionRef = null;
       }
+      const perRun: ValidityFusionRunSample[] = [];
+      for (let runIdx = 0; runIdx < auditRuns; runIdx++) {
+        let sample: ValidityFusionRunSample;
+        try {
+          const llmOutcome = await analyzeSlopWithLLMDetailed(f.text, { bypassCache: true });
+          if (llmOutcome.kind === "ok") {
+            const fused = fuseScores(ling, fact, llmOutcome.result, 50, f.text, undefined, verification);
+            const v = fused.validityFusion;
+            sample = {
+              status: "ok",
+              error: null,
+              llmRaw: v.llmRaw,
+              blended: v.blended,
+              finalApplied: v.finalApplied,
+              conservativeFloorApplied: v.conservativeFloorApplied,
+              delta: v.delta,
+              higherSide: v.higherSide,
+            };
+          } else {
+            // Task #445 — record *why* the call failed (timeout, no
+            // JSON, retries exhausted, provider unavailable, etc.) so
+            // reviewers can correlate spikes in `llmFailureCount`
+            // against transient provider issues.
+            const errLabel = llmOutcome.kind === "unavailable"
+              ? `unavailable:${llmOutcome.reason}`
+              : llmOutcome.error;
+            sample = {
+              status: "failed",
+              error: errLabel,
+              llmRaw: null,
+              blended: null,
+              finalApplied: null,
+              conservativeFloorApplied: false,
+              delta: null,
+              higherSide: null,
+            };
+          }
+        } catch (err: unknown) {
+          // Defensive: a fuseScores throw shouldn't take the audit
+          // sweep down; surface the throw as a failed sample.
+          sample = {
+            status: "failed",
+            error: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+            llmRaw: null,
+            blended: null,
+            finalApplied: null,
+            conservativeFloorApplied: false,
+            delta: null,
+            higherSide: null,
+          };
+        }
+        perRun.push(sample);
+      }
+      const successCount = perRun.filter(s => s.status === "ok").length;
+      const failureCount = perRun.length - successCount;
+      const floorFireCount = perRun.filter(s => s.conservativeFloorApplied).length;
+      validityAudit = {
+        runs: auditRuns,
+        successCount,
+        failureCount,
+        floorFireCount,
+        heuristic: heuristicFusionRef?.heuristic ?? 0,
+        disagreementThreshold: heuristicFusionRef?.disagreementThreshold ?? 30,
+        perRun,
+      };
     }
 
     return {
@@ -2999,7 +3262,7 @@ router.get("/test/run", async (req, res) => {
   // Task #209 — collect per-fixture audit rows from the smoke loop into the
   // single counters block returned alongside the existing summary.
   const auditRows = results.map(r => r._audit);
-  const auditTelemetry = await buildAuditAggregate(auditRows, llmRequested);
+  const auditTelemetry = await buildAuditAggregate(auditRows, llmRequested, auditRuns);
 
   const tiers: Tier[] = ["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP", "T4_HALLUCINATED"];
   const summary = tiers.map(tier => {

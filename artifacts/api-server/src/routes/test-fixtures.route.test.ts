@@ -249,12 +249,34 @@ describe("GET /api/test/run — Task #209 auditTelemetry contract", () => {
       byReason: Record<string, number>;
     };
     validityFusion: {
+      // Task #209 legacy fields (kept for backwards compat with
+      // calibration tooling and the diagnostics-panel markdown export).
       sampledCount: number;
       floorAppliedCount: number;
       floorAppliedRate: number;
       meanDeltaWhenApplied: number | null;
       higherSideWhenApplied: { heuristic: number; llm: number; tied: number };
       note: string;
+      // Task #445 stability fields.
+      runs: number;
+      fixtureCount: number;
+      attemptCount: number;
+      llmFailureCount: number;
+      perRunFloorFireCount: number[];
+      perRunSuccessCount: number[];
+      perRunFloorFireRate: number[];
+      fixtureFloorFireDistribution: {
+        alwaysFired: number;
+        neverFired: number;
+        sometimesFired: number;
+      };
+      variance: {
+        floorFireCountMean: number | null;
+        floorFireCountMin: number | null;
+        floorFireCountMax: number | null;
+        floorFireCountStdDev: number | null;
+        rangeAcrossRuns: number;
+      };
     };
   }
 
@@ -297,6 +319,39 @@ describe("GET /api/test/run — Task #209 auditTelemetry contract", () => {
     expect(fusion.floorAppliedCount).toBe(0);
     expect(fusion.meanDeltaWhenApplied).toBeNull();
     expect(fusion.note).toMatch(/withLlm=1/);
+
+    // Task #445 — new stability fields must be present and self-consistent
+    // even when the LLM is not invoked. fixtureCount/attemptCount/
+    // llmFailureCount/per-run arrays should all collapse to "no samples"
+    // since runs=1 (the default when llmRequested is false) and no
+    // fixtures contributed validity audits.
+    expect(fusion.runs).toBe(1);
+    expect(fusion.fixtureCount).toBe(0);
+    expect(fusion.attemptCount).toBe(0);
+    expect(fusion.llmFailureCount).toBe(0);
+    expect(Array.isArray(fusion.perRunFloorFireCount)).toBe(true);
+    expect(Array.isArray(fusion.perRunSuccessCount)).toBe(true);
+    expect(Array.isArray(fusion.perRunFloorFireRate)).toBe(true);
+    expect(fusion.perRunFloorFireCount.length).toBe(1);
+    expect(fusion.perRunSuccessCount.length).toBe(1);
+    expect(fusion.perRunFloorFireRate.length).toBe(1);
+    expect(fusion.perRunFloorFireCount[0]).toBe(0);
+    expect(fusion.perRunSuccessCount[0]).toBe(0);
+    expect(fusion.perRunFloorFireRate[0]).toBe(0);
+    expect(fusion.fixtureFloorFireDistribution).toEqual({
+      alwaysFired: 0,
+      neverFired: 0,
+      sometimesFired: 0,
+    });
+    expect(fusion.variance.floorFireCountMin).toBe(0);
+    expect(fusion.variance.floorFireCountMax).toBe(0);
+    expect(fusion.variance.floorFireCountMean).toBe(0);
+    expect(fusion.variance.floorFireCountStdDev).toBe(0);
+    expect(fusion.variance.rangeAcrossRuns).toBe(0);
+    // The note copy must call out which numbers are stable vs variable
+    // so dashboards quoting it cannot accidentally treat the floor-fire
+    // count as deterministic.
+    expect(fusion.note).toMatch(/Stable counters|stable|Counters in this block are 0/);
   }, 60_000);
 
   // Task #311 — the per-fixture `_audit` blob is stripped from the default

@@ -1316,6 +1316,22 @@ function AuditTelemetrySection({ audit }: { audit: AuditTelemetryBlock }) {
     return `Blend used (Δ = ${v.delta?.toFixed(0) ?? "0"} ≤ ${v.disagreementThreshold}; heuristic ${v.heuristic}, LLM ${v.llmRaw} → blended ${v.blended ?? "—"})`;
   })();
 
+  // Task #445 — annotate which numbers in this panel are deterministic
+  // ("stable") and which depend on a single LLM draw ("variable across
+  // runs"). The LLM gate decision and the heuristic side of the validity
+  // fusion are computed from the report text alone, so re-rendering the
+  // panel for the same report always produces the same gate verdict and
+  // the same `heuristic` value. The `llmRaw` / `blended` / `finalApplied`
+  // values, the `Δ` between heuristic and LLM, and the floor verdict
+  // itself depend on this report's single LLM call (gpt-5-nano is
+  // non-deterministic on borderline scores). The fixture-battery audit
+  // at /api/test/run?withLlm=1&runs=N (Task #445) is what reviewers
+  // should consult to see the across-run distribution of those
+  // variable numbers — this per-report panel only shows one draw.
+  const stabilityNote = validityFusion.llmRaw === null
+    ? "LLM gate + heuristic numbers are stable across re-renders (no LLM draw)."
+    : "LLM gate + heuristic numbers are stable across re-renders. LLM-derived numbers (Δ, llmRaw, blended, finalApplied, and the floor verdict) come from a single LLM draw and may differ between runs on borderline scores.";
+
   return (
     <section className="space-y-2" data-testid="audit-telemetry-section">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -1340,6 +1356,12 @@ function AuditTelemetrySection({ audit }: { audit: AuditTelemetryBlock }) {
           </Badge>
           <span className="text-foreground/90">{floorSummary}</span>
         </div>
+        <p
+          className="text-[10px] text-muted-foreground leading-snug pt-0.5"
+          data-testid="audit-telemetry-stability-note"
+        >
+          {stabilityNote}
+        </p>
       </div>
     </section>
   );
@@ -1718,6 +1740,22 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
       lines.push(
         `- Validity floor: **blend used** (Δ = ${validityFusion.delta?.toFixed(0) ?? "0"} ≤ ${validityFusion.disagreementThreshold}; ` +
           `heuristic ${validityFusion.heuristic}, LLM ${validityFusion.llmRaw} → blended ${validityFusion.blended ?? "—"})`,
+      );
+    }
+    // Task #445 — flag which numbers above are stable across re-runs
+    // and which depend on this report's single LLM draw, so triage
+    // threads quoting this block don't treat the floor verdict as a
+    // deterministic finding.
+    if (validityFusion.llmRaw === null) {
+      lines.push(
+        "- Stability: LLM gate decision and `heuristic` are stable across re-runs (no LLM draw on this report).",
+      );
+    } else {
+      lines.push(
+        "- Stability: LLM gate decision and `heuristic` are stable across re-runs. " +
+          "`llmRaw`, `Δ`, `blended`, `finalApplied`, and the floor verdict come from a single LLM draw " +
+          "and may differ between runs on borderline scores. For across-run distribution, see " +
+          "`/api/test/run?withLlm=1&runs=N` (Task #445) `auditTelemetry.validityFusion.perRunFloorFireCount` and `variance`.",
       );
     }
     lines.push("");
