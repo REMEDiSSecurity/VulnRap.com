@@ -3965,11 +3965,21 @@ export const AddHandwavyPhraseResponse = zod.object({
               "T3_SLOP",
               "T4_HALLUCINATED",
             ]),
+            snippet: zod
+              .object({
+                before: zod.string(),
+                match: zod.string(),
+                after: zod.string(),
+              })
+              .nullable()
+              .describe(
+                "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+              ),
           }),
         )
         .max(addHandwavyPhraseResponseDryRunMatchesSampleMatchesMax)
         .describe(
-          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+          "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
         ),
       warning: zod
         .string()
@@ -4237,13 +4247,23 @@ export const AddHandwavyPhraseResponse = zod.object({
               "T3_SLOP",
               "T4_HALLUCINATED",
             ]),
+            snippet: zod
+              .object({
+                before: zod.string(),
+                match: zod.string(),
+                after: zod.string(),
+              })
+              .nullable()
+              .describe(
+                "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+              ),
           }),
         )
         .max(
           addHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax,
         )
         .describe(
-          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+          "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
         ),
       warning: zod
         .string()
@@ -4922,11 +4942,21 @@ export const EditHandwavyPhraseResponse = zod.object({
               "T3_SLOP",
               "T4_HALLUCINATED",
             ]),
+            snippet: zod
+              .object({
+                before: zod.string(),
+                match: zod.string(),
+                after: zod.string(),
+              })
+              .nullable()
+              .describe(
+                "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+              ),
           }),
         )
         .max(editHandwavyPhraseResponseDryRunMatchesSampleMatchesMax)
         .describe(
-          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+          "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
         ),
       warning: zod
         .string()
@@ -5194,13 +5224,23 @@ export const EditHandwavyPhraseResponse = zod.object({
               "T3_SLOP",
               "T4_HALLUCINATED",
             ]),
+            snippet: zod
+              .object({
+                before: zod.string(),
+                match: zod.string(),
+                after: zod.string(),
+              })
+              .nullable()
+              .describe(
+                "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+              ),
           }),
         )
         .max(
           editHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax,
         )
         .describe(
-          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+          "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
         ),
       warning: zod
         .string()
@@ -5927,11 +5967,21 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                 "T3_SLOP",
                 "T4_HALLUCINATED",
               ]),
+              snippet: zod
+                .object({
+                  before: zod.string(),
+                  match: zod.string(),
+                  after: zod.string(),
+                })
+                .nullable()
+                .describe(
+                  "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+                ),
             }),
           )
           .max(removeHandwavyPhraseResponseOneDryRunMatchesSampleMatchesMax)
           .describe(
-            "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+            "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
           ),
         warning: zod
           .string()
@@ -6199,13 +6249,23 @@ export const RemoveHandwavyPhraseResponse = zod.union([
                 "T3_SLOP",
                 "T4_HALLUCINATED",
               ]),
+              snippet: zod
+                .object({
+                  before: zod.string(),
+                  match: zod.string(),
+                  after: zod.string(),
+                })
+                .nullable()
+                .describe(
+                  "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+                ),
             }),
           )
           .max(
             removeHandwavyPhraseResponseOneDryRunMatchesProductionOneSampleMatchesMax,
           )
           .describe(
-            "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+            "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
           ),
         warning: zod
           .string()
@@ -8096,11 +8156,21 @@ export const UndoHandwavyPhraseResponse = zod.object({
               "T3_SLOP",
               "T4_HALLUCINATED",
             ]),
+            snippet: zod
+              .object({
+                before: zod.string(),
+                match: zod.string(),
+                after: zod.string(),
+              })
+              .nullable()
+              .describe(
+                "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+              ),
           }),
         )
         .max(undoHandwavyPhraseResponseDryRunMatchesSampleMatchesMax)
         .describe(
-          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+          "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
         ),
       warning: zod
         .string()
@@ -8368,13 +8438,23 @@ export const UndoHandwavyPhraseResponse = zod.object({
               "T3_SLOP",
               "T4_HALLUCINATED",
             ]),
+            snippet: zod
+              .object({
+                before: zod.string(),
+                match: zod.string(),
+                after: zod.string(),
+              })
+              .nullable()
+              .describe(
+                "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+              ),
           }),
         )
         .max(
           undoHandwavyPhraseResponseDryRunMatchesProductionOneSampleMatchesMax,
         )
         .describe(
-          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+          "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
         ),
       warning: zod
         .string()
@@ -10703,11 +10783,21 @@ export const RevertHandwavyPhraseEditResponse = zod.object({
               "T3_SLOP",
               "T4_HALLUCINATED",
             ]),
+            snippet: zod
+              .object({
+                before: zod.string(),
+                match: zod.string(),
+                after: zod.string(),
+              })
+              .nullable()
+              .describe(
+                "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+              ),
           }),
         )
         .max(revertHandwavyPhraseEditResponseDryRunMatchesSampleMatchesMax)
         .describe(
-          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+          "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
         ),
       warning: zod
         .string()
@@ -10975,13 +11065,23 @@ export const RevertHandwavyPhraseEditResponse = zod.object({
               "T3_SLOP",
               "T4_HALLUCINATED",
             ]),
+            snippet: zod
+              .object({
+                before: zod.string(),
+                match: zod.string(),
+                after: zod.string(),
+              })
+              .nullable()
+              .describe(
+                "Task #495 — A short context snippet (~80 chars centered on the\nmatched phrase) cut from the row's original text so a reviewer\nevaluating a NEW candidate phrase can judge each sample match\nin place without opening \/verify\/:id (or, for curated cohorts,\ncross-referencing the fixture file). Returned as a structured\n`{ before, match, after }` triple so the UI can highlight the\nmatched phrase while the rest stays plain text. All three\nfields are raw text — the client is responsible for escaping\nthem when rendering (React's text-node rendering already does\nthis). Null when the matched phrase could not be located in\nthe original text (defensive fallback; should not happen for\nthe flow that produced the match). Mirrors the per-row\nremoval preview's `snippet` field added in Task #345.\n",
+              ),
           }),
         )
         .max(
           revertHandwavyPhraseEditResponseDryRunMatchesProductionOneSampleMatchesMax,
         )
         .describe(
-          "Up to 12 sample matched fixtures (id + tier) for reviewer review.",
+          "Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.",
         ),
       warning: zod
         .string()

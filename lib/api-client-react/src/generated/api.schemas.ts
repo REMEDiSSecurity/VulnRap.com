@@ -2815,9 +2815,46 @@ export const HandwavyPhraseDryRunMatchesSampleMatchesItemTier = {
   T4_HALLUCINATED: "T4_HALLUCINATED",
 } as const;
 
+/**
+ * Task #495 — A short context snippet (~80 chars centered on the
+matched phrase) cut from the row's original text so a reviewer
+evaluating a NEW candidate phrase can judge each sample match
+in place without opening /verify/:id (or, for curated cohorts,
+cross-referencing the fixture file). Returned as a structured
+`{ before, match, after }` triple so the UI can highlight the
+matched phrase while the rest stays plain text. All three
+fields are raw text — the client is responsible for escaping
+them when rendering (React's text-node rendering already does
+this). Null when the matched phrase could not be located in
+the original text (defensive fallback; should not happen for
+the flow that produced the match). Mirrors the per-row
+removal preview's `snippet` field added in Task #345.
+
+ */
+export type HandwavyPhraseDryRunMatchesSampleMatchesItemSnippet = {
+  before: string;
+  match: string;
+  after: string;
+} | null;
+
 export type HandwavyPhraseDryRunMatchesSampleMatchesItem = {
   id: string;
   tier: HandwavyPhraseDryRunMatchesSampleMatchesItemTier;
+  /** Task #495 — A short context snippet (~80 chars centered on the
+matched phrase) cut from the row's original text so a reviewer
+evaluating a NEW candidate phrase can judge each sample match
+in place without opening /verify/:id (or, for curated cohorts,
+cross-referencing the fixture file). Returned as a structured
+`{ before, match, after }` triple so the UI can highlight the
+matched phrase while the rest stays plain text. All three
+fields are raw text — the client is responsible for escaping
+them when rendering (React's text-node rendering already does
+this). Null when the matched phrase could not be located in
+the original text (defensive fallback; should not happen for
+the flow that produced the match). Mirrors the per-row
+removal preview's `snippet` field added in Task #345.
+ */
+  snippet: HandwavyPhraseDryRunMatchesSampleMatchesItemSnippet;
 };
 
 /**
@@ -2836,7 +2873,7 @@ export interface HandwavyPhraseDryRunMatches {
   /** Total number of corpus fixtures evaluated. */
   corpusSize: number;
   /**
-   * Up to 12 sample matched fixtures (id + tier) for reviewer review.
+   * Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.
    * @maxItems 12
    */
   sampleMatches: HandwavyPhraseDryRunMatchesSampleMatchesItem[];

@@ -66,7 +66,15 @@ interface DryRunMatches {
   byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
   falsePositives: number;
   corpusSize: number;
-  sampleMatches: Array<{ id: string; tier: CorpusTier }>;
+  // Task #495 — each sample match also carries a short context snippet
+  // (when one can be located in the row's original text) so the add-time
+  // preview's "Sample matched fixtures/reports" list can show reviewers
+  // what the report actually said next to each fixture/report ID, mirroring
+  // the per-row Trash REMOVAL preview Task #345 added. `snippet` is null
+  // only for the defensive fallback where the matched phrase can no longer
+  // be found in the original text (should not happen on the path that
+  // produced the match).
+  sampleMatches: Array<{ id: string; tier: CorpusTier; snippet: SampleMatchSnippet | null }>;
   warning: string | null;
   // Task #124 — for production scans, the createdAt range of the scanned
   // sample so reviewers can tell whether the false-positive signal reflects
@@ -82,7 +90,7 @@ function tallyMatches(
   rows: Iterable<{ id: string; tier: CorpusTier; text: string }>,
 ): { total: number; byTier: DryRunMatches["byTier"]; sampleMatches: DryRunMatches["sampleMatches"] } {
   const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
-  const sampleMatches: Array<{ id: string; tier: CorpusTier }> = [];
+  const sampleMatches: Array<{ id: string; tier: CorpusTier; snippet: SampleMatchSnippet | null }> = [];
   let total = 0;
   for (const r of rows) {
     const haystack = r.text.toLowerCase().replace(/\s+/g, " ");
@@ -92,7 +100,15 @@ function tallyMatches(
     else if (r.tier === "T2_BORDERLINE") byTier.t2Borderline += 1;
     else if (r.tier === "T3_SLOP") byTier.t3Slop += 1;
     else byTier.t4Hallucinated += 1;
-    if (sampleMatches.length < 12) sampleMatches.push({ id: r.id, tier: r.tier });
+    if (sampleMatches.length < 12) {
+      // Task #495 — attach a context snippet (cut from the row's ORIGINAL
+      // text, with the needle expanded back into a regex that matches
+      // original-cased / original-spaced runs) so the add-phrase preview
+      // can render the same in-place context the per-row Trash REMOVAL
+      // preview shows. Reuses the helper introduced in Task #345.
+      const snippet = buildSnippetForMatch(r.text, needle);
+      sampleMatches.push({ id: r.id, tier: r.tier, snippet });
+    }
   }
   return { total, byTier, sampleMatches };
 }

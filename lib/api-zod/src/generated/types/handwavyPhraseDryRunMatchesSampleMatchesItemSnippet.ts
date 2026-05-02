@@ -5,13 +5,9 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { HandwavyPhraseDryRunMatchesSampleMatchesItemSnippet } from "./handwavyPhraseDryRunMatchesSampleMatchesItemSnippet";
-import type { HandwavyPhraseDryRunMatchesSampleMatchesItemTier } from "./handwavyPhraseDryRunMatchesSampleMatchesItemTier";
 
-export type HandwavyPhraseDryRunMatchesSampleMatchesItem = {
-  id: string;
-  tier: HandwavyPhraseDryRunMatchesSampleMatchesItemTier;
-  /** Task #495 — A short context snippet (~80 chars centered on the
+/**
+ * Task #495 — A short context snippet (~80 chars centered on the
 matched phrase) cut from the row's original text so a reviewer
 evaluating a NEW candidate phrase can judge each sample match
 in place without opening /verify/:id (or, for curated cohorts,
@@ -24,6 +20,10 @@ this). Null when the matched phrase could not be located in
 the original text (defensive fallback; should not happen for
 the flow that produced the match). Mirrors the per-row
 removal preview's `snippet` field added in Task #345.
+
  */
-  snippet: HandwavyPhraseDryRunMatchesSampleMatchesItemSnippet;
-};
+export type HandwavyPhraseDryRunMatchesSampleMatchesItemSnippet = {
+  before: string;
+  match: string;
+  after: string;
+} | null;

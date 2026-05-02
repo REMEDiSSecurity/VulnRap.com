@@ -337,3 +337,70 @@ describe("computeRemovalImpactOnRows snippet threading", () => {
     expect(out.sampleMatches[0].snippet?.match).toBe("BETA phrase");
   });
 });
+
+// Task #495 — verify the add-phrase preview path (POST dryRun) attaches the
+// same `{ before, match, after }` snippet to each sample match that the
+// per-row REMOVAL preview added in Task #345. Both `previewHandwavyPhrase`
+// (curated cohorts) and `scoreProductionRows` (production archive scoring)
+// route through the shared `tallyMatches` helper, so a single snippet
+// implementation covers both surfaces — but we exercise both call sites
+// here so a regression that only updates one path is still caught.
+describe("Task #495 add-phrase dry-run snippet threading", () => {
+  it("scoreProductionRows attaches a snippet to each sample match identifying the candidate phrase", () => {
+    const out = scoreProductionRows("unsafe foo", [
+      {
+        id: 1,
+        label: "STRONG",
+        contentText: "Use of unsafe FOO function in handler with no guard",
+      },
+      {
+        id: 2,
+        label: "REASONABLE",
+        contentText: "Possibly unsafe   foo path with limited evidence here",
+      },
+    ]);
+    expect(out.sampleMatches).toHaveLength(2);
+    const a = out.sampleMatches.find((s) => s.id === "1");
+    const b = out.sampleMatches.find((s) => s.id === "2");
+    // Match preserves the row's ORIGINAL casing (case-insensitive regex
+    // expansion of the lowercased needle), with multi-whitespace runs
+    // collapsed to a single space so the highlighted token reads naturally.
+    expect(a?.snippet?.match).toBe("unsafe FOO");
+    expect(b?.snippet?.match).toBe("unsafe foo");
+    // Surrounding text carries the row's original wording so reviewers can
+    // judge each match in place without opening /verify/:id.
+    expect(`${a!.snippet!.before}${a!.snippet!.match}${a!.snippet!.after}`)
+      .toContain("function");
+    expect(`${b!.snippet!.before}${b!.snippet!.match}${b!.snippet!.after}`)
+      .toContain("limited evidence");
+  });
+
+  it("previewHandwavyPhrase (curated cohorts) attaches a snippet to each sample fixture the candidate would flag", () => {
+    // "cvss" is the canonical T1/T2 false-positive phrase used by the
+    // existing route tests, so we expect a non-empty curated sample.
+    const out = __testing.previewHandwavyPhrase("cvss");
+    expect(out.sampleMatches.length).toBeGreaterThan(0);
+    for (const s of out.sampleMatches) {
+      // The schema field is `nullable: true`, not `optional` — the property
+      // must always be present (either a populated triple or null).
+      expect(s).toHaveProperty("snippet");
+      if (s.snippet !== null) {
+        expect(typeof s.snippet.before).toBe("string");
+        expect(typeof s.snippet.after).toBe("string");
+        // The matched chunk preserves the fixture's original casing — at
+        // minimum its lowercased / whitespace-collapsed form must equal
+        // the candidate phrase.
+        expect(s.snippet.match.toLowerCase().replace(/\s+/g, " ")).toBe("cvss");
+      }
+    }
+  });
+
+  it("attaches a snippet on the common path (matched phrase locatable in original text)", () => {
+    const out = scoreProductionRows("marker phrase", [
+      { id: 1, label: "STRONG", contentText: "the MARKER phrase here" },
+    ]);
+    expect(out.sampleMatches).toHaveLength(1);
+    expect(out.sampleMatches[0].snippet).not.toBeNull();
+    expect(out.sampleMatches[0].snippet?.match).toBe("MARKER phrase");
+  });
+});

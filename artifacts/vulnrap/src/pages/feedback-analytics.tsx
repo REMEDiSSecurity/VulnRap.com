@@ -1531,11 +1531,33 @@ function PreviewMatchBlock({
           <summary className="cursor-pointer hover:text-foreground">
             Sample matched {sourceNoun}s ({matches.sampleMatches.length})
           </summary>
-          <ul className="mt-1 ml-3 list-disc space-y-0.5 font-mono">
+          <ul className="mt-1 ml-3 list-disc space-y-0.5 font-mono break-words">
             {matches.sampleMatches.map((s) => (
               <li key={s.id}>
                 {kind === "production" ? `report #${s.id}` : s.id}{" "}
                 <span className="opacity-60">[{s.tier}]</span>
+                {/* Task #495 — inline context snippet so reviewers
+                    evaluating a NEW candidate phrase can judge each
+                    sample match in place without opening /verify/:id
+                    (or, for curated cohorts, cross-referencing the
+                    fixture file). The matched phrase is highlighted
+                    with a <mark>; surrounding text is auto-escaped by
+                    React. Hidden when the server didn't supply one. */}
+                {s.snippet && (
+                  <span
+                    className="ml-1 italic break-words"
+                    data-testid={`handwavy-preview-${kind}-snippet-${s.id}`}
+                  >
+                    {s.snippet.before}
+                    <mark
+                      className="bg-amber-500/30 text-amber-100 not-italic font-semibold px-0.5 rounded-sm"
+                      data-testid={`handwavy-preview-${kind}-snippet-mark-${s.id}`}
+                    >
+                      {s.snippet.match}
+                    </mark>
+                    {s.snippet.after}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

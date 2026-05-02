@@ -167,8 +167,28 @@ test.describe("Side-by-side dry-run preview panel (Task #126)", () => {
                 falsePositives: 4,
                 corpusSize: 1234,
                 sampleMatches: [
-                  { id: "report-001", tier: "T1_LEGIT" },
-                  { id: "report-002", tier: "T2_BORDERLINE" },
+                  // Task #495 — server attaches a `{before, match, after}`
+                  // snippet to each sample match so the add-phrase preview
+                  // can render in-place context next to each report ID,
+                  // mirroring the per-row Trash REMOVAL preview (Task #345).
+                  {
+                    id: "report-001",
+                    tier: "T1_LEGIT",
+                    snippet: {
+                      before: "…well-evidenced ",
+                      match: "candidate phrase",
+                      after: " hits a legit report…",
+                    },
+                  },
+                  {
+                    id: "report-002",
+                    tier: "T2_BORDERLINE",
+                    snippet: {
+                      before: "borderline ",
+                      match: "candidate phrase",
+                      after: " in a YELLOW row",
+                    },
+                  },
                 ],
                 warning:
                   "This phrase would have flagged 4 legitimate reports (3 GREEN, 1 YELLOW) in the most recent 1234 production reports — consider rewording.",
@@ -209,6 +229,46 @@ test.describe("Side-by-side dry-run preview panel (Task #126)", () => {
       await expect(
         panel.getByTestId("handwavy-preview-production-warning"),
       ).toContainText("4 legitimate reports");
+
+      // Task #495 — the synthetic payload above attaches a
+      // `{before, match, after}` snippet to each production sample
+      // match. The `<details>` "Sample matched fixtures/reports" list
+      // must render the snippet inline next to each report ID with
+      // the matched phrase wrapped in a `<mark>` element. This is the
+      // exact reviewer-context payoff the task was built for, and a
+      // regression that drops the snippet (or stops threading it
+      // through `tallyMatches`) would silently revert the UI to the
+      // bare-id list it had before. We open the `<details>` block
+      // explicitly so the assertions below don't depend on a default
+      // open/closed state.
+      const productionDetails = panel
+        .getByTestId("handwavy-preview-production")
+        .locator("details");
+      await productionDetails.evaluate((el: HTMLDetailsElement) => {
+        el.open = true;
+      });
+      const snippet001 = panel.getByTestId(
+        "handwavy-preview-production-snippet-report-001",
+      );
+      await expect(snippet001).toBeVisible();
+      await expect(snippet001).toContainText("well-evidenced");
+      await expect(snippet001).toContainText("hits a legit report");
+      await expect(
+        panel.getByTestId(
+          "handwavy-preview-production-snippet-mark-report-001",
+        ),
+      ).toHaveText("candidate phrase");
+      const snippet002 = panel.getByTestId(
+        "handwavy-preview-production-snippet-report-002",
+      );
+      await expect(snippet002).toBeVisible();
+      await expect(snippet002).toContainText("borderline");
+      await expect(snippet002).toContainText("YELLOW row");
+      await expect(
+        panel.getByTestId(
+          "handwavy-preview-production-snippet-mark-report-002",
+        ),
+      ).toHaveText("candidate phrase");
 
       // The destructive "Add anyway" copy must appear on the confirm
       // button even though only the production signal flipped red.

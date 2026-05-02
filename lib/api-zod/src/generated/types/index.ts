@@ -106,6 +106,7 @@ export * from "./handwavyPhraseBody";
 export * from "./handwavyPhraseDryRunMatches";
 export * from "./handwavyPhraseDryRunMatchesByTier";
 export * from "./handwavyPhraseDryRunMatchesSampleMatchesItem";
+export * from "./handwavyPhraseDryRunMatchesSampleMatchesItemSnippet";
 export * from "./handwavyPhraseDryRunMatchesSampleMatchesItemTier";
 export * from "./handwavyPhraseDryRunOverlaps";
 export * from "./handwavyPhraseDryRunOverlapsMatchesItem";

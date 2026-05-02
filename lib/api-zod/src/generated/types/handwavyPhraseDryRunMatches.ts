@@ -24,7 +24,7 @@ export interface HandwavyPhraseDryRunMatches {
   /** Total number of corpus fixtures evaluated. */
   corpusSize: number;
   /**
-   * Up to 12 sample matched fixtures (id + tier) for reviewer review.
+   * Up to 12 sample matched fixtures (id + tier + nullable snippet) for reviewer review.
    * @maxItems 12
    */
   sampleMatches: HandwavyPhraseDryRunMatchesSampleMatchesItem[];
