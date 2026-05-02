@@ -662,4 +662,175 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await apiCtx.dispose();
     }
   });
+
+  // Task #486 — picker ROW now surfaces the same per-category breakdown
+  // the dialog shows, so reviewers can scan a mixed batch's category
+  // mix ("4 hedging · 3 absence · 1 buzzword") without having to open
+  // every preview dialog. The breakdown is derived from the same
+  // history payload + grouping helper that backs the dialog's
+  // sectioning, so this spec asserts both surfaces stay in sync.
+  test("picker row shows the same per-category breakdown as the dialog without opening it", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const hedgingPhrases = uniquePhrases(3, "task486 hedging");
+    const absencePhrases = uniquePhrases(2, "task486 absence");
+    const buzzwordPhrases = uniquePhrases(1, "task486 buzzword");
+    const allPhrases = [
+      ...hedgingPhrases,
+      ...absencePhrases,
+      ...buzzwordPhrases,
+    ];
+
+    try {
+      for (const p of hedgingPhrases) {
+        await addPhrase(apiCtx, p, { ...REVIEWER_OPTS, category: "hedging" });
+      }
+      for (const p of absencePhrases) {
+        await addPhrase(apiCtx, p, { ...REVIEWER_OPTS, category: "absence" });
+      }
+      for (const p of buzzwordPhrases) {
+        await addPhrase(apiCtx, p, { ...REVIEWER_OPTS, category: "buzzword" });
+      }
+      const batch = await batchRemove(apiCtx, allPhrases, REVIEWER_OPTS);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const pickerRow = page.locator(
+        `[data-testid="handwavy-removal-batches-row"][data-batch-removed-at="${removedAt}"]`,
+      );
+      await expect(pickerRow).toHaveCount(1, { timeout: 15_000 });
+
+      // The row must now expose a compact category-breakdown chip
+      // (without opening the dialog). The categories appear in the
+      // canonical order: absence → hedging → buzzword, regardless of
+      // the batch's submission order. Empty categories must NOT
+      // appear.
+      const breakdown = pickerRow.getByTestId(
+        "handwavy-removal-batches-row-categories",
+      );
+      await expect(breakdown).toBeVisible({ timeout: 15_000 });
+
+      // Wait for the chip to settle on the full set of categories
+      // before snapshotting the order; the parent
+      // useGetHandwavyPhrases query may briefly render the row from
+      // the picker summary (no breakdown) before the history-backed
+      // breakdown lands.
+      const categoryChips = breakdown.getByTestId(
+        "handwavy-removal-batches-row-category",
+      );
+      await expect(categoryChips).toHaveCount(3, { timeout: 15_000 });
+
+      const renderedCategories = await categoryChips.evaluateAll((nodes) =>
+        nodes.map(
+          (n) => (n as HTMLElement).getAttribute("data-category") ?? "",
+        ),
+      );
+      expect(renderedCategories).toEqual(["absence", "hedging", "buzzword"]);
+
+      // Per-category counts must match the seed counts exactly. The
+      // chip-level data-category-count is the contract the row uses
+      // to expose its breakdown to e2e + future consumers.
+      const absenceChip = breakdown.locator(
+        `[data-testid="handwavy-removal-batches-row-category"][data-category="absence"]`,
+      );
+      await expect(absenceChip).toHaveAttribute(
+        "data-category-count",
+        String(absencePhrases.length),
+      );
+      await expect(absenceChip).toContainText(String(absencePhrases.length));
+      await expect(absenceChip).toContainText("absence");
+
+      const hedgingChip = breakdown.locator(
+        `[data-testid="handwavy-removal-batches-row-category"][data-category="hedging"]`,
+      );
+      await expect(hedgingChip).toHaveAttribute(
+        "data-category-count",
+        String(hedgingPhrases.length),
+      );
+      await expect(hedgingChip).toContainText(String(hedgingPhrases.length));
+      await expect(hedgingChip).toContainText("hedging");
+
+      const buzzwordChip = breakdown.locator(
+        `[data-testid="handwavy-removal-batches-row-category"][data-category="buzzword"]`,
+      );
+      await expect(buzzwordChip).toHaveAttribute(
+        "data-category-count",
+        String(buzzwordPhrases.length),
+      );
+      await expect(buzzwordChip).toContainText(String(buzzwordPhrases.length));
+      await expect(buzzwordChip).toContainText("buzzword");
+
+      // The row's summary attribute mirrors the visible chip layout
+      // so callers that want to assert the whole breakdown at once
+      // don't have to enumerate the chips. Same source as the chips
+      // (the categoryBreakdownByBatchRemovedAt memo), so any future
+      // mismatch surfaces here.
+      await expect(pickerRow).toHaveAttribute(
+        "data-batch-categories",
+        `absence:${absencePhrases.length},hedging:${hedgingPhrases.length},buzzword:${buzzwordPhrases.length}`,
+      );
+
+      // The existing 5-phrase sample, count, and Reinstate affordances
+      // must still render — Task #486 adds the breakdown chip on top
+      // of those, it doesn't replace any of them.
+      await expect(
+        pickerRow.getByTestId("handwavy-removal-batches-samples"),
+      ).toBeVisible();
+      await expect(
+        pickerRow.getByTestId("handwavy-removal-batches-reinstate"),
+      ).toBeVisible();
+      await expect(pickerRow).toContainText(
+        `${allPhrases.length} phrases removed`,
+      );
+
+      // Now open the dialog and confirm the picker row's chip counts
+      // match the dialog's per-section counts exactly — the row and
+      // the dialog must never disagree because they share the
+      // grouping helper.
+      await pickerRow
+        .getByTestId("handwavy-removal-batches-reinstate")
+        .click();
+      const previewDialog = page.getByTestId(
+        "handwavy-removal-batches-preview-confirm",
+      );
+      await expect(previewDialog).toBeVisible({ timeout: 10_000 });
+      await expect(previewDialog).toHaveAttribute("data-status", "ready", {
+        timeout: 10_000,
+      });
+      const dialogGroups = previewDialog.getByTestId(
+        "handwavy-removal-batches-preview-group",
+      );
+      const dialogBreakdown = await dialogGroups.evaluateAll((nodes) =>
+        nodes.map((n) => {
+          const el = n as HTMLElement;
+          return {
+            key: el.getAttribute("data-category") ?? "",
+            count: Number(el.getAttribute("data-category-count") ?? "0"),
+          };
+        }),
+      );
+      const rowBreakdown = await categoryChips.evaluateAll((nodes) =>
+        nodes.map((n) => {
+          const el = n as HTMLElement;
+          return {
+            key: el.getAttribute("data-category") ?? "",
+            count: Number(el.getAttribute("data-category-count") ?? "0"),
+          };
+        }),
+      );
+      expect(rowBreakdown).toEqual(dialogBreakdown);
+
+      await previewDialog
+        .getByTestId("handwavy-removal-batches-preview-cancel")
+        .click();
+      await expect(previewDialog).toHaveCount(0, { timeout: 5_000 });
+    } finally {
+      await cleanup(apiCtx, allPhrases, {
+        reviewer: `${REVIEWER}-cleanup`,
+      });
+      await apiCtx.dispose();
+    }
+  });
 });

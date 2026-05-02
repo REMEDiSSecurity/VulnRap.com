@@ -2969,6 +2969,86 @@ function useGuardedNavigate(opts: {
   );
 }
 
+// Task #486 — Module-scope category labels + grouping helper. Used by
+// both the picker preview-dialog body (Task #342) and the picker row's
+// compact breakdown chip so they cannot disagree on which categories
+// appear, in which order, or under which labels. Originally a per-
+// component constant + per-render reduce inlined in the dialog; lifted
+// here so a single source of truth feeds every consumer.
+//
+// Ordering rule: known categories first in HANDWAVY_CATEGORY_LABELS
+// order, then any unknown buckets alphabetised, then an
+// "__uncategorized__" bucket last for rows whose category field is
+// missing/empty. The returned `label` is the long-form
+// HANDWAVY_CATEGORY_LABELS string for known keys, the literal
+// "Uncategorized" for the fallback bucket, and the raw category key
+// otherwise.
+const HANDWAVY_CATEGORY_LABELS: Record<
+  "absence" | "hedging" | "buzzword",
+  string
+> = {
+  absence: "Self-admitted absence of evidence",
+  hedging: "Generic hedging",
+  buzzword: "Buzzword-soup framing",
+};
+const HANDWAVY_UNCATEGORIZED_KEY = "__uncategorized__" as const;
+type HandwavyCategoryGroup<T> = {
+  key: string;
+  label: string;
+  items: T[];
+};
+function groupHandwavyPhrasesByCategory<T extends { category?: unknown }>(
+  items: ReadonlyArray<T>,
+): HandwavyCategoryGroup<T>[] {
+  const knownOrder = Object.keys(
+    HANDWAVY_CATEGORY_LABELS,
+  ) as ReadonlyArray<keyof typeof HANDWAVY_CATEGORY_LABELS>;
+  const knownSet = new Set<string>(knownOrder);
+  const groups = new Map<string, T[]>();
+  for (const it of items) {
+    const key =
+      typeof it.category === "string" && it.category
+        ? it.category
+        : HANDWAVY_UNCATEGORIZED_KEY;
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(it);
+    else groups.set(key, [it]);
+  }
+  const orderedKeys: string[] = [];
+  for (const k of knownOrder) {
+    if (groups.has(k)) orderedKeys.push(k);
+  }
+  Array.from(groups.keys())
+    .filter((k) => !knownSet.has(k) && k !== HANDWAVY_UNCATEGORIZED_KEY)
+    .sort()
+    .forEach((k) => orderedKeys.push(k));
+  if (groups.has(HANDWAVY_UNCATEGORIZED_KEY))
+    orderedKeys.push(HANDWAVY_UNCATEGORIZED_KEY);
+  return orderedKeys.map((key) => ({
+    key,
+    label:
+      key === HANDWAVY_UNCATEGORIZED_KEY
+        ? "Uncategorized"
+        : knownSet.has(key)
+          ? HANDWAVY_CATEGORY_LABELS[
+              key as keyof typeof HANDWAVY_CATEGORY_LABELS
+            ]
+          : key,
+    items: groups.get(key) ?? [],
+  }));
+}
+// Task #486 — Short, lowercase chip label for the picker-row breakdown.
+// The dialog uses the long HANDWAVY_CATEGORY_LABELS string (more
+// explanatory, vertical layout); the row needs to fit several
+// categories on a single horizontal line, so we surface the raw
+// category key (e.g. "hedging") with a stable "uncategorized"
+// fallback. Kept next to the helper above so any new category that
+// gets added shows up in both the dialog and the row chip with
+// matching wording.
+function shortHandwavyCategoryChipLabel(key: string): string {
+  return key === HANDWAVY_UNCATEGORIZED_KEY ? "uncategorized" : key;
+}
+
 export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean }) {
   // Task #214 — when the calibration auth probe says mutations would be
   // rejected (reviewer token missing or invalid), every mutating control on
@@ -3651,6 +3731,39 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     }
     return map;
   }, [history]);
+  // Task #486 — Per-batch category breakdown for the picker row's
+  // compact chip ("4 hedging · 3 absence · 1 buzzword"). Derived from
+  // the same `history[].phrases` payload that backs
+  // `phrasesByBatchRemovedAt` so the row and the dialog can never
+  // disagree on category membership: every inner phrase carries the
+  // same `category` field on the wire that the dialog's detail
+  // endpoint exposes, and we run both consumers through the shared
+  // `groupHandwavyPhrasesByCategory` helper. A batch only gets a
+  // breakdown when its inner phrases are present in the history
+  // payload — newly opened pages may briefly miss a row's chip until
+  // the handwavy-phrases query lands; that's the same lifecycle as
+  // the existing "Show all" toggle (Task #243).
+  const categoryBreakdownByBatchRemovedAt = useMemo(() => {
+    const map = new Map<
+      string,
+      ReadonlyArray<{ key: string; label: string; count: number }>
+    >();
+    for (const h of history) {
+      if (!Array.isArray(h.phrases) || h.phrases.length === 0) continue;
+      const key = String(h.removedAt ?? "");
+      if (!key) continue;
+      const groups = groupHandwavyPhrasesByCategory(h.phrases);
+      map.set(
+        key,
+        groups.map((g) => ({
+          key: g.key,
+          label: g.label,
+          count: g.items.length,
+        })),
+      );
+    }
+    return map;
+  }, [history]);
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(
     () => new Set<string>(),
   );
@@ -3888,11 +4001,6 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       historyPhrasesHighlightTimeoutRef.current = null;
     }, 2500);
   };
-  const CATEGORY_LABELS: Record<"absence" | "hedging" | "buzzword", string> = {
-    absence: "Self-admitted absence of evidence",
-    hedging: "Generic hedging",
-    buzzword: "Buzzword-soup framing",
-  };
 
   const persistReviewer = (value: string) => {
     setReviewer(value);
@@ -4018,7 +4126,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       if (result.added === false) {
         toast({ title: "Already in the list", description: `"${result.phrase}" was already a hand-wavy marker.` });
       } else {
-        toast({ title: "Phrase added", description: `New triages will flag "${result.phrase}" (${CATEGORY_LABELS[preview.category]}) immediately.` });
+        toast({ title: "Phrase added", description: `New triages will flag "${result.phrase}" (${HANDWAVY_CATEGORY_LABELS[preview.category]}) immediately.` });
       }
       setDraft("");
       setDraftRationale("");
@@ -5666,7 +5774,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       });
       toast({
         title: "Phrase reinstated",
-        description: `"${entry.phrase}" is back on the active list with its original ${CATEGORY_LABELS[entry.category as keyof typeof CATEGORY_LABELS] ?? entry.category ?? "absence"} context.`,
+        description: `"${entry.phrase}" is back on the active list with its original ${HANDWAVY_CATEGORY_LABELS[entry.category as keyof typeof HANDWAVY_CATEGORY_LABELS] ?? entry.category ?? "absence"} context.`,
       });
       refresh();
       // Task #443 — a reinstate puts the phrase BACK on the active list,
@@ -7034,7 +7142,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   &ldquo;{draftOverlaps[0].phrase}&rdquo;
                 </button>{" "}
                 <span className="text-amber-200/70">
-                  [{CATEGORY_LABELS[draftOverlaps[0].category]}]
+                  [{HANDWAVY_CATEGORY_LABELS[draftOverlaps[0].category]}]
                 </span>
               </span>
               {draftOverlaps.length > 1 && (
@@ -7082,7 +7190,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     &ldquo;{top.phrase}&rdquo;
                   </button>{" "}
                   <span className="text-amber-200/70">
-                    [{CATEGORY_LABELS[top.category]}]
+                    [{HANDWAVY_CATEGORY_LABELS[top.category]}]
                   </span>
                   {" — "}
                   {verb} by{" "}
@@ -9575,6 +9683,19 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     phraseCount > 0 &&
                     pickerReinstatedCount > 0 &&
                     pickerReinstatedCount < phraseCount;
+                  // Task #486 — Per-row category breakdown chip ("4
+                  // hedging · 3 absence · 1 buzzword"). Reuses the
+                  // shared groupHandwavyPhrasesByCategory helper via
+                  // the categoryBreakdownByBatchRemovedAt memo so the
+                  // row matches the dialog's category sectioning by
+                  // construction. We only render when the breakdown
+                  // is available (i.e. the parent
+                  // useGetHandwavyPhrases query has the inner
+                  // phrases for this batch); otherwise the chip is
+                  // omitted rather than guessing — same lifecycle as
+                  // the existing "Show all" toggle above.
+                  const categoryBreakdown =
+                    categoryBreakdownByBatchRemovedAt.get(removedAtIso);
                   // Task #340 — track whether THIS row's conflict popover
                   // is currently open. The chip becomes a button that
                   // toggles the inline list of conflicting phrases below
@@ -9591,6 +9712,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                       data-batch-conflict-count={conflict ? conflict.conflictCount : 0}
                       data-batch-expanded={isExpanded ? "true" : "false"}
                       data-batch-conflict-expanded={isConflictExpanded ? "true" : "false"}
+                      data-batch-categories={
+                        categoryBreakdown
+                          ? categoryBreakdown
+                              .map((g) => `${g.key}:${g.count}`)
+                              .join(",")
+                          : ""
+                      }
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-foreground/80 flex-1 min-w-0">
@@ -9710,6 +9838,55 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           })()
                         )}
                       </div>
+                      {categoryBreakdown && categoryBreakdown.length > 0 && (
+                        // Task #486 — Compact per-category breakdown
+                        // chip ("4 hedging · 3 absence · 1 buzzword").
+                        // Lets reviewers triaging a mixed batch see
+                        // the category mix at a glance without
+                        // opening the dialog. Derived from the same
+                        // history payload + grouping helper that the
+                        // dialog uses, so the row and the dialog can
+                        // never disagree on counts or section order.
+                        // Rendered as a single flex-wrap line so a
+                        // batch with many categories still wraps
+                        // cleanly inside the picker's narrow column.
+                        <div
+                          className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground"
+                          data-testid="handwavy-removal-batches-row-categories"
+                          aria-label={`Category breakdown: ${categoryBreakdown
+                            .map(
+                              (g) =>
+                                `${g.count} ${shortHandwavyCategoryChipLabel(g.key)}`,
+                            )
+                            .join(", ")}`}
+                        >
+                          {categoryBreakdown.map((g, idx) => (
+                            <span
+                              key={g.key}
+                              className="inline-flex items-baseline gap-1"
+                              data-testid="handwavy-removal-batches-row-category"
+                              data-category={g.key}
+                              data-category-count={g.count}
+                              title={`${g.count} ${g.label}`}
+                            >
+                              <strong className="text-foreground/80 tabular-nums">
+                                {g.count}
+                              </strong>
+                              <span>
+                                {shortHandwavyCategoryChipLabel(g.key)}
+                              </span>
+                              {idx < categoryBreakdown.length - 1 && (
+                                <span
+                                  aria-hidden="true"
+                                  className="text-muted-foreground/40 ml-1"
+                                >
+                                  ·
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {isConflictExpanded && conflict && (
                         // Task #340 — inline detail panel attached to the
                         // conflict chip. Lists each conflicting phrase
@@ -10907,8 +11084,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     <li>
                       category{" "}
                       <span className="text-foreground capitalize">
-                        {CATEGORY_LABELS[
-                          reinstateConfirm.category as keyof typeof CATEGORY_LABELS
+                        {HANDWAVY_CATEGORY_LABELS[
+                          reinstateConfirm.category as keyof typeof HANDWAVY_CATEGORY_LABELS
                         ] ?? reinstateConfirm.category ?? "absence"}
                       </span>
                     </li>
@@ -11454,55 +11631,28 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     };
                     const phrases = pickerBatchPreview.detail
                       .phrases as PreviewPhrase[];
-                    // Stable category order so the same batch always
-                    // renders the same section sequence — known
-                    // categories first (in CATEGORY_LABELS order), then
-                    // any unknown buckets (alphabetised) and finally an
-                    // "Uncategorized" fallback for rows with no
-                    // category field. Derived from CATEGORY_LABELS so a
-                    // future-added category renders in the right slot
-                    // without touching this block.
-                    const knownOrder = Object.keys(
-                      CATEGORY_LABELS,
-                    ) as ReadonlyArray<keyof typeof CATEGORY_LABELS>;
-                    const knownSet = new Set<string>(knownOrder);
-                    const groups = new Map<string, PreviewPhrase[]>();
-                    for (const p of phrases) {
-                      const key =
-                        typeof p.category === "string" && p.category
-                          ? p.category
-                          : "__uncategorized__";
-                      const bucket = groups.get(key);
-                      if (bucket) bucket.push(p);
-                      else groups.set(key, [p]);
-                    }
-                    const orderedKeys: string[] = [];
-                    for (const k of knownOrder) {
-                      if (groups.has(k)) orderedKeys.push(k);
-                    }
-                    const extra = Array.from(groups.keys())
-                      .filter(
-                        (k) =>
-                          !knownSet.has(k) && k !== "__uncategorized__",
-                      )
-                      .sort();
-                    orderedKeys.push(...extra);
-                    if (groups.has("__uncategorized__"))
-                      orderedKeys.push("__uncategorized__");
-
+                    // Task #486 — Group rows via the shared
+                    // groupHandwavyPhrasesByCategory helper so the
+                    // dialog and the picker row's compact breakdown
+                    // chip always agree on which categories appear,
+                    // in which order, and under which labels. Stable
+                    // category order: known categories first (in
+                    // HANDWAVY_CATEGORY_LABELS order), then any
+                    // unknown buckets alphabetised, then an
+                    // "Uncategorized" fallback last.
+                    const orderedGroups =
+                      groupHandwavyPhrasesByCategory(phrases);
                     // Task #485 — within each category bucket, sort
                     // "will reinstate" rows before "already reinstated"
                     // rows so the actionable items float to the top of
                     // the section, then sort case-insensitively by
                     // phrase within each status group so reviewers can
                     // scan related phrases without hunting. The
-                    // grouping above preserves insertion order so this
-                    // post-pass is the only ordering signal inside each
-                    // section.
-                    for (const key of orderedKeys) {
-                      const bucket = groups.get(key);
-                      if (!bucket) continue;
-                      bucket.sort((a, b) => {
+                    // grouping helper preserves insertion order inside
+                    // each bucket, so this post-pass is the only
+                    // ordering signal inside each section.
+                    for (const group of orderedGroups) {
+                      group.items.sort((a, b) => {
                         const aDone = a.reinstated === true ? 1 : 0;
                         const bDone = b.reinstated === true ? 1 : 0;
                         if (aDone !== bDone) return aDone - bDone;
@@ -11511,91 +11661,77 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                         });
                       });
                     }
-
-                    const labelFor = (key: string): string => {
-                      if (key === "__uncategorized__")
-                        return "Uncategorized";
-                      if (knownSet.has(key))
-                        return CATEGORY_LABELS[
-                          key as keyof typeof CATEGORY_LABELS
-                        ];
-                      return key;
-                    };
-
                     return (
                       <div
                         className="max-h-56 overflow-y-auto border border-border/30 rounded-md p-2 space-y-3"
                         data-testid="handwavy-removal-batches-preview-list"
                       >
-                        {orderedKeys.map((key) => {
-                          const rows = groups.get(key) ?? [];
-                          return (
-                            <section
-                              key={key}
-                              className="space-y-1"
-                              data-testid="handwavy-removal-batches-preview-group"
-                              data-category={key}
-                              data-category-count={rows.length}
+                        {orderedGroups.map((group) => (
+                          <section
+                            key={group.key}
+                            className="space-y-1"
+                            data-testid="handwavy-removal-batches-preview-group"
+                            data-category={group.key}
+                            data-category-count={group.items.length}
+                          >
+                            <header
+                              className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-foreground/70 sticky top-0 bg-background/80 backdrop-blur-sm py-0.5"
+                              data-testid="handwavy-removal-batches-preview-group-header"
                             >
-                              <header
-                                className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-foreground/70 sticky top-0 bg-background/80 backdrop-blur-sm py-0.5"
-                                data-testid="handwavy-removal-batches-preview-group-header"
+                              <span className="font-medium">
+                                {group.label}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] shrink-0"
+                                data-testid="handwavy-removal-batches-preview-group-count"
                               >
-                                <span className="font-medium">
-                                  {labelFor(key)}
-                                </span>
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] shrink-0"
-                                  data-testid="handwavy-removal-batches-preview-group-count"
+                                {group.items.length}
+                              </Badge>
+                            </header>
+                            <ul className="list-none pl-0 space-y-1">
+                              {group.items.map((p, idx) => (
+                                <li
+                                  key={`${p.phrase}-${idx}`}
+                                  className="flex items-start gap-2 text-[11px]"
+                                  data-testid="handwavy-removal-batches-preview-row"
+                                  data-phrase={p.phrase}
+                                  data-category={
+                                    typeof p.category === "string"
+                                      ? p.category
+                                      : ""
+                                  }
+                                  data-already-reinstated={
+                                    p.reinstated === true
+                                      ? "true"
+                                      : "false"
+                                  }
                                 >
-                                  {rows.length}
-                                </Badge>
-                              </header>
-                              <ul className="list-none pl-0 space-y-1">
-                                {rows.map((p, idx) => (
-                                  <li
-                                    key={`${p.phrase}-${idx}`}
-                                    className="flex items-start gap-2 text-[11px]"
-                                    data-testid="handwavy-removal-batches-preview-row"
-                                    data-phrase={p.phrase}
-                                    data-category={
-                                      typeof p.category === "string"
-                                        ? p.category
-                                        : ""
-                                    }
-                                    data-already-reinstated={
-                                      p.reinstated === true
-                                        ? "true"
-                                        : "false"
-                                    }
-                                  >
-                                    <span className="font-mono text-foreground/80 break-all flex-1">
-                                      “{p.phrase}”
-                                    </span>
-                                    {p.reinstated === true ? (
-                                      <Badge
-                                        variant="outline"
-                                        className="text-[10px] border-emerald-500/40 text-emerald-300 shrink-0"
-                                        data-testid="handwavy-removal-batches-preview-row-already"
-                                      >
-                                        Already reinstated
-                                      </Badge>
-                                    ) : (
-                                      <Badge
-                                        variant="outline"
-                                        className="text-[10px] border-sky-500/40 text-sky-300 shrink-0"
-                                        data-testid="handwavy-removal-batches-preview-row-pending"
-                                      >
-                                        Will reinstate
-                                      </Badge>
-                                    )}
-                                  </li>
-                                ))}
-                              </ul>
-                            </section>
-                          );
-                        })}
+                                  <span className="font-mono text-foreground/80 break-all flex-1">
+                                    “{p.phrase}”
+                                  </span>
+                                  {p.reinstated === true ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] border-emerald-500/40 text-emerald-300 shrink-0"
+                                      data-testid="handwavy-removal-batches-preview-row-already"
+                                    >
+                                      Already reinstated
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] border-sky-500/40 text-sky-300 shrink-0"
+                                      data-testid="handwavy-removal-batches-preview-row-pending"
+                                    >
+                                      Will reinstate
+                                    </Badge>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+                        ))}
                       </div>
                     );
                   })()}
