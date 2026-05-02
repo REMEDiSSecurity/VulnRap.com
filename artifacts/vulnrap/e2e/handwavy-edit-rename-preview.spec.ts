@@ -324,6 +324,162 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
     }
   });
 
+  // Task #465 — Task #327 locked in the production-scan timestamp range
+  // ("Scanned N reports from <oldest> to <newest>") for the add-phrase
+  // preview and the per-row Trash (single-remove) preview. The rename
+  // preview reuses the same shared `BulkRemovalImpactBlock` and so
+  // already produces the line in practice, but no e2e assertion guarded
+  // it. This test stubs the rename dryRun=true DELETE response with
+  // non-null production `oldestCreatedAt`/`newestCreatedAt`, opens the
+  // rename impact preview from the per-row Edit, and asserts the
+  // production block's range subtitle renders with the "Scanned N
+  // reports from <…> to <…>" shape — and that the curated-side
+  // null-timestamps graceful-degradation branch keeps the curated range
+  // testid out of the DOM.
+  test("rename impact preview production block renders the 'Scanned N reports from … to …' line and gracefully omits the curated range when timestamps are null (Task #465)", async ({
+    page,
+  }) => {
+    // Distinct calendar days so `formatProductionScanRange` returns the
+    // "from <…> to <…>" branch rather than collapsing to "on <date>".
+    // Both ISO strings are UTC midnight so the rendered date may shift
+    // one day in negative-offset locales — the assertions below match
+    // the structural shape and the year, both of which are
+    // locale-stable. Mirrors the constants used in the Task #327 spec.
+    const OLDEST_ISO = "2026-04-01T00:00:00.000Z";
+    const NEWEST_ISO = "2026-04-29T00:00:00.000Z";
+
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const original = uniquePhrase("range-from");
+    const renamed = uniquePhrase("range-to");
+
+    try {
+      // Need a real row in the active list so the per-row Edit affordance
+      // is mounted; the dryRun=true DELETE is intercepted below so the
+      // synthesized impact (with timestamps) drives the rendered panel.
+      await addPhrase(apiCtx, original);
+
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrase?: string }
+            | undefined;
+          if (!body?.dryRun || body.phrase !== original) {
+            await route.fallback();
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              dryRun: true,
+              batch: false,
+              wouldRemove: 1,
+              notFound: 0,
+              duplicateInBatch: 0,
+              phrase: original,
+              raw: original,
+              removed: true,
+              reason: null,
+              total: 99,
+              projectedTotal: 98,
+              results: [{ raw: original, phrase: original, removed: true }],
+              dryRunImpact: {
+                // Curated half: validDetectionsLost > 0 so the rename
+                // preview panel mounts (zero-impact renames apply in
+                // one click and skip the panel entirely), and null
+                // timestamps exercise the graceful-degradation branch
+                // — the curated-range testid must NOT appear in DOM.
+                corpus: {
+                  total: 1,
+                  validDetectionsLost: 1,
+                  falsePositivesDropped: 0,
+                  byTier: {
+                    t1Legit: 1,
+                    t2Borderline: 0,
+                    t3Slop: 0,
+                    t4Hallucinated: 0,
+                  },
+                  sampleMatches: [],
+                  warning:
+                    "1 legitimate detection would be lost from the curated benchmark",
+                  corpusSize: 47,
+                  oldestCreatedAt: null,
+                  newestCreatedAt: null,
+                },
+                production: {
+                  total: 0,
+                  validDetectionsLost: 0,
+                  falsePositivesDropped: 0,
+                  byTier: {
+                    t1Legit: 0,
+                    t2Borderline: 0,
+                    t3Slop: 0,
+                    t4Hallucinated: 0,
+                  },
+                  sampleMatches: [],
+                  warning: null,
+                  corpusSize: 412,
+                  oldestCreatedAt: OLDEST_ISO,
+                  newestCreatedAt: NEWEST_ISO,
+                },
+                productionError: null,
+                productionLimit: 2000,
+              },
+              phrases: [],
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const row = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: original });
+      await expect(row).toHaveCount(1, { timeout: 15_000 });
+
+      // Open Edit, rename, save — the panel should appear because the
+      // synthetic dry-run reports 1 valid detection lost on the curated
+      // half.
+      await row.getByTestId("handwavy-edit").click();
+      await row.getByTestId("handwavy-edit-phrase").fill(renamed);
+      await row.getByTestId("handwavy-edit-save").click();
+
+      const panel = page.getByTestId("handwavy-edit-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // The rename preview uses the shared `BulkRemovalImpactBlock`,
+      // which tags its scan-range subtitle with the kind-suffixed
+      // testid. The production block must render the same "Scanned N
+      // reports from … to …" shape that the bulk-preview and
+      // single-remove blocks do.
+      const productionRange = panel.getByTestId(
+        "handwavy-bulk-preview-production-range",
+      );
+      await expect(productionRange).toBeVisible();
+      await expect(productionRange).toContainText("Scanned 412 reports");
+      await expect(productionRange).toContainText(/from .+ to .+/);
+      await expect(productionRange).toContainText("2026");
+
+      // Graceful degradation: the curated block returned null
+      // timestamps, so its kind-suffixed range testid must not exist
+      // anywhere in the panel.
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-curated-range"),
+      ).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, [original, renamed]);
+      await apiCtx.dispose();
+    }
+  });
+
   test("'Back out' on the rename impact preview cancels without firing the live PATCH", async ({
     page,
   }) => {
