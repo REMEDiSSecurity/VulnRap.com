@@ -6,14 +6,14 @@
  * OpenAPI spec version: 3.0.0
  */
 
-export type VerificationCheckResult = typeof VerificationCheckResult[keyof typeof VerificationCheckResult];
-
+export type VerificationCheckResult =
+  (typeof VerificationCheckResult)[keyof typeof VerificationCheckResult];
 
 export const VerificationCheckResult = {
-  verified: 'verified',
-  not_found: 'not_found',
-  warning: 'warning',
-  error: 'error',
-  skipped: 'skipped',
-  info: 'info',
+  verified: "verified",
+  not_found: "not_found",
+  warning: "warning",
+  error: "error",
+  skipped: "skipped",
+  info: "info",
 } as const;

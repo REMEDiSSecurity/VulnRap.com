@@ -5,8 +5,8 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { VulnrapCompositeRescoreHistoryItemMode } from './vulnrapCompositeRescoreHistoryItemMode';
-import type { VulnrapCompositeRescoreHistoryItemSource } from './vulnrapCompositeRescoreHistoryItemSource';
+import type { VulnrapCompositeRescoreHistoryItemMode } from "./vulnrapCompositeRescoreHistoryItemMode";
+import type { VulnrapCompositeRescoreHistoryItemSource } from "./vulnrapCompositeRescoreHistoryItemSource";
 
 export type VulnrapCompositeRescoreHistoryItem = {
   /** Always `backfill-rescore` for now; reserved for future audit sources (e.g. manual reviewer overrides). */

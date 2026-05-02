@@ -5,12 +5,12 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { ChallengeQuestion } from './challengeQuestion';
-import type { RevisionResult } from './revisionResult';
-import type { TemplateMatch } from './templateMatch';
-import type { TemporalSignal } from './temporalSignal';
-import type { TriageMatrixInputs } from './triageMatrixInputs';
-import type { TriageRecommendationAction } from './triageRecommendationAction';
+import type { ChallengeQuestion } from "./challengeQuestion";
+import type { RevisionResult } from "./revisionResult";
+import type { TemplateMatch } from "./templateMatch";
+import type { TemporalSignal } from "./temporalSignal";
+import type { TriageMatrixInputs } from "./triageMatrixInputs";
+import type { TriageRecommendationAction } from "./triageRecommendationAction";
 
 export interface TriageRecommendation {
   /** Recommended triage action based on score, confidence, and verification results */

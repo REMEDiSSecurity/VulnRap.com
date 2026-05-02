@@ -9,9 +9,9 @@
 /**
  * Always `backfill-rescore` for now; reserved for future audit sources (e.g. manual reviewer overrides).
  */
-export type VulnrapCompositeRescoreHistoryItemSource = typeof VulnrapCompositeRescoreHistoryItemSource[keyof typeof VulnrapCompositeRescoreHistoryItemSource];
-
+export type VulnrapCompositeRescoreHistoryItemSource =
+  (typeof VulnrapCompositeRescoreHistoryItemSource)[keyof typeof VulnrapCompositeRescoreHistoryItemSource];
 
 export const VulnrapCompositeRescoreHistoryItemSource = {
-  'backfill-rescore': 'backfill-rescore',
+  "backfill-rescore": "backfill-rescore",
 } as const;

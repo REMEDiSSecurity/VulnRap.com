@@ -9,13 +9,13 @@
 /**
  * Recommended triage action based on score, confidence, and verification results
  */
-export type TriageRecommendationAction = typeof TriageRecommendationAction[keyof typeof TriageRecommendationAction];
-
+export type TriageRecommendationAction =
+  (typeof TriageRecommendationAction)[keyof typeof TriageRecommendationAction];
 
 export const TriageRecommendationAction = {
-  AUTO_CLOSE: 'AUTO_CLOSE',
-  MANUAL_REVIEW: 'MANUAL_REVIEW',
-  CHALLENGE_REPORTER: 'CHALLENGE_REPORTER',
-  PRIORITIZE: 'PRIORITIZE',
-  STANDARD_TRIAGE: 'STANDARD_TRIAGE',
+  AUTO_CLOSE: "AUTO_CLOSE",
+  MANUAL_REVIEW: "MANUAL_REVIEW",
+  CHALLENGE_REPORTER: "CHALLENGE_REPORTER",
+  PRIORITIZE: "PRIORITIZE",
+  STANDARD_TRIAGE: "STANDARD_TRIAGE",
 } as const;

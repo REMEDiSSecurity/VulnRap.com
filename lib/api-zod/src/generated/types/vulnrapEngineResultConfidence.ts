@@ -6,11 +6,11 @@
  * OpenAPI spec version: 3.0.0
  */
 
-export type VulnrapEngineResultConfidence = typeof VulnrapEngineResultConfidence[keyof typeof VulnrapEngineResultConfidence];
-
+export type VulnrapEngineResultConfidence =
+  (typeof VulnrapEngineResultConfidence)[keyof typeof VulnrapEngineResultConfidence];
 
 export const VulnrapEngineResultConfidence = {
-  HIGH: 'HIGH',
-  MEDIUM: 'MEDIUM',
-  LOW: 'LOW',
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
 } as const;

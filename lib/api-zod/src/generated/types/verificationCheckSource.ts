@@ -9,10 +9,10 @@
 /**
  * Whether the check was performed against a repo/resource explicitly cited in the report (referenced_in_report) or one we guessed via keyword fallback (search_fallback). Absent when not applicable (e.g. CVE/PoC checks).
  */
-export type VerificationCheckSource = typeof VerificationCheckSource[keyof typeof VerificationCheckSource];
-
+export type VerificationCheckSource =
+  (typeof VerificationCheckSource)[keyof typeof VerificationCheckSource];
 
 export const VerificationCheckSource = {
-  referenced_in_report: 'referenced_in_report',
-  search_fallback: 'search_fallback',
+  referenced_in_report: "referenced_in_report",
+  search_fallback: "search_fallback",
 } as const;

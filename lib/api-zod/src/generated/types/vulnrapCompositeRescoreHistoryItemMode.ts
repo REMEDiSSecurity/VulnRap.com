@@ -9,10 +9,10 @@
 /**
  * Which rescore branch produced this entry. `engine` means the live pipeline re-ran on stored text; `reconstruction` means the composite was rebuilt from cached v3.5.0 signals.
  */
-export type VulnrapCompositeRescoreHistoryItemMode = typeof VulnrapCompositeRescoreHistoryItemMode[keyof typeof VulnrapCompositeRescoreHistoryItemMode];
-
+export type VulnrapCompositeRescoreHistoryItemMode =
+  (typeof VulnrapCompositeRescoreHistoryItemMode)[keyof typeof VulnrapCompositeRescoreHistoryItemMode];
 
 export const VulnrapCompositeRescoreHistoryItemMode = {
-  engine: 'engine',
-  reconstruction: 'reconstruction',
+  engine: "engine",
+  reconstruction: "reconstruction",
 } as const;

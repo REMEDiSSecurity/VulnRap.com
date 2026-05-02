@@ -14,12 +14,12 @@ plausibility checks; MANUAL_ONLY short-circuits automated probes
 existence; GENERIC runs both source-code and endpoint probes.
 
  */
-export type VerificationMode = typeof VerificationMode[keyof typeof VerificationMode];
-
+export type VerificationMode =
+  (typeof VerificationMode)[keyof typeof VerificationMode];
 
 export const VerificationMode = {
-  SOURCE_CODE: 'SOURCE_CODE',
-  ENDPOINT: 'ENDPOINT',
-  MANUAL_ONLY: 'MANUAL_ONLY',
-  GENERIC: 'GENERIC',
+  SOURCE_CODE: "SOURCE_CODE",
+  ENDPOINT: "ENDPOINT",
+  MANUAL_ONLY: "MANUAL_ONLY",
+  GENERIC: "GENERIC",
 } as const;

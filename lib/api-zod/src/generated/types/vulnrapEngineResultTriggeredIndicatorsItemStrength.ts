@@ -6,11 +6,11 @@
  * OpenAPI spec version: 3.0.0
  */
 
-export type VulnrapEngineResultTriggeredIndicatorsItemStrength = typeof VulnrapEngineResultTriggeredIndicatorsItemStrength[keyof typeof VulnrapEngineResultTriggeredIndicatorsItemStrength];
-
+export type VulnrapEngineResultTriggeredIndicatorsItemStrength =
+  (typeof VulnrapEngineResultTriggeredIndicatorsItemStrength)[keyof typeof VulnrapEngineResultTriggeredIndicatorsItemStrength];
 
 export const VulnrapEngineResultTriggeredIndicatorsItemStrength = {
-  HIGH: 'HIGH',
-  MEDIUM: 'MEDIUM',
-  LOW: 'LOW',
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
 } as const;

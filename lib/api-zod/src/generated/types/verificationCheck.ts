@@ -5,8 +5,8 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { VerificationCheckResult } from './verificationCheckResult';
-import type { VerificationCheckSource } from './verificationCheckSource';
+import type { VerificationCheckResult } from "./verificationCheckResult";
+import type { VerificationCheckSource } from "./verificationCheckSource";
 
 export interface VerificationCheck {
   /** Check type identifier (e.g. github_file_verified, cve_not_in_nvd, poc_placeholder_textbook) */
