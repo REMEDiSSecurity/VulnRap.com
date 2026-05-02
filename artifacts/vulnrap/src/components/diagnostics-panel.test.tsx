@@ -833,6 +833,208 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/raw_http_request_with_headers/)).toBeInTheDocument();
   });
 
+  // Task #447 — the FAKE_RAW_HTTP_RESPONSE sub-block must surface its own
+  // "Response gold signals revoked" line so a reviewer can tell which
+  // revocations came from the fabricated response (vs. the request side,
+  // which is shown by the parent "Gold Signals Revoked" list). Wording
+  // mirrors the printable triage report's sub-bullet so the panel and the
+  // offline MD/PDF export stay in lock-step.
+  it("renders a 'Response gold signals revoked' line inside the FAKE_RAW_HTTP_RESPONSE sub-block when rawHttp.response.revokedGoldHits is non-empty (Task #447)", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "INJECTION",
+          familyName: "Injection",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-79",
+            evidence: ["CWE-79"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 22,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "INJECTION",
+                  familyName: "Injection",
+                  baseScore: 18,
+                  goldHitCount: 0,
+                  goldTotalCount: 6,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  rawHttp: {
+                    requestsAnalyzed: 1,
+                    totalHeaders: 4,
+                    placeholderHeaders: 0,
+                    crlfPresent: true,
+                    teClConflicts: 0,
+                    teClBroken: 0,
+                    isFake: true,
+                    reason:
+                      "Fake raw HTTP response (fabricated `HTTP/1.1 200 OK` block missing Date/Server headers)",
+                    revokedGoldHits: [
+                      { id: "request_response_diff", points: 12 },
+                    ],
+                    penalty: -12,
+                    response: {
+                      responsesAnalyzed: 1,
+                      responsesFlagged: 1,
+                      totalHeaders: 2,
+                      responsesMissingDate: 1,
+                      responsesMissingServer: 1,
+                      responsesWithSuspiciousJsonBody: 1,
+                      responsesMissingIncidentals: 1,
+                      isFake: true,
+                      reason:
+                        "Fabricated response: missing Date/Server, suspiciously clean JSON body, no incidental headers",
+                      revokedGoldHits: [
+                        { id: "request_response_diff", points: 12 },
+                      ],
+                    },
+                  },
+                  rawAvriScore: 0,
+                  legacyScore: 30,
+                  blendedScore: 22,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("FAKE_RAW_HTTP_RESPONSE")).toBeInTheDocument();
+    });
+
+    // Sub-block header for the response-side revoked gold signals.
+    expect(
+      screen.getByText(/Response gold signals revoked/i),
+    ).toBeInTheDocument();
+    // The response-class id and its negative-points value render under
+    // the new sub-block. The id also appears in the parent OR-merged
+    // "Gold Signals Revoked" list, so both occurrences must be present
+    // (panel surfaces the request/response split *and* the merged view).
+    const ids = screen.getAllByText(/request_response_diff/);
+    expect(ids).toHaveLength(2);
+    const points = screen.getAllByText(/^−12$/);
+    expect(points).toHaveLength(2);
+  });
+
+  // Task #447 — guard against accidentally rendering the sub-block header
+  // when the response sub-block is fake but `revokedGoldHits` is absent
+  // (legacy persisted reports analyzed before the field shipped) or empty.
+  it("does not render the 'Response gold signals revoked' line when rawHttp.response.revokedGoldHits is empty/absent (Task #447)", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "INJECTION",
+          familyName: "Injection",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-79",
+            evidence: ["CWE-79"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 18,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 22,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "INJECTION",
+                  familyName: "Injection",
+                  baseScore: 18,
+                  goldHitCount: 0,
+                  goldTotalCount: 6,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  rawHttp: {
+                    requestsAnalyzed: 1,
+                    totalHeaders: 4,
+                    placeholderHeaders: 0,
+                    crlfPresent: true,
+                    teClConflicts: 0,
+                    teClBroken: 0,
+                    isFake: true,
+                    reason:
+                      "Fake raw HTTP response (fabricated `HTTP/1.1 200 OK` block missing Date/Server headers)",
+                    revokedGoldHits: [],
+                    penalty: -12,
+                    response: {
+                      responsesAnalyzed: 1,
+                      responsesFlagged: 1,
+                      totalHeaders: 2,
+                      responsesMissingDate: 1,
+                      responsesMissingServer: 1,
+                      responsesWithSuspiciousJsonBody: 1,
+                      responsesMissingIncidentals: 1,
+                      isFake: true,
+                      reason: null,
+                      // revokedGoldHits intentionally omitted to simulate
+                      // a legacy persisted report.
+                    },
+                  },
+                  rawAvriScore: 0,
+                  legacyScore: 30,
+                  blendedScore: 22,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("FAKE_RAW_HTTP_RESPONSE")).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByText(/Response gold signals revoked/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not render the FAKE_RAW_HTTP block when rawHttp.isFake is false", async () => {
     fetchSpy.mockImplementationOnce(async () => new Response(
       JSON.stringify({

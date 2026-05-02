@@ -1085,6 +1085,38 @@ function AvriFamilySection({
                         no incidentals: {rawHttp.response.responsesMissingIncidentals}
                       </span>
                     </div>
+                    {/*
+                      Task #447: surface the response-class revoked gold
+                      signal id(s) inside the FAKE_RAW_HTTP_RESPONSE
+                      sub-block so a reviewer can tell which revocations
+                      came from the fabricated response (vs. the request
+                      side, which is shown by the parent "Gold Signals
+                      Revoked" list below). Wording mirrors the printable
+                      triage report's "Response gold signals revoked"
+                      sub-bullet so the panel and the offline MD/PDF
+                      export stay in lock-step. `revokedGoldHits` is
+                      optional on `AvriEngine2RawHttpResponse` (legacy
+                      persisted reports won't carry it) so we default to
+                      an empty list and skip the line when empty.
+                    */}
+                    {(rawHttp.response.revokedGoldHits ?? []).length > 0 && (
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                          Response gold signals revoked
+                        </div>
+                        <ul className="space-y-0.5">
+                          {rawHttp.response.revokedGoldHits!.map((r) => (
+                            <li
+                              key={r.id}
+                              className="text-[11px] font-mono text-red-400/90 flex items-baseline gap-1"
+                            >
+                              <span>−{r.points}</span>
+                              <span className="text-foreground/80">{r.id}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
                 {rawHttp.revokedGoldHits.length > 0 && (
