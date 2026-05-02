@@ -84,6 +84,17 @@ const LLM_TIMEOUT_MS = 30_000;
 // signal needs to change, not its threshold widths. Full data, the list of
 // 16 silently-skipped borderline-composite fixtures, and the per-knob "why
 // not" reasoning live in docs/calibration/2026-04-30-llm-cost-gate-audit.md.
+//
+// Task #442 — follow-up: the audit's "change the input signal" recommendation
+// is now applied below. `evaluateLlmGate` accepts an optional Engine 2 / 3-
+// engine composite score (0–100, higher = more valid) and uses it as the
+// PRIMARY borderline signal. The heuristic score (0–100, higher = more
+// slop) acts only as a tiebreaker that allows the cost gate to skip the LLM
+// when a borderline composite report ALSO looks heuristically slop-y. When
+// no composite is supplied (legacy callers / pre-engine pipelines), the gate
+// falls back to the original heuristic-only behavior so this change is
+// strictly additive. The thresholds themselves are reused for the composite
+// band — calibration confirmed [25, 60] is the right window for both axes.
 export const COST_GUARD_LOW = 25;
 export const COST_GUARD_HIGH = 60;
 export const COST_GUARD_CONFIDENCE = 0.5;
@@ -119,8 +130,9 @@ export function isLLMAvailable(): boolean {
 export function shouldCallLLM(
   heuristicScore: number,
   confidence: number,
+  compositeScore?: number | null,
 ): boolean {
-  return evaluateLlmGate(heuristicScore, confidence).shouldCall;
+  return evaluateLlmGate(heuristicScore, confidence, compositeScore).shouldCall;
 }
 
 // Task #209 — structured gate decision so the diagnostics panel and the
@@ -128,12 +140,23 @@ export function shouldCallLLM(
 // for a given report rather than just a boolean. This is observation-only:
 // the underlying thresholds are unchanged, we just expose the reason string
 // keyed off the same checks.
+//
+// Task #442 — three composite-driven reasons added so the audit can
+// distinguish a borderline-composite skip (cost guard hit on T1 high or
+// T3/T4 low composite) from the heuristic-tiebreaker skip (composite is
+// borderline but heuristic ≥ HIGH already says "slop"). The legacy
+// heuristic-only reasons remain in the union for fallback / legacy callers
+// that don't supply a composite score.
 export type LlmGateReason =
   | "fired_borderline"
   | "fired_low_confidence"
   | "fired_borderline_and_low_confidence"
+  | "fired_borderline_composite"
   | "skipped_above_borderline"
   | "skipped_below_borderline"
+  | "skipped_above_borderline_composite"
+  | "skipped_below_borderline_composite"
+  | "skipped_composite_borderline_heuristic_confirms_slop"
   | "skipped_high_confidence_outside_borderline"
   | "skipped_unavailable";
 
@@ -142,6 +165,10 @@ export interface LlmGateDecision {
   reason: LlmGateReason;
   heuristicScore: number;
   confidence: number;
+  // Task #442 — Engine 2 / 3-engine composite (0–100, higher = more valid)
+  // when supplied by the caller, else `null`. Surfaced verbatim through the
+  // audit telemetry so reviewers can see which signal drove the decision.
+  compositeScore: number | null;
   costGuard: {
     low: number;
     high: number;
@@ -152,33 +179,119 @@ export interface LlmGateDecision {
 export function evaluateLlmGate(
   heuristicScore: number,
   confidence: number,
+  compositeScore: number | null | undefined = null,
 ): LlmGateDecision {
   const costGuard = {
     low: COST_GUARD_LOW,
     high: COST_GUARD_HIGH,
     confidence: COST_GUARD_CONFIDENCE,
   };
+  const composite =
+    typeof compositeScore === "number" && Number.isFinite(compositeScore)
+      ? compositeScore
+      : null;
   if (!isLLMAvailable()) {
-    return { shouldCall: false, reason: "skipped_unavailable", heuristicScore, confidence, costGuard };
+    return {
+      shouldCall: false,
+      reason: "skipped_unavailable",
+      heuristicScore,
+      confidence,
+      compositeScore: composite,
+      costGuard,
+    };
   }
-  const borderline = heuristicScore >= COST_GUARD_LOW && heuristicScore <= COST_GUARD_HIGH;
   const uncertain = confidence < COST_GUARD_CONFIDENCE;
+
+  // Task #442 — composite-driven path (preferred when the engines have
+  // produced a composite). Composite is the substance/validity axis: low
+  // composite = looks like slop, high composite = looks valid, borderline
+  // = exactly the population the LLM substance pass exists to disambiguate.
+  if (composite !== null) {
+    // Low confidence still wins as an override regardless of which axis
+    // the composite or heuristic lands on — same semantics as the legacy
+    // path so the override is not silently dropped when composite is
+    // present. (Today reports.ts always passes confidence=1.0 so this
+    // branch is dormant; keeping it makes the future "use real fusion
+    // confidence" change a one-liner.)
+    if (uncertain) {
+      return {
+        shouldCall: true,
+        reason: "fired_low_confidence",
+        heuristicScore,
+        confidence,
+        compositeScore: composite,
+        costGuard,
+      };
+    }
+    if (composite > COST_GUARD_HIGH) {
+      // T1 high-composite skip — clearly valid, no point spending an LLM
+      // call to second-guess the engines.
+      return {
+        shouldCall: false,
+        reason: "skipped_above_borderline_composite",
+        heuristicScore,
+        confidence,
+        compositeScore: composite,
+        costGuard,
+      };
+    }
+    if (composite < COST_GUARD_LOW) {
+      // T3/T4 low-composite skip — clearly slop, the cost guard's other
+      // protection direction.
+      return {
+        shouldCall: false,
+        reason: "skipped_below_borderline_composite",
+        heuristicScore,
+        confidence,
+        compositeScore: composite,
+        costGuard,
+      };
+    }
+    // Composite is in the borderline band [LOW, HIGH] — exactly the case
+    // the original audit identified as silently skipped. Default action is
+    // to FIRE the LLM substance pass; the heuristic acts only as a
+    // tiebreaker that lets us still skip when it independently confirms
+    // the report looks slop-y (heuristic ≥ HIGH).
+    if (heuristicScore >= COST_GUARD_HIGH) {
+      return {
+        shouldCall: false,
+        reason: "skipped_composite_borderline_heuristic_confirms_slop",
+        heuristicScore,
+        confidence,
+        compositeScore: composite,
+        costGuard,
+      };
+    }
+    return {
+      shouldCall: true,
+      reason: "fired_borderline_composite",
+      heuristicScore,
+      confidence,
+      compositeScore: composite,
+      costGuard,
+    };
+  }
+
+  // Legacy heuristic-only path — unchanged. Used by callers that haven't
+  // wired the composite through yet, or by the degraded-mode fallback
+  // when the engine layer crashed.
+  const borderline = heuristicScore >= COST_GUARD_LOW && heuristicScore <= COST_GUARD_HIGH;
   if (borderline && uncertain) {
-    return { shouldCall: true, reason: "fired_borderline_and_low_confidence", heuristicScore, confidence, costGuard };
+    return { shouldCall: true, reason: "fired_borderline_and_low_confidence", heuristicScore, confidence, compositeScore: null, costGuard };
   }
   if (borderline) {
-    return { shouldCall: true, reason: "fired_borderline", heuristicScore, confidence, costGuard };
+    return { shouldCall: true, reason: "fired_borderline", heuristicScore, confidence, compositeScore: null, costGuard };
   }
   if (uncertain) {
-    return { shouldCall: true, reason: "fired_low_confidence", heuristicScore, confidence, costGuard };
+    return { shouldCall: true, reason: "fired_low_confidence", heuristicScore, confidence, compositeScore: null, costGuard };
   }
   if (heuristicScore > COST_GUARD_HIGH) {
-    return { shouldCall: false, reason: "skipped_above_borderline", heuristicScore, confidence, costGuard };
+    return { shouldCall: false, reason: "skipped_above_borderline", heuristicScore, confidence, compositeScore: null, costGuard };
   }
   if (heuristicScore < COST_GUARD_LOW) {
-    return { shouldCall: false, reason: "skipped_below_borderline", heuristicScore, confidence, costGuard };
+    return { shouldCall: false, reason: "skipped_below_borderline", heuristicScore, confidence, compositeScore: null, costGuard };
   }
-  return { shouldCall: false, reason: "skipped_high_confidence_outside_borderline", heuristicScore, confidence, costGuard };
+  return { shouldCall: false, reason: "skipped_high_confidence_outside_borderline", heuristicScore, confidence, compositeScore: null, costGuard };
 }
 
 function getCacheKey(text: string): string {

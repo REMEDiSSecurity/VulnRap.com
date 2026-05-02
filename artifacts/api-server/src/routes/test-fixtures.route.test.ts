@@ -352,6 +352,54 @@ describe("GET /api/test/run — Task #209 auditTelemetry contract", () => {
       expect(row).not.toHaveProperty("_audit");
     }
   }, 60_000);
+
+  // Task #442 — guard the calibration-battery's gate-fire distribution.
+  // The Task #311 audit found that 16 borderline-composite fixtures were
+  // silently skipped (gate-fire rate 0/72) because the gate was driven
+  // by the heuristic instead of the composite. This test pins the
+  // post-fix distribution: the gate must produce composite-driven
+  // reasons across the battery, AND the borderline-composite bucket
+  // must be non-empty (i.e. the LLM substance pass *would* run on those
+  // fixtures in production with an LLM provider configured).
+  it("uses the composite-driven gate path on the calibration battery and fires on borderline-composite fixtures", async () => {
+    const body = await fetchJson<{
+      auditTelemetry: AuditTelemetry;
+      fixtureCount: number;
+    }>("/api/test/run");
+    const gating = body.auditTelemetry.llmGating;
+
+    // The composite path emits these three reasons; the legacy
+    // heuristic-only reasons should be absent on the battery (every
+    // fixture has a composite). If a future change accidentally rolls
+    // the gate back to heuristic-only, this assertion catches it.
+    const compositeReasons = [
+      "fired_borderline_composite",
+      "skipped_above_borderline_composite",
+      "skipped_below_borderline_composite",
+      "skipped_composite_borderline_heuristic_confirms_slop",
+    ];
+    const compositeCount = compositeReasons.reduce(
+      (acc, k) => acc + (gating.byReason[k] ?? 0),
+      0,
+    );
+    expect(compositeCount).toBe(gating.fixtureCount);
+
+    // The whole point of Task #442: the gate must ACTUALLY FIRE on the
+    // borderline-composite fixtures the audit identified as silently
+    // skipped. The exact count is fixture-data-dependent so we don't
+    // pin a specific number; we just require the bucket is populated.
+    // Today's snapshot (May 2026): 16 borderline-composite fires, 10
+    // above, 48 below, total 74 — see the audit doc.
+    expect(gating.byReason["fired_borderline_composite"] ?? 0).toBeGreaterThan(
+      0,
+    );
+    expect(gating.shouldCallCount).toBeGreaterThan(0);
+
+    // Sanity: the fixtureCount on the audit block must match the route
+    // top-level fixtureCount (drift here would mean the audit
+    // aggregator stopped sampling some fixtures).
+    expect(gating.fixtureCount).toBe(body.fixtureCount);
+  }, 60_000);
 });
 
 describe("GET /api/test/archetype-history — Sprint 13 trend persistence", () => {

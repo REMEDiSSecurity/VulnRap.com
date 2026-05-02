@@ -183,6 +183,10 @@ export interface AuditTelemetry {
     reason: import("../lib/llm-slop").LlmGateReason;
     heuristicScore: number;
     confidenceUsed: number;
+    // Task #442 — Engine 2 / 3-engine composite score (0–100, higher = more
+    // valid) that was fed into the gate, or `null` for legacy callers / the
+    // degraded fallback path that didn't compute a composite.
+    compositeScoreUsed: number | null;
     costGuard: { low: number; high: number; confidence: number };
     userSkipped: boolean;
     actuallyFired: boolean;
@@ -270,11 +274,65 @@ async function performAnalysis(
     const heuristic = await runStage("heuristic_analysis", () => analyzeSloppiness(safeOriginal), diagnostics);
 
     const heuristicScore = heuristic?.score ?? 50;
+
+    // Task #442 — Engine 2 / 3-engine composite must be available BEFORE
+    // the LLM cost gate runs so it can drive the gate decision. The
+    // engines are local + synchronous (no network), so moving this block
+    // up is essentially free; the AVRI velocity/template scoring inside
+    // it is also local. When the new-composite feature flag is off the
+    // composite stays null and the gate falls back to the legacy
+    // heuristic-only path.
+    let vulnrapComposite: VulnrapComposite | null = null;
+    let vulnrapTrace: PipelineTrace | null = null;
+    if (isNewCompositeEnabled()) {
+      // AVRI submission-velocity + template-fingerprint signals are evaluated
+      // here so the resulting penalties flow into the AVRI composite override
+      // table. Both are no-ops when the AVRI feature flag is off.
+      let velocityPenalty: number | undefined;
+      let templatePenalty: number | undefined;
+      if (isAvriEnabled()) {
+        try {
+          const vh = visitorHash(opts?.visitor ?? null);
+          const v = recordVelocity(vh);
+          velocityPenalty = v.penalty;
+          const t = recordTemplateFingerprint(safeRedacted);
+          templatePenalty = t.penalty;
+          if (v.penalty !== 0 || t.penalty !== 0) {
+            logger.info(
+              {
+                avriVelocityCount: v.submissionCount,
+                avriVelocityPenalty: v.penalty,
+                avriTemplateCount: t.count,
+                avriTemplatePenalty: t.penalty,
+              },
+              "[AVRI] velocity/template signals recorded",
+            );
+          }
+        } catch (avriErr) {
+          logger.warn({ err: avriErr }, "[AVRI] velocity/template scoring failed (non-fatal)");
+        }
+      }
+      const traced = await runStage(
+        "vulnrap_engines",
+        () => analyzeWithEnginesTraced(safeRedacted, { velocityPenalty, templatePenalty }),
+        diagnostics,
+      );
+      if (traced) {
+        vulnrapComposite = traced.composite;
+        vulnrapTrace = traced.trace;
+      }
+    } else {
+      diagnostics.stages["vulnrap_engines"] = { status: "ok", durationMs: 0, error: "feature_flag_disabled" };
+    }
+
     // Task #209 — capture the structured gate decision (with reason) so it can
     // flow into auditTelemetry below. Whether the LLM actually fires still
     // honors the user-skip flag, but the gate decision tracks what the cost
     // gate alone would do — that's the signal the audit panel + counters need.
-    const gateDecision: LlmGateDecision = evaluateLlmGate(heuristicScore, 1.0);
+    // Task #442 — composite (when available) is now the primary signal that
+    // drives the gate; heuristic acts as a tiebreaker. See evaluateLlmGate.
+    const compositeForGate = vulnrapComposite?.overallScore ?? null;
+    const gateDecision: LlmGateDecision = evaluateLlmGate(heuristicScore, 1.0, compositeForGate);
     const callLlm = !userSkippedLlm && gateDecision.shouldCall;
 
     const llmPromise = callLlm
@@ -345,6 +403,11 @@ async function performAnalysis(
         // the literal value so a future change to use the real confidence is
         // self-documenting in the audit payload.
         confidenceUsed: gateDecision.confidence,
+        // Task #442 — surface the composite signal that drove the gate so
+        // reviewers can see whether the new composite path or the legacy
+        // heuristic-only path was used. `null` when the engine layer was
+        // skipped (feature-flag off or pre-engine legacy report).
+        compositeScoreUsed: gateDecision.compositeScore,
         costGuard: gateDecision.costGuard,
         userSkipped: userSkippedLlm,
         actuallyFired: callLlm && !!llmResult,
@@ -353,51 +416,10 @@ async function performAnalysis(
       validityFusion: safeFusion.validityFusion,
     };
 
-    // v3.6.0 §4: Compute the engine-composite up-front so the triage call below
-    // flows through the matrix (composite × engine 2 × verification ratio ×
-    // strong-evidence count) instead of the removed legacy single-axis branch.
-    let vulnrapComposite: VulnrapComposite | null = null;
-    let vulnrapTrace: PipelineTrace | null = null;
-    if (isNewCompositeEnabled()) {
-      // AVRI submission-velocity + template-fingerprint signals are evaluated
-      // here so the resulting penalties flow into the AVRI composite override
-      // table. Both are no-ops when the AVRI feature flag is off.
-      let velocityPenalty: number | undefined;
-      let templatePenalty: number | undefined;
-      if (isAvriEnabled()) {
-        try {
-          const vh = visitorHash(opts?.visitor ?? null);
-          const v = recordVelocity(vh);
-          velocityPenalty = v.penalty;
-          const t = recordTemplateFingerprint(safeRedacted);
-          templatePenalty = t.penalty;
-          if (v.penalty !== 0 || t.penalty !== 0) {
-            logger.info(
-              {
-                avriVelocityCount: v.submissionCount,
-                avriVelocityPenalty: v.penalty,
-                avriTemplateCount: t.count,
-                avriTemplatePenalty: t.penalty,
-              },
-              "[AVRI] velocity/template signals recorded",
-            );
-          }
-        } catch (avriErr) {
-          logger.warn({ err: avriErr }, "[AVRI] velocity/template scoring failed (non-fatal)");
-        }
-      }
-      const traced = await runStage(
-        "vulnrap_engines",
-        () => analyzeWithEnginesTraced(safeRedacted, { velocityPenalty, templatePenalty }),
-        diagnostics,
-      );
-      if (traced) {
-        vulnrapComposite = traced.composite;
-        vulnrapTrace = traced.trace;
-      }
-    } else {
-      diagnostics.stages["vulnrap_engines"] = { status: "ok", durationMs: 0, error: "feature_flag_disabled" };
-    }
+    // v3.6.0 §4 / Task #442: vulnrapComposite is computed earlier in the
+    // pipeline (before the LLM gate so it can drive the gate decision).
+    // The triage call below still flows through the same matrix
+    // (composite × engine 2 × verification ratio × strong-evidence count).
 
     let triageRecommendation: TriageRecommendation | null = null;
     const triageRecResult = await runStage("triage_recommendation", () => {
@@ -493,6 +515,8 @@ async function performAnalysis(
           reason: "skipped_unavailable",
           heuristicScore: 0,
           confidenceUsed: 0,
+          // Task #442 — degraded fallback: composite was never computed.
+          compositeScoreUsed: null,
           costGuard: { low: 0, high: 0, confidence: 0 },
           userSkipped: opts?.skipLlm === true,
           actuallyFired: false,

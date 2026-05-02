@@ -105,6 +105,40 @@
       "lastTickNewFlagCount": null,
       "nextTickAt": null,
       "ticksCompleted": 0
+    },
+    "62767df0fec3-90295e4f": {
+      "replicaId": "62767df0fec3-90295e4f",
+      "hostname": "62767df0fec3",
+      "heartbeatAt": "2026-05-02T12:14:03.592Z",
+      "schedulerStarted": true,
+      "startedAt": "2026-05-02T12:14:03.016Z",
+      "intervalMs": 21600000,
+      "retryIntervalMs": 300000,
+      "webhookConfigured": false,
+      "lastTickAt": null,
+      "lastTickOk": null,
+      "lastTickRanCheck": null,
+      "lastTickDispatched": null,
+      "lastTickNewFlagCount": null,
+      "nextTickAt": null,
+      "ticksCompleted": 0
+    },
+    "62767df0fec3-be8411f7": {
+      "replicaId": "62767df0fec3-be8411f7",
+      "hostname": "62767df0fec3",
+      "heartbeatAt": "2026-05-02T12:14:08.004Z",
+      "schedulerStarted": true,
+      "startedAt": "2026-05-02T12:14:06.459Z",
+      "intervalMs": 21600000,
+      "retryIntervalMs": 300000,
+      "webhookConfigured": false,
+      "lastTickAt": null,
+      "lastTickOk": null,
+      "lastTickRanCheck": null,
+      "lastTickDispatched": null,
+      "lastTickNewFlagCount": null,
+      "nextTickAt": null,
+      "ticksCompleted": 0
     }
   }
 }

@@ -2950,7 +2950,10 @@ router.get("/test/run", async (req, res) => {
     // analyzeSloppiness call is local + cheap; LLM substance + fuseScores
     // only run when the caller passes ?withLlm=1.
     const heuristicAudit = analyzeSloppiness(f.text);
-    const gateDecision = evaluateLlmGate(heuristicAudit.score, 1.0);
+    // Task #442 — feed the per-fixture composite into the gate evaluation so
+    // the audit aggregator's gateReasonCounts reflect the new composite-driven
+    // path (the whole point of the calibration battery is to monitor this).
+    const gateDecision = evaluateLlmGate(heuristicAudit.score, 1.0, composite);
     let validityAudit: ValidityFusionAudit | null = null;
     if (llmRequested) {
       try {

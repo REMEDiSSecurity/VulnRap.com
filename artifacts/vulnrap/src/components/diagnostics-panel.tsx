@@ -152,8 +152,14 @@ export interface DiagnosticsResponse {
 export type AuditLlmGateReason =
   | "fired_borderline"
   | "fired_low_confidence"
+  | "fired_borderline_and_low_confidence"
+  | "fired_borderline_composite"
   | "skipped_above_borderline"
   | "skipped_below_borderline"
+  | "skipped_above_borderline_composite"
+  | "skipped_below_borderline_composite"
+  | "skipped_composite_borderline_heuristic_confirms_slop"
+  | "skipped_high_confidence_outside_borderline"
   | "skipped_unavailable";
 
 export interface AuditTelemetryBlock {
@@ -162,6 +168,11 @@ export interface AuditTelemetryBlock {
     reason: AuditLlmGateReason | string;
     heuristicScore: number;
     confidenceUsed: number;
+    // Task #442 — composite (Engine 2 / 3-engine, 0–100 higher = more
+    // valid) that was used as the primary gate input. `null` for legacy
+    // reports analyzed before the composite-driven gate shipped, or when
+    // the engine layer was skipped (degraded fallback).
+    compositeScoreUsed?: number | null;
     costGuard: { low: number; high: number; confidence: number };
     userSkipped: boolean;
     actuallyFired: boolean;
@@ -1246,15 +1257,31 @@ function AuditTelemetrySection({ audit }: { audit: AuditTelemetryBlock }) {
   // have to memorize the LlmGateReason enum or recompute thresholds.
   const gateSummary = (() => {
     const cg = llmGating.costGuard;
+    // Task #442 — composite is now the primary gate signal. Render it
+    // verbatim when present; the legacy heuristic-only branches stay for
+    // pre-composite reports.
+    const composite = llmGating.compositeScoreUsed;
     switch (llmGating.reason) {
       case "fired_borderline":
         return `Fired (heuristic ${llmGating.heuristicScore} in borderline band ${cg.low}–${cg.high})`;
+      case "fired_borderline_and_low_confidence":
+        return `Fired (heuristic ${llmGating.heuristicScore} in borderline ${cg.low}–${cg.high} AND low confidence ${llmGating.confidenceUsed.toFixed(2)} < ${cg.confidence})`;
+      case "fired_borderline_composite":
+        return `Fired (composite ${composite ?? "?"} in borderline band ${cg.low}–${cg.high} — substance ambiguous, LLM second opinion warranted)`;
       case "fired_low_confidence":
         return `Fired (low confidence ${llmGating.confidenceUsed.toFixed(2)} < ${cg.confidence})`;
       case "skipped_above_borderline":
         return `Skipped (heuristic ${llmGating.heuristicScore} above ${cg.high} — clearly slop)`;
       case "skipped_below_borderline":
         return `Skipped (heuristic ${llmGating.heuristicScore} below ${cg.low} — clearly clean)`;
+      case "skipped_above_borderline_composite":
+        return `Skipped (composite ${composite ?? "?"} above ${cg.high} — clearly valid, no LLM call needed)`;
+      case "skipped_below_borderline_composite":
+        return `Skipped (composite ${composite ?? "?"} below ${cg.low} — clearly slop, cost guard)`;
+      case "skipped_composite_borderline_heuristic_confirms_slop":
+        return `Skipped (composite ${composite ?? "?"} in borderline ${cg.low}–${cg.high} but heuristic ${llmGating.heuristicScore} ≥ ${cg.high} confirms slop)`;
+      case "skipped_high_confidence_outside_borderline":
+        return `Skipped (heuristic ${llmGating.heuristicScore} outside ${cg.low}–${cg.high} with high confidence)`;
       case "skipped_unavailable":
         return llmGating.llmAvailable
           ? "Skipped (degraded analysis — LLM not invoked)"
@@ -1663,9 +1690,16 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
   if (data.auditTelemetry) {
     const { llmGating, validityFusion } = data.auditTelemetry;
     lines.push("## Score Audit (observation-only)");
+    // Task #442 — surface the composite signal that drove the gate when
+    // present so reviewers can see at a glance which path (composite-driven
+    // vs legacy heuristic-only) was used.
+    const compositeStr =
+      typeof llmGating.compositeScoreUsed === "number"
+        ? `, composite ${llmGating.compositeScoreUsed}`
+        : ", composite n/a";
     lines.push(
       `- LLM gate: **${llmGating.actuallyFired ? "fired" : "skipped"}** — \`${llmGating.reason}\` ` +
-        `(heuristic ${llmGating.heuristicScore}, confidence ${llmGating.confidenceUsed.toFixed(2)}, ` +
+        `(heuristic ${llmGating.heuristicScore}${compositeStr}, confidence ${llmGating.confidenceUsed.toFixed(2)}, ` +
         `cost guard ${llmGating.costGuard.low}–${llmGating.costGuard.high})` +
         (llmGating.userSkipped ? " · user opted out" : "") +
         (llmGating.shouldCall && !llmGating.actuallyFired ? " · LLM call did not return" : ""),

@@ -73,6 +73,9 @@ vi.mock("../lib/llm-slop", () => ({
     reason: "skipped_unavailable",
     heuristicScore: 0,
     confidence: 1,
+    // Task #442 — composite added to LlmGateDecision; mock returns null
+    // (no composite available) to match the LLM-unavailable shape.
+    compositeScore: null,
     costGuard: { low: 25, high: 60, confidence: 0.5 },
   }),
   analyzeSlopWithLLM: vi.fn(async () => null),
