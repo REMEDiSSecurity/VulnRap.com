@@ -6511,6 +6511,42 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               aria-label="Production scan window (most recent N reports). Applies to add-phrase, single-phrase removal, and bulk-removal previews."
               disabled={busy === "preview" || busy === "confirm" || preview !== null}
             />
+            {/* Task #459 — one-click restore for the documented default. The
+                input/help block already explains the 100..10000 range and
+                the 2000 fallback, but reverting a heavy-handed tweak still
+                forced reviewers to retype the magic number. This button
+                resets the shared input back to the default and proactively
+                clears the persisted localStorage entry so the next page
+                load starts at the default too (the value-mirror useEffect
+                above also removes the key when the effective value equals
+                the default, but we drop it here explicitly so the storage
+                clear isn't gated on the validity-tracking effect re-firing).
+                Disabled set matches the input above so we can't reset while
+                a preview/confirm mutation is in flight. */}
+            <button
+              type="button"
+              onClick={() => {
+                setProductionScanLimitInput(
+                  String(CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT),
+                );
+                if (typeof window !== "undefined") {
+                  try {
+                    window.localStorage.removeItem(
+                      CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY,
+                    );
+                  } catch {
+                    // ignore storage failures (private mode, quota)
+                  }
+                }
+              }}
+              className="h-7 px-2 rounded-md border border-border/40 bg-background/40 text-[11px] text-muted-foreground hover:text-foreground hover:border-border/70 focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:border-border/40"
+              data-testid="handwavy-production-scan-limit-reset"
+              aria-label={`Reset production scan window to the default of ${CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT} reports`}
+              title={`Reset to default (${CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT})`}
+              disabled={busy === "preview" || busy === "confirm" || preview !== null}
+            >
+              Reset to default ({CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT})
+            </button>
             <span className="text-muted-foreground/70">
               most recent reports ({CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
               {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
