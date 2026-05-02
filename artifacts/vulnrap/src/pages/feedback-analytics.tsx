@@ -16732,7 +16732,7 @@ interface DatasetHistoryConfigResponse {
 
 const DATASET_HISTORY_CONFIG_QUERY_KEY = ["test-dataset-history-config"] as const;
 
-function DatasetCohortDriftSection() {
+export function DatasetCohortDriftSection() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data, isLoading, isError } = useQuery<DatasetHistoryResponse>({
@@ -17085,7 +17085,27 @@ function DatasetCohortDriftSection() {
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {summary.tiers.map(series => (
+            {summary.tiers.map(series => {
+              // Task #515 — surface the same dataset-vs-fixture trend the
+              // Cohort Means tiles already render (Task #362) on this
+              // standalone Drift panel, so a reviewer landing here
+              // doesn't have to scroll back up to the means card to see
+              // the synthetic-vs-real Δ trend. We reuse the warn-state
+              // logic from `computeCohortFixtureDelta` so the orange
+              // "divergent" treatment matches the means tile exactly,
+              // and the signed-Δ caption uses the same `Δ+x.x / Δ —`
+              // formatting the means panel uses above.
+              const latestDelta = series.latestDelta;
+              const isDeltaDivergent =
+                latestDelta != null
+                && Math.abs(latestDelta) > FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD;
+              const deltaCaption = latestDelta == null
+                ? "Δ —"
+                : `Δ${latestDelta >= 0 ? "+" : ""}${latestDelta.toFixed(1)}`;
+              const deltaCaptionColor = isDeltaDivergent
+                ? "text-orange-400"
+                : "text-muted-foreground/80";
+              return (
               <div
                 key={series.tier}
                 className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 space-y-1"
@@ -17134,8 +17154,34 @@ function DatasetCohortDriftSection() {
                   <span className="text-[10px] text-muted-foreground">latest mean</span>
                 </div>
                 <DatasetHistoryMeanSparkline points={series.points} />
+                {/*
+                  Task #515 — second sparkline tracks (datasetMean −
+                  fixtureMean) over the same history window so the panel
+                  literally named "Drift" surfaces the synthetic-vs-real
+                  delta as a primary signal. Reuses the Cohort Means
+                  tile's `DatasetCohortFixtureDeltaSparkline` for visual
+                  consistency, and a small caption beside the sparkline
+                  shows the latest Δ in the same signed `Δ+x.x` format
+                  the Cohort Means card uses.
+                */}
+                <div className="flex items-center justify-between gap-2 pt-1 text-[10px] text-muted-foreground">
+                  <span className="font-mono">fixture Δ</span>
+                  <span
+                    className={cn("tabular-nums", deltaCaptionColor)}
+                    data-testid={`dataset-cohort-drift-fixture-delta-latest-${series.tier}`}
+                  >
+                    {deltaCaption}
+                  </span>
+                </div>
+                <div data-testid={`dataset-cohort-drift-fixture-delta-trend-${series.tier}`}>
+                  <DatasetCohortFixtureDeltaSparkline
+                    points={series.deltaPoints}
+                    isDivergent={isDeltaDivergent}
+                  />
+                </div>
               </div>
-            ))}
+              );
+            })}
             <div
               className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 space-y-1"
               data-testid="dataset-cohort-drift-tier-gap"

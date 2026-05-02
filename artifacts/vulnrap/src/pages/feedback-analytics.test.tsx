@@ -24,6 +24,7 @@ import {
   formatRemovePreviewScannedAgo,
   summarizeDatasetHistory,
   computeCohortFixtureDelta,
+  DatasetCohortDriftSection,
   DatasetCohortFixtureDeltaSparkline,
   DatasetHistoryMeanSparkline,
   DatasetRotationDensityBar,
@@ -1578,6 +1579,152 @@ describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-
     ).not.toBeNull();
     // Aria-label should not promise a roll-up split when there isn't one.
     expect(svg.getAttribute("aria-label")).not.toContain("daily aggregate");
+  });
+});
+
+describe("DatasetCohortDriftSection (Task #515 — surface the dataset-vs-fixture trend on the standalone Drift panel)", () => {
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      // The /config endpoint feeds the rollup-window editor at the top
+      // of the panel; we don't care about it for this assertion, so
+      // 404 it (the panel tolerates that path silently).
+      if (url.includes("/api/test/dataset-history/config")) {
+        return jsonResponse({ error: "not found" }, 404);
+      }
+      if (url.includes("/api/test/dataset-history")) {
+        // Two snapshots per tier with finite fixtureMean so each tier
+        // produces a 2-point deltaPoints series and the
+        // `DatasetCohortFixtureDeltaSparkline` falls into the polyline
+        // branch (rather than the empty/single-snapshot fallback).
+        const mkCohort = (
+          tier: string,
+          a: { dataset: number; fixture: number; gap: number },
+          b: { dataset: number; fixture: number; gap: number },
+        ) => ({
+          tier,
+          snapshots: [
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier,
+              label: tier,
+              count: 25,
+              compositeMean: a.dataset,
+              fixtureMean: a.fixture,
+              gap: a.gap,
+            },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier,
+              label: tier,
+              count: 25,
+              compositeMean: b.dataset,
+              fixtureMean: b.fixture,
+              gap: b.gap,
+            },
+          ],
+        });
+        return jsonResponse({
+          totalSnapshots: 6,
+          cohorts: [
+            // T1: latest Δ = +1.0 → calm caption.
+            mkCohort(
+              "T1_LEGIT",
+              { dataset: 70, fixture: 71, gap: 50 },
+              { dataset: 72, fixture: 71, gap: 52 },
+            ),
+            // T2: latest Δ = -2.0 → still calm.
+            mkCohort(
+              "T2_BORDERLINE",
+              { dataset: 50, fixture: 51, gap: 0 },
+              { dataset: 49, fixture: 51, gap: 0 },
+            ),
+            // T3: latest Δ = +8.0 (|Δ| > warn threshold of 5) →
+            // divergent caption + matching sparkline treatment.
+            mkCohort(
+              "T3_SLOP",
+              { dataset: 22, fixture: 20, gap: 50 },
+              { dataset: 28, fixture: 20, gap: 44 },
+            ),
+          ],
+        });
+      }
+      return jsonResponse({});
+    });
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  function renderSection() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/feedback-analytics"]}>
+          <DatasetCohortDriftSection />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("renders the per-tier dataset-vs-fixture sparkline + signed Δ caption inside every drift tile", async () => {
+    renderSection();
+
+    // Wait for the panel to swap from the loading skeleton to its
+    // populated tile grid before asserting on the new sparkline.
+    await screen.findByTestId("dataset-cohort-drift-tier-T1_LEGIT");
+
+    for (const tier of ["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"]) {
+      const tile = screen.getByTestId(`dataset-cohort-drift-tier-${tier}`);
+      // The new "fixture Δ" trend wraps the reused
+      // DatasetCohortFixtureDeltaSparkline — assert both the tile-
+      // scoped wrapper and the underlying sparkline render.
+      const trend = within(tile).getByTestId(
+        `dataset-cohort-drift-fixture-delta-trend-${tier}`,
+      );
+      expect(
+        trend.querySelector("[data-testid='dataset-cohort-fixture-delta-sparkline']"),
+      ).not.toBeNull();
+      // The signed-Δ caption beside the sparkline mirrors the means
+      // panel's `Δ+x.x` format so the two cards read consistently.
+      expect(
+        within(tile).getByTestId(`dataset-cohort-drift-fixture-delta-latest-${tier}`),
+      ).toBeInTheDocument();
+    }
+
+    // T1's most recent dataset−fixture is 72−71 = +1.0 (calm).
+    expect(
+      screen.getByTestId("dataset-cohort-drift-fixture-delta-latest-T1_LEGIT"),
+    ).toHaveTextContent("Δ+1.0");
+    // T2's is 49−51 = -2.0 (still inside the ±5 warn band).
+    expect(
+      screen.getByTestId("dataset-cohort-drift-fixture-delta-latest-T2_BORDERLINE"),
+    ).toHaveTextContent("Δ-2.0");
+    // T3's is 28−20 = +8.0 — past the warn threshold so the caption
+    // flips to the divergent treatment that matches the means tile.
+    const t3Caption = screen.getByTestId(
+      "dataset-cohort-drift-fixture-delta-latest-T3_SLOP",
+    );
+    expect(t3Caption).toHaveTextContent("Δ+8.0");
+    expect(t3Caption.className).toContain("text-orange-400");
   });
 });
 
