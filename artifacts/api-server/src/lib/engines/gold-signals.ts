@@ -24,6 +24,15 @@ import {
   stripPlaceholderBodies,
 } from "./avri/raw-http";
 
+// Task #467 — re-export the shared plain-English labels for the gold
+// category ids alongside `GOLD_SIGNAL_WEIGHTS` below so server-side
+// callers can pick them up from the same module that defines the
+// weights. Single source of truth lives in `@workspace/avri-rubric` so
+// the vulnrap diagnostics panel and this server module cannot drift;
+// the sync test in `gold-signals.test.ts` guarantees every weight key
+// has a matching label.
+export { GOLD_SIGNAL_LABELS } from "@workspace/avri-rubric";
+
 export interface AdditionalGoldSignal {
   /** Stable id surfaced as the GOLD_SIGNAL indicator value. */
   id: string;

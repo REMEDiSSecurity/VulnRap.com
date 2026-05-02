@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   AVRI_OVERRIDE_LABELS,
   buildAvriRubricMarkdown,
+  GOLD_SIGNAL_LABELS,
   HANDWAVY_CATEGORY_LABELS,
   HANDWAVY_CATEGORY_ORDER,
   type AvriCompositeBlock,
@@ -1605,15 +1606,23 @@ function GoldSignalBonusSection({ engines }: { engines: EngineResult[] }) {
           </span>
         </div>
         <ul className="space-y-0.5">
-          {signals.map((s) => (
-            <li
-              key={s.id}
-              className="text-[11px] font-mono text-green-400/90 flex items-baseline gap-1"
-            >
-              <span>+{s.weight}</span>
-              <span className="text-foreground/80">{s.id}</span>
-            </li>
-          ))}
+          {signals.map((s) => {
+            const label = GOLD_SIGNAL_LABELS[s.id];
+            return (
+              <li
+                key={s.id}
+                className="text-[11px] font-mono text-green-400/90 flex items-baseline gap-1 flex-wrap"
+              >
+                <span>+{s.weight}</span>
+                <span className="text-foreground/80">{s.id}</span>
+                {label && (
+                  <span className="text-muted-foreground font-sans">
+                    — {label}
+                  </span>
+                )}
+              </li>
+            );
+          })}
         </ul>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           Strong-evidence categories (real crash traces, raw HTTP, payload
@@ -1757,7 +1766,9 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
       `- Applied: **+${bonus}** — ${capNote}; ${signals.length} categor${signals.length === 1 ? "y" : "ies"} fired`,
     );
     for (const s of signals) {
-      lines.push(`  - +${s.weight} \`${s.id}\``);
+      const label = GOLD_SIGNAL_LABELS[s.id];
+      const labelSuffix = label ? ` — ${label}` : "";
+      lines.push(`  - +${s.weight} \`${s.id}\`${labelSuffix}`);
     }
     lines.push("");
   }

@@ -2345,6 +2345,23 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(within(section).getByText("auth_token")).toBeInTheDocument();
     expect(within(section).getByText("code_diff")).toBeInTheDocument();
 
+    // Task #467 — each id is paired with its plain-English label so the
+    // panel is self-documenting. Labels are sourced from
+    // `GOLD_SIGNAL_LABELS` in `@workspace/avri-rubric` (re-exported by
+    // the server-side gold-signals module).
+    expect(
+      within(section).getByText(/— Real ASan\/sanitizer crash trace/i),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(/— SQL injection payload/i),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(/— Authentication footprint/i),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(/— Code diff hunk for the fix or repro/i),
+    ).toBeInTheDocument();
+
     // Markdown export carries the same data so triage threads stay self-contained.
     const md = buildMarkdownSummary(withGoldBonus);
     expect(md).toContain("## Strong-Evidence Bonus (Gold Categories)");
@@ -2352,6 +2369,11 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(md).toContain("raw +14 capped at +12");
     expect(md).toContain("`real_crash_trace`");
     expect(md).toContain("`sql_injection_payload`");
+    // Task #467 — markdown rows include the same plain-English labels
+    // as the panel so triage threads quoting this section stay
+    // self-documenting.
+    expect(md).toContain("`real_crash_trace` — Real ASan/sanitizer crash trace");
+    expect(md).toContain("`auth_token` — Authentication footprint");
   });
 
   it("renders the Strong-Evidence Bonus with an under-cap raw total when no cap was hit", async () => {

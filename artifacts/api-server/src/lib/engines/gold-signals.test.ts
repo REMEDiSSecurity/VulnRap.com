@@ -15,7 +15,11 @@
 import { describe, it, expect } from "vitest";
 import { runEngine2 } from "./engines";
 import { extractSignals } from "./extractors";
-import { GOLD_SIGNAL_WEIGHTS, GOLD_SIGNAL_BONUS_CAP } from "./gold-signals";
+import {
+  GOLD_SIGNAL_WEIGHTS,
+  GOLD_SIGNAL_BONUS_CAP,
+  GOLD_SIGNAL_LABELS,
+} from "./gold-signals";
 
 function goldValues(text: string, claimedCwes: string[] = []): string[] {
   const sig = extractSignals(text, claimedCwes);
@@ -826,6 +830,42 @@ Payloads: \`<inject>\`, \`<script>\`, \`<metadata-url>\`, \`<entity>\`.
       };
       expect(breakdown.bonus).toBe(0);
       expect(breakdown.rawSum).toBe(0);
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // Task #467: GOLD_SIGNAL_LABELS sync with GOLD_SIGNAL_WEIGHTS
+  // -----------------------------------------------------------------
+  //
+  // The diagnostics panel (`GoldSignalBonusSection` in
+  // `artifacts/vulnrap/src/components/diagnostics-panel.tsx`) and its
+  // markdown export read `GOLD_SIGNAL_LABELS` from
+  // `@workspace/avri-rubric` (which this module re-exports) to render a
+  // plain-English label next to each fired category id. If a new
+  // category id is added to `GOLD_SIGNAL_WEIGHTS` without a matching
+  // label, the panel would surface the bare id with no description and
+  // the markdown export row would lose its " — label" suffix — exactly
+  // the failure mode the label table exists to prevent.
+  describe("Task #467: GOLD_SIGNAL_LABELS stays in sync with GOLD_SIGNAL_WEIGHTS", () => {
+    it("defines a non-empty label for every weighted category id", () => {
+      const weightKeys = Object.keys(GOLD_SIGNAL_WEIGHTS).sort();
+      const labelKeys = Object.keys(GOLD_SIGNAL_LABELS).sort();
+      // Every weighted id must have a matching label key.
+      expect(labelKeys).toEqual(expect.arrayContaining(weightKeys));
+      // And every label must be a non-trivial human string.
+      for (const id of weightKeys) {
+        const label = GOLD_SIGNAL_LABELS[id];
+        expect(typeof label).toBe("string");
+        expect(label.trim().length).toBeGreaterThan(0);
+      }
+    });
+
+    it("does not define labels for ids that are not in GOLD_SIGNAL_WEIGHTS (avoids stale entries)", () => {
+      const weightKeys = new Set(Object.keys(GOLD_SIGNAL_WEIGHTS));
+      const orphans = Object.keys(GOLD_SIGNAL_LABELS).filter(
+        (id) => !weightKeys.has(id),
+      );
+      expect(orphans).toEqual([]);
     });
   });
 

@@ -189,6 +189,41 @@ export const HANDWAVY_CATEGORY_ORDER: AvriHandwavyCategory[] = [
   "buzzword",
 ];
 
+// Task #467 — plain-English labels for the strong-evidence GOLD_SIGNAL
+// category ids surfaced in the diagnostics panel's "Strong-Evidence Bonus
+// (Gold Categories)" section AND its markdown export. Lives in the
+// shared `@workspace/avri-rubric` package so the server-side weight table
+// (`GOLD_SIGNAL_WEIGHTS` in
+// `artifacts/api-server/src/lib/engines/gold-signals.ts`, which re-exports
+// this same constant) and the client-side renderer cannot drift. Keep the
+// keys in lock-step with `GOLD_SIGNAL_WEIGHTS`; a sync test in
+// `gold-signals.test.ts` enforces full coverage.
+export const GOLD_SIGNAL_LABELS: Readonly<Record<string, string>> = {
+  // Curated three (Task #170).
+  real_crash_trace: "Real ASan/sanitizer crash trace",
+  real_raw_http: "Real raw HTTP/1.x request bytes",
+  code_diff: "Code diff hunk for the fix or repro",
+  // Additional ten (Task #174).
+  sql_injection_payload:
+    "SQL injection payload (UNION SELECT / OR 1=1 / SLEEP / etc.)",
+  command_injection_payload:
+    "Command/JNDI injection payload (;cat /etc/passwd, $(...), ${jndi:…})",
+  xss_payload: "Concrete XSS payload with active sink (alert/cookie/fetch)",
+  ssrf_metadata_target:
+    "SSRF target: cloud-metadata URL with concrete path",
+  path_traversal_payload:
+    "Path traversal reaching a sensitive file (e.g. ../../etc/passwd)",
+  xxe_external_entity:
+    "XML external entity declaration with concrete URI",
+  deserialization_gadget:
+    "Concrete deserialization gadget chain or unsafe-load sink",
+  auth_token: "Authentication footprint: real JWT/Bearer/session value",
+  crypto_misuse:
+    "Crypto misuse (static IV/key, ECB mode, MD5/SHA1, DES/3DES/RC4)",
+  filesystem_toctou:
+    "Filesystem TOCTOU: stat/access followed by open on related path",
+};
+
 // Task 272: also exported so the on-screen panel's "AVRI Composite
 // Overrides" section reads label wording (and the set of recognised
 // tokens) from the same table the markdown export uses.
