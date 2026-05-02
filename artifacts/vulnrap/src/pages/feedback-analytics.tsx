@@ -4362,6 +4362,129 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     setSingleUndo((prev) => prev.filter((e) => e.removedAt !== entry.removedAt));
   };
 
+  // Task #472 — bulk wrapper around the per-row Undo stack. The stack
+  // panel header shows an "Undo all" button when there are 2+ entries;
+  // clicking it walks the snapshot of the current stack through the
+  // existing single-phrase reinstate path and reports succeeded vs.
+  // skipped in a single toast — same shape as Task #233's bulk-undo
+  // toast for the "Undo last N adds" affordance.
+  //
+  // We deliberately reuse `reinstateHandwavyPhrase` per entry rather
+  // than the /reinstate-batch route because each entry on the stack
+  // came from an independent single-phrase Trash (different
+  // `removedAt` timestamps, no shared batch row), so there's no
+  // server-side batch identifier the bulk endpoint could key off of.
+  // Driving each one through the same code path `handleUndoSingleRemove`
+  // uses also keeps the per-entry success / 404 / auth-failed
+  // semantics identical to the per-row Undo button.
+  //
+  // Each entry leaves the stack the moment its reinstate succeeds
+  // (or its 404 confirms it was already reinstated elsewhere) so the
+  // reviewer sees progress as the loop advances; failed entries
+  // (network errors, non-401/403/404 server errors, missing-token
+  // sticky auth-failure for everything past the first 401/403) stay
+  // in the stack so the reviewer can retry the row that actually
+  // failed without re-trashing the rest.
+  const SINGLE_UNDO_ALL_BUSY_KEY = "single-undo-all";
+  const handleUndoAllSingleRemoves = async () => {
+    if (singleUndo.length === 0) return;
+    if (bailOnCooldown("Undo all")) return;
+    // Snapshot the stack at click time so concurrent pushes (a Trash
+    // landing while the loop is running) don't get dragged into this
+    // bulk undo — they remain on the stack and the reviewer can decide
+    // whether to undo them with another click.
+    const entriesToProcess = [...singleUndo];
+    const reviewerName = reviewer.trim() || undefined;
+    setBusy(SINGLE_UNDO_ALL_BUSY_KEY);
+    let reinstated = 0;
+    let notFound = 0;
+    let authFailed = 0;
+    let errored = 0;
+    let authFailedSticky = false;
+    try {
+      for (const entry of entriesToProcess) {
+        if (authFailedSticky) {
+          // Mirror handleUndoBulkBatch's sticky-401 behavior: once the
+          // server has rejected the reviewer token, every remaining
+          // entry would 401 too — count them as auth-failed and leave
+          // them in the stack so the reviewer can retry after fixing
+          // the token.
+          authFailed++;
+          continue;
+        }
+        try {
+          await reinstateHandwavyPhrase({
+            phrase: entry.phrase,
+            removedAt: entry.removedAt,
+            reviewer: reviewerName,
+          });
+          reinstated++;
+          // Drop the entry from the stack the moment it succeeds so the
+          // reviewer sees progress while the loop is still walking the
+          // remaining entries.
+          setSingleUndo((prev) =>
+            prev.filter((e) => e.removedAt !== entry.removedAt),
+          );
+        } catch (err) {
+          const status = (err as { status?: number } | null)?.status;
+          if (status === 404) {
+            // Already reinstated through some other path — drop the
+            // entry so the reviewer doesn't keep clicking a button
+            // that will 404 again. Mirrors the per-row Undo's 404
+            // handling.
+            notFound++;
+            setSingleUndo((prev) =>
+              prev.filter((e) => e.removedAt !== entry.removedAt),
+            );
+          } else if (status === 401 || status === 403) {
+            authFailedSticky = true;
+            authFailed++;
+            // Leave the entry in the stack so the reviewer can retry
+            // once the token issue is resolved.
+          } else {
+            errored++;
+            // Leave the entry in the stack so the reviewer can retry
+            // the specific row that failed (network blip, 5xx, etc.).
+          }
+        }
+      }
+    } finally {
+      refresh();
+      // Task #443 — single-phrase reinstates can change the active
+      // list and any open add-preview's overlap snapshot. Fire once
+      // per bulk pass rather than once per inner reinstate to avoid
+      // hammering the dry-run endpoint.
+      void refreshOpenAddPreview();
+      setBusy(null);
+    }
+
+    const failures = notFound + authFailed + errored;
+    if (failures === 0) {
+      const noun = reinstated === 1 ? "phrase" : "phrases";
+      toast({
+        title: `Undid ${reinstated} ${noun}`,
+        description: "The active list has been refreshed.",
+      });
+    } else {
+      const parts: string[] = [];
+      if (notFound > 0) parts.push(`${notFound} already reinstated elsewhere`);
+      if (authFailed > 0) parts.push(`${authFailed} auth-failed`);
+      if (errored > 0) parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
+      const noun = reinstated === 1 ? "phrase" : "phrases";
+      toast({
+        title:
+          reinstated > 0
+            ? `Undid ${reinstated} ${noun}`
+            : "Nothing to undo",
+        description:
+          reinstated > 0
+            ? `Skipped ${failures} (${parts.join(", ")}). Failed entries stay in the stack so you can retry them.`
+            : `Skipped ${failures} (${parts.join(", ")}).`,
+        ...(reinstated === 0 ? { variant: "destructive" as const } : {}),
+      });
+    }
+  };
+
   // Task #237 / #332 — defense-in-depth for the post-Trash Undo stack.
   // The explicit clears (success / dismiss / 404) cover the in-component
   // paths, but the same phrase can also be reinstated externally (per-
@@ -7887,8 +8010,74 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             data-count={singleUndo.length}
             data-max={SINGLE_UNDO_MAX}
           >
+            {/* Task #472 — stack header with "Undo all" affordance.
+                Surfaces only when there are 2+ entries so the single-
+                entry case keeps the cleanest possible Undo flow (the
+                per-row button does the same thing as a one-entry "Undo
+                all" would). The button drives `handleUndoAllSingleRemoves`,
+                which walks each entry through the same single-phrase
+                reinstate path the per-row Undo button uses and reports
+                succeeded vs. skipped in one toast. */}
+            {singleUndo.length >= 2 && (() => {
+              const allBusy = busy === SINGLE_UNDO_ALL_BUSY_KEY;
+              const allReason = describeHandwavyDisabledReason({
+                mutationsAllowed,
+                cooldownActive: cooldown.active,
+                cooldownSecondsRemaining: cooldown.secondsRemaining,
+                inFlight: allBusy,
+                inFlightLabel:
+                  "Undoing every recent removal — wait for it to finish.",
+              });
+              const allHintId = allReason
+                ? "handwavy-single-undo-all-disabled-hint-id"
+                : undefined;
+              return (
+                <div
+                  className="flex items-center gap-2 flex-wrap text-[11px]"
+                  data-testid="handwavy-single-undo-stack-header"
+                >
+                  <span className="text-muted-foreground">
+                    {singleUndo.length} recent removals
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px] ml-auto"
+                    onClick={() => void handleUndoAllSingleRemoves()}
+                    disabled={allBusy || !mutationsAllowed || cooldown.active}
+                    title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
+                    data-testid="handwavy-single-undo-all"
+                    aria-label="Undo all recent removals"
+                    data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
+                    aria-describedby={allHintId}
+                  >
+                    <Undo2 className="w-3 h-3 mr-1" />
+                    {allBusy ? "Undoing all…" : `Undo all (${singleUndo.length})`}
+                  </Button>
+                  {allHintId && (
+                    <div className="basis-full">
+                      <HandwavyDisabledHint
+                        id={allHintId}
+                        reason={allReason}
+                        testId="handwavy-single-undo-all-disabled-hint"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {[...singleUndo].reverse().map((entry) => {
               const undoBusy = busy === singleUndoBusyKey(entry);
+              // Task #472 — while the bulk "Undo all" is walking the
+              // stack, every per-row Undo / Dismiss should also be
+              // disabled so a stray click doesn't race the loop and
+              // either fire a duplicate reinstate or yank an entry
+              // out from under the loop's iterator. The loop itself
+              // snapshots the stack at start, so dismissed entries
+              // would still be processed — disabling is the simpler
+              // contract.
+              const allBusy = busy === SINGLE_UNDO_ALL_BUSY_KEY;
               return (
                 <div
                   key={entry.removedAt}
@@ -7909,9 +8098,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     // identifier even when several banners render at once.
                     const singleUndoReason = describeHandwavyDisabledReason({
                       mutationsAllowed,
-                      inFlight: undoBusy,
-                      inFlightLabel:
-                        "Undoing this single removal — wait for it to finish.",
+                      inFlight: undoBusy || allBusy,
+                      inFlightLabel: allBusy
+                        ? "Undoing every recent removal — wait for it to finish."
+                        : "Undoing this single removal — wait for it to finish.",
                     });
                     const singleUndoHintId = singleUndoReason
                       ? `handwavy-single-undo-disabled-hint-id-${entry.removedAt}`
@@ -7924,7 +8114,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           size="sm"
                           className="h-7 px-2 text-[11px]"
                           onClick={() => handleUndoSingleRemove(entry)}
-                          disabled={undoBusy || !mutationsAllowed}
+                          disabled={undoBusy || allBusy || !mutationsAllowed}
                           title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
                           data-testid="handwavy-single-undo-button"
                           aria-label={`Undo removal of phrase ${entry.phrase}`}
@@ -7950,7 +8140,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     type="button"
                     className="text-[10px] text-muted-foreground hover:text-foreground underline"
                     onClick={() => dismissSingleUndo(entry)}
-                    disabled={undoBusy}
+                    disabled={undoBusy || allBusy}
                     aria-label={`Dismiss undo banner for phrase ${entry.phrase}`}
                     data-testid="handwavy-single-undo-dismiss"
                   >

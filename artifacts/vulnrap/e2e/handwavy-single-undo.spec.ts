@@ -180,6 +180,75 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
     }
   });
 
+  test('"Undo all" rolls back every stacked per-row Trash in one click and reports succeeded vs. skipped (Task #472)', async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const first = uniquePhrase("undoall-first");
+    const second = uniquePhrase("undoall-second");
+    const third = uniquePhrase("undoall-third");
+
+    try {
+      await addPhrase(apiCtx, first);
+      await addPhrase(apiCtx, second);
+      await addPhrase(apiCtx, third);
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      // Single-entry stack must NOT show the "Undo all" button — the
+      // per-row Undo already does the same thing in that case, so a
+      // bulk affordance would just be visual clutter.
+      await trashRow(page, first);
+      const stack = page.getByTestId("handwavy-single-undo-stack");
+      await expect(stack).toBeVisible({ timeout: 15_000 });
+      await expect(stack).toHaveAttribute("data-count", "1");
+      await expect(page.getByTestId("handwavy-single-undo-all")).toHaveCount(0);
+
+      // Push two more entries onto the stack so we have ≥2 — this is
+      // when the "Undo all" header surfaces.
+      await trashRow(page, second);
+      await trashRow(page, third);
+      await expect(stack).toHaveAttribute("data-count", "3", { timeout: 15_000 });
+
+      const undoAllBtn = page.getByTestId("handwavy-single-undo-all");
+      await expect(undoAllBtn).toBeVisible();
+      await expect(undoAllBtn).toContainText("Undo all (3)");
+
+      await undoAllBtn.click();
+
+      // Every entry leaves the stack as it succeeds — the whole panel
+      // disappears once the loop finishes.
+      await expect(stack).toHaveCount(0, { timeout: 30_000 });
+
+      // Aggregate toast carries the succeeded count — locks in the
+      // Task #233-shaped "Undid N phrases" summary so a future
+      // refactor of the success path can't silently drop the
+      // single-toast contract. `.first()` because the toast viewport
+      // renders the text twice (visual + aria-live mirror).
+      await expect(
+        page.getByText("Undid 3 phrases", { exact: false }).first(),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // All three phrases are back on the active list — the reviewer
+      // got the entire batch back in one click instead of three.
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: first }),
+      ).toHaveCount(1, { timeout: 15_000 });
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: second }),
+      ).toHaveCount(1, { timeout: 15_000 });
+      await expect(
+        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: third }),
+      ).toHaveCount(1, { timeout: 15_000 });
+    } finally {
+      await cleanup(apiCtx, first);
+      await cleanup(apiCtx, second);
+      await cleanup(apiCtx, third);
+      await apiCtx.dispose();
+    }
+  });
+
   test("Undoing the OLDER stacked entry rolls back that specific Trash and leaves the newer entry intact (Task #332)", async ({
     page,
   }) => {
