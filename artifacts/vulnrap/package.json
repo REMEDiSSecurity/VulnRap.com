@@ -9,7 +9,7 @@
     "build:no-prerender": "vite build --config vite.config.ts",
     "prerender": "node scripts/prerender.mjs",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "pnpm -w run typecheck:libs && tsc -p tsconfig.json --noEmit",
     "test": "vitest run && pnpm run test:e2e",
     "test:watch": "vitest",
     "test:unit": "vitest run",
