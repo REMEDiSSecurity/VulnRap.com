@@ -14,6 +14,7 @@ import {
   GetStatsResponse,
   GetRecentActivityResponse,
   GetSlopDistributionResponse,
+  GetTrendsResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -282,8 +283,7 @@ router.get("/stats/trends", async (req, res): Promise<void> => {
     })
     .from(reportsTable);
 
-  res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
-  res.json({
+  const response = GetTrendsResponse.parse({
     days,
     totalReports: totals.totalReports,
     totalFeedback: totals.totalFeedback,
@@ -301,6 +301,9 @@ router.get("/stats/trends", async (req, res): Promise<void> => {
     })),
     feedbackTrend,
   });
+
+  res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
+  res.json(response);
 });
 
 export default router;
