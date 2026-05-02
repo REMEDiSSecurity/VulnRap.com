@@ -1707,4 +1707,75 @@ describe("GET /.well-known/security.txt — public URL resolution", () => {
       else process.env.PUBLIC_URL = previousPublicUrl;
     }
   });
+
+  // Task #517: the Expires line was previously a frozen literal
+  // (2027-12-31T23:59:00.000Z) that would silently lapse. It must now be
+  // computed at request time so the file always satisfies RFC 9116 §2.5.5
+  // (in the future, and within ~one year).
+  it("renders an Expires timestamp that is in the future and within RFC 9116's one-year window", async () => {
+    const before = Date.now();
+    const res = await getText("/.well-known/security.txt");
+    const after = Date.now();
+    expect(res.status).toBe(200);
+
+    const match = res.body.match(/^Expires: (.+)$/m);
+    expect(match).not.toBeNull();
+    const expiresIso = match![1];
+    // RFC 5322 / RFC 9116 require ISO-8601 UTC; assert the canonical Z form.
+    expect(expiresIso).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
+    const expiresMs = Date.parse(expiresIso);
+    expect(Number.isFinite(expiresMs)).toBe(true);
+    // Strictly in the future relative to the start of this request.
+    expect(expiresMs).toBeGreaterThan(before);
+    // And no further out than one year + a small slack for the request
+    // round-trip, matching the RFC's "values longer than a year are not
+    // recommended" guidance.
+    const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+    expect(expiresMs).toBeLessThanOrEqual(after + oneYearMs);
+    // The frozen literal that motivated this task must never reappear.
+    expect(res.body).not.toContain("2027-12-31T23:59:00.000Z");
+  });
+
+  it("honours SECURITY_TXT_EXPIRY_DAYS when set, and clamps out-of-range values to (0, 365]", async () => {
+    const previous = process.env.SECURITY_TXT_EXPIRY_DAYS;
+    const dayMs = 24 * 60 * 60 * 1000;
+    try {
+      // 1) A reasonable in-range value (30 days) is honoured exactly.
+      process.env.SECURITY_TXT_EXPIRY_DAYS = "30";
+      let before = Date.now();
+      let res = await getText("/.well-known/security.txt");
+      let after = Date.now();
+      expect(res.status).toBe(200);
+      let expiresMs = Date.parse(res.body.match(/^Expires: (.+)$/m)![1]);
+      expect(expiresMs).toBeGreaterThanOrEqual(before + 30 * dayMs - 1000);
+      expect(expiresMs).toBeLessThanOrEqual(after + 30 * dayMs + 1000);
+
+      // 2) An overlong value (10 years) is clamped to the 365-day max so
+      //    deployments cannot accidentally publish a non-compliant file.
+      process.env.SECURITY_TXT_EXPIRY_DAYS = String(365 * 10);
+      before = Date.now();
+      res = await getText("/.well-known/security.txt");
+      after = Date.now();
+      expect(res.status).toBe(200);
+      expiresMs = Date.parse(res.body.match(/^Expires: (.+)$/m)![1]);
+      expect(expiresMs).toBeLessThanOrEqual(after + 365 * dayMs + 1000);
+      expect(expiresMs).toBeGreaterThan(before);
+
+      // 3) A garbage / non-positive value falls back to the 90-day default
+      //    instead of producing an Expires in the past.
+      process.env.SECURITY_TXT_EXPIRY_DAYS = "not-a-number";
+      before = Date.now();
+      res = await getText("/.well-known/security.txt");
+      after = Date.now();
+      expect(res.status).toBe(200);
+      expiresMs = Date.parse(res.body.match(/^Expires: (.+)$/m)![1]);
+      expect(expiresMs).toBeGreaterThan(before);
+      expect(expiresMs).toBeLessThanOrEqual(after + 90 * dayMs + 1000);
+    } finally {
+      if (previous === undefined) delete process.env.SECURITY_TXT_EXPIRY_DAYS;
+      else process.env.SECURITY_TXT_EXPIRY_DAYS = previous;
+    }
+  });
 });

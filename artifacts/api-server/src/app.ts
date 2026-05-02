@@ -168,14 +168,46 @@ if (swaggerDocument) {
   }));
 }
 
+// Task #517 — Compute the Expires line dynamically so the file never lapses
+// per RFC 9116 §2.5.5 (the timestamp MUST be in the future, and values longer
+// than a year out are explicitly not recommended). The default rollover
+// window is 90 days; deployments can tune it via SECURITY_TXT_EXPIRY_DAYS,
+// and any value outside the (0, 365] range is clamped to that range so a
+// misconfigured env var can't produce an invalid file.
+const SECURITY_TXT_DEFAULT_EXPIRY_DAYS = 90;
+const SECURITY_TXT_MAX_EXPIRY_DAYS = 365;
+
+export function resolveSecurityTxtExpiryDays(
+  raw: string | undefined = process.env.SECURITY_TXT_EXPIRY_DAYS,
+): number {
+  if (raw === undefined || raw.trim() === "") {
+    return SECURITY_TXT_DEFAULT_EXPIRY_DAYS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return SECURITY_TXT_DEFAULT_EXPIRY_DAYS;
+  }
+  if (parsed > SECURITY_TXT_MAX_EXPIRY_DAYS) {
+    return SECURITY_TXT_MAX_EXPIRY_DAYS;
+  }
+  return parsed;
+}
+
+export function computeSecurityTxtExpires(now: Date = new Date()): string {
+  const days = resolveSecurityTxtExpiryDays();
+  const expires = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  return expires.toISOString();
+}
+
 // Build the security.txt body per-request so Canonical / Policy resolve
 // through the shared buildPublicUrl helper (PUBLIC_URL → request origin →
 // vulnrap.com fallback) instead of being hard-coded.
 function buildSecurityTxt(req: Request): string {
   const canonical = buildPublicUrl({ req, path: "/.well-known/security.txt" });
   const policy = buildPublicUrl({ req, path: "/privacy" });
+  const expires = computeSecurityTxtExpires();
   return `Contact: mailto:remedisllc@gmail.com
-Expires: 2027-12-31T23:59:00.000Z
+Expires: ${expires}
 Preferred-Languages: en
 Canonical: ${canonical}
 Policy: ${policy}
