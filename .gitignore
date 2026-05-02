@@ -84,4 +84,9 @@ artifacts/api-server/data/calibration-auth-brute-force-state.json
 # notifications; rebuilt automatically by lib/avri-drift-notifications.ts on
 # every replica boot and during scheduler ticks). Tracking it causes endless
 # rebase conflicts as different replicas write their own heartbeat entries.
+# Both paths are covered: the canonical location is artifacts/api-server/data/
+# (process.cwd() is the workspace root); when the api-server is launched with
+# cwd=artifacts/api-server (e.g. via `pnpm --filter`), it instead writes to
+# artifacts/data/ via the same relative resolver.
 artifacts/api-server/data/avri-drift-notifications.json
+artifacts/data/avri-drift-notifications.json
