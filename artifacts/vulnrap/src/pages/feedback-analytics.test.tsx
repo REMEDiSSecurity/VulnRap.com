@@ -26,6 +26,7 @@ import {
   computeCohortFixtureDelta,
   DatasetCohortFixtureDeltaSparkline,
   DatasetHistoryMeanSparkline,
+  DatasetRotationDensityBar,
   FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD,
   COHORT_DELTA_WARN_THRESHOLD_OPTIONS,
   COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY,
@@ -1248,6 +1249,188 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
     expect(t1.rawCount).toBe(2);
     expect(summary.gapAggregatedCount).toBe(0);
     expect(summary.gapRawCount).toBe(2);
+  });
+
+  // Task #510 — per-UTC-day rotation-density bucket on the gap series so
+  // the new visual under the per-tier sparklines can show whether a
+  // week had a denser rotation cadence than another at a glance.
+  it("buckets slice rotations by the UTC day they landed on and fills 0-rotation days inside the trend window (Task #510)", () => {
+    // Two rotations across a 4-day window: one lands on 2026-04-23,
+    // one on 2026-04-25. The intervening 2026-04-24 (no rotation) and
+    // the leading 2026-04-22 (the first day, anchor) should both
+    // appear with count: 0 so the bar stays comparable week-over-week
+    // instead of being squashed onto the days that happened to flip.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 5,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-04-22" },
+            { timestamp: "2026-04-22T12:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18, sampleDateKey: "2026-04-22" },
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 19, sampleDateKey: "2026-04-23" },
+            { timestamp: "2026-04-24T06:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72.5, gap: 19.2, sampleDateKey: "2026-04-23" },
+            { timestamp: "2026-04-25T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 73, gap: 20, sampleDateKey: "2026-04-25" },
+          ],
+        },
+      ],
+    });
+    expect(summary.rotationsByDay).toEqual([
+      { date: "2026-04-22", count: 0 },
+      { date: "2026-04-23", count: 1 },
+      { date: "2026-04-24", count: 0 },
+      { date: "2026-04-25", count: 1 },
+    ]);
+  });
+
+  it("counts multiple rotations on the same UTC day separately (Task #510)", () => {
+    // Pathological-but-possible: two runs in the same UTC day each
+    // observe a different sampleDateKey (e.g. an operator backfilled
+    // a slice mid-day). Both rotations should fall into the same
+    // bucket and sum, so the bar's height honestly reflects density.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 3,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            { timestamp: "2026-04-22T01:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-04-22" },
+            { timestamp: "2026-04-22T05:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18, sampleDateKey: "2026-04-23" },
+            { timestamp: "2026-04-22T11:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 18, sampleDateKey: "2026-04-22" },
+          ],
+        },
+      ],
+    });
+    expect(summary.rotationsByDay).toEqual([
+      { date: "2026-04-22", count: 2 },
+    ]);
+  });
+
+  it("returns an empty rotation-density series when no slice keys are present (legacy history) (Task #510)", () => {
+    // Pure-legacy history: no rotations are observable, so the visual
+    // shouldn't render at all. Mirrors the per-tier `rotationCount`
+    // staying at 0 in the same scenario.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 2,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18 },
+          ],
+        },
+      ],
+    });
+    expect(summary.rotationsByDay).toEqual([]);
+  });
+
+  it("returns an empty rotation-density series on a single-snapshot history (no rotation observable) (Task #510)", () => {
+    // One gap point can't produce an adjacent pair, so there's nothing
+    // to bucket. The visual is hidden by the renderer in this case.
+    const summary = summarizeDatasetHistory({
+      totalSnapshots: 1,
+      cohorts: [
+        {
+          tier: "T1_LEGIT",
+          snapshots: [
+            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-04-22" },
+          ],
+        },
+      ],
+    });
+    expect(summary.rotationsByDay).toEqual([]);
+  });
+
+  it("returns an empty rotation-density series on the dataset-not-mounted empty state (Task #510)", () => {
+    // Mirrors the rest of the card — the bar must not render in the
+    // empty state. `summary.isEmpty` is the gate the renderer uses;
+    // `rotationsByDay` is empty for free here because there are no
+    // gap points to walk.
+    const summary = summarizeDatasetHistory({ totalSnapshots: 0, cohorts: [] });
+    expect(summary.isEmpty).toBe(true);
+    expect(summary.rotationsByDay).toEqual([]);
+  });
+});
+
+describe("DatasetRotationDensityBar (Task #510 — per-UTC-day rotation density underneath the cohort drift sparklines)", () => {
+  it("renders nothing when the bucket array is empty so the legacy / empty-state branch stays clean", () => {
+    const { container } = render(<DatasetRotationDensityBar buckets={[]} />);
+    expect(container.querySelector("svg")).toBeNull();
+    expect(
+      container.querySelector("[data-testid='dataset-cohort-drift-rotation-density']"),
+    ).toBeNull();
+  });
+
+  it("renders one bar per UTC day with a hover-friendly count and a summary aria-label", () => {
+    render(
+      <DatasetRotationDensityBar
+        buckets={[
+          { date: "2026-04-22", count: 0 },
+          { date: "2026-04-23", count: 2 },
+          { date: "2026-04-24", count: 1 },
+        ]}
+      />,
+    );
+    const svg = screen.getByTestId("dataset-cohort-drift-rotation-density");
+    // One <rect> per bucket, regardless of whether the day rotated.
+    const rects = svg.querySelectorAll("rect");
+    expect(rects.length).toBe(3);
+    // Days with rotations carry the bar test id and expose their count
+    // via data-* and a native SVG <title> so hover surfaces it.
+    const filledBars = svg.querySelectorAll(
+      "[data-testid='dataset-cohort-drift-rotation-density-bar']",
+    );
+    expect(filledBars.length).toBe(2);
+    const filledByDate = new Map<string, Element>();
+    for (const bar of Array.from(filledBars)) {
+      filledByDate.set(bar.getAttribute("data-date")!, bar);
+    }
+    expect(filledByDate.get("2026-04-23")?.getAttribute("data-count")).toBe("2");
+    expect(filledByDate.get("2026-04-24")?.getAttribute("data-count")).toBe("1");
+    expect(filledByDate.get("2026-04-23")?.querySelector("title")?.textContent).toBe(
+      "2026-04-23 UTC: 2 slice rotations",
+    );
+    expect(filledByDate.get("2026-04-24")?.querySelector("title")?.textContent).toBe(
+      "2026-04-24 UTC: 1 slice rotation",
+    );
+    // Days with zero rotations get the empty-day marker so the time
+    // axis stays continuous but the bar reads as background.
+    const emptyDays = svg.querySelectorAll(
+      "[data-testid='dataset-cohort-drift-rotation-density-empty-day']",
+    );
+    expect(emptyDays.length).toBe(1);
+    expect(emptyDays[0]!.getAttribute("data-date")).toBe("2026-04-22");
+    expect(emptyDays[0]!.getAttribute("data-count")).toBe("0");
+    expect(emptyDays[0]!.querySelector("title")?.textContent).toBe(
+      "2026-04-22 UTC: 0 slice rotations",
+    );
+    // Top-level aria-label / <title> reports the totals so screen-
+    // reader users get the same context as hover users.
+    expect(svg.getAttribute("aria-label")).toBe(
+      "3 slice rotations across 3 UTC days (2026-04-22 → 2026-04-24)",
+    );
+  });
+
+  it("renders a bar that's visibly taller for higher-count days (height scales with count)", () => {
+    render(
+      <DatasetRotationDensityBar
+        buckets={[
+          { date: "2026-04-22", count: 1 },
+          { date: "2026-04-23", count: 4 },
+        ]}
+      />,
+    );
+    const svg = screen.getByTestId("dataset-cohort-drift-rotation-density");
+    const bars = Array.from(
+      svg.querySelectorAll("[data-testid='dataset-cohort-drift-rotation-density-bar']"),
+    );
+    const byDate = new Map(bars.map(b => [b.getAttribute("data-date")!, b] as const));
+    const shortH = Number(byDate.get("2026-04-22")!.getAttribute("height"));
+    const tallH = Number(byDate.get("2026-04-23")!.getAttribute("height"));
+    expect(Number.isFinite(shortH)).toBe(true);
+    expect(Number.isFinite(tallH)).toBe(true);
+    expect(tallH).toBeGreaterThan(shortH);
   });
 });
 

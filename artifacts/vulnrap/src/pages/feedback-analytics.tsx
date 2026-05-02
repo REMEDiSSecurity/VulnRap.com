@@ -15704,6 +15704,26 @@ export interface DatasetHistorySeries {
   rawCount: number;
 }
 
+/**
+ * Task #510 — one UTC day's worth of slice-rotation observations on
+ * the deduped gap series. Rendered as a thin bar in the rotation-
+ * density visual underneath the per-tier sparklines so reviewers can
+ * spot which days (or weeks) had a denser rotation cadence at a
+ * glance, without having to count vertical ticks across four
+ * sparklines.
+ */
+export interface DatasetRotationDayBucket {
+  /** UTC date key (YYYY-MM-DD) the rotations were observed on. */
+  date: string;
+  /**
+   * Number of slice rotations whose "to" snapshot landed on this UTC
+   * day. A rotation is an adjacent pair of deduped gap points whose
+   * sampleDateKey differs (and both sides carry one). Days inside the
+   * trend window with no rotation report `count: 0`.
+   */
+  count: number;
+}
+
 export interface DatasetHistorySummary {
   /** True when the endpoint returned no snapshots at all (dataset not mounted). */
   isEmpty: boolean;
@@ -15717,6 +15737,15 @@ export interface DatasetHistorySummary {
   /** Task #380 — agg/raw split for the deduped gap series. */
   gapAggregatedCount: number;
   gapRawCount: number;
+  /**
+   * Task #510 — per-UTC-day slice-rotation density derived from the
+   * deduped gap series' sampleDateKey annotations. Spans every UTC
+   * day from the first to the last gap point so the rotation bar
+   * underneath the sparklines is comparable week-over-week (days with
+   * no rotation get an explicit `count: 0` bucket). Empty when fewer
+   * than two gap points carry a slice key (no rotation is observable).
+   */
+  rotationsByDay: DatasetRotationDayBucket[];
 }
 
 /**
@@ -15856,6 +15885,65 @@ export function summarizeDatasetHistory(
     0,
   );
 
+  // Task #510 — bucket adjacent-pair slice rotations by the UTC day
+  // their "to" snapshot landed on, then emit a contiguous range of
+  // daily buckets (filling 0-rotation days with explicit zero counts)
+  // so the rotation-density bar underneath the sparklines is
+  // comparable week-over-week instead of being squashed onto only the
+  // days that happened to rotate. We derive this from the deduped gap
+  // series so each run contributes one rotation event at most (the
+  // per-tier rows of a single run share a sampleDateKey by
+  // construction). Pure-legacy history without slice keys yields an
+  // empty array, mirroring the per-tier rotationCount semantics.
+  const rotationsByDay: DatasetRotationDayBucket[] = [];
+  // Only honour gap entries that actually carry a slice key when
+  // building the day axis, so a pure-legacy history (rows persisted
+  // before Task #358 added the field) yields no buckets at all and
+  // the visual stays hidden — there is no rotation signal to display
+  // in that scenario, mirroring the per-tier `rotationCount` of 0.
+  const sliceKeyedEntries = gapEntries.filter(
+    p => typeof p.sampleDateKey === "string" && p.sampleDateKey.length > 0,
+  );
+  if (sliceKeyedEntries.length >= 2) {
+    const counts = new Map<string, number>();
+    let firstDay: string | null = null;
+    let lastDay: string | null = null;
+    for (const p of sliceKeyedEntries) {
+      const day = p.timestamp.slice(0, 10);
+      if (firstDay == null || day < firstDay) firstDay = day;
+      if (lastDay == null || day > lastDay) lastDay = day;
+    }
+    for (let i = 1; i < gapEntries.length; i++) {
+      const prev = gapEntries[i - 1]!;
+      const cur = gapEntries[i]!;
+      if (
+        prev.sampleDateKey
+        && cur.sampleDateKey
+        && prev.sampleDateKey !== cur.sampleDateKey
+      ) {
+        const day = cur.timestamp.slice(0, 10);
+        counts.set(day, (counts.get(day) ?? 0) + 1);
+      }
+    }
+    if (firstDay != null && lastDay != null) {
+      const startMs = Date.parse(`${firstDay}T00:00:00.000Z`);
+      const endMs = Date.parse(`${lastDay}T00:00:00.000Z`);
+      const dayMs = 24 * 60 * 60 * 1000;
+      // Cap the range to avoid pathological bucket counts if the
+      // history ever spans far longer than the configured rollup
+      // window. 366 days is well past the editor's max (365), so we
+      // never truncate normal data — but a corrupt persisted row with
+      // a wild timestamp can't blow the visual up.
+      const maxBuckets = 400;
+      let bucketCount = 0;
+      for (let t = startMs; t <= endMs && bucketCount < maxBuckets; t += dayMs) {
+        const dayKey = new Date(t).toISOString().slice(0, 10);
+        rotationsByDay.push({ date: dayKey, count: counts.get(dayKey) ?? 0 });
+        bucketCount += 1;
+      }
+    }
+  }
+
   return {
     isEmpty: total === 0 || cohorts.every(c => c.snapshots.length === 0),
     tiers,
@@ -15864,6 +15952,7 @@ export function summarizeDatasetHistory(
     latestSampleDateKey,
     gapAggregatedCount,
     gapRawCount: gapEntries.length - gapAggregatedCount,
+    rotationsByDay,
   };
 }
 
@@ -16240,6 +16329,88 @@ export function DatasetCohortFixtureDeltaSparkline({
         />
       )}
       <circle cx={lastX} cy={lastY} r={2} fill={lastColor} />
+    </svg>
+  );
+}
+
+/**
+ * Task #510 — small rotation-density bar that sits beneath the
+ * per-tier sparklines on the Curated Dataset Cohort Drift card. Each
+ * vertical bar is one UTC day; bar height is proportional to the
+ * rotation count for that day so a noisier week reads as a denser
+ * block of bars at a glance, and a quiet week reads as a row of
+ * hairlines. Days with zero rotations still get a faint baseline
+ * marker so the time axis stays continuous and week-over-week
+ * comparison is honest. Each bar carries a native SVG `<title>` so
+ * hovering surfaces the absolute count for that UTC day.
+ */
+export function DatasetRotationDensityBar({
+  buckets,
+}: {
+  buckets: DatasetRotationDayBucket[];
+}) {
+  if (buckets.length === 0) return null;
+  const totalRotations = buckets.reduce((n, b) => n + b.count, 0);
+  const maxCount = Math.max(1, ...buckets.map(b => b.count));
+  const W = 480;
+  const H = 24;
+  const PAD = 2;
+  const innerW = W - 2 * PAD;
+  const innerH = H - 2 * PAD;
+  const slotW = innerW / buckets.length;
+  const barW = Math.max(0.6, slotW * 0.7);
+  const firstDay = buckets[0]!.date;
+  const lastDay = buckets[buckets.length - 1]!.date;
+  const tooltip =
+    `${totalRotations} slice rotation${totalRotations === 1 ? "" : "s"}`
+    + ` across ${buckets.length} UTC day${buckets.length === 1 ? "" : "s"}`
+    + ` (${firstDay} → ${lastDay})`;
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full h-5"
+      preserveAspectRatio="none"
+      role="img"
+      aria-label={tooltip}
+      data-testid="dataset-cohort-drift-rotation-density"
+    >
+      <title>{tooltip}</title>
+      <line
+        x1={PAD}
+        y1={H - PAD}
+        x2={W - PAD}
+        y2={H - PAD}
+        stroke="rgba(255,255,255,0.08)"
+        strokeWidth={0.5}
+      />
+      {buckets.map((b, i) => {
+        const slotX = PAD + i * slotW;
+        const x = slotX + (slotW - barW) / 2;
+        const isEmpty = b.count === 0;
+        const h = isEmpty ? 0.6 : Math.max(2, (innerH * b.count) / maxCount);
+        const y = H - PAD - h;
+        return (
+          <rect
+            key={b.date}
+            x={x}
+            y={y}
+            width={barW}
+            height={h}
+            fill={isEmpty ? "rgba(148,163,184,0.20)" : "rgba(217,119,6,0.75)"}
+            data-testid={
+              isEmpty
+                ? "dataset-cohort-drift-rotation-density-empty-day"
+                : "dataset-cohort-drift-rotation-density-bar"
+            }
+            data-date={b.date}
+            data-count={b.count}
+          >
+            <title>
+              {`${b.date} UTC: ${b.count} slice rotation${b.count === 1 ? "" : "s"}`}
+            </title>
+          </rect>
+        );
+      })}
     </svg>
   );
 }
@@ -16729,6 +16900,46 @@ function DatasetCohortDriftSection() {
               />
             </div>
             </div>
+            {/*
+              Task #510 — per-UTC-day rotation-density bar so reviewers
+              comparing weeks can see at a glance whether one stretch
+              rotated more often than another (which would explain a
+              noisier sparkline above without having to count vertical
+              ticks). Hidden when there are no observable rotations
+              (pure-legacy history or a single snapshot), since an
+              all-zero bar would just be visual noise.
+            */}
+            {summary.rotationsByDay.length > 0 && (
+              <div
+                className="mt-2 rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2"
+                data-testid="dataset-cohort-drift-rotation-density-section"
+              >
+                <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span className="font-mono">Rotations per UTC day</span>
+                  <span className="tabular-nums text-muted-foreground/60">
+                    {(() => {
+                      const total = summary.rotationsByDay.reduce(
+                        (n, b) => n + b.count,
+                        0,
+                      );
+                      const dayCount = summary.rotationsByDay.length;
+                      return (
+                        <>
+                          <span data-testid="dataset-cohort-drift-rotation-density-total">
+                            {total} rot
+                          </span>
+                          {" · "}
+                          <span data-testid="dataset-cohort-drift-rotation-density-span">
+                            {dayCount} day{dayCount === 1 ? "" : "s"}
+                          </span>
+                        </>
+                      );
+                    })()}
+                  </span>
+                </div>
+                <DatasetRotationDensityBar buckets={summary.rotationsByDay} />
+              </div>
+            )}
           </>
         )}
       </CardContent>
