@@ -8,9 +8,18 @@ import swaggerUi from "swagger-ui-express";
 import YAML from "yamljs";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
+
+// Task #462 — Resolve __dirname from import.meta.url so this file works under
+// any pure-ESM loader (no esbuild banner) as well as the bundled output. The
+// esbuild banner in build.mjs sets globalThis.__dirname for dist/index.mjs;
+// this local const shadows it harmlessly because in the bundle,
+// fileURLToPath(import.meta.url) resolves to the same dist/ path the banner
+// injects, so the candidate paths below still resolve identically.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 validatePublicUrlEnv({ logger });
 
@@ -197,3 +206,4 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 export default app;
+

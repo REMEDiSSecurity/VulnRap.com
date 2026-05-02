@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "export NODE_ENV=development && export CALIBRATION_TOKEN=\"${CALIBRATION_TOKEN:-e2e-calibration-token}\" && pnpm run build && pnpm run start",
+    "dev": "export NODE_ENV=development && export CALIBRATION_TOKEN=\"${CALIBRATION_TOKEN:-e2e-calibration-token}\" && node ./build.mjs --watch",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",

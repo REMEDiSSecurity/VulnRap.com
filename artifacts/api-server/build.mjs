@@ -1,7 +1,8 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { build as esbuild } from "esbuild";
+import { spawn } from "node:child_process";
+import { build as esbuild, context as esbuildContext } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
 import { rm, copyFile } from "node:fs/promises";
 
@@ -9,19 +10,108 @@ import { rm, copyFile } from "node:fs/promises";
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+const watchMode = process.argv.includes("--watch");
+
+function makeRestartPlugin() {
+  let child = null;
+  let restartTimer = null;
+
+  function killChild() {
+    if (!child) return Promise.resolve();
+    const c = child;
+    child = null;
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      c.once("exit", finish);
+      try {
+        c.kill("SIGTERM");
+      } catch {
+        finish();
+        return;
+      }
+      // Force-kill if the child doesn't exit quickly
+      setTimeout(() => {
+        if (!done) {
+          try {
+            c.kill("SIGKILL");
+          } catch {}
+          finish();
+        }
+      }, 1500).unref();
+    });
+  }
+
+  function spawnChild() {
+    const entry = path.resolve(artifactDir, "dist/index.mjs");
+    child = spawn(
+      process.execPath,
+      ["--enable-source-maps", entry],
+      { stdio: "inherit", env: process.env },
+    );
+    child.once("exit", (code, signal) => {
+      // Only log unexpected exits; expected restarts null `child` first.
+      if (child && code !== 0 && !signal) {
+        console.error(`[dev] child process exited with code ${code}`);
+      }
+    });
+  }
+
+  async function restart() {
+    await killChild();
+    spawnChild();
+  }
+
+  process.on("SIGINT", async () => {
+    await killChild();
+    process.exit(0);
+  });
+  process.on("SIGTERM", async () => {
+    await killChild();
+    process.exit(0);
+  });
+
+  return {
+    name: "dev-restart",
+    setup(build) {
+      build.onEnd(async (result) => {
+        if (result.errors && result.errors.length > 0) return;
+        // Copy the OpenAPI spec next to the freshly-built dist/index.mjs so
+        // app.ts's spec-candidate path resolution succeeds. Doing this here
+        // (inside onEnd) avoids the startup-noise warning that fires when the
+        // top-level copyOpenApiSpec() runs before the first watch build.
+        await copyOpenApiSpec();
+        // Debounce in case of rapid successive rebuilds
+        if (restartTimer) clearTimeout(restartTimer);
+        restartTimer = setTimeout(() => {
+          restartTimer = null;
+          restart().catch((err) => console.error("[dev] restart failed:", err));
+        }, 50);
+      });
+    },
+  };
+}
 
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
 
-  await esbuild({
-    entryPoints: [
-      path.resolve(artifactDir, "src/index.ts"),
-      path.resolve(artifactDir, "src/seed.ts"),
-      path.resolve(artifactDir, "src/backfill-vulnrap.ts"),
-      path.resolve(artifactDir, "src/backfill-avri-family.ts"),
-      path.resolve(artifactDir, "src/backfill-fabricated-evidence.ts"),
-    ],
+  const entryPoints = watchMode
+    ? [path.resolve(artifactDir, "src/index.ts")]
+    : [
+        path.resolve(artifactDir, "src/index.ts"),
+        path.resolve(artifactDir, "src/seed.ts"),
+        path.resolve(artifactDir, "src/backfill-vulnrap.ts"),
+        path.resolve(artifactDir, "src/backfill-avri-family.ts"),
+        path.resolve(artifactDir, "src/backfill-fabricated-evidence.ts"),
+      ];
+
+  const buildOptions = {
+    entryPoints,
     platform: "node",
     bundle: true,
     format: "esm",
@@ -123,17 +213,37 @@ globalThis.__filename = __bannerUrl.fileURLToPath(import.meta.url);
 globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
-  });
+  };
+
+  if (watchMode) {
+    buildOptions.logLevel = "warning";
+    buildOptions.plugins.push(makeRestartPlugin());
+    const ctx = await esbuildContext(buildOptions);
+    await ctx.watch();
+    // Keep the process alive; the restart plugin owns the child server.
+  } else {
+    await esbuild(buildOptions);
+  }
+}
+
+async function copyOpenApiSpec() {
+  const specSrc = path.resolve(artifactDir, "..", "..", "lib", "api-spec", "openapi.yaml");
+  const specDst = path.resolve(artifactDir, "dist", "openapi.yaml");
+  try {
+    await copyFile(specSrc, specDst);
+  } catch {
+    console.warn("Could not copy openapi.yaml to dist/");
+  }
 }
 
 buildAll()
   .then(async () => {
-    const specSrc = path.resolve(artifactDir, "..", "..", "lib", "api-spec", "openapi.yaml");
-    const specDst = path.resolve(artifactDir, "dist", "openapi.yaml");
-    try {
-      await copyFile(specSrc, specDst);
-    } catch {
-      console.warn("Could not copy openapi.yaml to dist/");
+    // In watch mode, the dev-restart plugin copies the spec after each
+    // successful build (the first run included), so we skip it here to avoid
+    // racing the initial build and emitting a "Could not copy openapi.yaml"
+    // warning before dist/ exists.
+    if (!watchMode) {
+      await copyOpenApiSpec();
     }
   })
   .catch((err) => {
