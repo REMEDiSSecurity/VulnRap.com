@@ -21,12 +21,12 @@ import { logger } from "../lib/logger";
 // brute-force defense.
 //
 // requireCalibrationAuth behavior (used for mutation endpoints):
-//   - When CALIBRATION_TOKEN is unset or empty, the middleware is a no-op.
-//     This preserves the current single-reviewer / local-dev workflow so
-//     nobody is locked out by a silent default.
-//   - When CALIBRATION_TOKEN is set, callers must present the same token
-//     via either the `X-Calibration-Token` header or an
-//     `Authorization: Bearer <token>` header. Comparison is timing-safe.
+//   - Always requires a valid token — fails closed even when CALIBRATION_TOKEN
+//     is unset. This prevents unauthenticated mutation of scoring config and
+//     hand-wavy phrase lists when the env var is not configured in production.
+//   - Callers must present the configured token via either the
+//     `X-Calibration-Token` header or an `Authorization: Bearer <token>`
+//     header. Comparison is timing-safe.
 //   - Missing/wrong token returns 401 with a JSON error body that matches
 //     the rest of the calibration surface.
 //   - Repeated 401s from the same IP within the limiter window return 429
@@ -142,8 +142,19 @@ export function requireCalibrationAuth(
   next: NextFunction,
 ): void {
   const expected = readConfiguredToken();
+  // Fail closed: when CALIBRATION_TOKEN is unset, every mutation request is
+  // rejected. The previous fail-open behavior (calling next() when the env
+  // var was missing) allowed unauthenticated callers to mutate scoring config
+  // and phrase lists on any deployment that omitted the secret.
   if (expected === null) {
-    next();
+    const limiter = getLimiter();
+    limiter(req, res, () => {
+      logWrongTokenRejection(req, "mutation");
+      res.status(401).json({
+        error:
+          "Calibration mutations require a reviewer token. Set CALIBRATION_TOKEN on the server and send it via the X-Calibration-Token header or Authorization: Bearer <token>.",
+      });
+    });
     return;
   }
   const presented = extractPresentedToken(req);
@@ -206,10 +217,12 @@ export const __CALIBRATION_AUTH_HEADER = HEADER_NAME;
 //   * `tokenPresented`      — did the request include a token (header/bearer)?
 //   * `tokenValid`          — does the presented token match the server's?
 // `mutationsAllowed` is the derived "would `requireCalibrationAuth.next()` be
-// called?" boolean: true when the server is open OR when the presented token
-// is valid. Exposed as a separate helper (rather than inlined in the route)
-// so the UI probe and the middleware can never drift on what counts as a
-// valid token presentation.
+// called?" boolean: true only when CALIBRATION_TOKEN is set AND the presented
+// token matches. Because requireCalibrationAuth now fails closed (unset token
+// == reject), `mutationsAllowed` is false whenever serverRequiresToken is
+// false. Exposed as a separate helper (rather than inlined in the route) so
+// the UI probe and the middleware can never drift on what counts as a valid
+// token presentation.
 export interface CalibrationAuthStatus {
   serverRequiresToken: boolean;
   tokenPresented: boolean;
@@ -226,6 +239,10 @@ export function getCalibrationAuthStatus(req: Request): CalibrationAuthStatus {
     tokenValid = constantTimeEquals(expected, presentedToken);
   }
   const serverRequiresToken = expected !== null;
-  const mutationsAllowed = !serverRequiresToken || tokenValid;
+  // mutationsAllowed requires both a configured token AND a matching
+  // presented token. The old `!serverRequiresToken || tokenValid` expression
+  // returned true when no token was configured, which no longer matches the
+  // fail-closed behavior of requireCalibrationAuth.
+  const mutationsAllowed = serverRequiresToken && tokenValid;
   return { serverRequiresToken, tokenPresented, tokenValid, mutationsAllowed };
 }
