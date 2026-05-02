@@ -496,4 +496,156 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await apiCtx.dispose();
     }
   });
+
+  // Task #485 — within each category section the rows now sort with
+  // "will reinstate" rows before "already reinstated" rows, then
+  // case-insensitive alphabetical by phrase. Seeds a mixed-category
+  // batch with one already-reinstated row per category so the in-
+  // section ordering is observable on every group.
+  test("picker preview sorts each category section by status (pending first) then alphabetically", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    // Phrases chosen so insertion order does NOT match alphabetical
+    // order — the assertions below would pass trivially if the UI
+    // still rendered insertion order.
+    const hedgingPhrases = ["task485 hedging zeta", "task485 hedging Bravo", "task485 hedging mike"];
+    const absencePhrases = ["task485 absence Yankee", "task485 absence alpha", "task485 absence Charlie"];
+    const buzzwordPhrases = ["task485 buzzword Tango", "task485 buzzword delta", "task485 buzzword Oscar"];
+    const allPhrases = [
+      ...hedgingPhrases,
+      ...absencePhrases,
+      ...buzzwordPhrases,
+    ];
+
+    try {
+      for (const p of hedgingPhrases) {
+        await addPhrase(apiCtx, p, { ...REVIEWER_OPTS, category: "hedging" });
+      }
+      for (const p of absencePhrases) {
+        await addPhrase(apiCtx, p, { ...REVIEWER_OPTS, category: "absence" });
+      }
+      for (const p of buzzwordPhrases) {
+        await addPhrase(apiCtx, p, { ...REVIEWER_OPTS, category: "buzzword" });
+      }
+      const batch = await batchRemove(apiCtx, allPhrases, REVIEWER_OPTS);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      // Reinstate one phrase from each category individually so every
+      // section in the preview contains both an "already reinstated"
+      // row and at least two "will reinstate" rows. Pick rows whose
+      // alphabetical position would put them ahead of a pending row in
+      // a naive sort, so the status-first rule has bite.
+      const alreadyReinstated = {
+        hedging: "task485 hedging Bravo",
+        absence: "task485 absence alpha",
+        buzzword: "task485 buzzword delta",
+      };
+      for (const phrase of Object.values(alreadyReinstated)) {
+        await reinstate(apiCtx, phrase, removedAt, REVIEWER_OPTS);
+      }
+
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const pickerRow = page.locator(
+        `[data-testid="handwavy-removal-batches-row"][data-batch-removed-at="${removedAt}"]`,
+      );
+      await expect(pickerRow).toHaveCount(1, { timeout: 15_000 });
+
+      const pickerBtn = pickerRow.getByTestId(
+        "handwavy-removal-batches-reinstate",
+      );
+      await expect(pickerBtn).toBeEnabled();
+      await pickerBtn.click();
+
+      const previewDialog = page.getByTestId(
+        "handwavy-removal-batches-preview-confirm",
+      );
+      await expect(previewDialog).toBeVisible({ timeout: 10_000 });
+      await expect(previewDialog).toHaveAttribute("data-status", "ready", {
+        timeout: 10_000,
+      });
+
+      const previewList = previewDialog.getByTestId(
+        "handwavy-removal-batches-preview-list",
+      );
+      await expect(previewList).toBeVisible();
+
+      // Helper: read the rendered rows for a single category section
+      // as [{ phrase, reinstated }] in DOM order.
+      const readSectionRows = async (
+        category: "absence" | "hedging" | "buzzword",
+      ): Promise<Array<{ phrase: string; reinstated: boolean }>> => {
+        const group = previewList.locator(
+          `[data-testid="handwavy-removal-batches-preview-group"][data-category="${category}"]`,
+        );
+        await expect(group).toHaveCount(1);
+        return group
+          .getByTestId("handwavy-removal-batches-preview-row")
+          .evaluateAll((nodes) =>
+            nodes.map((n) => ({
+              phrase: (n as HTMLElement).getAttribute("data-phrase") ?? "",
+              reinstated:
+                (n as HTMLElement).getAttribute("data-already-reinstated") ===
+                "true",
+            })),
+          );
+      };
+
+      // Build the expected ordering for a category bucket: pending
+      // rows first (case-insensitive alphabetical), then already-
+      // reinstated rows (also case-insensitive alphabetical). Mirrors
+      // the comparator inside the picker preview.
+      const expectedOrderingFor = (
+        seeded: ReadonlyArray<string>,
+        reinstatedPhrase: string,
+      ): Array<{ phrase: string; reinstated: boolean }> => {
+        const pending = seeded
+          .filter((p) => p !== reinstatedPhrase)
+          .slice()
+          .sort((a, b) =>
+            a.localeCompare(b, undefined, { sensitivity: "base" }),
+          )
+          .map((phrase) => ({ phrase, reinstated: false }));
+        return [...pending, { phrase: reinstatedPhrase, reinstated: true }];
+      };
+
+      for (const [category, seeded] of [
+        ["absence", absencePhrases],
+        ["hedging", hedgingPhrases],
+        ["buzzword", buzzwordPhrases],
+      ] as const) {
+        const rendered = await readSectionRows(category);
+        const expected = expectedOrderingFor(
+          seeded,
+          alreadyReinstated[category],
+        );
+        expect(rendered).toEqual(expected);
+
+        // Sanity check the status partition is contiguous: every
+        // pending row appears before every already-reinstated row.
+        const firstReinstatedIdx = rendered.findIndex(
+          (row) => row.reinstated,
+        );
+        if (firstReinstatedIdx !== -1) {
+          for (let i = firstReinstatedIdx; i < rendered.length; i += 1) {
+            expect(rendered[i].reinstated).toBe(true);
+          }
+          for (let i = 0; i < firstReinstatedIdx; i += 1) {
+            expect(rendered[i].reinstated).toBe(false);
+          }
+        }
+      }
+
+      await previewDialog
+        .getByTestId("handwavy-removal-batches-preview-cancel")
+        .click();
+      await expect(previewDialog).toHaveCount(0, { timeout: 5_000 });
+    } finally {
+      await cleanup(apiCtx, allPhrases, {
+        reviewer: `${REVIEWER}-cleanup`,
+      });
+      await apiCtx.dispose();
+    }
+  });
 });

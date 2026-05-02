@@ -11313,6 +11313,28 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     if (groups.has("__uncategorized__"))
                       orderedKeys.push("__uncategorized__");
 
+                    // Task #485 — within each category bucket, sort
+                    // "will reinstate" rows before "already reinstated"
+                    // rows so the actionable items float to the top of
+                    // the section, then sort case-insensitively by
+                    // phrase within each status group so reviewers can
+                    // scan related phrases without hunting. The
+                    // grouping above preserves insertion order so this
+                    // post-pass is the only ordering signal inside each
+                    // section.
+                    for (const key of orderedKeys) {
+                      const bucket = groups.get(key);
+                      if (!bucket) continue;
+                      bucket.sort((a, b) => {
+                        const aDone = a.reinstated === true ? 1 : 0;
+                        const bDone = b.reinstated === true ? 1 : 0;
+                        if (aDone !== bDone) return aDone - bDone;
+                        return a.phrase.localeCompare(b.phrase, undefined, {
+                          sensitivity: "base",
+                        });
+                      });
+                    }
+
                     const labelFor = (key: string): string => {
                       if (key === "__uncategorized__")
                         return "Uncategorized";
