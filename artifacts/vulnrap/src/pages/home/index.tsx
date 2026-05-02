@@ -811,6 +811,19 @@ export default function Home() {
               </ul>
             </div>
           </div>
+          <p className="text-[11px] text-muted-foreground/80 leading-relaxed pt-1">
+            Writing a real finding that <em>reads</em> like slop? See our{" "}
+            <a
+              href="https://github.com/REMEDiSSecurity/VulnRap.com/blob/main/artifacts/api-server/docs/marketing/2026-05-02-llm-rewrite-prompt.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+              data-testid="link-llm-rewrite-prompt"
+            >
+              LLM rewrite prompt + guardrails
+            </a>{" "}
+            — restructure your report without inventing facts. (And here's why faking detail still won't slip past the engines.)
+          </p>
         </div>
       </div>
 
