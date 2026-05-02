@@ -419,6 +419,167 @@ test.describe("FLAT hand-wavy phrase panel — 'Preview reinstate' batch button"
     }
   });
 
+  // Task #498 — third-branch coverage for `expectedOutcomeFor` /
+  // `previewDrifted` in the per-batch reinstate preview panel. The
+  // comment around expectedOutcomeFor in feedback-analytics.tsx names
+  // three drift triggers: a per-phrase reinstate landing in between
+  // (Task #248, snapshot="would-reinstate" → current="already-reinstated"),
+  // an independent re-add of one of the phrases to the active list
+  // (Task #355, snapshot="would-reinstate" → current="already-active"),
+  // and "re-removes a previously reinstated row" — the case this test
+  // is meant to close.
+  //
+  // expectedOutcomeFor's three returns are: A "already-reinstated" (when
+  // the inner history row's `reinstated` flag is true), B "already-active"
+  // (when the phrase is on the active list), and C "would-reinstate"
+  // (the fallback). Tasks #248 and #355 cover transitions INTO A and B;
+  // the only transition that exercises branch C as the *new* outcome is
+  // a snapshot of A or B that resolves to C after re-removal.
+  //
+  // The literal "per-phrase reinstate then re-remove" path (which would
+  // be snapshot=A → current=C) cannot fire today: removeHandwavyPhrase
+  // and removeHandwavyPhrasesBatch in
+  // artifacts/api-server/src/lib/engines/avri/handwavy-phrases.ts only
+  // APPEND a fresh history entry — neither clears the previous entry's
+  // inner.reinstated flag. Empirically (verified end-to-end against the
+  // running api-server during task work): per-phrase reinstate → DELETE
+  // → GET /handwavy-phrases shows the original history row with
+  // reinstated=true intact. So expectedOutcomeFor's branch A always
+  // wins for that row and `previewDrifted` stays false.
+  //
+  // The transition that IS reachable today and exercises the same C
+  // (would-reinstate) fallback in expectedOutcomeFor is snapshot=B
+  // ("already-active") → current=C: independently re-add a phrase via
+  // POST /handwavy-phrases (so the dry-run captures it as
+  // "already-active" and inner.reinstated stays false), open the
+  // preview, then DELETE the phrase so the active list no longer
+  // contains it. expectedOutcomeFor falls through both A
+  // (innerRow.reinstated=false) and B (not on active list) and returns
+  // "would-reinstate"; previewDrifted flips and the stale notice
+  // renders after the in-panel poll picks up the new state.
+  //
+  // The asserts below also lock in the actual engine behavior — the
+  // inner row's `reinstated` flag stays false across the whole flow —
+  // so a future engine change that DOES make the literal "per-phrase
+  // reinstate then re-remove" path drift (e.g. by clearing the flag on
+  // re-remove) will surface as a clear backend signal alongside this
+  // test, rather than silently regressing the panel's drift detection.
+  test("a re-remove of a previously re-added phrase landing between preview and confirm surfaces the 'stale preview' notice on the panel", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3);
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p);
+      const batch = await batchRemove(apiCtx, phrases);
+      const removedAt = batch.historyEntry!.removedAt;
+
+      // Setup the snapshot=B ("already-active") state: independently
+      // re-add the first inner phrase via POST /handwavy-phrases. This
+      // does NOT touch the original batch's inner.reinstated flag —
+      // unlike the per-phrase reinstate endpoint, which would flip the
+      // flag and lock branch A in. The dry-run preview opened next
+      // will see this row as already-active.
+      await addPhrase(apiCtx, phrases[0]);
+
+      const group = await openHistoryAndFindBatch(page, removedAt);
+      await group.getByTestId("handwavy-reinstate-batch-preview").click();
+      const panel = group.getByTestId("handwavy-reinstate-batch-preview-panel");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Snapshot baseline: 1 row "already-active" (the re-added phrase),
+      // 2 rows "would-reinstate" (the rest), no stale notice yet.
+      const wouldRows = panel.locator(
+        '[data-testid="handwavy-reinstate-batch-preview-row"][data-outcome="would-reinstate"]',
+      );
+      const alreadyActiveRows = panel.locator(
+        '[data-testid="handwavy-reinstate-batch-preview-row"][data-outcome="already-active"]',
+      );
+      await expect(alreadyActiveRows).toHaveCount(1);
+      await expect(alreadyActiveRows.first()).toContainText(phrases[0]);
+      await expect(wouldRows).toHaveCount(phrases.length - 1);
+      await expect(
+        panel.getByTestId("handwavy-reinstate-batch-preview-stale"),
+      ).toHaveCount(0);
+
+      // Out of band: a teammate re-removes the re-added phrase via
+      // DELETE /handwavy-phrases. The active list no longer contains
+      // it, but the inner history row's `reinstated` flag stays false
+      // (the engine only appends a fresh removal entry). After the
+      // 5s in-panel poll picks up the new active list,
+      // expectedOutcomeFor falls through branches A + B and returns
+      // "would-reinstate" for that row, while the snapshot still says
+      // "already-active" — previewDrifted flips to true.
+      const reRemoveRes = await apiCtx.delete(
+        "/api/feedback/calibration/handwavy-phrases",
+        {
+          data: { phrase: phrases[0], reviewer: "e2e-task498-drift" },
+        },
+      );
+      expect(
+        reRemoveRes.ok(),
+        `re-remove DELETE failed: ${reRemoveRes.status()} ${await reRemoveRes.text()}`,
+      ).toBeTruthy();
+
+      const stale = panel.getByTestId("handwavy-reinstate-batch-preview-stale");
+      await expect(stale).toBeVisible({ timeout: 20_000 });
+      await expect(stale).toContainText(/Re-preview to refresh/);
+
+      // Lock in the engine's actual flag-handling: the inner row in
+      // the original batch must still have reinstated=false after the
+      // re-remove (the engine only appends; it never touches the
+      // existing entry). If a future change starts flipping the flag
+      // back to false on re-removal that's still consistent with this
+      // assertion (false stays false), and the much stronger test
+      // would be the still-uncovered snapshot=A → current=C path.
+      // What this assertion guards against is the OPPOSITE regression
+      // — the engine accidentally flipping the flag to TRUE on
+      // re-removal — which would also break this drift detection.
+      const historyRes = await apiCtx.get(
+        "/api/feedback/calibration/handwavy-phrases",
+      );
+      expect(historyRes.ok()).toBeTruthy();
+      const historyBody = (await historyRes.json()) as {
+        history: Array<{
+          removedAt: string;
+          phrases: Array<{ phrase: string; reinstated?: boolean }>;
+        }>;
+      };
+      const originalEntry = historyBody.history.find(
+        (e) => e.removedAt === removedAt,
+      );
+      expect(
+        originalEntry,
+        `expected to find original batch history entry for removedAt=${removedAt}`,
+      ).toBeTruthy();
+      const innerRow = originalEntry!.phrases.find(
+        (p) => p.phrase === phrases[0],
+      );
+      expect(
+        innerRow,
+        `expected inner phrase row for "${phrases[0]}" inside batch ${removedAt}`,
+      ).toBeTruthy();
+      expect(
+        innerRow!.reinstated ?? false,
+        "engine must not flip the inner row's `reinstated` flag on a fresh re-removal",
+      ).toBe(false);
+
+      // Confirm stays enabled — the server's reinstate call already
+      // de-dupes already-active and would-reinstate rows safely. The
+      // original per-phrase outcomes are still rendered exactly as
+      // captured at click time.
+      await expect(
+        panel.getByTestId("handwavy-reinstate-batch-preview-confirm"),
+      ).toBeEnabled();
+      await expect(alreadyActiveRows).toHaveCount(1);
+      await expect(wouldRows).toHaveCount(phrases.length - 1);
+    } finally {
+      await cleanup(apiCtx, phrases);
+      await apiCtx.dispose();
+    }
+  });
+
   // Task #354 — when the stale notice surfaces (Task #248), the reviewer
   // can refresh the dry-run snapshot in place by pressing the
   // "Re-preview" button rendered next to the notice copy. That re-runs
