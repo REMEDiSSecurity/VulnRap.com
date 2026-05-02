@@ -8,6 +8,11 @@ out-tsc
 .expo
 .expo-shared
 
+# Go SDK build artifacts (sdks/go/vulnrap)
+sdks/go/**/*.test
+sdks/go/**/*.exe
+sdks/go/vendor/
+
 # dependencies
 node_modules
 
