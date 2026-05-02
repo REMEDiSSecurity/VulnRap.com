@@ -23,6 +23,17 @@
 //      - A cold start (no dist/) with a populated cache short-circuits
 //        the build and restores the prior dist/ instead of spawning the
 //        configured build command.
+//   5. pnpm-lock.yaml is part of the watched set (Task #499):
+//      - Every target's source list includes pnpm-lock.yaml, so an
+//        external npm dep version bump (which only edits the lockfile,
+//        not any per-artifact source) flips both the freshness check
+//        and the persistent cache key.
+//      - Bumping the lockfile's mtime past the dist marker, with no
+//        other source edits, makes build-if-stale.mjs decide "stale" and
+//        spawn the build (covered end-to-end via the pnpm stub).
+//      - Mutating the lockfile's contents flips cacheKey(), so a cold
+//        container with a different lockfile won't restore a snapshot
+//        built against the previous resolved tree.
 //
 // Run: `node scripts/build-if-stale.test.mjs` (exit 0 == pass)
 
@@ -79,6 +90,15 @@ for (const [target, cfg] of Object.entries(TARGETS)) {
       `sources=${JSON.stringify(sources)}`,
     );
   }
+  // Task #499: every target must watch pnpm-lock.yaml, otherwise an
+  // external npm dep version bump (esbuild, vite, fastify, ...) wouldn't
+  // flip either the freshness check or the cache key, and a stale dist
+  // built against the previous resolved tree would get reused.
+  check(
+    `${target}: watches pnpm-lock.yaml (external dep versions)`,
+    sources.includes("pnpm-lock.yaml"),
+    `sources=${JSON.stringify(sources)}`,
+  );
 }
 
 // --- Test 2: touching a watched dep triggers the rebuild path ---
@@ -383,6 +403,30 @@ if (markerExists) {
     d === a,
     `original=${a}\nrestored=${d}`,
   );
+
+  // Task #499: explicitly verify that mutating pnpm-lock.yaml's contents
+  // flips cacheKey. The general "any watched file flips the hash" property
+  // is already covered above via package.json, but this one is the headline
+  // case for this task -- a `pnpm up esbuild` (lockfile-only edit) must not
+  // restore a stale snapshot on a cold container.
+  const lockPath = path.join(REPO_ROOT, "pnpm-lock.yaml");
+  const lockOriginal = await readFile(lockPath);
+  const lockOriginalStat = await stat(lockPath);
+  try {
+    // A trailing newline is a content change yaml parsers tolerate, so the
+    // working copy stays valid even if a parallel process happens to read
+    // the lockfile mid-test.
+    await writeFile(lockPath, lockOriginal + "\n");
+    const lockMutated = await cacheKey(target);
+    check(
+      "cacheKey changes when pnpm-lock.yaml's contents change",
+      lockMutated !== a,
+      `before=${a}\nafter=${lockMutated}`,
+    );
+  } finally {
+    await writeFile(lockPath, lockOriginal);
+    await utimes(lockPath, lockOriginalStat.atime, lockOriginalStat.mtime);
+  }
 }
 
 // --- Test 5: save/restore round-trip via an isolated cache directory ---
@@ -535,6 +579,54 @@ if (markerExists) {
     } else {
       process.env.BUILD_IF_STALE_CACHE_DIR = prevCacheDir;
     }
+  }
+}
+
+// --- Test 7: bumping pnpm-lock.yaml's mtime past the marker (with no
+// other source edits) trips the freshness check, end-to-end (Task #499).
+//
+// This is the headline scenario for this task: a contributor runs
+// `pnpm up <some-external-dep>` which only edits pnpm-lock.yaml, no
+// per-artifact source touches anything else. Without the lockfile in
+// the watch set the freshness check would happily reuse the existing
+// dist/ that was built against the previous resolved tree. We disable
+// the persistent cache here so the test asserts purely on the
+// mtime-based stale path; Test 4 already covers that the lockfile's
+// content is mixed into the cache key.
+//
+// We restore the lockfile's atime/mtime in a finally so the bump
+// doesn't leak into any subsequent build-if-stale run on this working
+// copy (Test 2 uses the avri-rubric src bump deliberately, but a
+// permanently-future lockfile mtime is much more surprising).
+if (markerExists) {
+  const lockRel = "pnpm-lock.yaml";
+  const lockAbs = path.join(REPO_ROOT, lockRel);
+  const lockOriginalStat = await stat(lockAbs);
+  const farFuture = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  try {
+    await utimes(lockAbs, farFuture, farFuture);
+    const result = await withPnpmStub(
+      { BUILD_IF_STALE_DISABLE_CACHE: "1" },
+      () =>
+        spawnSync(
+          process.execPath,
+          [path.join(__dirname, "build-if-stale.mjs"), target],
+          { cwd: REPO_ROOT, encoding: "utf8" },
+        ),
+    );
+    const stderr = result.stderr ?? "";
+    check(
+      "touching pnpm-lock.yaml is detected as stale (lockfile-only edit)",
+      stderr.includes("stale —") && stderr.includes("pnpm-lock.yaml"),
+      `stdout=${result.stdout}\nstderr=${stderr}`,
+    );
+    check(
+      "lockfile-only stale rebuild exits 0 (stub build succeeds)",
+      result.status === 0,
+      `status=${result.status}\nstderr=${stderr}`,
+    );
+  } finally {
+    await utimes(lockAbs, lockOriginalStat.atime, lockOriginalStat.mtime);
   }
 }
 

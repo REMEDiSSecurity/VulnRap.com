@@ -64,6 +64,13 @@
 //     reused for the release gate. If a dep doesn't follow the
 //     `lib/<short-name>/src` convention, the missing-path warning at run
 //     time surfaces it loudly.
+//   - `pnpm-lock.yaml` (Task #499). External npm dep version bumps don't
+//     touch any of the per-artifact sources above, so without the lockfile
+//     in the watch set a `pnpm up esbuild` (or vite, fastify, ...) would
+//     leave the freshness check thinking dist/ was still good and let the
+//     cache restore a snapshot built against the previous resolved tree.
+//     Hashing the lockfile's contents into the cache key also means a cold
+//     container with a different lockfile won't restore a stale snapshot.
 
 import { spawn } from "node:child_process";
 import {
@@ -96,6 +103,10 @@ export const TARGETS = {
       // the build; @workspace/api-spec isn't a declared dep of api-server,
       // so list it explicitly here.
       "lib/api-spec/openapi.yaml",
+      // External npm dep versions live in the lockfile; bumping esbuild,
+      // fastify, etc. without this would leave a stale dist/ in place. See
+      // header comment ("Task #499") for the full rationale.
+      "pnpm-lock.yaml",
     ],
     build: ["pnpm", ["--filter", "@workspace/api-server", "run", "build"]],
   },
@@ -109,6 +120,10 @@ export const TARGETS = {
       "artifacts/vulnrap/vite.config.ts",
       "artifacts/vulnrap/package.json",
       "artifacts/vulnrap/public",
+      // External npm dep versions live in the lockfile; bumping vite,
+      // react, etc. without this would leave a stale dist/ in place. See
+      // header comment ("Task #499") for the full rationale.
+      "pnpm-lock.yaml",
     ],
     build: [
       "pnpm",
