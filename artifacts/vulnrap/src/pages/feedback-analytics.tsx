@@ -3529,7 +3529,32 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     };
     data: HandwavyPhraseSingleRemoveDryRunResponse;
     acknowledged: boolean;
+    // Task #492 — fresh fetch vs. cache-hit for the rename impact
+    // preview's "Fresh scan" / "Reused scan · Ns ago" badge. Mirrors
+    // the per-row Trash preview (Task #349) so a reviewer who renames
+    // the same phrase twice in a row can tell whether the second
+    // click reused the prior scan or paid for a fresh corpus +
+    // production-archive round-trip. The rename's dry-run targets
+    // the ORIGINAL phrase with the same DELETE body shape as the
+    // Trash flow, so it shares the Task #246 cache key (phrase +
+    // productionScanLimit at active-list version) — backing-out a
+    // rename and re-clicking Save, or Trash-previewing then Edit-
+    // renaming the same phrase, will both surface a cached badge.
+    source: RemovePreviewSource;
+    scannedAt: number;
   } | null>(null);
+  // Task #492 — 1Hz tick to keep the rename preview's cached badge's
+  // "Ns ago" label current while the panel is open. Only runs when
+  // showing a cached preview; fresh previews have a static label.
+  // Mirrors the Trash preview's `removePreviewNow` (Task #349).
+  const [editPreviewNow, setEditPreviewNow] = useState<number>(() => Date.now());
+  const cachedEditPreviewOpen = editPreview?.source === "cached";
+  useEffect(() => {
+    if (!cachedEditPreviewOpen) return;
+    setEditPreviewNow(Date.now());
+    const id = setInterval(() => setEditPreviewNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [cachedEditPreviewOpen]);
 
   const { data, isLoading } = useGetHandwavyPhrases({
     query: {
@@ -4293,6 +4318,43 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       });
       return;
     }
+    // Task #492 — short-circuit a re-Save on the same rename to the most
+    // recent dry-run response while the active phrase list is unchanged.
+    // The rename's dry-run targets the ORIGINAL phrase with the same
+    // DELETE body shape as the Trash flow, so it shares the Task #246
+    // cache key (phrase + productionScanLimit at the active-list
+    // version). Backing out the rename preview and re-clicking Save —
+    // or Trash-previewing the same phrase, then Edit-renaming it —
+    // will surface a cached preview with a "Reused scan · Ns ago"
+    // badge instead of paying for a fresh corpus + production scan.
+    const cachedEntry = removeDryRunCacheRef.current.getEntry(
+      editing.phrase,
+      effectiveProductionScanLimit,
+      handwavyActiveListVersion,
+    );
+    if (cachedEntry) {
+      const cached = cachedEntry.response;
+      const cachedCorpusLost = cached.dryRunImpact.corpus.validDetectionsLost;
+      const cachedProductionLost =
+        cached.dryRunImpact.production?.validDetectionsLost ?? 0;
+      const cachedTotalValidLost = cachedCorpusLost + cachedProductionLost;
+      // Mirror the post-fetch branch below: zero-impact renames keep
+      // the one-click affordance even when served from cache; non-
+      // zero-impact re-opens the rename impact preview.
+      if (cachedTotalValidLost === 0) {
+        await applyEdit(editing.phrase, editing);
+        return;
+      }
+      setEditPreview({
+        originalPhrase: editing.phrase,
+        pending: { ...editing },
+        data: cached,
+        acknowledged: false,
+        source: "cached",
+        scannedAt: cachedEntry.scannedAt,
+      });
+      return;
+    }
     setBusy(`edit-preview:${editing.phrase}`);
     try {
       const resp = await removeHandwavyPhrase({
@@ -4317,6 +4379,28 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         return;
       }
       const single = resp as HandwavyPhraseSingleRemoveDryRunResponse;
+      // Task #492 — stash the validated dry-run response in the same
+      // cache the Trash flow uses so a Back-out → Save on the same
+      // rename (or a follow-up Trash on the same phrase) reuses it
+      // while the active list is unchanged. We cache regardless of
+      // impact: the version-keyed eviction keeps zero-impact entries
+      // from outliving the live PATCH that's about to fire (which
+      // calls refresh() and bumps the version anyway), and caching
+      // unconditionally keeps the hit-rate logic simple.
+      removeDryRunCacheRef.current.set(
+        editing.phrase,
+        effectiveProductionScanLimit,
+        handwavyActiveListVersion,
+        single,
+      );
+      // Task #492 — re-read the cache's stored `scannedAt` so the
+      // panel and any subsequent cache hit share the same anchor.
+      const freshScannedAt =
+        removeDryRunCacheRef.current.getEntry(
+          editing.phrase,
+          effectiveProductionScanLimit,
+          handwavyActiveListVersion,
+        )?.scannedAt ?? Date.now();
       const corpusLost = single.dryRunImpact.corpus.validDetectionsLost;
       const productionLost = single.dryRunImpact.production?.validDetectionsLost ?? 0;
       const totalValidLost = corpusLost + productionLost;
@@ -4331,6 +4415,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         pending: { ...editing },
         data: single,
         acknowledged: false,
+        source: "fresh",
+        scannedAt: freshScannedAt,
       });
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
@@ -8611,7 +8697,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             removal-impact dry-run reported a non-zero
             validDetectionsLost — zero-impact renames apply directly. */}
         {editPreview && (() => {
-          const { originalPhrase, pending, data, acknowledged } = editPreview;
+          const { originalPhrase, pending, data, acknowledged, source, scannedAt } = editPreview;
           const corpus = data.dryRunImpact.corpus;
           const production = data.dryRunImpact.production ?? null;
           const productionError = data.dryRunImpact.productionError;
@@ -8627,6 +8713,17 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             .toLowerCase()
             .replace(/\s+/g, " ")
             .trim();
+          // Task #492 — fresh-vs-cached badge for the rename preview
+          // header. Mirrors the per-row Trash preview's badge (Task
+          // #349) so a reviewer who renames the same phrase twice in
+          // a row can tell whether the second click reused the prior
+          // scan or paid for a fresh corpus + production-archive
+          // round-trip.
+          const sourceBadge = describeRemovePreviewSource(
+            source,
+            scannedAt,
+            editPreviewNow,
+          );
           return (
             <div
               className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-3 text-xs"
@@ -8635,8 +8732,29 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               <div className="flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
                 <div className="flex-1">
-                  <div className="font-semibold text-foreground">
-                    Rename "{originalPhrase}" → "{renamedTo}"?
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-semibold text-foreground">
+                      Rename "{originalPhrase}" → "{renamedTo}"?
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[9px] uppercase tracking-wide whitespace-nowrap shrink-0",
+                        sourceBadge.tone === "fresh"
+                          ? "border-emerald-500/40 text-emerald-200"
+                          : "border-amber-500/40 text-amber-200",
+                      )}
+                      data-testid="handwavy-edit-preview-source"
+                      data-source={source}
+                      data-scanned-at={scannedAt}
+                      title={
+                        source === "fresh"
+                          ? "These impact numbers came from a fresh corpus + production-archive scan."
+                          : `Served from cache, scanned ${formatRemovePreviewScannedAgo(scannedAt, editPreviewNow)}. Adding, removing, reinstating, or editing any phrase invalidates the cache so the next Save re-scans.`
+                      }
+                    >
+                      {sourceBadge.label}
+                    </Badge>
                   </div>
                   <div
                     className="text-[10px] text-muted-foreground mt-0.5"

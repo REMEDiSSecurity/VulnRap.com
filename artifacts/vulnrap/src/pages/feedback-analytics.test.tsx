@@ -2546,6 +2546,279 @@ describe("HandwavyPhrasesAdmin — Re-scan from cached preview (Task #494)", () 
 });
 
 // =====================================================================
+// Task #492 — render-level coverage of the rename impact preview's
+// fresh-vs-cached badge. Mirrors the per-row Trash preview's badge
+// (Task #349) so a reviewer who renames the same phrase twice in a
+// row can tell whether the second click reused the prior scan or
+// paid for a fresh corpus + production-archive round-trip.
+//
+// The test mounts the real `HandwavyPhrasesAdmin`, opens the rename
+// preview once (asserts the badge reads "Fresh scan" and the panel
+// is mounted with `data-source="fresh"`), backs out, re-clicks Save
+// on the same rename (asserts the badge reads "Reused scan · just
+// now" with `data-source="cached"`), and finally verifies that only
+// ONE DELETE dry-run hit the wire across both clicks — proving the
+// cache reuse the badge is advertising actually short-circuited the
+// fetch.
+//
+// The pure-helper branching of `describeRemovePreviewSource` itself
+// (label / tone for both arms, "Ns ago" rounding, sub-5s collapse,
+// negative-skew handling) is already pinned by the Task #349 unit
+// tests above; this block specifically pins the rename panel's
+// wiring of the helper so a future refactor that drops the
+// `source`/`scannedAt` plumbing on `editPreview` (or stops reading
+// from the shared dry-run cache) can't land silently.
+// =====================================================================
+
+describe("HandwavyPhrasesAdmin — rename impact preview fresh-vs-cached badge (Task #492)", () => {
+  const ACTIVE_PHRASE = "vague handwavy phrase";
+  const RENAMED_PHRASE = "tuned renamed phrase";
+
+  const REVIEWER_KEY = "vulnrap.handwavy.reviewer";
+  const PRODUCTION_SCAN_LIMIT_KEY = "vulnrap.calibration.productionScanLimit";
+  const LEGACY_PRODUCTION_SCAN_LIMIT_KEY =
+    "vulnrap.handwavy.productionScanLimit";
+
+  type CapturedRequest = {
+    method: string;
+    url: string;
+    body: Record<string, unknown> | null;
+  };
+
+  const HIGH_IMPACT_DRY_RUN: HandwavyPhraseSingleRemoveDryRunResponse = {
+    dryRun: true,
+    batch: false,
+    wouldRemove: 1,
+    notFound: 0,
+    duplicateInBatch: 0,
+    phrase: ACTIVE_PHRASE,
+    raw: ACTIVE_PHRASE,
+    removed: false,
+    total: 1,
+    projectedTotal: 0,
+    results: [{ raw: ACTIVE_PHRASE, phrase: ACTIVE_PHRASE, removed: true }],
+    dryRunImpact: {
+      corpus: {
+        total: 4,
+        byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 3, t4Hallucinated: 1 },
+        // Non-zero so the rename preview panel opens (the zero-impact
+        // branch would silently PATCH and never render the badge).
+        validDetectionsLost: 4,
+        falsePositivesDropped: 0,
+        corpusSize: 50,
+        sampleMatches: [],
+        warning: "would un-flag 4 valid detections",
+        oldestCreatedAt: null,
+        newestCreatedAt: null,
+        archiveTotal: null,
+      } satisfies HandwavyPhraseBatchRemoveDryRunImpact,
+      production: null,
+      productionError: null,
+      productionLimit: 2000,
+    },
+    phrases: [
+      {
+        phrase: ACTIVE_PHRASE,
+        category: "hedging",
+        addedBy: "tester@example.com",
+        addedAt: "2026-04-01T10:00:00.000Z",
+        rationale: "test fixture",
+      },
+    ],
+  };
+
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  function installFetchMock(): {
+    spy: ReturnType<typeof vi.spyOn>;
+    captured: CapturedRequest[];
+  } {
+    const captured: CapturedRequest[] = [];
+    const spy = vi.spyOn(globalThis, "fetch");
+    spy.mockImplementation(async (input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      const method = (init?.method ?? "GET").toUpperCase();
+
+      if (
+        method === "DELETE" &&
+        url.includes("/api/feedback/calibration/handwavy-phrases") &&
+        !url.includes("/handwavy-phrases/")
+      ) {
+        let parsed: Record<string, unknown> | null = null;
+        if (typeof init?.body === "string") {
+          try {
+            parsed = JSON.parse(init.body) as Record<string, unknown>;
+          } catch {
+            parsed = null;
+          }
+        }
+        captured.push({ method, url, body: parsed });
+        return jsonResponse(HIGH_IMPACT_DRY_RUN);
+      }
+
+      if (url.includes("/api/feedback/calibration/auth-status")) {
+        return jsonResponse({
+          serverRequiresToken: false,
+          tokenPresented: false,
+          tokenValid: false,
+          mutationsAllowed: true,
+        });
+      }
+
+      if (
+        url.includes(
+          "/api/feedback/calibration/handwavy-phrases/removal-batches",
+        )
+      ) {
+        return jsonResponse({ batches: [], total: 0, hasMore: false });
+      }
+
+      if (url.includes("/api/feedback/calibration/handwavy-phrases")) {
+        return jsonResponse({
+          phrases: [
+            {
+              phrase: ACTIVE_PHRASE,
+              category: "hedging",
+              addedBy: "tester@example.com",
+              addedAt: "2026-04-01T10:00:00.000Z",
+              rationale: "test fixture",
+            },
+          ],
+          history: [],
+        });
+      }
+
+      return jsonResponse({});
+    });
+    return { spy, captured };
+  }
+
+  function renderAdmin() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/feedback-analytics"]}>
+          <HandwavyPhrasesAdmin mutationsAllowed={true} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  let fetchMock: ReturnType<typeof installFetchMock>;
+
+  beforeEach(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+    fetchMock = installFetchMock();
+  });
+
+  afterEach(() => {
+    fetchMock.spy.mockRestore();
+    setCalibrationToken(null);
+    resetCalibrationCooldown();
+    resetCalibrationTokenRejection();
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(REVIEWER_KEY);
+      window.localStorage.removeItem(PRODUCTION_SCAN_LIMIT_KEY);
+      window.localStorage.removeItem(LEGACY_PRODUCTION_SCAN_LIMIT_KEY);
+    }
+  });
+
+  // Helper that walks Edit → rewrite phrase → Save and waits for the
+  // rename impact preview panel (and its source badge) to mount.
+  async function openRenamePreview(): Promise<HTMLElement> {
+    const editButton = await screen.findByTestId(
+      "handwavy-edit",
+      {},
+      { timeout: 5_000 },
+    );
+    fireEvent.click(editButton);
+    const phraseInput = (await screen.findByTestId(
+      "handwavy-edit-phrase",
+    )) as HTMLInputElement;
+    fireEvent.change(phraseInput, { target: { value: RENAMED_PHRASE } });
+    const saveButton = screen.getByTestId("handwavy-edit-save");
+    await act(async () => {
+      fireEvent.click(saveButton);
+    });
+    return await screen.findByTestId(
+      "handwavy-edit-preview-source",
+      {},
+      { timeout: 5_000 },
+    );
+  }
+
+  it("renders 'Fresh scan' on the first rename Save and 'Reused scan · just now' on a back-out + re-Save", async () => {
+    renderAdmin();
+
+    // First Save → fresh fetch → "Fresh scan" badge with data-source="fresh".
+    const freshBadge = await openRenamePreview();
+    expect(freshBadge).toHaveAttribute("data-source", "fresh");
+    expect(freshBadge).toHaveTextContent("Fresh scan");
+
+    // Capture the fetch count after the first preview lands so we can
+    // prove the second click did NOT issue a second DELETE dry-run.
+    const dryRunsAfterFirst = fetchMock.captured.filter(
+      (r) => r.method === "DELETE" && r.body?.dryRun === true,
+    ).length;
+    expect(dryRunsAfterFirst).toBe(1);
+
+    // Back out of the rename preview so the panel unmounts.
+    fireEvent.click(screen.getByTestId("handwavy-edit-preview-cancel"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("handwavy-edit-preview")).toBeNull(),
+    );
+
+    // Re-Save the same rename. The Edit row stays open after Back out
+    // (cancelEditPreview only clears `editPreview`, not `editing`),
+    // so the phrase input still carries the renamed value and a
+    // single Save click re-enters the rename branch.
+    const saveButtonAgain = screen.getByTestId("handwavy-edit-save");
+    await act(async () => {
+      fireEvent.click(saveButtonAgain);
+    });
+
+    const cachedBadge = await screen.findByTestId(
+      "handwavy-edit-preview-source",
+      {},
+      { timeout: 5_000 },
+    );
+    // Cache hit on the same phrase + production-scan limit + active-
+    // list version → the badge flips to "cached" with the same
+    // sub-5s "just now" copy the helper renders for fresh writes.
+    expect(cachedBadge).toHaveAttribute("data-source", "cached");
+    expect(cachedBadge).toHaveTextContent("Reused scan · just now");
+
+    // Critical: the cache short-circuit prevented a second DELETE
+    // dry-run from hitting the wire. Without this, the badge would
+    // be cosmetic — the panel would say "cached" while the network
+    // tab still showed a redundant scan.
+    const dryRunsAfterSecond = fetchMock.captured.filter(
+      (r) => r.method === "DELETE" && r.body?.dryRun === true,
+    ).length;
+    expect(dryRunsAfterSecond).toBe(1);
+  });
+});
+
+// =====================================================================
 // Task #460 — regression test for the "About the production scan window"
 // reviewer cheat-sheet block that Task #326 added under the shared scan-
 // window input (data-testid `handwavy-production-scan-limit-help`).
