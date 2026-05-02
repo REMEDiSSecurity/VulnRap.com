@@ -548,6 +548,36 @@ function isCalibrationMutationAuthError(err: unknown): boolean {
   );
 }
 
+// Task #489 — known reason codes returned by GET
+// /feedback/calibration/handwavy-phrases/removal-batches/{removedAt}.
+// These are deterministic 4xx failures (the removal-history row is gone
+// or the row exists but represents a single-phrase removal rather than a
+// batch) and retrying them will never succeed, so the silent auto-retry
+// in handleOpenPickerBatchPreview must skip them and let the dialog flip
+// straight to the reason-keyed error state added by Task #343.
+const KNOWN_PICKER_PREVIEW_ERROR_REASONS = new Set<string>([
+  "history-not-found",
+  "not-a-batch",
+]);
+
+// Task #489 — predicate for "should the picker preview GET retry once
+// silently?". Retries transport errors (anything that isn't an ApiError —
+// fetch failures, abort, parse errors) and 5xx server responses, both of
+// which are commonly transient. Suppresses any 4xx response that carries
+// a known HandwavyPhraseRemovalBatchDetailErrorReason (deterministic
+// failure, retry would never succeed) and conservatively also suppresses
+// other 4xx (auth, validation) since those are unlikely to recover on a
+// blind retry.
+function shouldAutoRetryPickerPreviewError(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return true;
+  const reason =
+    err.data && typeof (err.data as { reason?: unknown }).reason === "string"
+      ? (err.data as { reason: string }).reason
+      : undefined;
+  if (reason && KNOWN_PICKER_PREVIEW_ERROR_REASONS.has(reason)) return false;
+  return err.status >= 500;
+}
+
 function useCalibrationAuthState(): CalibrationAuthState {
   // Refetch periodically so a reviewer who configures the server token while
   // the dashboard is open sees the indicator flip without a hard reload.
@@ -5315,7 +5345,18 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     setBusy(key);
     setPickerBatchPreview({ removedAtIso, removedBy, phraseCount, status: "loading" });
     try {
-      const detail = await getHandwavyPhraseRemovalBatch(removedAtIso);
+      // Task #489 — issue the GET, and on a transient failure (transport
+      // error or 5xx) re-issue it once silently before flipping the dialog
+      // into the error state. Known-reason 4xx responses skip the retry so
+      // a "history-not-found" / "not-a-batch" body still surfaces the
+      // Task #343 reason-keyed message immediately.
+      let detail: HandwavyPhraseRemovalBatchDetail;
+      try {
+        detail = await getHandwavyPhraseRemovalBatch(removedAtIso);
+      } catch (firstErr) {
+        if (!shouldAutoRetryPickerPreviewError(firstErr)) throw firstErr;
+        detail = await getHandwavyPhraseRemovalBatch(removedAtIso);
+      }
       setPickerBatchPreview({
         removedAtIso,
         removedBy: detail.removedBy ?? removedBy,
