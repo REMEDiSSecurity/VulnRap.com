@@ -63,7 +63,16 @@ export interface StructuralMarker {
     // /proc/self/maps listings whose ranges overlap, are zero-size, sit
     // below the Linux mmap_min_addr, or are not 4 KiB page-aligned.
     | "fabricated_register_state"
-    | "fabricated_memory_map";
+    | "fabricated_memory_map"
+    // Task #434: shape check against the ASan "Shadow bytes around the
+    // buggy address" section — the single most-faked artifact in
+    // AI-generated MEMORY_CORRUPTION reports. Real ASan emits rows of
+    // exactly 16 hex byte pairs, marks the buggy-address row with `=>`,
+    // and prints a multi-line legend (Addressable: 00, Heap left
+    // redzone: fa, Freed heap region: fd, …). A fabricated block
+    // routinely picks the wrong row width, omits the `=>` marker, or
+    // skips the legend entirely.
+    | "malformed_shadow_bytes";
   description: string;
 }
 
@@ -543,6 +552,109 @@ function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
   return null;
 }
 
+// Task #434 ASan shadow-bytes detector ----------------------------------
+//
+// Real ASan output emits a "Shadow bytes around the buggy address:" header
+// followed by a fixed-width grid: each row is `0x<addr>: bb bb bb bb bb bb
+// bb bb bb bb bb bb bb bb bb bb` — exactly 16 hex byte pairs, with the row
+// containing the buggy address marked by a leading `=>` and the buggy byte
+// itself bracketed (`[fd]`). Below the grid is a multi-line legend mapping
+// each shadow byte value to its meaning (`Addressable: 00`, `Heap left
+// redzone: fa`, `Freed heap region: fd`, …).
+//
+// Fabricated shadow blocks routinely deviate from those invariants in three
+// ways: rows that don't carry 16 byte pairs (LLMs pick 8 or 4 because the
+// resulting block "looks shorter and more readable"), no `=>` marker on any
+// row (the LLM doesn't know which row carries the buggy address), and no
+// legend at all (the LLM stops generating after the grid). This detector
+// fires when a "Shadow bytes" section is *present* and trips any of those
+// three checks — it never fires on traces that legitimately omit the
+// section, since plenty of real reports paste only the stack frames.
+
+const SHADOW_BYTES_HEADER_RE = /Shadow\s+bytes\s+around\s+the\s+buggy\s+address[ \t]*:?[ \t]*/i;
+// A shadow row line: optional leading `=>`, an address `0x<hex>:`, then a
+// run of hex byte pairs separated by whitespace, with optional `[ ]`
+// bracketing the buggy byte. The row contents are captured so the byte
+// count can be measured; non-row lines (the legend, blank separators,
+// surrounding prose) do not match.
+const SHADOW_ROW_RE =
+  /^[ \t]*(=>)?[ \t]*0x[0-9a-fA-F]+:[ \t]+([0-9a-fA-F\[\]\s]+?)[ \t]*$/;
+// Legend entry: a named shadow-byte category followed by `:` and a hex
+// pair. Matching any one of these anywhere in the report is enough to
+// satisfy the legend-presence check; ASan emits ten or so categories so
+// fabricators that drop the legend miss all of them at once.
+const SHADOW_LEGEND_RE =
+  /\b(?:Addressable|Partially\s+addressable|Heap\s+left\s+redzone|Heap\s+right\s+redzone|Freed\s+heap\s+region|Stack\s+left\s+redzone|Stack\s+mid\s+redzone|Stack\s+right\s+redzone|Stack\s+after\s+return|Stack\s+use\s+after\s+scope|Global\s+redzone|Global\s+init\s+order|Poisoned\s+by\s+user|Container\s+overflow|Array\s+cookie|Intra\s+object\s+redzone|ASan\s+internal|Left\s+alloca\s+redzone|Right\s+alloca\s+redzone|Shadow\s+gap)\s*:\s*[0-9a-fA-F]{2}/i;
+const EXPECTED_SHADOW_ROW_WIDTH = 16;
+
+function detectMalformedShadowBytes(text: string): StructuralMarker | null {
+  const headerMatch = SHADOW_BYTES_HEADER_RE.exec(text);
+  if (!headerMatch) return null;
+
+  // Scan the lines following the header and collect contiguous shadow
+  // rows. A blank line is allowed inside the block (some pretty-printers
+  // insert one between the buggy row and its neighbours); the first
+  // non-blank non-row line ends the block (typically the legend header
+  // `Shadow byte legend (...)` or surrounding prose).
+  const after = text.slice(headerMatch.index + headerMatch[0].length);
+  const lines = after.split(/\r?\n/);
+  let hasBuggyMarker = false;
+  const rows: { width: number; raw: string }[] = [];
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    const m = line.match(SHADOW_ROW_RE);
+    if (!m) break;
+    if (m[1]) hasBuggyMarker = true;
+    // Normalise the captured byte run: strip the bracket characters
+    // (which only mark the buggy byte, not a separator) and split on
+    // whitespace. Keep only tokens that look like exactly a 2-digit hex
+    // pair; anything else means the row is malformed in a way the row
+    // regex didn't already reject.
+    const bytes = m[2]
+      .replace(/[\[\]]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
+    if (!bytes.every((b) => /^[0-9a-fA-F]{2}$/.test(b))) {
+      return {
+        id: "malformed_shadow_bytes",
+        description: `Shadow byte row contains non-hex-pair tokens: "${line.trim()}"`,
+      };
+    }
+    rows.push({ width: bytes.length, raw: line.trim() });
+  }
+
+  if (rows.length === 0) {
+    return {
+      id: "malformed_shadow_bytes",
+      description: `Trace contains "Shadow bytes around the buggy address" header but no shadow rows follow it; real ASan always prints the grid after the header`,
+    };
+  }
+
+  const wrongWidth = rows.find((r) => r.width !== EXPECTED_SHADOW_ROW_WIDTH);
+  if (wrongWidth) {
+    return {
+      id: "malformed_shadow_bytes",
+      description: `Shadow byte row has ${wrongWidth.width} hex byte pairs (expected ${EXPECTED_SHADOW_ROW_WIDTH}): "${wrongWidth.raw}"`,
+    };
+  }
+
+  if (!hasBuggyMarker) {
+    return {
+      id: "malformed_shadow_bytes",
+      description: `Shadow bytes section is missing the "=>" buggy-address marker on every row; real ASan always marks the row containing the faulting address`,
+    };
+  }
+
+  if (!SHADOW_LEGEND_RE.test(text)) {
+    return {
+      id: "malformed_shadow_bytes",
+      description: `Shadow bytes section lacks the legend (e.g., "Addressable: 00", "Heap left redzone: fa", "Freed heap region: fd"); real ASan output always emits the legend below the grid`,
+    };
+  }
+
+  return null;
+}
+
 /** Run all structural-fabrication detectors and return the markers that
  * fired. Exported so the hallucination detector can hook the same predicates
  * without re-tokenising the trace. */
@@ -569,6 +681,9 @@ export function detectStructuralFabrication(text: string): StructuralMarker[] {
   if (h) markers.push(h);
   const i = detectFabricatedMemoryMap(text);
   if (i) markers.push(i);
+  // Task #434 shadow-bytes detector.
+  const j = detectMalformedShadowBytes(text);
+  if (j) markers.push(j);
   return markers;
 }
 

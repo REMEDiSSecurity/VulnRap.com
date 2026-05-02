@@ -371,5 +371,14 @@ exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > p
     ],
     "totalWeight": 24,
   },
+  "T4-17-fake-shadow-bytes": {
+    "signals": [
+      "empty_disclosure_claim",
+      "fabricated_pid",
+      "phantom_exploit_script",
+      "structural_fabrication",
+    ],
+    "totalWeight": 43,
+  },
 }
 `;

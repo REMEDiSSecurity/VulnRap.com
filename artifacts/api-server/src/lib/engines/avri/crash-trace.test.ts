@@ -483,6 +483,112 @@ RBX: 0x0000000000002000 was the destination operand.`;
   });
 });
 
+// --- Task #434: ASan shadow-bytes detector --------------------------------
+
+describe("detectStructuralFabrication — Task #434 shadow-bytes detector", () => {
+  it("flags a shadow row with the wrong number of byte pairs (malformed_shadow_bytes)", () => {
+    // Eight bytes per row instead of sixteen — a common LLM shortcut that
+    // makes the block "look more readable" but is structurally wrong.
+    // Even though the legend and `=>` marker are present, the row width
+    // is enough on its own to fire.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f80: fa fa fa fa fa fa fa fa
+=>0x0c047fff7f90: fa fa[fd]fd fd fd fd fd
+  0x0c047fff7fa0: fd fd fd fd fd fd fd fd
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Heap left redzone:       fa
+  Freed heap region:       fd`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("malformed_shadow_bytes");
+  });
+
+  it("flags a shadow block with no `=>` buggy-address marker", () => {
+    // Every row carries 16 byte pairs and the legend is intact, but no
+    // row is marked with `=>` — real ASan always marks the row that
+    // contains the buggy address.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c047fff7f90: fa fa fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x0c047fff7fa0: fd fd fd fd fd fd fd fd fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Heap left redzone:       fa
+  Freed heap region:       fd`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("malformed_shadow_bytes");
+  });
+
+  it("flags a shadow block with no legend below the grid", () => {
+    // Rows have the right width and the `=>` marker is present, but the
+    // legend is omitted entirely — a tell that the LLM stopped after
+    // the visually-impressive grid.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=>0x0c047fff7f90: fa fa[fd]fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x0c047fff7fa0: fd fd fd fd fd fd fd fd fa fa fa fa fa fa fa fa
+
+The crash is reproducible against the shipped binary.`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("malformed_shadow_bytes");
+  });
+
+  it("does NOT fire on a well-formed shadow block (16 pairs + `=>` + legend)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f70: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x0c047fff7f80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=>0x0c047fff7f90: fa fa[fd]fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x0c047fff7fa0: fd fd fd fd fd fd fd fd fa fa fa fa fa fa fa fa
+  0x0c047fff7fb0: fa fa fa fa fa fa fa fa 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("malformed_shadow_bytes");
+  });
+
+  it("does NOT fire when the trace has no shadow-bytes section at all", () => {
+    // Plenty of legit reports paste only the stack frames; the detector
+    // must only fire when a "Shadow bytes" section is *present* but
+    // malformed — never on a trace that simply omits it.
+    const ids = detectStructuralFabrication(SYMBOL_RICH_TRACE).map((m) => m.id);
+    expect(ids).not.toContain("malformed_shadow_bytes");
+  });
+
+  it("does NOT fire on the symbol-rich TSan trace (no shadow section, irrelevant section)", () => {
+    const ids = detectStructuralFabrication(SYMBOL_RICH_TSAN_TRACE).map((m) => m.id);
+    expect(ids).not.toContain("malformed_shadow_bytes");
+  });
+
+  it("flags a header followed by no rows at all", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+
+The exact shadow bytes have been redacted from this report.`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("malformed_shadow_bytes");
+  });
+});
+
 describe("evaluateCrashTrace — structural fabrication aggregation", () => {
   it("hasStructuralFabrication is true only when ≥2 markers fire", () => {
     // Only round_function_offsets should fire here.
