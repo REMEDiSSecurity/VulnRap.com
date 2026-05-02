@@ -10692,7 +10692,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         if (!open) setReinstateBatchConfirm(null);
       }}
     >
-      <AlertDialogContent data-testid="handwavy-reinstate-batch-confirm">
+      <AlertDialogContent
+        data-testid="handwavy-reinstate-batch-confirm"
+        data-batch-conflict-count={
+          reinstateBatchConfirm
+            ? removalBatchConflicts.get(reinstateBatchConfirm.removedAtIso)
+                ?.conflictCount ?? 0
+            : 0
+        }
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>
             {reinstateBatchConfirm
@@ -10705,6 +10713,37 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             <div className="space-y-2">
               {reinstateBatchConfirm && (
                 <>
+                  {(() => {
+                    // Task #470 — re-use the same `removalBatchConflicts`
+                    // memo the picker rows (#242) and history-panel batch
+                    // headers (#339) consult, keyed by ISO `removedAt`.
+                    // Surfacing the same chip on this final confirm dialog
+                    // gives reviewers a last-chance warning before the
+                    // batch reinstate fires — they don't have to have
+                    // noticed the chip on the row above. No extra request:
+                    // the memo is already built from the existing
+                    // handwavy-phrases payload.
+                    const confirmConflict = removalBatchConflicts.get(
+                      reinstateBatchConfirm.removedAtIso,
+                    );
+                    if (!confirmConflict) return null;
+                    return (
+                      <div>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-amber-500/40 text-amber-300 gap-1"
+                          data-testid="handwavy-reinstate-batch-confirm-conflict-chip"
+                          data-conflict-count={confirmConflict.conflictCount}
+                          data-conflict-total={confirmConflict.total}
+                          title={`${confirmConflict.conflictCount} of ${confirmConflict.total} phrase${confirmConflict.total === 1 ? "" : "s"} in this batch ${confirmConflict.conflictCount === 1 ? "is" : "are"} either back on the active list or have a newer removal entry — reinstating this batch will overwrite that newer state.`}
+                          aria-label={`${confirmConflict.conflictCount} of ${confirmConflict.total} phrases in this batch may overwrite recent edits`}
+                        >
+                          <AlertTriangle className="w-3 h-3" />
+                          {confirmConflict.conflictCount} of {confirmConflict.total} may overwrite recent edits
+                        </Badge>
+                      </div>
+                    );
+                  })()}
                   <div>
                     Restore the{" "}
                     <strong>

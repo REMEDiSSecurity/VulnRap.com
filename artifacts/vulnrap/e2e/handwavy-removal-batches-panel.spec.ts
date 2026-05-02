@@ -613,4 +613,90 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       await apiCtx.dispose();
     }
   });
+
+  // Task #470 — the picker rows (#242) and history-panel batch group
+  // headers (#339) both surface a "N of M may overwrite recent edits"
+  // chip when phrases were re-added since the batch removal. The same
+  // chip MUST also appear on the final `handwavy-reinstate-batch-confirm`
+  // AlertDialog (the click-through that actually fires the batch
+  // reinstate) so a reviewer who missed the header chip and clicks
+  // "Reinstate all" still gets a last-chance warning before committing.
+  // A clean batch (no re-adds) shows no chip on the dialog at all.
+  test("reinstate-batch confirm dialog shows the same conflict chip when phrases were re-added since the removal", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3, "task470 confirm chip");
+
+    try {
+      // Add three, then remove all three as one batch — this is the
+      // batch whose confirm dialog we want the chip to appear on.
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
+      const removedAt = batch.historyEntry!.removedAt;
+
+      // Re-add two of the three so reinstating the batch would silently
+      // merge the historical state on top of those edits.
+      await addPhrase(apiCtx, phrases[0], { reviewer: REVIEWER });
+      await addPhrase(apiCtx, phrases[1], { reviewer: REVIEWER });
+
+      const group = await openHistoryAndFindBatchGroup(page, removedAt);
+      const batchBtn = group.getByTestId("handwavy-reinstate-batch");
+      await expect(batchBtn).toBeVisible();
+      await batchBtn.click();
+
+      const dialog = page.getByTestId("handwavy-reinstate-batch-confirm");
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+      await expect(dialog).toHaveAttribute("data-batch-conflict-count", "2");
+
+      const chip = dialog.getByTestId(
+        "handwavy-reinstate-batch-confirm-conflict-chip",
+      );
+      await expect(chip).toBeVisible();
+      await expect(chip).toContainText("2 of 3 may overwrite recent edits");
+      await expect(chip).toHaveAttribute("data-conflict-count", "2");
+      await expect(chip).toHaveAttribute("data-conflict-total", "3");
+
+      // The chip is purely informational — the confirm button is still
+      // present and enabled.
+      await expect(
+        dialog.getByTestId("handwavy-reinstate-batch-confirm-confirm"),
+      ).toBeEnabled();
+
+      await dialog.getByTestId("handwavy-reinstate-batch-confirm-cancel").click();
+      await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  test("reinstate-batch confirm dialog omits the conflict chip for a clean batch", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task470 confirm clean");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
+      const removedAt = batch.historyEntry!.removedAt;
+
+      const group = await openHistoryAndFindBatchGroup(page, removedAt);
+      await group.getByTestId("handwavy-reinstate-batch").click();
+
+      const dialog = page.getByTestId("handwavy-reinstate-batch-confirm");
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
+      await expect(dialog).toHaveAttribute("data-batch-conflict-count", "0");
+      await expect(
+        dialog.getByTestId("handwavy-reinstate-batch-confirm-conflict-chip"),
+      ).toHaveCount(0);
+
+      await dialog.getByTestId("handwavy-reinstate-batch-confirm-cancel").click();
+      await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
 });
