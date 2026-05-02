@@ -166,6 +166,216 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
     }
   });
 
+  // Task #488 — mixed-failure path of the bulk-undo confirmation toast.
+  // Task #347 split the per-entry failures the server reports into two
+  // buckets: window-expired skips (the expected "the dialog sat open
+  // long enough that one entry's 5-minute window elapsed before the
+  // POST landed") vs. other reasons (drift like `not-found` /
+  // `addedAt-mismatch` from a refresh racing the click). The happy-path
+  // test above only exercises the all-success branch; this test drives
+  // the partial breakdown branch by deleting one of the candidates
+  // server-side AFTER the dialog snapshot is captured but BEFORE
+  // confirm — so the POST sends three entries and the server replies
+  // with two `undone:true` and one `undone:false, reason:"not-found"`.
+  // The toast then has to use the mixed-format breakdown
+  // (`Skipped N (X no longer in window, Y other)`) and the audit-log
+  // hint sentence, which is the wording reviewers see whenever drift
+  // shows up at confirm time.
+  test("partial-failure toast lists the per-failure breakdown and audit-log hint", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3, "task488 undo-all mixed");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      for (const p of phrases) {
+        await expect(
+          page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),
+        ).toHaveCount(1, { timeout: 15_000 });
+      }
+
+      const undoAll = page.getByTestId("handwavy-undo-all");
+      await expect(undoAll).toBeVisible({ timeout: 15_000 });
+      await undoAll.click();
+
+      const dialog = page.getByTestId("handwavy-undo-all-confirm");
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+      // Snapshot of all three phrases is captured in the dialog state at
+      // open time, so the upcoming server-side mutation can't shrink it.
+      const summary = dialog.getByTestId("handwavy-undo-all-confirm-summary");
+      for (const p of phrases) {
+        await expect(summary).toContainText(p);
+      }
+
+      // Drift one candidate out from under the dialog: a direct DELETE
+      // through the calibration API removes it from the active list, so
+      // the per-marker undo path the bulk endpoint walks will return
+      // `not-found` for that one entry while the other two succeed. This
+      // is the same shape as a refresh-race where the reviewer's other
+      // tab removed a row between the dialog open and the confirm click,
+      // and produces a non-window-expired failure (i.e. an "other"
+      // failure that triggers the partial breakdown wording).
+      await removeSingle(apiCtx, phrases[0], { reviewer: REVIEWER });
+
+      await dialog.getByTestId("handwavy-undo-all-confirm-confirm").click();
+
+      // Dialog closes after confirm, even on the partial-failure path.
+      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+      // The success toast renders with the partial breakdown wording —
+      // 2 succeeded ("Undid 2 adds"), 1 failed for a non-window reason
+      // ("Skipped 1 (0 no longer in window, 1 other)"), plus the
+      // audit-log hint pointing to the per-phrase removal history. The
+      // toast viewport renders the text twice (visual + aria-live
+      // mirror) so we anchor on `.first()`.
+      await expect(
+        page
+          .getByText("Undid 2 adds. Skipped 1 (0 no longer in window, 1 other)", {
+            exact: false,
+          })
+          .first(),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page
+          .getByText(
+            "Check the removal history below for the per-phrase audit row.",
+            { exact: false },
+          )
+          .first(),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // The two not-drifted phrases are gone from the active list (the
+      // bulk-undo rolled them back). The drifted one is also gone, but
+      // because it was removed via the manual DELETE path, not undone.
+      for (const p of phrases) {
+        await expect(
+          page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),
+        ).toHaveCount(0, { timeout: 15_000 });
+      }
+
+      // Audit-trail contract: exactly two `undone:true` rows appeared
+      // (one per successfully-undone phrase), and the drifted phrase
+      // has its own non-undone removal row from the manual DELETE
+      // instead of an undone row.
+      const postRes = await apiCtx.get(
+        "/api/feedback/calibration/handwavy-phrases",
+      );
+      expect(postRes.ok()).toBeTruthy();
+      const post = (await postRes.json()) as {
+        history: Array<{ phrase: string; undone?: boolean }>;
+      };
+      const undoneForPhrases = post.history.filter(
+        (h) => h.undone === true && phrases.includes(h.phrase),
+      );
+      expect(undoneForPhrases.map((h) => h.phrase).sort()).toEqual(
+        [phrases[1], phrases[2]].sort(),
+      );
+      const driftedUndoneRows = post.history.filter(
+        (h) => h.undone === true && h.phrase === phrases[0],
+      );
+      expect(driftedUndoneRows).toHaveLength(0);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
+  // Task #488 — all-failed branch: every entry in the captured snapshot
+  // has drifted by the time the confirm click lands, so the server
+  // returns `undoneCount: 0` and the toast switches to the destructive
+  // "Nothing to undo" title (instead of "Undid N adds") while still
+  // showing the per-failure breakdown and the audit-log hint. This is
+  // the worst-case wording the reviewer sees when a long-paused dialog
+  // is finally confirmed against a fully-stale candidate set.
+  test("all-failed branch surfaces the 'Nothing to undo' destructive toast with the audit-log hint", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task488 undo-all none");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      for (const p of phrases) {
+        await expect(
+          page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),
+        ).toHaveCount(1, { timeout: 15_000 });
+      }
+
+      const undoAll = page.getByTestId("handwavy-undo-all");
+      await expect(undoAll).toBeVisible({ timeout: 15_000 });
+      await undoAll.click();
+
+      const dialog = page.getByTestId("handwavy-undo-all-confirm");
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+      const summary = dialog.getByTestId("handwavy-undo-all-confirm-summary");
+      for (const p of phrases) {
+        await expect(summary).toContainText(p);
+      }
+
+      // Drift EVERY candidate so the bulk-undo POST sees a fully-stale
+      // snapshot: each entry returns `undone:false, reason:"not-found"`.
+      for (const p of phrases) {
+        await removeSingle(apiCtx, p, { reviewer: REVIEWER });
+      }
+
+      await dialog.getByTestId("handwavy-undo-all-confirm-confirm").click();
+      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+      // Title flips to "Nothing to undo" because `undoneCount === 0`,
+      // and the toast variant becomes destructive (we don't assert on
+      // the variant attribute directly, since the toast's
+      // role="status" + the explicit title text is the contract that
+      // the reviewer reads). The description still carries the
+      // breakdown and the audit-log hint so the reviewer knows where
+      // to inspect what went wrong.
+      await expect(
+        page.getByText("Nothing to undo", { exact: false }).first(),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page
+          .getByText("Undid 0 adds. Skipped 2 (0 no longer in window, 2 other)", {
+            exact: false,
+          })
+          .first(),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page
+          .getByText(
+            "Check the removal history below for the per-phrase audit row.",
+            { exact: false },
+          )
+          .first(),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // No `undone:true` row appeared for either phrase — the bulk-undo
+      // POST didn't roll anything back, the existing manual-removal
+      // history rows from the drift DELETEs are what stayed in the log.
+      const postRes = await apiCtx.get(
+        "/api/feedback/calibration/handwavy-phrases",
+      );
+      expect(postRes.ok()).toBeTruthy();
+      const post = (await postRes.json()) as {
+        history: Array<{ phrase: string; undone?: boolean }>;
+      };
+      const undoneForPhrases = post.history.filter(
+        (h) => h.undone === true && phrases.includes(h.phrase),
+      );
+      expect(undoneForPhrases).toHaveLength(0);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
   test("dialog Cancel leaves every phrase active and emits no audit rows", async ({
     page,
   }) => {
