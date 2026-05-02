@@ -1008,11 +1008,13 @@ describe("Task #435: structural_fabrication signal carries marker context", () =
     });
   }
 
-  it("does NOT attach context when the signal is below the firing threshold", () => {
+  it("does NOT emit any structural_fabrication signal when zero markers fire", () => {
     // A symbol-rich legit trace trips zero structural detectors, so no
-    // structural_fabrication signal is emitted at all (and therefore no
-    // context to assert on). Pin this so a future regression that emits the
-    // signal at <2 markers also surfaces here.
+    // structural_fabrication signal is emitted at all. Task #612 lowered
+    // the firing threshold from ≥2 markers to ≥1, but a clean trace with
+    // *no* markers must still stay quiet — pin that floor here so a
+    // future regression that fabricates a marker on legit-shaped input
+    // surfaces immediately.
     const legit = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a1c0
 READ of size 8 at 0x60200000a1c0 thread T0
     #0 0x55e9b8c2f3d1 in foo_finalize parser/parse.c:418
@@ -1020,5 +1022,62 @@ READ of size 8 at 0x60200000a1c0 thread T0
     const r = detectHallucinationSignals(legit);
     const types = r.signals.map((s) => s.type);
     expect(types).not.toContain("structural_fabrication");
+  });
+});
+
+describe("Task #612: single structural marker surfaces as informational signal", () => {
+  // Before Task #612 the aggregator only emitted `structural_fabrication`
+  // at ≥2 markers, so a trace tripping exactly one tell carried no
+  // `context.markers` payload to render in the Evidence Signals card.
+  // The new contract:
+  //   - 1 marker  → emit signal at weight 4 (informational, below the
+  //     moderate-tier composite floor of 12 so it can't condemn alone)
+  //   - ≥2 markers → unchanged: weight = markers.length * 8
+  // Both branches populate `context.markers` with the full
+  // StructuralMarker[] so the diagnostics UI renders one bullet per marker
+  // regardless of how many fired.
+  it("emits structural_fabrication at weight 4 when exactly 1 marker fires", () => {
+    // Bare register-state dump — no source frames, no resolved symbols,
+    // no real ASan/PID anchor. The `fabricated_register_state` predicate
+    // detects the same value repeated across ≥3 registers (the
+    // `0x4141414141414141` tell) and fires alone here while the other
+    // structural detectors stay quiet (no offsets, no /proc/self/maps,
+    // no thread-id lines, no heap region header).
+    const text = `Captured register dump from the crash:
+RAX: 0x4141414141414141  RBX: 0x4141414141414141
+RCX: 0x4141414141414141  RDX: 0x4141414141414141
+RSI: 0x4141414141414141  RDI: 0x4141414141414141`;
+    const markers = detectStructuralFabrication(text);
+    expect(markers).toHaveLength(1);
+
+    const r = detectHallucinationSignals(text);
+    const sig = r.signals.find((s) => s.type === "structural_fabrication");
+    expect(sig, "structural_fabrication signal should fire on a single marker").toBeDefined();
+    expect(sig!.weight).toBe(4);
+    // Context still populated so the Evidence Signals card can render
+    // the marker without parsing `description`.
+    expect(sig!.context).toBeDefined();
+    expect(sig!.context!.markers).toHaveLength(1);
+    expect(sig!.context!.markers[0].id).toBe(markers[0].id);
+    expect(sig!.context!.markers[0].description).toBe(markers[0].description);
+    // Description names the single marker explicitly (no "1 markers"
+    // grammar slip).
+    expect(sig!.description).toContain("1 structural fabrication marker —");
+    expect(sig!.description).toContain(markers[0].id);
+  });
+
+  it("keeps the ≥2-marker weight on `markers.length * 8` (triage scoring unchanged)", () => {
+    // T4-12 trips three structural detectors, so the signal weight must
+    // remain 24 (3 * 8) — the same value the cohort snapshot pinned
+    // before Task #612 lowered the firing threshold.
+    const text = findFixture("T4-12-fake-prologue-offsets").text;
+    const markers = detectStructuralFabrication(text);
+    expect(markers.length).toBeGreaterThanOrEqual(2);
+
+    const r = detectHallucinationSignals(text);
+    const sig = r.signals.find((s) => s.type === "structural_fabrication");
+    expect(sig).toBeDefined();
+    expect(sig!.weight).toBe(markers.length * 8);
+    expect(sig!.context!.markers).toHaveLength(markers.length);
   });
 });

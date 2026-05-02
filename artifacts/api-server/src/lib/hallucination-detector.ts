@@ -60,16 +60,32 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   //   2 markers → 16 (moderate -10)
   //   3 markers → 24 (strong -15)
   //   4 markers → 32 (overwhelming -25)
+  //
+  // Task #612: a single structural marker also surfaces as a
+  // *lower-weight informational* `structural_fabrication` signal (weight
+  // 4) instead of being swallowed. The aggregator used to drop the
+  // single-marker case entirely, which meant traces tripping exactly one
+  // tell (e.g. only `fabricated_register_state`) carried no
+  // `context.markers` payload for the Evidence Signals card to render.
+  // Diagnostic transparency wins: reviewers see the marker, but the
+  // weight (4) sits well under the moderate-tier composite floor (12)
+  // so a single marker alone cannot condemn a fixture. The ≥2-marker
+  // path keeps the existing `markers.length * 8` weight unchanged so
+  // triage scoring on multi-marker traces is identical to before.
   const structuralMarkers = detectStructuralFabrication(text);
-  if (structuralMarkers.length >= 2) {
+  if (structuralMarkers.length >= 1) {
+    const isSingle = structuralMarkers.length === 1;
     signals.push({
       type: "structural_fabrication",
-      description: `Crash trace has ${structuralMarkers.length} structural fabrication markers — ${structuralMarkers.map((m) => m.id).join(", ")}`,
-      weight: structuralMarkers.length * 8,
+      description: isSingle
+        ? `Crash trace has 1 structural fabrication marker — ${structuralMarkers[0].id}`
+        : `Crash trace has ${structuralMarkers.length} structural fabrication markers — ${structuralMarkers.map((m) => m.id).join(", ")}`,
+      weight: isSingle ? 4 : structuralMarkers.length * 8,
       // Task #435: surface the structured marker objects so the
       // diagnostics panel can render one bullet per marker (with its
       // human-readable description) without regex-parsing the joined
-      // description string above.
+      // description string above. Task #612 keeps this populated for the
+      // single-marker informational signal too.
       context: { markers: structuralMarkers },
     });
   }
