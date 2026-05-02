@@ -57,10 +57,21 @@ import {
   cacheKey,
   saveToCache,
   restoreFromCache,
+  recordStatsEvent,
 } from "./build-if-stale.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
+
+// Shared scratch cache dir for any test that spawns build-if-stale.mjs
+// without already pointing BUILD_IF_STALE_CACHE_DIR somewhere isolated.
+// Keeps test-driven stats records (Task #500) and tmp tree out of the
+// real <repo>/.cache/build-if-stale used by everyday Playwright runs.
+const TEST_CACHE_DIR = path.join(
+  REPO_ROOT,
+  ".local",
+  "tmp-build-if-stale-test-cache",
+);
 
 let failed = 0;
 function check(label, cond, detail = "") {
@@ -203,8 +214,14 @@ if (markerExists) {
     await fileNewerThanMarker(target, touched);
     // Disable the persistent cache so this test purely exercises the
     // mtime-based staleness path. (Tests 5 and 6 below exercise the cache.)
+    // Point the cache dir at the shared test scratch so the stats
+    // record this run produces (Task #500) lands there instead of in
+    // the real <repo>/.cache/build-if-stale.
     const result = await withPnpmStub(
-      { BUILD_IF_STALE_DISABLE_CACHE: "1" },
+      {
+        BUILD_IF_STALE_DISABLE_CACHE: "1",
+        BUILD_IF_STALE_CACHE_DIR: TEST_CACHE_DIR,
+      },
       () =>
         spawnSync(
           process.execPath,
@@ -282,7 +299,13 @@ if (markerExists) {
           cwd: REPO_ROOT,
           encoding: "utf8",
           // Ensure no stale env knob bleeds in from the parent shell.
-          env: { ...process.env, BUILD_IF_STALE_ALLOW_MISSING: "" },
+          // Quarantine this run's stats record (Task #500) to the
+          // shared test scratch instead of the real cache root.
+          env: {
+            ...process.env,
+            BUILD_IF_STALE_ALLOW_MISSING: "",
+            BUILD_IF_STALE_CACHE_DIR: TEST_CACHE_DIR,
+          },
         },
       ),
     ),
@@ -325,6 +348,9 @@ if (markerExists) {
             ...process.env,
             BUILD_IF_STALE_ALLOW_MISSING: "1",
             BUILD_IF_STALE_DISABLE_CACHE: "1",
+            // Quarantine this run's stats record (Task #500) to the
+            // shared test scratch instead of the real cache root.
+            BUILD_IF_STALE_CACHE_DIR: TEST_CACHE_DIR,
           },
         },
       ),
@@ -629,6 +655,398 @@ if (markerExists) {
     await utimes(lockAbs, lockOriginalStat.atime, lockOriginalStat.mtime);
   }
 }
+
+// --- Test 8: persistent cache stats (Task #500) ---
+//
+// Two things to verify:
+//   8a. A normal build-if-stale.mjs invocation appends one structured
+//       JSONL record to <cache-root>/stats.jsonl with the expected
+//       target/outcome/elapsedMs fields. We use the cheapest happy path
+//       (E2E_SKIP_PROD_BUILD=1) so the test doesn't have to spawn a
+//       real build, and we point BUILD_IF_STALE_CACHE_DIR at a fresh
+//       scratch dir so the assertion sees exactly one record.
+//   8b. Once the stats file outgrows the rotation threshold, a
+//       follow-up append truncates it to the per-target cap with the
+//       most-recent entries kept and the oldest dropped. We exercise
+//       this by pre-populating the file with > trigger lines and then
+//       calling recordStatsEvent() (the same hook the script uses on
+//       every invocation), which is faster and more focused than
+//       spawning the script ~1300 times.
+{
+  const statsCacheDir = path.join(
+    REPO_ROOT,
+    ".local",
+    "tmp-build-if-stale-stats",
+  );
+  await rm(statsCacheDir, { recursive: true, force: true });
+  const statsFile = path.join(statsCacheDir, "stats.jsonl");
+
+  // 8a. End-to-end: run build-if-stale.mjs and assert a record landed.
+  const skipResult = spawnSync(
+    process.execPath,
+    [path.join(__dirname, "build-if-stale.mjs"), "api-server"],
+    {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        // E2E_SKIP_PROD_BUILD=1 exits immediately with the "skip"
+        // outcome — avoids needing dist/ to exist or any pnpm stub.
+        E2E_SKIP_PROD_BUILD: "1",
+        BUILD_IF_STALE_CACHE_DIR: statsCacheDir,
+        // Make sure no parent-shell knob silently disables stats.
+        BUILD_IF_STALE_DISABLE_STATS: "",
+      },
+    },
+  );
+  check(
+    "stats: skip-path invocation exits 0",
+    skipResult.status === 0,
+    `status=${skipResult.status}\nstderr=${skipResult.stderr}`,
+  );
+
+  let firstLines = [];
+  try {
+    const txt = await readFile(statsFile, "utf8");
+    firstLines = txt.split("\n").filter((l) => l.length > 0);
+  } catch (err) {
+    check("stats: file exists after skip-path invocation", false, err.message);
+  }
+  check(
+    "stats: file has exactly one record after one invocation",
+    firstLines.length === 1,
+    `lines=${firstLines.length}`,
+  );
+  if (firstLines.length === 1) {
+    let rec;
+    try {
+      rec = JSON.parse(firstLines[0]);
+    } catch (err) {
+      check("stats: record is valid JSON", false, err.message);
+    }
+    if (rec) {
+      check(
+        "stats: record carries target=api-server, outcome=skip, " +
+          "numeric elapsedMs, ISO ts",
+        rec.target === "api-server" &&
+          rec.outcome === "skip" &&
+          typeof rec.elapsedMs === "number" &&
+          rec.elapsedMs >= 0 &&
+          typeof rec.ts === "string" &&
+          !Number.isNaN(Date.parse(rec.ts)),
+        `record=${JSON.stringify(rec)}`,
+      );
+    }
+  }
+
+  // 8b. Pre-fill past the rotation trigger and confirm the next
+  // recordStatsEvent truncates to the cap. We have to push the file
+  // past BOTH thresholds: STATS_TRUNCATE_TRIGGER (1100 lines) AND
+  // STATS_ROTATE_SIZE_PROBE_BYTES (200KB), since the byte check is a
+  // cheap pre-filter that skips the rewrite entirely for small files.
+  // A bare record is only ~95 bytes, so we add a padding field of
+  // ~150 bytes to push each line to ~250 bytes — 1500 lines then
+  // weighs ~370KB, comfortably past both gates.
+  const PADDING = "x".repeat(150);
+  const bigLines = [];
+  for (let i = 0; i < 1500; i++) {
+    bigLines.push(
+      JSON.stringify({
+        ts: new Date(Date.now() - (1500 - i) * 1000).toISOString(),
+        target: "api-server",
+        outcome: "fresh",
+        elapsedMs: i,
+        // seq is purely a test marker so we can verify which records
+        // survived rotation.
+        seq: i,
+        // Padding to push line size past the byte-probe threshold so
+        // rotation actually fires on the next append. See comment above.
+        _pad: PADDING,
+      }),
+    );
+  }
+  await writeFile(statsFile, bigLines.join("\n") + "\n");
+
+  const prevCacheDir = process.env.BUILD_IF_STALE_CACHE_DIR;
+  const prevDisable = process.env.BUILD_IF_STALE_DISABLE_STATS;
+  process.env.BUILD_IF_STALE_CACHE_DIR = statsCacheDir;
+  delete process.env.BUILD_IF_STALE_DISABLE_STATS;
+  try {
+    await recordStatsEvent({
+      ts: new Date().toISOString(),
+      target: "api-server",
+      outcome: "fresh",
+      elapsedMs: 42,
+      seq: 9999,
+    });
+  } finally {
+    if (prevCacheDir === undefined) delete process.env.BUILD_IF_STALE_CACHE_DIR;
+    else process.env.BUILD_IF_STALE_CACHE_DIR = prevCacheDir;
+    if (prevDisable === undefined) delete process.env.BUILD_IF_STALE_DISABLE_STATS;
+    else process.env.BUILD_IF_STALE_DISABLE_STATS = prevDisable;
+  }
+
+  const txtAfter = await readFile(statsFile, "utf8");
+  const linesAfter = txtAfter.split("\n").filter((l) => l.length > 0);
+  check(
+    "stats: rotation truncates to <= the per-target cap once oversized",
+    linesAfter.length <= 1000,
+    `lines=${linesAfter.length}`,
+  );
+  check(
+    "stats: rotation keeps the most recent record at the tail",
+    (() => {
+      try {
+        const last = JSON.parse(linesAfter[linesAfter.length - 1]);
+        return last.seq === 9999;
+      } catch {
+        return false;
+      }
+    })(),
+    `tail=${linesAfter[linesAfter.length - 1]}`,
+  );
+  check(
+    "stats: rotation drops the oldest records first",
+    (() => {
+      try {
+        const first = JSON.parse(linesAfter[0]);
+        // We pre-filled 1500 records (seq 0..1499) and then appended 1
+        // (seq 9999), giving 1501 total. Rotation keeps the trailing
+        // STATS_MAX_RECORDS (1000), so the head should now be at index
+        // 501 of the original sequence — i.e. anything > 0 means the
+        // oldest entries were correctly dropped.
+        return first.seq > 0;
+      } catch {
+        return false;
+      }
+    })(),
+    `head=${linesAfter[0]}`,
+  );
+
+  // 8c. BUILD_IF_STALE_DISABLE_STATS=1 must short-circuit the writer
+  // entirely. We start from a fresh dir, set the disable flag, run
+  // the script, and assert no stats file appears.
+  const disabledDir = path.join(
+    REPO_ROOT,
+    ".local",
+    "tmp-build-if-stale-stats-disabled",
+  );
+  await rm(disabledDir, { recursive: true, force: true });
+  const disabledResult = spawnSync(
+    process.execPath,
+    [path.join(__dirname, "build-if-stale.mjs"), "api-server"],
+    {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        E2E_SKIP_PROD_BUILD: "1",
+        BUILD_IF_STALE_CACHE_DIR: disabledDir,
+        BUILD_IF_STALE_DISABLE_STATS: "1",
+      },
+    },
+  );
+  check(
+    "stats: skip-path invocation still exits 0 with stats disabled",
+    disabledResult.status === 0,
+    `status=${disabledResult.status}\nstderr=${disabledResult.stderr}`,
+  );
+  let disabledHasFile = false;
+  try {
+    await stat(path.join(disabledDir, "stats.jsonl"));
+    disabledHasFile = true;
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+  check(
+    "stats: BUILD_IF_STALE_DISABLE_STATS=1 prevents the file from being created",
+    disabledHasFile === false,
+    `stats.jsonl unexpectedly exists under ${disabledDir}`,
+  );
+
+  await rm(statsCacheDir, { recursive: true, force: true });
+  await rm(disabledDir, { recursive: true, force: true });
+}
+
+// --- Test 9: build-if-stale-stats.mjs summary helper (Task #500) ---
+//
+// Drive the helper with a synthetic stats log that has a known mix of
+// outcomes per target, then assert:
+//   - The default human-readable output names every target, reports
+//     the expected hit-rate (fresh + restore over the cacheable
+//     denominator), and shows the average wall-clock for the build
+//     bucket so a regression in build time is visible.
+//   - --target filters out other targets.
+//   - --last N keeps only the trailing N records (after the target
+//     filter, matching the helper's documented order).
+//   - --json emits a parseable summary so downstream tooling has a
+//     stable shape to consume.
+{
+  const helperCacheDir = path.join(
+    REPO_ROOT,
+    ".local",
+    "tmp-build-if-stale-stats-helper",
+  );
+  await rm(helperCacheDir, { recursive: true, force: true });
+  await mkdir(helperCacheDir, { recursive: true });
+  const helperStatsFile = path.join(helperCacheDir, "stats.jsonl");
+  // Synthetic log: 4 cacheable api-server invocations (2 fresh + 1
+  // restore + 1 build) -> hit-rate = 75.0%. One vulnrap fresh.
+  const synth = [
+    {
+      ts: "2026-01-01T00:00:00.000Z",
+      target: "api-server",
+      outcome: "fresh",
+      elapsedMs: 100,
+    },
+    {
+      ts: "2026-01-01T00:01:00.000Z",
+      target: "api-server",
+      outcome: "restore",
+      elapsedMs: 800,
+      hash: "abc123def456",
+    },
+    {
+      ts: "2026-01-01T00:02:00.000Z",
+      target: "api-server",
+      outcome: "build",
+      elapsedMs: 15000,
+      reason: "no-cache-entry",
+      hash: "abc123def456",
+      success: true,
+    },
+    {
+      ts: "2026-01-01T00:03:00.000Z",
+      target: "api-server",
+      outcome: "fresh",
+      elapsedMs: 110,
+    },
+    {
+      ts: "2026-01-01T00:04:00.000Z",
+      target: "vulnrap",
+      outcome: "fresh",
+      elapsedMs: 90,
+    },
+  ];
+  await writeFile(
+    helperStatsFile,
+    synth.map((r) => JSON.stringify(r)).join("\n") + "\n",
+  );
+
+  const baseSpawn = (extraArgs) =>
+    spawnSync(
+      process.execPath,
+      [
+        path.join(__dirname, "build-if-stale-stats.mjs"),
+        "--cache-dir",
+        helperCacheDir,
+        ...extraArgs,
+      ],
+      { cwd: REPO_ROOT, encoding: "utf8" },
+    );
+
+  const summary = baseSpawn([]);
+  check(
+    "stats helper: default summary exits 0",
+    summary.status === 0,
+    `status=${summary.status}\nstderr=${summary.stderr}`,
+  );
+  const summaryOut = summary.stdout ?? "";
+  check(
+    "stats helper: default summary names both targets",
+    summaryOut.includes("api-server") && summaryOut.includes("vulnrap"),
+    `out=${summaryOut}`,
+  );
+  check(
+    "stats helper: api-server hit-rate is 75.0% (2 fresh + 1 restore over " +
+      "4 cacheable)",
+    summaryOut.includes("75.0%"),
+    `out=${summaryOut}`,
+  );
+  check(
+    "stats helper: build outcome's avg ms surfaces in the table",
+    /build\s+1\s+25\.0%\s+15000/.test(summaryOut) ||
+      summaryOut.includes("15000"),
+    `out=${summaryOut}`,
+  );
+  check(
+    "stats helper: per-outcome reason breakdown surfaces no-cache-entry",
+    summaryOut.includes("build:no-cache-entry"),
+    `out=${summaryOut}`,
+  );
+
+  const filtered = baseSpawn(["--target", "vulnrap"]);
+  check(
+    "stats helper: --target filters out other targets",
+    !(filtered.stdout ?? "").includes("api-server") &&
+      (filtered.stdout ?? "").includes("vulnrap"),
+    `out=${filtered.stdout}`,
+  );
+
+  const last2 = baseSpawn(["--last", "2"]);
+  check(
+    "stats helper: --last N reports only the trailing N records",
+    (last2.stdout ?? "").includes("2 records"),
+    `out=${last2.stdout}`,
+  );
+
+  const jsonResult = baseSpawn(["--json"]);
+  check(
+    "stats helper: --json exits 0",
+    jsonResult.status === 0,
+    `status=${jsonResult.status}\nstderr=${jsonResult.stderr}`,
+  );
+  let parsed = null;
+  try {
+    parsed = JSON.parse(jsonResult.stdout ?? "");
+  } catch (err) {
+    check("stats helper: --json emits parseable JSON", false, err.message);
+  }
+  if (parsed) {
+    check(
+      "stats helper: --json summary has expected per-target shape",
+      parsed["api-server"] &&
+        parsed["api-server"].total === 4 &&
+        parsed["api-server"].hits === 3 &&
+        parsed["api-server"].cacheable === 4 &&
+        Math.abs(parsed["api-server"].hitRate - 0.75) < 1e-9 &&
+        parsed["api-server"].outcomes.build &&
+        parsed["api-server"].outcomes.build.avgMs === 15000,
+      `parsed=${JSON.stringify(parsed)}`,
+    );
+  }
+
+  // Empty / missing stats file path: helper must exit 0 with a
+  // friendly hint instead of crashing.
+  const emptyDir = path.join(
+    REPO_ROOT,
+    ".local",
+    "tmp-build-if-stale-stats-empty",
+  );
+  await rm(emptyDir, { recursive: true, force: true });
+  const emptyResult = spawnSync(
+    process.execPath,
+    [
+      path.join(__dirname, "build-if-stale-stats.mjs"),
+      "--cache-dir",
+      emptyDir,
+    ],
+    { cwd: REPO_ROOT, encoding: "utf8" },
+  );
+  check(
+    "stats helper: missing stats file exits 0 with a hint",
+    emptyResult.status === 0 &&
+      (emptyResult.stdout ?? "").includes("No build-if-stale stats found"),
+    `status=${emptyResult.status}\nout=${emptyResult.stdout}`,
+  );
+
+  await rm(helperCacheDir, { recursive: true, force: true });
+  await rm(emptyDir, { recursive: true, force: true });
+}
+
+// Final cleanup of the shared test scratch (Tests 2 + 3 use it for
+// stats quarantine; nothing else should have written there).
+await rm(TEST_CACHE_DIR, { recursive: true, force: true });
 
 if (failed > 0) {
   console.error(`\n${failed} check(s) failed`);

@@ -30,6 +30,13 @@
 //                           cache save. Use when debugging cache behaviour
 //                           or when disk pressure is more painful than the
 //                           ~15s rebuild.
+//   BUILD_IF_STALE_DISABLE_STATS=1
+//                           skip appending the per-invocation outcome
+//                           record to stats.jsonl. The stats writer is
+//                           best-effort and never fails the build, so
+//                           this is rarely needed in practice -- it
+//                           exists mostly for tests that don't want to
+//                           touch the shared stats file.
 //
 // On a stale or missing dist the configured build command is executed and
 // this script exits with that command's status. On a fresh dist it logs
@@ -82,6 +89,8 @@ import {
   rm,
   rename,
   utimes,
+  appendFile,
+  writeFile,
 } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -160,6 +169,75 @@ function cacheRoot() {
 
 function cacheEntryDir(target, hash) {
   return path.join(cacheRoot(), target, hash);
+}
+
+// Persistent stats file (Task #500). On every invocation the script
+// appends a JSONL record describing which path it took (skip / fresh /
+// restore / build / error), the target, the source-set hash where one
+// was computed, and the wall-clock ms it took. The companion script
+// scripts/build-if-stale-stats.mjs summarises these so it's obvious at
+// a glance whether the cache is paying off or whether something is
+// silently invalidating it on every run.
+//
+// The file lives in cacheRoot() (so BUILD_IF_STALE_CACHE_DIR overrides
+// move it for free), survives container restarts alongside the cache
+// itself, and is rotated below STATS_MAX_RECORDS once it grows past
+// STATS_TRUNCATE_TRIGGER lines so it can't grow without bound.
+const STATS_FILE_NAME = "stats.jsonl";
+// ~1000 records is plenty of history for trend analysis without making
+// the read+rewrite during rotation expensive (each record is ~150-250B,
+// so the rotated file stays well under 250KB).
+const STATS_MAX_RECORDS = 1000;
+// Truncate at 1.1x the cap so we don't pay the read+rewrite cost on
+// every single append once we cross the boundary.
+const STATS_TRUNCATE_TRIGGER = 1100;
+// Cheap pre-check size in bytes: skip the readFile+split entirely when
+// the file is comfortably below the trigger. 200KB is roughly 1300
+// records of typical size, which is a comfortable upper bound on the
+// trigger line-count.
+const STATS_ROTATE_SIZE_PROBE_BYTES = 200 * 1024;
+
+function statsFilePath() {
+  return path.join(cacheRoot(), STATS_FILE_NAME);
+}
+
+// Append one JSONL record to the stats file, then opportunistically
+// rotate. Best-effort: any error here is swallowed because stats are
+// observability — they MUST NOT change the script's exit status.
+//
+// Exported so the test suite can drive recording directly without
+// having to spawn the whole script for every assertion.
+export async function recordStatsEvent(record) {
+  if (process.env.BUILD_IF_STALE_DISABLE_STATS === "1") return;
+  try {
+    await mkdir(cacheRoot(), { recursive: true });
+    const file = statsFilePath();
+    // appendFile uses O_APPEND, which is atomic for the small
+    // (<PIPE_BUF, ~4KB on Linux) writes we produce here, so two
+    // concurrent build-if-stale invocations can't interleave a single
+    // record. Rotation is read+writeFile and isn't atomic, but the
+    // worst case is losing a few records — acceptable for a stats log.
+    await appendFile(file, JSON.stringify(record) + "\n");
+    await maybeRotateStats(file);
+  } catch {
+    // Swallow. Stats are best-effort.
+  }
+}
+
+async function maybeRotateStats(file) {
+  let s;
+  try {
+    s = await stat(file);
+  } catch (err) {
+    if (err.code === "ENOENT") return;
+    throw err;
+  }
+  if (s.size < STATS_ROTATE_SIZE_PROBE_BYTES) return;
+  const contents = await readFile(file, "utf8");
+  const lines = contents.split("\n").filter((l) => l.length > 0);
+  if (lines.length <= STATS_TRUNCATE_TRIGGER) return;
+  const kept = lines.slice(-STATS_MAX_RECORDS);
+  await writeFile(file, kept.join("\n") + "\n");
 }
 
 async function newestMtime(p) {
@@ -401,14 +479,34 @@ async function main() {
     process.exit(2);
   }
 
+  // Wall-clock anchor for the elapsedMs field on every stats record.
+  // Captured here (not inside recordAndExit) so even very-early exits
+  // like E2E_SKIP_PROD_BUILD=1 still report a meaningful duration.
+  const startMs = Date.now();
+
   const log = (msg) =>
     process.stderr.write(`[build-if-stale:${target}] ${msg}\n`);
+
+  // Single funnel for every script exit. Records the outcome to the
+  // stats log first, then exits with the build's status code. Always
+  // await: process.exit() drops in-flight microtasks, so a fire-and-
+  // forget recordStatsEvent could be lost before the file is flushed.
+  async function recordAndExit(code, outcome, extras = {}) {
+    await recordStatsEvent({
+      ts: new Date().toISOString(),
+      target,
+      outcome,
+      elapsedMs: Date.now() - startMs,
+      ...extras,
+    });
+    process.exit(code);
+  }
 
   const cfg = TARGETS[target];
 
   if (process.env.E2E_SKIP_PROD_BUILD === "1") {
     log("E2E_SKIP_PROD_BUILD=1 — trusting existing dist/, skipping build");
-    process.exit(0);
+    await recordAndExit(0, "skip");
   }
 
   const force = process.env.E2E_FORCE_PROD_BUILD === "1";
@@ -449,7 +547,10 @@ async function main() {
           continue;
         }
         log(`ERROR: rename detected — ${detail}`);
-        process.exit(3);
+        await recordAndExit(3, "error", {
+          reason: "missing-source",
+          missingPath: rel,
+        });
       }
       if (m > newest) {
         newest = m;
@@ -462,7 +563,7 @@ async function main() {
           `newer than every watched source ` +
           `(latest: ${newestPath} @ ${new Date(newest).toISOString()})`,
       );
-      process.exit(0);
+      await recordAndExit(0, "fresh");
     }
     log(
       `stale — ${newestPath} (${new Date(newest).toISOString()}) is newer ` +
@@ -480,20 +581,27 @@ async function main() {
   // Try the persistent cache before paying for a full build. A force-
   // rebuild bypasses both the restore *and* the post-build save, since
   // the operator asked for a known-good fresh artifact.
+  //
+  // We also stash the hash here so the post-build save doesn't have to
+  // re-walk + re-hash every watched source; a typical miss path then
+  // pays the cacheKey cost exactly once instead of twice.
+  let computedHash = null;
   if (!force && !cacheDisabled) {
     try {
-      const hash = await cacheKey(target);
-      const restored = await restoreFromCache(target, hash, log);
+      computedHash = await cacheKey(target);
+      const restored = await restoreFromCache(target, computedHash, log);
       if (restored) {
         log(
           `restored ${cfg.dist} from persistent cache ` +
-            `(${path.relative(REPO_ROOT, cacheEntryDir(target, hash))}); ` +
+            `(${path.relative(REPO_ROOT, cacheEntryDir(target, computedHash))}); ` +
             `skipping rebuild`,
         );
-        process.exit(0);
+        await recordAndExit(0, "restore", {
+          hash: computedHash.slice(0, 12),
+        });
       }
       log(
-        `no persistent-cache entry for source-set hash ${hash.slice(0, 12)}; ` +
+        `no persistent-cache entry for source-set hash ${computedHash.slice(0, 12)}; ` +
           `building from sources`,
       );
     } catch (err) {
@@ -509,7 +617,11 @@ async function main() {
   const code = await runBuild(cfg.build[0], cfg.build[1]);
   if (code === 0 && !cacheDisabled) {
     try {
-      const hash = await cacheKey(target);
+      // Reuse the hash from the restore attempt above when we have
+      // one; only recompute on the cache-disabled / force-rebuild
+      // paths where we never reached cacheKey().
+      const hash = computedHash ?? (await cacheKey(target));
+      computedHash = hash;
       const saved = await saveToCache(target, hash, log);
       if (saved) {
         log(
@@ -523,7 +635,21 @@ async function main() {
       log(`WARN: persistent cache save failed (${err.message})`);
     }
   }
-  process.exit(code);
+
+  // Why a build happened, captured for the stats helper so a sudden
+  // shift in the reason mix is easy to spot (e.g. "no-cache-entry"
+  // dominating means the cache key is flipping unexpectedly).
+  let reason;
+  if (force) reason = "force";
+  else if (cacheDisabled) reason = "cache-disabled";
+  else if (markerMtime === null) reason = "no-marker";
+  else reason = "no-cache-entry";
+
+  await recordAndExit(code, "build", {
+    reason,
+    ...(computedHash ? { hash: computedHash.slice(0, 12) } : {}),
+    ...(code !== 0 ? { exitCode: code, success: false } : { success: true }),
+  });
 }
 
 // Only run main() when invoked as a script (not when imported by tests).
