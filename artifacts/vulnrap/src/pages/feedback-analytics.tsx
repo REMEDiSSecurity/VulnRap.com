@@ -3130,6 +3130,28 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     data: HandwavyPhraseReinstateBatchDryRunResponse;
     droppedPhrases: Set<string>;
   } | null>(null);
+  // Task #514 — partial-success feedback for the preview-panel subset
+  // confirm. `handleReinstateBatchSubset` collapses dropped rows into a
+  // single /reinstate-batch round-trip with a `phrases` allow-list (Task
+  // #360); when the response comes back with a mix of `reinstated: true`
+  // and `reinstated: false` results — e.g. a teammate re-added one of the
+  // remaining phrases between preview and confirm, or a per-phrase
+  // reinstate elsewhere flipped one of them to "already reinstated" — the
+  // preview panel itself just disappears and the only acknowledgement is
+  // the existing toast / banner. That's easy to miss when half the rows
+  // landed and half didn't, so we hold the per-row `results[]` here and
+  // render a dedicated outcome panel inline below the batch header so the
+  // reviewer can see exactly which phrases are now active vs. which stayed
+  // on the removal-history list (and why). `null` = no outcome panel
+  // showing; the success-only path keeps today's behavior (panel closes,
+  // list refreshes, no outcome panel).
+  const [reinstateBatchOutcome, setReinstateBatchOutcome] = useState<{
+    removedAtIso: string;
+    results: HandwavyPhraseReinstateBatchEntryResult[];
+    reinstatedCount: number;
+    skippedCount: number;
+    attemptedCount: number;
+  } | null>(null);
   // Task #180 — the per-row Reinstate button got a confirm dialog in Task #153
   // but the "Reinstate all N" button on a batch removal entry was still firing
   // immediately on click. A misclick on the batch button re-enables every
@@ -6027,6 +6049,35 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       setReinstatePreview((prev) =>
         prev && prev.removedAtIso === removedAtIso ? null : prev,
       );
+      // Task #514 — when at least one allow-listed phrase came back as
+      // `reinstated: false` (e.g. a teammate re-added it between preview
+      // and confirm so it's now "already-active", or a per-phrase
+      // reinstate elsewhere flipped it to "already-reinstated"), surface
+      // a panel-side outcome list so the reviewer can see exactly which
+      // rows landed vs. which didn't. The toast/banner above still fires;
+      // this is the "panel-side acknowledgement" the toast can't carry.
+      // The success-only path (every result `reinstated: true`) keeps
+      // today's behavior — clear any stale outcome and let the panel
+      // close cleanly so the refreshed list speaks for itself.
+      const results: HandwavyPhraseReinstateBatchEntryResult[] = Array.isArray(
+        resp.results,
+      )
+        ? (resp.results as HandwavyPhraseReinstateBatchEntryResult[])
+        : [];
+      const failedCount = results.filter((r) => !r.reinstated).length;
+      if (results.length > 0 && failedCount > 0) {
+        setReinstateBatchOutcome({
+          removedAtIso,
+          results,
+          reinstatedCount,
+          skippedCount: skipped,
+          attemptedCount: phrases.length,
+        });
+      } else {
+        setReinstateBatchOutcome((prev) =>
+          prev && prev.removedAtIso === removedAtIso ? null : prev,
+        );
+      }
       toast({
         title: reinstatedCount > 0 ? "Subset reinstated" : "Nothing to reinstate",
         description:
@@ -6175,6 +6226,14 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     // refresh doesn't leave a stale (and possibly misleading) panel
     // visible while the reviewer figures out what went wrong.
     setReinstatePreview((prev) =>
+      prev && prev.removedAtIso === removedAtIso ? null : prev,
+    );
+    // Task #514 — also drop any partial-success outcome panel for this
+    // batch so re-previewing a failed mixed-result confirm hides the
+    // stale outcome list while the new dry-run is in flight; the fresh
+    // dry-run shows current "would-reinstate" / "already-active" /
+    // "already-reinstated" classifications instead.
+    setReinstateBatchOutcome((prev) =>
       prev && prev.removedAtIso === removedAtIso ? null : prev,
     );
     try {
@@ -10601,6 +10660,20 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     reinstatePreview.removedAtIso === group.removedAtIso
                       ? reinstatePreview
                       : null;
+                  // Task #514 — partial-success outcome panel for this batch.
+                  // Populated by `handleReinstateBatchSubset` when the
+                  // server's mutating /reinstate-batch round-trip came back
+                  // with a mix of `reinstated: true` and `reinstated: false`
+                  // results (e.g. a teammate re-added one of the remaining
+                  // phrases between preview and confirm). Renders a per-row
+                  // outcome list inline below the header so reviewers can
+                  // see exactly which rows landed vs. which stayed on the
+                  // removal-history list.
+                  const outcomeForGroup =
+                    reinstateBatchOutcome &&
+                    reinstateBatchOutcome.removedAtIso === group.removedAtIso
+                      ? reinstateBatchOutcome
+                      : null;
                   // Task #179 — count how many of the rows the batch button
                   // would actually flip have already cycled (remove +
                   // reinstate) >= 2 times. Surfaced as a summary line below
@@ -11184,6 +11257,175 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                   </>
                                 );
                               })()}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {outcomeForGroup && (() => {
+                        // Task #514 — partial-success outcome panel.
+                        // Renders when `handleReinstateBatchSubset`
+                        // captured a mixed `results[]` from the server (at
+                        // least one `reinstated: true` AND at least one
+                        // `reinstated: false`). The all-success path
+                        // already cleared this state, so a fully
+                        // successful confirm collapses the panel exactly
+                        // as before.
+                        const {
+                          results,
+                          reinstatedCount,
+                          attemptedCount,
+                        } = outcomeForGroup;
+                        const failed = results.filter((r) => !r.reinstated);
+                        return (
+                          <div
+                            className="px-3 py-2 border-l-2 border-amber-500/50 bg-amber-500/5 space-y-2"
+                            data-testid="handwavy-reinstate-batch-outcome-panel"
+                            data-batch-removed-at={group.removedAtIso}
+                            data-reinstated-count={reinstatedCount}
+                            data-failed-count={failed.length}
+                          >
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+                              <div className="flex-1 text-[11px]">
+                                <div
+                                  className="font-semibold text-foreground"
+                                  data-testid="handwavy-reinstate-batch-outcome-title"
+                                >
+                                  Partial reinstate: {reinstatedCount} of{" "}
+                                  {attemptedCount} landed
+                                </div>
+                                <div className="text-[10px] text-muted-foreground mt-0.5">
+                                  <span className="text-foreground/90">
+                                    {failed.length}
+                                  </span>{" "}
+                                  phrase{failed.length === 1 ? "" : "s"}{" "}
+                                  stayed on the removal-history list — likely
+                                  re-added or
+                                  reinstated elsewhere between preview and
+                                  confirm. Re-preview to see the current state.
+                                </div>
+                              </div>
+                            </div>
+                            <ul
+                              className="max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
+                              data-testid="handwavy-reinstate-batch-outcome-results"
+                            >
+                              {results.map((r, idx) => {
+                                const cfg = r.reinstated
+                                  ? {
+                                      label: "reinstated",
+                                      color: "text-emerald-400",
+                                      icon: <CheckCircle2 className="w-3 h-3" />,
+                                    }
+                                  : r.reason === "already-active"
+                                    ? {
+                                        label: "failed: already active",
+                                        color: "text-amber-300",
+                                        icon: <Info className="w-3 h-3" />,
+                                      }
+                                    : r.reason === "already-reinstated"
+                                      ? {
+                                          label: "failed: already reinstated",
+                                          color: "text-muted-foreground",
+                                          icon: <CheckCircle2 className="w-3 h-3" />,
+                                        }
+                                      : r.reason === "not-in-batch"
+                                        ? {
+                                            label: "failed: not in batch",
+                                            color: "text-yellow-400",
+                                            icon: <AlertTriangle className="w-3 h-3" />,
+                                          }
+                                        : {
+                                            label: "failed: skipped",
+                                            color: "text-yellow-400",
+                                            icon: <AlertTriangle className="w-3 h-3" />,
+                                          };
+                                return (
+                                  <li
+                                    key={`outcome-${r.phrase}-${idx}`}
+                                    className="flex items-start gap-2 text-[11px]"
+                                    data-testid="handwavy-reinstate-batch-outcome-row"
+                                    data-outcome={
+                                      r.reinstated
+                                        ? "reinstated"
+                                        : r.reason ?? "skipped"
+                                    }
+                                    data-phrase={r.phrase}
+                                  >
+                                    <span
+                                      className={cn(
+                                        "flex items-center gap-1 w-44 shrink-0",
+                                        cfg.color,
+                                      )}
+                                    >
+                                      {cfg.icon}
+                                      {cfg.label}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "flex-1 min-w-0 break-words font-mono",
+                                        r.reinstated
+                                          ? "text-foreground/90"
+                                          : "text-muted-foreground line-through",
+                                      )}
+                                    >
+                                      {r.phrase}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                            {failed.length > 0 && (
+                              <div
+                                className="text-[11px] text-amber-200"
+                                data-testid="handwavy-reinstate-batch-outcome-failed-summary"
+                              >
+                                Failed: {failed.map((r) => `“${r.phrase}”`).join(", ")}
+                              </div>
+                            )}
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200"
+                                disabled={
+                                  busy === previewKey ||
+                                  busy === batchKey ||
+                                  !mutationsAllowed
+                                }
+                                title={
+                                  !mutationsAllowed
+                                    ? MUTATIONS_BLOCKED_TITLE
+                                    : undefined
+                                }
+                                onClick={() =>
+                                  handlePreviewReinstateBatch(
+                                    group.removedAtIso,
+                                  )
+                                }
+                                data-testid="handwavy-reinstate-batch-outcome-repreview"
+                              >
+                                <RefreshCw className="w-3 h-3 mr-1" />
+                                {busy === previewKey
+                                  ? "Refreshing…"
+                                  : "Re-preview"}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                                onClick={() =>
+                                  setReinstateBatchOutcome((prev) =>
+                                    prev &&
+                                    prev.removedAtIso === group.removedAtIso
+                                      ? null
+                                      : prev,
+                                  )
+                                }
+                                data-testid="handwavy-reinstate-batch-outcome-dismiss"
+                              >
+                                Dismiss
+                              </Button>
                             </div>
                           </div>
                         );
