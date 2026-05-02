@@ -249,6 +249,118 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
     }
   });
 
+  test("Each stacked entry shows a 'Slot N of MAX' position indicator (Task #473)", async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const first = uniquePhrase("slot-first");
+    const second = uniquePhrase("slot-second");
+
+    try {
+      await addPhrase(apiCtx, first);
+      await addPhrase(apiCtx, second);
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      await trashRow(page, first);
+      await trashRow(page, second);
+
+      const stack = page.getByTestId("handwavy-single-undo-stack");
+      await expect(stack).toHaveAttribute("data-count", "2", { timeout: 15_000 });
+      const max = await stack.getAttribute("data-max");
+      expect(max).toBe("5");
+
+      // The first phrase was Trashed first, so it sits at slot 1 (the
+      // oldest live entry); the second phrase pushed onto the top of the
+      // stack so it sits at slot 2. The badge text + data attribute must
+      // both agree so screen readers and tests see the same answer.
+      const firstEntry = stack
+        .locator('[data-testid="handwavy-single-undo"]')
+        .filter({ hasText: first });
+      const secondEntry = stack
+        .locator('[data-testid="handwavy-single-undo"]')
+        .filter({ hasText: second });
+
+      await expect(firstEntry).toHaveAttribute("data-slot-position", "1");
+      await expect(secondEntry).toHaveAttribute("data-slot-position", "2");
+      await expect(firstEntry.getByTestId("handwavy-single-undo-slot")).toContainText(
+        `Slot 1 of ${max}`,
+      );
+      await expect(secondEntry.getByTestId("handwavy-single-undo-slot")).toContainText(
+        `Slot 2 of ${max}`,
+      );
+
+      // Below cap → no entry is flagged as next-to-evict.
+      await expect(firstEntry).toHaveAttribute("data-next-to-evict", "false");
+      await expect(secondEntry).toHaveAttribute("data-next-to-evict", "false");
+      await expect(
+        stack.getByTestId("handwavy-single-undo-evict-warning"),
+      ).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, first);
+      await cleanup(apiCtx, second);
+      await apiCtx.dispose();
+    }
+  });
+
+  test("At cap, the oldest entry is flagged 'Next Trash evicts this entry' so reviewers see eviction order before it happens (Task #473)", async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    // SINGLE_UNDO_MAX is 5 — Trash exactly that many phrases to fill
+    // the stack so the oldest entry must wear the urgent affordance.
+    const phrases = Array.from({ length: 5 }, (_, i) =>
+      uniquePhrase(`evict-${i}`),
+    );
+
+    try {
+      for (const p of phrases) {
+        await addPhrase(apiCtx, p);
+      }
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      for (const p of phrases) {
+        await trashRow(page, p);
+      }
+
+      const stack = page.getByTestId("handwavy-single-undo-stack");
+      await expect(stack).toHaveAttribute("data-count", "5", { timeout: 15_000 });
+      await expect(stack).toHaveAttribute("data-max", "5");
+
+      const oldestEntry = stack
+        .locator('[data-testid="handwavy-single-undo"]')
+        .filter({ hasText: phrases[0] });
+      const newestEntry = stack
+        .locator('[data-testid="handwavy-single-undo"]')
+        .filter({ hasText: phrases[phrases.length - 1] });
+
+      await expect(oldestEntry).toHaveAttribute("data-slot-position", "1");
+      await expect(oldestEntry).toHaveAttribute("data-next-to-evict", "true");
+      await expect(
+        oldestEntry.getByTestId("handwavy-single-undo-evict-warning"),
+      ).toBeVisible();
+
+      // Newer entries are never flagged — only slot 1 wears the urgent
+      // affordance because count-based eviction always drops the oldest.
+      await expect(newestEntry).toHaveAttribute("data-slot-position", "5");
+      await expect(newestEntry).toHaveAttribute("data-next-to-evict", "false");
+
+      // Exactly one warning is rendered across the entire stack so a
+      // sixth Trash unambiguously points at the entry that will fall off.
+      await expect(
+        stack.getByTestId("handwavy-single-undo-evict-warning"),
+      ).toHaveCount(1);
+    } finally {
+      for (const p of phrases) {
+        await cleanup(apiCtx, p);
+      }
+      await apiCtx.dispose();
+    }
+  });
+
   test("Undoing the OLDER stacked entry rolls back that specific Trash and leaves the newer entry intact (Task #332)", async ({
     page,
   }) => {

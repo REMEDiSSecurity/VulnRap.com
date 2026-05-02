@@ -8067,7 +8067,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 </div>
               );
             })()}
-            {[...singleUndo].reverse().map((entry) => {
+            {[...singleUndo].reverse().map((entry, reversedIndex) => {
               const undoBusy = busy === singleUndoBusyKey(entry);
               // Task #472 — while the bulk "Undo all" is walking the
               // stack, every per-row Undo / Dismiss should also be
@@ -8078,18 +8078,62 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               // would still be processed — disabling is the simpler
               // contract.
               const allBusy = busy === SINGLE_UNDO_ALL_BUSY_KEY;
+              // Task #473 — count-based eviction signal. The stack drops the
+              // OLDEST entry (singleUndo[0]) once a new push tips it past
+              // SINGLE_UNDO_MAX (see handleRemove). The list renders newest
+              // first via .reverse(), so the oldest entry is the LAST one
+              // rendered — `slotPosition` (1 = oldest, N = newest) lets each
+              // banner show "Slot N of MAX" so reviewers can predict the
+              // eviction order before it happens. When the stack is at cap
+              // the slot-1 entry additionally gets red border + pulse styling
+              // and a "Next to evict" caption, mirroring the urgency cue
+              // Task #140 surfaced for the time-windowed Undo affordance.
+              const slotPosition = singleUndo.length - reversedIndex;
+              const atCap = singleUndo.length >= SINGLE_UNDO_MAX;
+              const isNextToEvict = atCap && slotPosition === 1;
               return (
                 <div
                   key={entry.removedAt}
-                  className="rounded-md border border-border/40 bg-background/40 p-3 flex items-center gap-2 flex-wrap text-xs"
+                  className={cn(
+                    "rounded-md border p-3 flex items-center gap-2 flex-wrap text-xs",
+                    isNextToEvict
+                      ? "border-red-400/60 bg-red-500/5 animate-pulse"
+                      : "border-border/40 bg-background/40",
+                  )}
                   data-testid="handwavy-single-undo"
                   data-phrase={entry.phrase}
                   data-removed-at={entry.removedAt}
+                  data-slot-position={slotPosition}
+                  data-next-to-evict={isNextToEvict ? "true" : "false"}
                 >
                   <span className="font-semibold text-foreground">Phrase removed</span>
                   <span className="font-mono text-foreground/80 break-all flex-1 min-w-[8rem]">
                     {entry.phrase}
                   </span>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] tabular-nums shrink-0",
+                      isNextToEvict && "border-red-400/60 text-red-300",
+                    )}
+                    data-testid="handwavy-single-undo-slot"
+                    title={
+                      isNextToEvict
+                        ? `Slot ${slotPosition} of ${SINGLE_UNDO_MAX} — the next per-row Trash will evict this entry from the one-click Undo stack.`
+                        : `Slot ${slotPosition} of ${SINGLE_UNDO_MAX} in the post-Trash one-click Undo stack (newest pushes drop the oldest entry once the cap is reached).`
+                    }
+                  >
+                    Slot {slotPosition} of {SINGLE_UNDO_MAX}
+                  </Badge>
+                  {isNextToEvict && (
+                    <span
+                      className="text-[10px] font-semibold text-red-300 shrink-0 flex items-center gap-1"
+                      data-testid="handwavy-single-undo-evict-warning"
+                    >
+                      <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                      Next Trash evicts this entry
+                    </span>
+                  )}
                   {(() => {
                     // Task #337 — visible reason caption + aria-describedby
                     // for this specific banner's Undo button. Hint id is
