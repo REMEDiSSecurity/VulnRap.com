@@ -1616,4 +1616,150 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       await apiCtx.dispose();
     }
   });
+
+  // Task #502 — when the bulk-remove preview's "Selection has changed
+  // since this preview was generated" stale notice fires, the reviewer
+  // can refresh the dry-run snapshot in place by pressing the
+  // "Re-preview" button rendered next to the notice copy. That re-runs
+  // `handlePreviewBulkRemove` against the current `selectedInList` so
+  // the captured outcomes + counts catch up to the live selection
+  // without forcing the reviewer to back out and click "Remove
+  // selected" again (two clicks for what is effectively a refresh, and
+  // which would also lose the panel's "high-thrash auto-expand" state
+  // and the reviewer's place in the active list). Once the new
+  // snapshot matches the current selection the stale notice
+  // disappears. Mirrors the Task #354 affordance on the per-batch
+  // reinstate preview.
+  test("the stale notice's 'Re-preview' button refreshes the snapshot in place and clears the notice", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(3, "task502 bulk repreview");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+
+      // Mock the GET handwavy-phrases response so the active list is
+      // reduced to JUST our 3 phrases (plus an empty history). This is
+      // necessary because the dev DB is pre-seeded with many other
+      // marker phrases and the drift trigger we use below
+      // (`select all`) would otherwise promote the selection to every
+      // single phrase in the table — making the dry-run scoring
+      // assertions noisy and brittle. Mocking GET lets the test stay
+      // focused on the new "Re-preview" button while keeping the
+      // (real) DELETE dry-run path intact for the snapshot itself.
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          if (route.request().method() !== "GET") {
+            await route.fallback();
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              phrases: phrases.map((phrase) => ({
+                phrase,
+                category: "STYLE_HEDGING",
+                rationale: null,
+                reviewer: REVIEWER,
+                addedAt: new Date().toISOString(),
+              })),
+              total: phrases.length,
+              history: [],
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      // Sanity: only our 3 phrases render in the active list.
+      await expect(
+        page.locator('[data-testid="handwavy-row"]'),
+      ).toHaveCount(phrases.length, { timeout: 15_000 });
+
+      // Tick only the FIRST TWO phrases, then open the bulk-remove
+      // preview. The dry-run is scored against [phrases[0], phrases[1]]
+      // — `requestedPhrases` captures exactly those two.
+      for (const p of phrases.slice(0, 2)) {
+        const row = page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: p });
+        await expect(row).toHaveCount(1);
+        await row.getByTestId("handwavy-select").check();
+      }
+      await page.getByTestId("handwavy-bulk-remove").click();
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+      await expect(panel).toContainText("Removal preview for 2 phrases");
+      const confirmBtn = panel.getByTestId("handwavy-bulk-preview-confirm");
+      await expect(confirmBtn).toHaveText(/Remove 2 phrases/);
+
+      // Initial snapshot matches the current selection — no stale notice.
+      const stale = panel.getByTestId("handwavy-bulk-preview-stale");
+      await expect(stale).toHaveCount(0);
+
+      // Drift the selection without closing the panel. Per-row checkboxes
+      // are disabled while the preview is open, but the toolbar's
+      // "select all" checkbox stays operable — clicking it with a
+      // partial selection promotes it to the full set, so
+      // `selectedInList` becomes all 3 phrases while `requestedPhrases`
+      // stays at the original 2. That's the drift the panel detects.
+      await page.getByTestId("handwavy-select-all").click();
+
+      // Stale notice now renders alongside a one-click "Re-preview"
+      // button. The original captured outcomes + counts are unchanged
+      // (the panel still shows the 2-phrase snapshot the reviewer was
+      // reading) — the notice is purely an in-place affordance to
+      // refresh the dry-run.
+      await expect(stale).toBeVisible();
+      await expect(stale).toContainText(/Re-preview to refresh/);
+      await expect(panel).toContainText("Removal preview for 2 phrases");
+      await expect(confirmBtn).toHaveText(/Remove 2 phrases/);
+
+      const repreviewBtn = stale.getByTestId(
+        "handwavy-bulk-preview-stale-repreview",
+      );
+      await expect(repreviewBtn).toBeVisible();
+      await expect(repreviewBtn).toHaveText(/Re-preview/);
+      await expect(repreviewBtn).toBeEnabled();
+
+      // Pressing it re-runs the dry-run preview against the current
+      // selection (all 3 phrases). The summary header + confirm button
+      // count both move to 3, the stale notice clears because the new
+      // snapshot matches reality, and the panel itself stays open —
+      // the reviewer's place is preserved.
+      await repreviewBtn.click();
+
+      await expect(panel).toContainText("Removal preview for 3 phrases", {
+        timeout: 15_000,
+      });
+      await expect(confirmBtn).toHaveText(/Remove 3 phrases/);
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-stale"),
+      ).toHaveCount(0);
+      await expect(panel).toBeVisible();
+
+      // The per-phrase outcomes list now carries one would-remove row
+      // per currently-selected phrase — confirms the snapshot was
+      // genuinely refreshed against the wider selection rather than
+      // the stale notice being hidden client-side.
+      await panel
+        .getByTestId("handwavy-bulk-preview-results-details")
+        .locator("summary")
+        .click();
+      await expect(
+        panel.locator(
+          `[data-testid="handwavy-bulk-preview-result-row"][data-outcome="would-remove"]`,
+        ),
+      ).toHaveCount(3);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
 });

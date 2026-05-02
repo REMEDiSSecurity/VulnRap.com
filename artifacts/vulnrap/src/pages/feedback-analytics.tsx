@@ -7779,8 +7779,42 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 data-testid="handwavy-bulk-preview-stale"
               >
                 <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-                Selection has changed since this preview was generated. Re-preview to refresh — confirming will still apply to the {bulkPreview.requestedPhrases.length} phrase
-                {bulkPreview.requestedPhrases.length === 1 ? "" : "s"} shown above.
+                <span className="flex-1">
+                  Selection has changed since this preview was generated. Re-preview to refresh — confirming will still apply to the {bulkPreview.requestedPhrases.length} phrase
+                  {bulkPreview.requestedPhrases.length === 1 ? "" : "s"} shown above.
+                </span>
+                {/* Task #502 — one-click in-place refresh of the bulk-remove
+                    dry-run snapshot, mirroring the Task #354 affordance on
+                    the per-batch reinstate preview. Re-runs the same handler
+                    the outer "Remove selected" button uses so the captured
+                    outcomes + counts catch up to the currently-selected
+                    phrase set without forcing the reviewer to back out and
+                    re-tick the active list. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200 shrink-0"
+                  disabled={
+                    selectedInList.length === 0 ||
+                    busy === "bulk-remove" ||
+                    busy === "bulk-preview" ||
+                    !mutationsAllowed
+                  }
+                  title={
+                    !mutationsAllowed
+                      ? MUTATIONS_BLOCKED_TITLE
+                      : undefined
+                  }
+                  onClick={handlePreviewBulkRemove}
+                  data-testid="handwavy-bulk-preview-stale-repreview"
+                  data-mutations-blocked={
+                    !mutationsAllowed ? "true" : "false"
+                  }
+                  aria-label="Re-preview removal to refresh the snapshot"
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  {busy === "bulk-preview" ? "Refreshing…" : "Re-preview"}
+                </Button>
               </div>
             )}
             {requiresAck ? (
