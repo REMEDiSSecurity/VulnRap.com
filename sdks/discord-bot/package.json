@@ -1,0 +1,20 @@
+{
+  "name": "vulnrap-discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reference Discord bot for VulnRap.com — exposes /vulnrap-score <id> in your server.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "register": "node deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  },
+  "license": "Apache-2.0"
+}
