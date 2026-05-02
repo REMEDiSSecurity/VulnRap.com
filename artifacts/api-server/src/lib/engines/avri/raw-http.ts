@@ -1333,20 +1333,148 @@ const INCIDENTAL_JSON_KEYS = new Set([
 // narrative-looking. Slop authors padding fake responses with throw-
 // away keys almost never invent a believable UUID or timestamp value;
 // they reach for round-number status codes and short status strings.
-const INCIDENTAL_VALUE_PATTERNS: RegExp[] = [
-  // UUID v1-v5 in the canonical 8-4-4-4-12 hex layout.
-  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i,
-  // ISO-8601 date+time (with or without seconds, with or without TZ).
-  /\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?/,
-  // IPv4 address.
-  /\b(?:\d{1,3}\.){3}\d{1,3}\b/,
-  // IPv6 address (loose: at least three colon-separated hex groups so
-  // a single MAC-like `aa:bb:cc` fragment in prose doesn't count).
-  /\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b/i,
-];
+//
+// Task #448 — slop authors who learn about this veto adapt by inventing
+// trivially-fabricated values that match the regex shape but carry no
+// real entropy: all-zero / repeated-character / monotonically-increasing
+// UUIDs, midnight-on-Jan-1 timestamps, RFC 1918 / loopback / unspecified
+// IPs. We therefore find each match and validate it against per-shape
+// "plausibility" rules; only matches that survive count as real
+// incidentals. The regex shapes themselves are kept as anchors but each
+// candidate value is then run through `isReal*`.
+const INCIDENTAL_UUID_RE =
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+const INCIDENTAL_TIMESTAMP_RE =
+  /\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?/g;
+const INCIDENTAL_IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+// IPv6 address (loose: at least three colon-separated hex groups so
+// a single MAC-like `aa:bb:cc` fragment in prose doesn't count).
+const INCIDENTAL_IPV6_RE = /\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b/gi;
 
+/** True iff the candidate UUID looks like a real, high-entropy value
+ * rather than a hand-typed pad. Rejects: all-zero, all-same character,
+ * each-segment-uniform (`11111111-2222-3333-4444-555555555555`),
+ * sequential-hex (`01234567-89ab-cdef-0123-456789abcdef`), and any
+ * value with ≤4 distinct hex digits (covers `aaaa…` / `0a0a…` style
+ * runs and 2-3-character alphabets). Real UUIDs (v1/v4/v5) carry 12+
+ * distinct hex digits. */
+function isRealUuidValue(s: string): boolean {
+  const hex = s.replace(/-/g, "").toLowerCase();
+  if (hex.length !== 32) return false;
+  if (/^0+$/.test(hex)) return false;
+  if (/^([0-9a-f])\1{31}$/.test(hex)) return false;
+  const parts = s.toLowerCase().split("-");
+  if (
+    parts.length === 5 &&
+    parts.every((p) => p.length > 0 && /^([0-9a-f])\1*$/.test(p))
+  ) {
+    return false;
+  }
+  if (new Set(hex).size <= 4) return false;
+  let monotonic = true;
+  for (let i = 1; i < hex.length; i++) {
+    const prev = parseInt(hex[i - 1], 16);
+    const cur = parseInt(hex[i], 16);
+    if ((prev + 1) % 16 !== cur) {
+      monotonic = false;
+      break;
+    }
+  }
+  if (monotonic) return false;
+  return true;
+}
+
+/** True iff the candidate ISO-8601 timestamp looks like a real moment
+ * a server would emit rather than a round-number pad. Rejects: epoch
+ * zero (1970-01-01), any midnight on Jan 1 of any year (the canonical
+ * "round timestamp" — `2025-01-01T00:00:00Z`), and any timestamp whose
+ * date and time components are entirely zeros. A real `Date:` /
+ * `created_at` value carries non-zero seconds or a non-Jan-1 date. */
+function isRealTimestampValue(s: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:?\d{2})?$/.exec(
+    s,
+  );
+  if (!m) return true;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const second = m[6] !== undefined ? Number(m[6]) : 0;
+  const subsec = m[7] ? Number(m[7]) : 0;
+  if (year <= 1) return false;
+  if (year === 1970 && month === 1 && day === 1) return false;
+  const isMidnight =
+    hour === 0 && minute === 0 && second === 0 && subsec === 0;
+  if (month === 1 && day === 1 && isMidnight) return false;
+  return true;
+}
+
+/** True iff the IPv4 candidate looks like a real, routable address
+ * rather than a placeholder. Rejects: 0.0.0.0, 127.0.0.0/8 (loopback),
+ * 10.0.0.0/8 / 172.16.0.0/12 / 192.168.0.0/16 (RFC 1918 private),
+ * 169.254.0.0/16 (link-local), 224.0.0.0/4 (multicast),
+ * 240.0.0.0/4 (reserved / broadcast), and the documentation-only
+ * TEST-NET ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24).
+ * A real reporter pasting a server IP almost always pastes a public
+ * routable address; slop authors reach for `127.0.0.1` / `10.0.0.1`. */
+function isRealIPv4Value(s: string): boolean {
+  const parts = s.split(".");
+  if (parts.length !== 4) return false;
+  const octets = parts.map((p) => Number(p));
+  if (octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) {
+    return false;
+  }
+  const [a, b, c, d] = octets;
+  if (a === 0) return false;
+  if (a === 127) return false;
+  if (a === 10) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 168) return false;
+  if (a === 169 && b === 254) return false;
+  if (a >= 224) return false;
+  if (a === 192 && b === 0 && c === 2) return false;
+  if (a === 198 && b === 51 && c === 100) return false;
+  if (a === 203 && b === 0 && c === 113) return false;
+  if (a === 255 && b === 255 && c === 255 && d === 255) return false;
+  return true;
+}
+
+/** True iff the IPv6 candidate looks like a real address rather than
+ * a placeholder. Rejects: `::` (unspecified), `::1` (loopback),
+ * `fe80::/10` (link-local), `fc00::/7` (unique-local), `2001:db8::/32`
+ * (documentation prefix, RFC 3849), and any value whose hex groups
+ * are entirely zero. */
+function isRealIPv6Value(s: string): boolean {
+  const lower = s.toLowerCase();
+  if (lower === "::" || lower === "::1") return false;
+  if (/^fe[89ab][0-9a-f]?:/.test(lower)) return false;
+  if (/^f[cd][0-9a-f]{2}:/.test(lower)) return false;
+  if (lower.startsWith("2001:db8:") || lower.startsWith("2001:0db8:")) {
+    return false;
+  }
+  const groups = lower.split(":").filter((g) => g.length > 0);
+  if (groups.length > 0 && groups.every((g) => /^0+$/.test(g))) return false;
+  return true;
+}
+
+/** True iff `text` carries at least one piece of realistic incidental
+ * data — a high-entropy UUID, a non-round ISO-8601 timestamp, a public
+ * routable IPv4, or a non-reserved IPv6. Trivially-fabricated values
+ * (all-zero UUIDs, midnight-Jan-1 timestamps, RFC 1918 / loopback
+ * IPs) do NOT count: slop authors who learn about the per-shape veto
+ * dodge by inventing such values, so the detector must look at the
+ * value's plausibility, not just its byte shape. */
 function hasIncidentalValueData(text: string): boolean {
-  return INCIDENTAL_VALUE_PATTERNS.some((re) => re.test(text));
+  const uuids = text.match(INCIDENTAL_UUID_RE);
+  if (uuids && uuids.some(isRealUuidValue)) return true;
+  const timestamps = text.match(INCIDENTAL_TIMESTAMP_RE);
+  if (timestamps && timestamps.some(isRealTimestampValue)) return true;
+  const ipv4s = text.match(INCIDENTAL_IPV4_RE);
+  if (ipv4s && ipv4s.some(isRealIPv4Value)) return true;
+  const ipv6s = text.match(INCIDENTAL_IPV6_RE);
+  if (ipv6s && ipv6s.some(isRealIPv6Value)) return true;
+  return false;
 }
 
 /** Walk every string leaf in a parsed JSON value and count those that

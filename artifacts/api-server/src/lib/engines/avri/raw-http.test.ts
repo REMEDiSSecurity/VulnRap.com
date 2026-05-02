@@ -2302,11 +2302,14 @@ describe("isSuspiciousJsonBody", () => {
     // ≥3 top-level keys carrying narrative vocab is no longer
     // automatically safe (slop authors pad fake bodies with throwaway
     // keys to clear the old key-count threshold), but the body is
-    // still safe when a value carries a UUID / ISO timestamp / IP
-    // address — real incidental data slop authors don't fabricate.
+    // still safe when a value carries a real-looking UUID / ISO
+    // timestamp / public IP — real incidental data slop authors
+    // don't typically fabricate. Task #448 narrowed this to *real*
+    // incidentals only: a public routable IP, a high-entropy UUID,
+    // a non-round timestamp.
     expect(
       isSuspiciousJsonBody(
-        '{"event": "vulnerability scan finished", "host": "10.0.0.5", "code": 200}',
+        '{"event": "vulnerability scan finished", "host": "54.231.125.7", "code": 200}',
       ),
     ).toBe(false);
     expect(
@@ -2317,6 +2320,101 @@ describe("isSuspiciousJsonBody", () => {
     expect(
       isSuspiciousJsonBody(
         '{"status": "error", "code": 500, "error": "vulnerability noted", "received_at": "2026-04-30T10:11:12Z"}',
+      ),
+    ).toBe(false);
+  });
+
+  it("flags multi-key bodies whose 'incidental' values are trivially fabricated UUIDs", () => {
+    // Task #448 — slop authors who learn about the per-shape veto
+    // dodge by inventing UUID-shaped strings with no entropy. The
+    // detector must look at the value, not just the byte shape.
+    // All-zero UUID:
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "compromise detected", "request_uuid": "00000000-0000-0000-0000-000000000000"}',
+      ),
+    ).toBe(true);
+    // All-same-character UUID:
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "vulnerability narrative", "request_uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}',
+      ),
+    ).toBe(true);
+    // Each-segment-uniform UUID (the literal example in the task):
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "SQL injection", "request_uuid": "11111111-2222-3333-4444-555555555555"}',
+      ),
+    ).toBe(true);
+    // Monotonically-increasing hex sequence:
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "XSS payload reflected", "request_uuid": "01234567-89ab-cdef-0123-456789abcdef"}',
+      ),
+    ).toBe(true);
+  });
+
+  it("flags multi-key bodies whose 'incidental' values are round-number timestamps", () => {
+    // Midnight on Jan 1, no offset (the literal example in the task):
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "vulnerability narrative", "received_at": "2025-01-01T00:00:00Z"}',
+      ),
+    ).toBe(true);
+    // Epoch zero:
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "compromise detected", "received_at": "1970-01-01T00:00:00Z"}',
+      ),
+    ).toBe(true);
+    // Midnight on Jan 1 with no timezone marker at all:
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "SQL injection", "received_at": "2024-01-01T00:00:00"}',
+      ),
+    ).toBe(true);
+  });
+
+  it("flags multi-key bodies whose 'incidental' values are reserved IPs", () => {
+    // 127.0.0.1 loopback:
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "request smuggled", "host": "127.0.0.1"}',
+      ),
+    ).toBe(true);
+    // 0.0.0.0 unspecified:
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "exploit reflected", "host": "0.0.0.0"}',
+      ),
+    ).toBe(true);
+    // RFC 1918 private (10/8):
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "vulnerability noted", "host": "10.0.0.1"}',
+      ),
+    ).toBe(true);
+    // RFC 1918 private (192.168/16):
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "compromise detected", "host": "192.168.1.1"}',
+      ),
+    ).toBe(true);
+    // IPv6 loopback:
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "exploit detected", "host": "::1"}',
+      ),
+    ).toBe(true);
+  });
+
+  it("does not flag multi-key bodies that mix fake incidentals with one real incidental", () => {
+    // A real public IP alongside a fake UUID is enough to mark the
+    // body plausible — the real incidental is the load-bearing
+    // evidence, not the shape of the other values.
+    expect(
+      isSuspiciousJsonBody(
+        '{"status": "error", "code": 500, "error": "vulnerability narrative", "request_uuid": "00000000-0000-0000-0000-000000000000", "host": "54.231.125.7"}',
       ),
     ).toBe(false);
   });
