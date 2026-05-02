@@ -288,4 +288,118 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/category.*rationale.*newPhrase/i);
   });
+
+  // Task #503 — the engine-level test
+  // (`handwavy-phrases.test.ts` -> "applies concurrent category edits even
+  // when the rename is a no-op", and the broader rename + category coverage)
+  // proves that a single edit call can rewrite phrase/category/rationale
+  // together and emit one combined audit entry. Task #356's route tests
+  // only exercise rename in isolation, so nothing on the HTTP boundary
+  // pins that contract: a future refactor of the PATCH handler could
+  // silently start rejecting combined edits, drop one of the audit
+  // from/to pairs, or apply them across multiple entries without any CI
+  // signal. The two cases below lock the wire shape down.
+  it("applies a combined rename + category + rationale change in a single PATCH and records all three from/to pairs in one audit entry", async () => {
+    const add = await request<{ added: boolean }>("POST", "/feedback/calibration/handwavy-phrases", {
+      phrase: "combined edit source",
+      category: "hedging",
+      reviewer: "alice@team.com",
+      rationale: "original reason for combined edit",
+    });
+    expect(add.status).toBe(201);
+
+    const r = await request<EditResponse>("PATCH", "/feedback/calibration/handwavy-phrases", {
+      phrase: "combined edit source",
+      newPhrase: "  Combined   EDIT   Target  ",
+      category: "buzzword",
+      rationale: "updated reason after combined edit",
+      reviewer: "bob@team.com",
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.edited).toBe(true);
+    // New identity, new category, new rationale all reflected in the
+    // marker the route returns to the client.
+    expect(r.body.phrase).toBe("combined edit target");
+    expect(r.body.marker.phrase).toBe("combined edit target");
+    expect(r.body.marker.category).toBe("buzzword");
+    expect(r.body.marker.rationale).toBe("updated reason after combined edit");
+    // Original add audit context is preserved across the combined edit.
+    expect(r.body.marker.addedBy).toBe("alice@team.com");
+    // A SINGLE audit entry carries all three from/to pairs plus the
+    // editor — not three separate entries, not a missing field.
+    expect(r.body.editEntry?.editedBy).toBe("bob@team.com");
+    expect(r.body.editEntry?.phrase).toEqual({
+      from: "combined edit source",
+      to: "combined edit target",
+    });
+    expect(r.body.editEntry?.category).toEqual({
+      from: "hedging",
+      to: "buzzword",
+    });
+    expect(r.body.editEntry?.rationale).toEqual({
+      from: "original reason for combined edit",
+      to: "updated reason after combined edit",
+    });
+    // The marker's own edits log mirrors the response and contains
+    // exactly one entry — proving the three changes were collapsed
+    // into a single audit row.
+    const target = r.body.phrases.find((m) => m.phrase === "combined edit target");
+    expect(target?.edits ?? []).toHaveLength(1);
+    expect(target?.edits?.[0].phrase).toEqual({
+      from: "combined edit source",
+      to: "combined edit target",
+    });
+    expect(target?.edits?.[0].category).toEqual({
+      from: "hedging",
+      to: "buzzword",
+    });
+    expect(target?.edits?.[0].rationale).toEqual({
+      from: "original reason for combined edit",
+      to: "updated reason after combined edit",
+    });
+    // Old identity is gone from the active list.
+    const phrases = r.body.phrases.map((m) => m.phrase);
+    expect(phrases).not.toContain("combined edit source");
+  });
+
+  it("still applies category + rationale changes when the rename is a no-op (newPhrase normalizes to the existing phrase)", async () => {
+    await request("POST", "/feedback/calibration/handwavy-phrases", {
+      phrase: "noop combined marker",
+      category: "absence",
+      rationale: "starting rationale",
+    });
+
+    const r = await request<EditResponse>("PATCH", "/feedback/calibration/handwavy-phrases", {
+      phrase: "noop combined marker",
+      newPhrase: "  Noop   Combined   MARKER  ",
+      category: "buzzword",
+      rationale: "rationale after no-op rename",
+      reviewer: "carol@team.com",
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.edited).toBe(true);
+    // Identity is unchanged because the rename normalized to the same
+    // value, but the category + rationale updates still landed.
+    expect(r.body.phrase).toBe("noop combined marker");
+    expect(r.body.marker.phrase).toBe("noop combined marker");
+    expect(r.body.marker.category).toBe("buzzword");
+    expect(r.body.marker.rationale).toBe("rationale after no-op rename");
+    // The audit entry carries the category + rationale from/to pairs
+    // but NOT a phrase from/to (the rename was a no-op so it's not a
+    // recorded change).
+    expect(r.body.editEntry?.editedBy).toBe("carol@team.com");
+    expect(r.body.editEntry?.phrase).toBeUndefined();
+    expect(r.body.editEntry?.category).toEqual({
+      from: "absence",
+      to: "buzzword",
+    });
+    expect(r.body.editEntry?.rationale).toEqual({
+      from: "starting rationale",
+      to: "rationale after no-op rename",
+    });
+    // Exactly one new audit row was appended — the no-op rename did
+    // not produce a second empty entry.
+    const marker = r.body.phrases.find((m) => m.phrase === "noop combined marker");
+    expect(marker?.edits ?? []).toHaveLength(1);
+  });
 });
