@@ -2338,6 +2338,34 @@ export function BulkRemovalImpactBlock({
               <li key={s.id}>
                 {kind === "production" ? `report #${s.id}` : s.id}{" "}
                 <span className="opacity-60">[{s.tier}]</span>
+                {/* Task #496 — render the per-match context snippet inline
+                    next to its ID with the matched phrase highlighted,
+                    mirroring the visual treatment the per-row Trash
+                    preview's `HandwavyRemovePreviewMatchSnippet` uses on
+                    the inline-matches block (Task #345). The server now
+                    sends `snippet` on every removal-preview response, so
+                    the legacy collapsed list — currently surfaced by the
+                    edit-rename preview, which doesn't render the inline
+                    `HandwavyRemovePreviewMatches` block — gets the same
+                    judge-in-place affordance reviewers already have on
+                    the per-row Trash flow. `font-sans` overrides the
+                    parent `font-mono` so the natural-language snippet
+                    text reads naturally next to the monospaced ID. */}
+                {s.snippet && (
+                  <span
+                    className="ml-1 text-muted-foreground italic break-words font-sans"
+                    data-testid={`handwavy-bulk-preview-${kind}-sample-snippet-${s.id}`}
+                  >
+                    {s.snippet.before}
+                    <mark
+                      className="bg-amber-500/30 text-amber-100 not-italic font-semibold px-0.5 rounded-sm"
+                      data-testid={`handwavy-bulk-preview-${kind}-sample-snippet-mark-${s.id}`}
+                    >
+                      {s.snippet.match}
+                    </mark>
+                    {s.snippet.after}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

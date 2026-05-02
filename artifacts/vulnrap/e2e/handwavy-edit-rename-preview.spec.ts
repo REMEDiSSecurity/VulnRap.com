@@ -480,6 +480,229 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
     }
   });
 
+  // Task #496 — Task #345 added inline context snippets next to each
+  // sample-match ID on the per-row Trash preview's
+  // `HandwavyRemovePreviewMatches` block so reviewers can judge an
+  // un-flag in place without leaving the page. The shared
+  // `BulkRemovalImpactBlock` renderer's OWN, older sample-match list
+  // inside its collapsed `<details>` ("Sample {sourceNoun}s that would
+  // lose their flag (N)") only displayed bare IDs. The bulk-retire
+  // and per-row Trash flows already pass `hideSampleMatchesDetails`
+  // to suppress that legacy block (they render the inline matches
+  // block separately), so the only flow that surfaces the legacy
+  // `<details>` in real usage today is the per-row edit-then-rename
+  // preview. This test stubs the rename dryRun=true DELETE response
+  // with a sampleMatches array carrying snippets on the curated side
+  // (one with a snippet, one without) and on the synthetic production
+  // side, expands the curated `<details>`, and asserts that:
+  //   * the snippet renders next to its ID with the surrounding text
+  //     (`before`/`after`) plain and the matched phrase wrapped in a
+  //     <mark> for highlighting (matching the per-row Trash treatment),
+  //   * a sample-match without a snippet does NOT render an empty /
+  //     dangling snippet element next to its ID,
+  //   * React text-rendering escapes raw HTML in the snippet body so
+  //     the literal text appears (no SVG element is injected),
+  //   * the production `<details>` rendering follows the same shape.
+  test("rename impact preview's collapsed sample-match `<details>` renders the snippet with the matched phrase highlighted (Task #496)", async ({
+    page,
+  }) => {
+    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const original = uniquePhrase("snippet-from");
+    const renamed = uniquePhrase("snippet-to");
+
+    try {
+      await addPhrase(apiCtx, original);
+
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrase?: string }
+            | undefined;
+          if (!body?.dryRun || body.phrase !== original) {
+            await route.fallback();
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              dryRun: true,
+              batch: false,
+              wouldRemove: 1,
+              notFound: 0,
+              duplicateInBatch: 0,
+              phrase: original,
+              raw: original,
+              removed: true,
+              reason: null,
+              total: 99,
+              projectedTotal: 98,
+              results: [{ raw: original, phrase: original, removed: true }],
+              dryRunImpact: {
+                corpus: {
+                  total: 4,
+                  validDetectionsLost: 2,
+                  falsePositivesDropped: 2,
+                  byTier: {
+                    t1Legit: 1,
+                    t2Borderline: 1,
+                    t3Slop: 1,
+                    t4Hallucinated: 1,
+                  },
+                  sampleMatches: [
+                    {
+                      id: "fixture-T1-alpha",
+                      tier: "T1_LEGIT",
+                      snippet: {
+                        before: "the report says ",
+                        match: "MAGIC PHRASE",
+                        after: " has fired here",
+                      },
+                    },
+                    // Snippetless sibling — must NOT render a dangling
+                    // snippet element next to its ID.
+                    {
+                      id: "fixture-T2-beta",
+                      tier: "T2_BORDERLINE",
+                      snippet: null,
+                    },
+                  ],
+                  warning:
+                    "2 legitimate detections would be lost from the curated benchmark",
+                  corpusSize: 47,
+                  oldestCreatedAt: null,
+                  newestCreatedAt: null,
+                },
+                production: {
+                  total: 1,
+                  validDetectionsLost: 1,
+                  falsePositivesDropped: 0,
+                  byTier: {
+                    t1Legit: 1,
+                    t2Borderline: 0,
+                    t3Slop: 0,
+                    t4Hallucinated: 0,
+                  },
+                  sampleMatches: [
+                    {
+                      id: "9001",
+                      tier: "T1_LEGIT",
+                      // Includes a literal `<svg>` substring to verify
+                      // the snippet text is rendered via React (which
+                      // escapes angle brackets) rather than as raw HTML.
+                      snippet: {
+                        before: "alert(<svg> ",
+                        match: "fishy claim",
+                        after: " about CVE-1234",
+                      },
+                    },
+                  ],
+                  warning:
+                    "1 legitimate detection would be lost from the production archive",
+                  corpusSize: 200,
+                  oldestCreatedAt: "2026-04-01T00:00:00.000Z",
+                  newestCreatedAt: "2026-04-29T00:00:00.000Z",
+                },
+                productionError: null,
+                productionLimit: 200,
+              },
+              phrases: [],
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+
+      const row = page
+        .locator(`[data-testid="handwavy-row"]`)
+        .filter({ hasText: original });
+      await expect(row).toHaveCount(1, { timeout: 15_000 });
+
+      // Open Edit, rename, save — the panel mounts because the synthetic
+      // dry-run reports valid detections lost on both halves.
+      await row.getByTestId("handwavy-edit").click();
+      await row.getByTestId("handwavy-edit-phrase").fill(renamed);
+      await row.getByTestId("handwavy-edit-save").click();
+
+      const panel = page.getByTestId("handwavy-edit-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Curated half — expand the legacy `<details>` and assert the
+      // snippet renders next to its ID with the matched phrase wrapped
+      // in a <mark>. The snippetless sibling must NOT render a snippet
+      // element.
+      const curatedBlock = panel.getByTestId("handwavy-bulk-preview-curated");
+      const curatedDetails = curatedBlock.locator("details", {
+        hasText: "fixtures that would lose their flag",
+      });
+      await expect(curatedDetails).toHaveCount(1);
+      await curatedDetails.locator("summary").click();
+
+      const curatedSnippet = curatedBlock.getByTestId(
+        "handwavy-bulk-preview-curated-sample-snippet-fixture-T1-alpha",
+      );
+      await expect(curatedSnippet).toBeVisible();
+      await expect(curatedSnippet).toContainText("the report says");
+      await expect(curatedSnippet).toContainText("has fired here");
+
+      const curatedMark = curatedBlock.getByTestId(
+        "handwavy-bulk-preview-curated-sample-snippet-mark-fixture-T1-alpha",
+      );
+      await expect(curatedMark).toBeVisible();
+      await expect(curatedMark).toHaveText("MAGIC PHRASE");
+      // The mark element is a real <mark> tag so screen readers and any
+      // user CSS targeting the highlight get the correct semantics.
+      await expect(curatedMark).toHaveJSProperty("tagName", "MARK");
+
+      // Snippetless sibling — its bare ID is in the list but no snippet
+      // element is rendered next to it.
+      await expect(curatedDetails).toContainText("fixture-T2-beta");
+      await expect(
+        curatedBlock.getByTestId(
+          "handwavy-bulk-preview-curated-sample-snippet-fixture-T2-beta",
+        ),
+      ).toHaveCount(0);
+
+      // Production half — expand its legacy `<details>` and assert the
+      // same shape, plus the React-escaping guard for the literal `<svg>`
+      // substring in the snippet's `before` field (a naive innerHTML
+      // render would inject an SVG element into the DOM).
+      const productionBlock = panel.getByTestId(
+        "handwavy-bulk-preview-production",
+      );
+      const productionDetails = productionBlock.locator("details", {
+        hasText: "reports that would lose their flag",
+      });
+      await expect(productionDetails).toHaveCount(1);
+      await productionDetails.locator("summary").click();
+
+      const productionSnippet = productionBlock.getByTestId(
+        "handwavy-bulk-preview-production-sample-snippet-9001",
+      );
+      await expect(productionSnippet).toBeVisible();
+      await expect(productionSnippet).toContainText("about CVE-1234");
+      await expect(productionSnippet).toContainText("<svg>");
+      await expect(productionSnippet.locator("svg")).toHaveCount(0);
+
+      const productionMark = productionBlock.getByTestId(
+        "handwavy-bulk-preview-production-sample-snippet-mark-9001",
+      );
+      await expect(productionMark).toHaveText("fishy claim");
+      await expect(productionMark).toHaveJSProperty("tagName", "MARK");
+    } finally {
+      await cleanup(apiCtx, [original, renamed]);
+      await apiCtx.dispose();
+    }
+  });
+
   test("'Back out' on the rename impact preview cancels without firing the live PATCH", async ({
     page,
   }) => {

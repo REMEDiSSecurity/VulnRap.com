@@ -450,6 +450,214 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     }
   });
 
+  // Task #496 — Task #345 added inline context snippets next to each
+  // sample-match ID on the per-row Trash preview's
+  // `HandwavyRemovePreviewMatches` block so reviewers can judge an
+  // un-flag in place without leaving the page. The shared
+  // `BulkRemovalImpactBlock` renderer's OWN, older sample-match list
+  // inside its collapsed `<details>` ("Sample {sourceNoun}s that would
+  // lose their flag (N)") was extended in Task #496 to render the same
+  // snippet inline next to each ID with the matched phrase wrapped in
+  // a `<mark>`. The bulk-retire flow already passes
+  // `hideSampleMatchesDetails` to suppress that legacy block (Task
+  // #344, asserted just above) — the inline matches block above it
+  // already shows the same IDs and snippets, so duplicating into the
+  // legacy block would render the same data twice. This test pins
+  // both halves of that design on the bulk-flow:
+  //   * the bulk-flow's INLINE matches block surfaces the per-tier
+  //     snippet next to each ID with the matched phrase highlighted
+  //     in a real `<mark>` element (the actual surfaced behavior here),
+  //   * the BulkRemovalImpactBlock's legacy collapsed `<details>`
+  //     sample-match list with the Task #496 snippet support stays
+  //     suppressed on this flow on both the curated and production
+  //     blocks (so the same `handwavy-bulk-preview-{kind}-sample-snippet-…`
+  //     testids the legacy block emits do NOT appear here, even with
+  //     a snippet-bearing dryRun response).
+  test("Bulk-flow surfaces sample-match snippets via the inline block while the legacy `<details>` stays suppressed (Task #496)", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task496 batch snippets");
+
+    try {
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+
+      await page.route(
+        "**/api/feedback/calibration/handwavy-phrases",
+        async (route) => {
+          const req = route.request();
+          if (req.method() !== "DELETE") {
+            await route.fallback();
+            return;
+          }
+          const body = req.postDataJSON() as
+            | { dryRun?: boolean; phrases?: string[] }
+            | undefined;
+          if (!body?.dryRun) {
+            await route.fallback();
+            return;
+          }
+          const requested = body.phrases ?? [];
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              dryRun: true,
+              wouldRemove: requested.length,
+              notFound: 0,
+              duplicateInBatch: 0,
+              total: 99,
+              projectedTotal: 99 - requested.length,
+              results: requested.map((raw: string) => ({
+                raw,
+                phrase: raw,
+                removed: true,
+              })),
+              dryRunImpact: {
+                corpus: {
+                  total: 2,
+                  validDetectionsLost: 1,
+                  falsePositivesDropped: 1,
+                  byTier: {
+                    t1Legit: 1,
+                    t2Borderline: 1,
+                    t3Slop: 0,
+                    t4Hallucinated: 0,
+                  },
+                  sampleMatches: [
+                    {
+                      id: "fixture-T1-alpha",
+                      tier: "T1_LEGIT",
+                      snippet: {
+                        before: "the report says ",
+                        match: "MAGIC PHRASE",
+                        after: " has fired here",
+                      },
+                    },
+                    {
+                      id: "fixture-T2-beta",
+                      tier: "T2_BORDERLINE",
+                      snippet: null,
+                    },
+                  ],
+                  warning:
+                    "1 legitimate detection would be lost from the curated benchmark",
+                  corpusSize: 47,
+                  oldestCreatedAt: null,
+                  newestCreatedAt: null,
+                },
+                production: {
+                  total: 1,
+                  validDetectionsLost: 1,
+                  falsePositivesDropped: 0,
+                  byTier: {
+                    t1Legit: 1,
+                    t2Borderline: 0,
+                    t3Slop: 0,
+                    t4Hallucinated: 0,
+                  },
+                  sampleMatches: [
+                    {
+                      id: "9001",
+                      tier: "T1_LEGIT",
+                      // Literal `<svg>` substring guards React text-node
+                      // escaping (a naive innerHTML render would inject
+                      // an SVG element into the DOM).
+                      snippet: {
+                        before: "alert(<svg> ",
+                        match: "fishy claim",
+                        after: " about CVE-1234",
+                      },
+                    },
+                  ],
+                  warning:
+                    "1 legitimate detection would be lost from the production archive",
+                  corpusSize: 200,
+                  oldestCreatedAt: "2026-04-01T00:00:00.000Z",
+                  newestCreatedAt: "2026-04-29T00:00:00.000Z",
+                },
+                productionError: null,
+                productionLimit: 200,
+              },
+            }),
+          });
+        },
+      );
+
+      await injectCalibrationTokenIntoPage(page);
+      await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
+      await selectRowsAndOpenPreview(page, phrases);
+
+      const panel = page.getByTestId("handwavy-bulk-preview");
+      await expect(panel).toBeVisible({ timeout: 15_000 });
+
+      // Inline matches block is the ACTUAL surfaced renderer on the
+      // bulk-flow — assert the snippet shows next to its ID with the
+      // matched phrase wrapped in a real `<mark>` element.
+      const matches = panel.getByTestId("handwavy-bulk-preview-matches");
+      await expect(matches).toBeVisible();
+
+      const curatedInlineSnippet = matches.getByTestId(
+        "handwavy-remove-preview-matches-curated-snippet-fixture-T1-alpha",
+      );
+      await expect(curatedInlineSnippet).toBeVisible();
+      await expect(curatedInlineSnippet).toContainText("the report says");
+      await expect(curatedInlineSnippet).toContainText("has fired here");
+      const curatedInlineMark = matches.getByTestId(
+        "handwavy-remove-preview-matches-curated-snippet-mark-fixture-T1-alpha",
+      );
+      await expect(curatedInlineMark).toHaveText("MAGIC PHRASE");
+      await expect(curatedInlineMark).toHaveJSProperty("tagName", "MARK");
+
+      const productionInlineSnippet = matches.getByTestId(
+        "handwavy-remove-preview-matches-production-snippet-9001",
+      );
+      await expect(productionInlineSnippet).toBeVisible();
+      await expect(productionInlineSnippet).toContainText("about CVE-1234");
+      await expect(productionInlineSnippet).toContainText("<svg>");
+      await expect(productionInlineSnippet.locator("svg")).toHaveCount(0);
+      const productionInlineMark = matches.getByTestId(
+        "handwavy-remove-preview-matches-production-snippet-mark-9001",
+      );
+      await expect(productionInlineMark).toHaveText("fishy claim");
+      await expect(productionInlineMark).toHaveJSProperty("tagName", "MARK");
+
+      // BulkRemovalImpactBlock's legacy collapsed `<details>`
+      // sample-match list (now snippet-aware after Task #496) MUST stay
+      // suppressed on the bulk-flow so the same IDs/snippets don't
+      // appear twice — once inline above and once hidden behind a
+      // <summary> click below. The Task #496 testids the legacy block
+      // would emit must NOT exist anywhere in the panel.
+      await expect(
+        panel
+          .getByTestId("handwavy-bulk-preview-curated")
+          .locator("details", {
+            hasText: "fixtures that would lose their flag",
+          }),
+      ).toHaveCount(0);
+      await expect(
+        panel
+          .getByTestId("handwavy-bulk-preview-production")
+          .locator("details", {
+            hasText: "reports that would lose their flag",
+          }),
+      ).toHaveCount(0);
+      await expect(
+        panel.getByTestId(
+          "handwavy-bulk-preview-curated-sample-snippet-fixture-T1-alpha",
+        ),
+      ).toHaveCount(0);
+      await expect(
+        panel.getByTestId(
+          "handwavy-bulk-preview-production-sample-snippet-9001",
+        ),
+      ).toHaveCount(0);
+    } finally {
+      await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
+      await apiCtx.dispose();
+    }
+  });
+
   // Task #344 — when the dry-run returned no `sampleMatches` on either
   // side (e.g. the synthetic happy-path phrases used in the first spec
   // here), the inline match block must stay out of the DOM entirely so
