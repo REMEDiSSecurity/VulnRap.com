@@ -79,9 +79,9 @@ const REARM_HISTORY_TWO = {
       rationale: "investigated, want to re-fire next week",
     },
     {
-      key: "FAMILY_SHIFT::2026-04-20::xss",
+      key: "FAMILY_MEAN_SHIFT::2026-04-20::xss",
       weekStart: "2026-04-20",
-      kind: "FAMILY_SHIFT" as const,
+      kind: "FAMILY_MEAN_SHIFT" as const,
       originalNotifiedAt: "2026-04-21T10:30:00.000Z",
       originalDetail: 'xss family mean shifted by 6pt, comma "quoted"\nsecond line.',
       rearmedAt: "2026-04-22T08:15:00.000Z",

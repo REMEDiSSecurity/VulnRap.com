@@ -87,9 +87,9 @@ const NOTIFIED = [
     detail: "T1−T3 gap of 41pt is below the 45pt warn line.",
   },
   {
-    key: "FAMILY_SHIFT::2026-04-20::xss",
+    key: "FAMILY_MEAN_SHIFT::2026-04-20::xss",
     weekStart: "2026-04-20",
-    kind: "FAMILY_SHIFT" as const,
+    kind: "FAMILY_MEAN_SHIFT" as const,
     notifiedAt: "2026-04-21T10:30:00.000Z",
     detail: "xss family mean shifted by 6pt week-over-week.",
   },

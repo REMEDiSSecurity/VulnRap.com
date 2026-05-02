@@ -127,9 +127,9 @@ const AVRI_DRIFT_REARM_HISTORY = {
       rearmedBy: "bob",
     },
     {
-      key: "FAMILY_SHIFT::2026-04-20::xss",
+      key: "FAMILY_MEAN_SHIFT::2026-04-20::xss",
       weekStart: "2026-04-20",
-      kind: "FAMILY_SHIFT" as const,
+      kind: "FAMILY_MEAN_SHIFT" as const,
       originalNotifiedAt: "2026-04-21T10:30:00.000Z",
       originalDetail: "xss family mean shifted by 6pt week-over-week.",
       rearmedAt: "2026-04-22T12:00:00.000Z",
@@ -339,9 +339,9 @@ describe("AvriDriftSection — per-week re-arm badge + audit filter", () => {
     fetchSpy = installFetchMock({
       history: [
         {
-          key: "FAMILY_SHIFT::2026-04-20::xss",
+          key: "FAMILY_MEAN_SHIFT::2026-04-20::xss",
           weekStart: "2026-04-20",
-          kind: "FAMILY_SHIFT" as const,
+          kind: "FAMILY_MEAN_SHIFT" as const,
           originalNotifiedAt: "2026-04-21T10:30:00.000Z",
           originalDetail: "xss family mean shifted by 6pt week-over-week.",
           rearmedAt: "2026-04-22T12:00:00.000Z",
