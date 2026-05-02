@@ -562,6 +562,98 @@ describe("renderHandwavyEditEntries — rename block (Task #357)", () => {
   });
 });
 
+describe("renderHandwavyEditEntries — rename-only Revert hint (Task #506)", () => {
+  // Task #506 — the per-edit Revert button only restores category and
+  // rationale (the server's `revertHandwavyPhraseEdit` ignores the
+  // `phrase` field), so a rename-only entry will always look like a
+  // no-op to `revertWouldBeNoop`. Pre-Task #506 those rows showed the
+  // generic "Already at this state — nothing to revert" wording, which
+  // is misleading: there IS something to undo (the rename) — just not
+  // through this button. The new wording must point reviewers at the
+  // inline phrase edit field for renaming back instead.
+  function renderEntries(args: Parameters<typeof renderHandwavyEditEntries>[0]) {
+    return render(<ul>{renderHandwavyEditEntries(args)}</ul>);
+  }
+
+  const renameOnlyEntry: HandwavyEditEntry = {
+    editedAt: "2026-04-25T10:00:00.000Z",
+    editedBy: "alice@team.com",
+    phrase: { from: "we plan to look", to: "we plan to investigate" },
+  };
+
+  it("shows a rename-specific hint that points at the inline phrase edit field, not the generic 'already matches prior values' wording", () => {
+    renderEntries({
+      editsList: [renameOnlyEntry],
+      phrase: "we plan to investigate",
+      currentCategory: "absence",
+      currentRationale: undefined,
+      editing: null,
+      busy: null,
+      onRevertClick: () => {},
+      mutationsAllowed: true,
+    });
+
+    const button = screen.getByTestId("handwavy-revert-edit");
+    // The button is still disabled (the server-side revert can't undo
+    // renames), but the surrounding messaging must explain WHY in a way
+    // that doesn't lie to the reviewer.
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("data-noop", "true");
+
+    const hint = screen.getByTestId("handwavy-revert-noop-hint");
+    expect(hint).toBeVisible();
+    // The rename-only branch is tagged so future selectors / E2E specs
+    // can target the two no-op kinds independently without scraping
+    // user-visible copy.
+    expect(hint).toHaveAttribute("data-noop-kind", "rename-only");
+    // Visible copy must mention renames AND the inline phrase edit
+    // field — the whole point is to redirect the reviewer at the right
+    // affordance.
+    expect(hint).toHaveTextContent(/rename/i);
+    expect(hint).toHaveTextContent(/inline phrase edit field/i);
+    // And it must NOT show the misleading "already matches prior
+    // values" / "nothing to undo" wording, which falsely implies the
+    // rename can't be reversed.
+    expect(hint).not.toHaveTextContent(/already matches/i);
+    expect(hint).not.toHaveTextContent(/nothing to undo/i);
+
+    // The accessible description (resolved via aria-describedby) must
+    // match the visible caption so screen-reader users get the same
+    // redirection a sighted touch user reads.
+    expect(button).toHaveAccessibleDescription(/rename/i);
+    expect(button).toHaveAccessibleDescription(/inline phrase edit field/i);
+  });
+
+  it("keeps the existing 'already matches prior values' wording for category/rationale-only no-op entries", () => {
+    // Pinning the negative side of the split: a category-only edit
+    // whose `from` value already matches the live marker is a TRUE
+    // no-op (there's nothing the server could do, and the inline
+    // phrase edit field isn't relevant). The wording for that branch
+    // must NOT regress to the rename-specific copy.
+    const categoryOnlyNoopEntry: HandwavyEditEntry = {
+      editedAt: "2026-04-22T10:00:00.000Z",
+      editedBy: "carol@team.com",
+      category: { from: "absence", to: "buzzword" },
+    };
+    renderEntries({
+      editsList: [categoryOnlyNoopEntry],
+      phrase: "we plan to investigate",
+      currentCategory: "absence",
+      currentRationale: undefined,
+      editing: null,
+      busy: null,
+      onRevertClick: () => {},
+      mutationsAllowed: true,
+    });
+
+    const hint = screen.getByTestId("handwavy-revert-noop-hint");
+    expect(hint).toHaveAttribute("data-noop-kind", "values-match");
+    expect(hint).toHaveTextContent(/already matches/i);
+    expect(hint).toHaveTextContent(/nothing to undo/i);
+    expect(hint).not.toHaveTextContent(/inline phrase edit field/i);
+  });
+});
+
 describe("computeHandwavyActiveListVersion (Task #246 — invalidation key for the per-row dry-run preview cache)", () => {
   it("returns a stable string for the empty list so callers don't have to special-case undefined", () => {
     expect(computeHandwavyActiveListVersion([])).toBe("0:");

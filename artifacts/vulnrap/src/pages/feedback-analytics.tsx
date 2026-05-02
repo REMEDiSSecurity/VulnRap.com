@@ -2767,6 +2767,20 @@ export function renderHandwavyEditEntries({
       // explanatory tooltip instead of a "nothing to undo" toast they only
       // discover after firing.
       const isNoop = revertWouldBeNoop(entry, currentCategory, currentRationale);
+      // Task #506 — distinguish "this button cannot revert this kind of
+      // edit" from "the marker already matches this edit's prior values".
+      // The server-side `revertHandwavyPhraseEdit` only restores category
+      // and rationale; it ignores the `phrase` field. So a rename-only
+      // entry will always show up as a no-op here even though the rename
+      // CAN still be undone — just through the inline phrase edit field
+      // rather than this button. We detect that case so the hint can
+      // point reviewers at the right affordance instead of the misleading
+      // "already matches prior values" wording.
+      const isRenameOnlyEntry =
+        !entry.category &&
+        !entry.rationale &&
+        !!entry.phrase &&
+        entry.phrase.from !== entry.phrase.to;
       // Task #241 — when Revert is greyed out for the no-op case, render a
       // visible inline caption beneath the row so the reason is obvious
       // without hovering the button. The existing aria-label/title were the
@@ -2877,14 +2891,18 @@ export function renderHandwavyEditEntries({
                 !mutationsAllowed
                   ? `Revert blocked for ${phrase}: reviewer token missing or invalid.`
                   : isNoop
-                    ? `Revert unavailable for ${phrase}: the marker already matches this edit's prior state.`
+                    ? isRenameOnlyEntry
+                      ? `Revert unavailable for ${phrase}: this button doesn't undo renames — use the inline phrase edit field above to rename it back.`
+                      : `Revert unavailable for ${phrase}: the marker already matches this edit's prior state.`
                     : `Revert edit on ${phrase} from ${editedAtLabel ?? entry.editedAt}`
               }
               title={
                 !mutationsAllowed
                   ? MUTATIONS_BLOCKED_TITLE
                   : isNoop
-                    ? "Already at this state — nothing to revert."
+                    ? isRenameOnlyEntry
+                      ? "Revert can't undo renames — use the inline phrase edit field above to rename it back."
+                      : "Already at this state — nothing to revert."
                     : "Restore the values from before this edit (recorded as a new audit entry)."
               }
             >
@@ -2901,10 +2919,13 @@ export function renderHandwavyEditEntries({
               id={hintId}
               className="flex items-start gap-1 text-[10px] text-muted-foreground/80 pl-0.5"
               data-testid="handwavy-revert-noop-hint"
+              data-noop-kind={isRenameOnlyEntry ? "rename-only" : "values-match"}
             >
               <Info className="w-3 h-3 mt-0.5 shrink-0" aria-hidden="true" />
               <span>
-                Revert is unavailable because the marker already matches this edit's prior values — there's nothing to undo.
+                {isRenameOnlyEntry
+                  ? "Revert can't undo renames — use the inline phrase edit field above to rename it back."
+                  : "Revert is unavailable because the marker already matches this edit's prior values — there's nothing to undo."}
               </span>
             </div>
           )}
