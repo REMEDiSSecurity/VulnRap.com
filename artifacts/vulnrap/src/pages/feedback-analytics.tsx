@@ -1657,7 +1657,14 @@ export function PreviewOverlapsBlock({
   // open with the documented auto-collapse defaults. Hooks are declared
   // before the early-null-return below so the hook count stays stable
   // across renders that toggle between empty and non-empty overlap
-  // snapshots (a common case during dry-run refreshes).
+  // snapshots (a common case during dry-run refreshes — also covers
+  // Task #441's hooks-order regression test).
+  //
+  // Persistence note: collapse state is intentionally NOT reset when
+  // `candidate` changes — Task #440 owns deliberate cross-preview
+  // persistence so reviewers don't have to re-expand the same bucket
+  // when the parent re-renders this block with the same relation set
+  // for a follow-up candidate edit.
   const [collapsedByRelation, setCollapsedByRelation] = useState<
     Map<HandwavyPhraseDryRunOverlapsMatchesItemRelation, boolean>
   >(() => new Map());
@@ -1715,6 +1722,44 @@ export function PreviewOverlapsBlock({
   })();
   const showRemoveAllOverlapping =
     !!onRequestRemoveAllOverlapping && overlappingForBulk.length >= 2;
+  // Task #441 — bulk expand/collapse affordance. Layered on top of the
+  // Task #440 collapse-persistence state above: we read the same
+  // `collapsedByRelation` Map (treating "no entry" as the row-count
+  // auto-collapse default) to decide the current mixed state, and the
+  // bulk action writes a uniform override for every visible bucket so
+  // the action flips them all at once. Per-bucket toggles continue to
+  // mutate the same Map via `handleSetBucketCollapsed`, so a manual
+  // flip after a bulk action keeps working independently. The toggle
+  // is only meaningful when there are 2+ buckets — for a single bucket
+  // the per-bucket toggle is already a one-click action.
+  const isBucketEffectivelyCollapsed = (b: {
+    relation: HandwavyPhraseDryRunOverlapsMatchesItemRelation;
+    matches: HandwavyPhraseDryRunOverlapsMatchesItem[];
+  }): boolean => {
+    if (collapsedByRelation.has(b.relation)) {
+      return collapsedByRelation.get(b.relation) === true;
+    }
+    return b.matches.length > PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD;
+  };
+  const showBulkCollapseToggle = buckets.length >= 2;
+  // "Expand all" whenever ANY bucket is collapsed, "Collapse all" when
+  // every bucket is open — a partially expanded panel always advertises
+  // the action that moves it to a uniform fully-expanded state first.
+  const anyBucketCollapsed = buckets.some(isBucketEffectivelyCollapsed);
+  const bulkLabel = anyBucketCollapsed ? "Expand all" : "Collapse all";
+  const bulkAriaLabel = anyBucketCollapsed
+    ? `Expand all ${buckets.length} overlap buckets`
+    : `Collapse all ${buckets.length} overlap buckets`;
+  const onBulkToggle = () => {
+    const nextValue = !anyBucketCollapsed;
+    setCollapsedByRelation((prev) => {
+      const next = new Map(prev);
+      for (const b of buckets) {
+        next.set(b.relation, nextValue);
+      }
+      return next;
+    });
+  };
   return (
     <div
       className="rounded-md border border-red-500/40 bg-red-500/10 p-2.5 space-y-1.5 text-xs text-red-100"
@@ -1731,6 +1776,31 @@ export function PreviewOverlapsBlock({
             or editing the existing entry is usually preferable to a near-duplicate add.
           </div>
         </div>
+        {showBulkCollapseToggle && (
+          <button
+            type="button"
+            onClick={onBulkToggle}
+            aria-label={bulkAriaLabel}
+            aria-expanded={!anyBucketCollapsed}
+            className="shrink-0 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold text-red-200/90 uppercase tracking-wide hover:bg-red-500/20 hover:text-red-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70"
+            data-testid="handwavy-preview-overlap-bulk-toggle"
+            data-handwavy-overlap-bulk-state={
+              anyBucketCollapsed ? "any-collapsed" : "all-expanded"
+            }
+            title={
+              anyBucketCollapsed
+                ? `Expand every overlap bucket (${buckets.length}) at once`
+                : `Collapse every overlap bucket (${buckets.length}) at once`
+            }
+          >
+            {anyBucketCollapsed ? (
+              <ChevronDown className="w-3 h-3" />
+            ) : (
+              <ChevronRight className="w-3 h-3" />
+            )}
+            {bulkLabel}
+          </button>
+        )}
         {showRemoveAllOverlapping && (
           <button
             type="button"
@@ -1807,6 +1877,11 @@ export const PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD = 5;
 // reviewer hasn't expressed a choice yet, so the row-count auto-collapse
 // default applies; once they toggle, we report the new value to the parent
 // which keeps it across re-renders.
+//
+// Task #441 — the parent's header bulk-toggle ("Expand all / Collapse
+// all") flips state by writing a uniform `collapsedOverride` for every
+// visible bucket through this same `onCollapsedChange` callback, so
+// per-bucket toggles continue to work independently after a bulk flip.
 function PreviewOverlapBucketBlock({
   bucket,
   collapsedOverride,

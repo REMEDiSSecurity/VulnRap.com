@@ -601,6 +601,298 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
   });
 });
 
+describe("PreviewOverlapsBlock bulk expand/collapse (Task #441)", () => {
+  function makeBucketOfRelation(
+    relation: HandwavyPhraseDryRunOverlapsMatchesItem["relation"],
+    count: number,
+  ): HandwavyPhraseDryRunOverlapsMatchesItem[] {
+    return Array.from({ length: count }, (_, i) =>
+      makeMatch({
+        phrase: `${relation}-phrase-${i}`,
+        relation,
+      }),
+    );
+  }
+
+  it("hides the bulk toggle when only one bucket is rendered", () => {
+    // The per-bucket toggle is already a one-click action when there's
+    // only one bucket — a "bulk" affordance would be redundant.
+    const overlaps = makeOverlaps(makeBucketOfRelation("equal", 2));
+
+    render(<PreviewOverlapsBlock overlaps={overlaps} candidate="anything" />);
+
+    expect(
+      screen.queryByTestId("handwavy-preview-overlap-bulk-toggle"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows 'Expand all' when ANY bucket is collapsed and flips every bucket open at once", () => {
+    // One small (auto-expanded) bucket plus one oversized (auto-collapsed)
+    // bucket — the panel starts in a mixed state, and the bulk toggle
+    // must advertise the action that uniformly opens every bucket first.
+    const bigCount = PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD + 4;
+    const smallCount = 2;
+    const overlaps = makeOverlaps([
+      ...makeBucketOfRelation("equal", smallCount),
+      ...makeBucketOfRelation("existing-contains-candidate", bigCount),
+    ]);
+
+    render(<PreviewOverlapsBlock overlaps={overlaps} candidate="the system" />);
+
+    const bulkToggle = screen.getByTestId(
+      "handwavy-preview-overlap-bulk-toggle",
+    );
+    expect(bulkToggle).toHaveTextContent(/Expand all/i);
+    expect(bulkToggle).toHaveAttribute(
+      "data-handwavy-overlap-bulk-state",
+      "any-collapsed",
+    );
+    expect(bulkToggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(bulkToggle);
+
+    // Every bucket is now expanded — both the previously-open small one
+    // and the previously-collapsed large one expose all their rows.
+    const buckets = screen.getAllByTestId("handwavy-preview-overlap-bucket");
+    expect(buckets).toHaveLength(2);
+    for (const b of buckets) {
+      expect(b).toHaveAttribute(
+        "data-handwavy-overlap-bucket-collapsed",
+        "false",
+      );
+    }
+    expect(
+      screen.getAllByTestId("handwavy-preview-overlap-row"),
+    ).toHaveLength(smallCount + bigCount);
+    // After flipping everything open, the toggle now offers the inverse.
+    expect(bulkToggle).toHaveTextContent(/Collapse all/i);
+    expect(bulkToggle).toHaveAttribute(
+      "data-handwavy-overlap-bulk-state",
+      "all-expanded",
+    );
+    expect(bulkToggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("shows 'Collapse all' when every bucket is open and flips every bucket closed at once", () => {
+    // Two small buckets — both start expanded by the size-based default.
+    const smallCount = 2;
+    const overlaps = makeOverlaps([
+      ...makeBucketOfRelation("equal", smallCount),
+      ...makeBucketOfRelation("candidate-contains-existing", smallCount),
+    ]);
+
+    render(<PreviewOverlapsBlock overlaps={overlaps} candidate="anything" />);
+
+    const bulkToggle = screen.getByTestId(
+      "handwavy-preview-overlap-bulk-toggle",
+    );
+    expect(bulkToggle).toHaveTextContent(/Collapse all/i);
+    expect(bulkToggle).toHaveAttribute(
+      "data-handwavy-overlap-bulk-state",
+      "all-expanded",
+    );
+
+    fireEvent.click(bulkToggle);
+
+    const buckets = screen.getAllByTestId("handwavy-preview-overlap-bucket");
+    expect(buckets).toHaveLength(2);
+    for (const b of buckets) {
+      expect(b).toHaveAttribute(
+        "data-handwavy-overlap-bucket-collapsed",
+        "true",
+      );
+    }
+    // No rows are rendered when every bucket is collapsed.
+    expect(
+      screen.queryAllByTestId("handwavy-preview-overlap-row"),
+    ).toHaveLength(0);
+    // The toggle now offers the inverse.
+    expect(bulkToggle).toHaveTextContent(/Expand all/i);
+    expect(bulkToggle).toHaveAttribute(
+      "data-handwavy-overlap-bulk-state",
+      "any-collapsed",
+    );
+  });
+
+  it("re-evaluates the label after a per-bucket toggle so the mixed state stays accurate", () => {
+    // Start with two small buckets (both expanded → label is "Collapse all").
+    // Collapse just one via its per-bucket toggle and confirm the bulk
+    // label flips to "Expand all" because the panel is now mixed.
+    const smallCount = 2;
+    const overlaps = makeOverlaps([
+      ...makeBucketOfRelation("equal", smallCount),
+      ...makeBucketOfRelation("candidate-contains-existing", smallCount),
+    ]);
+
+    render(<PreviewOverlapsBlock overlaps={overlaps} candidate="anything" />);
+
+    const bulkToggle = screen.getByTestId(
+      "handwavy-preview-overlap-bulk-toggle",
+    );
+    expect(bulkToggle).toHaveTextContent(/Collapse all/i);
+
+    const equalBucket = screen
+      .getAllByTestId("handwavy-preview-overlap-bucket")
+      .find((b) => b.getAttribute("data-relation") === "equal")!;
+    fireEvent.click(
+      within(equalBucket).getByTestId("handwavy-preview-overlap-bucket-toggle"),
+    );
+
+    expect(equalBucket).toHaveAttribute(
+      "data-handwavy-overlap-bucket-collapsed",
+      "true",
+    );
+    // One bucket collapsed, one still open → bulk label advertises
+    // the uniform-expand action.
+    expect(bulkToggle).toHaveTextContent(/Expand all/i);
+    expect(bulkToggle).toHaveAttribute(
+      "data-handwavy-overlap-bulk-state",
+      "any-collapsed",
+    );
+  });
+
+  it("keeps per-bucket toggles working independently after a bulk flip", () => {
+    // Bulk-collapse everything, then re-open just one bucket via its
+    // own toggle — the other bucket must stay collapsed, proving that
+    // per-bucket state isn't tied to (or reset by) bulk operations.
+    const smallCount = 2;
+    const overlaps = makeOverlaps([
+      ...makeBucketOfRelation("equal", smallCount),
+      ...makeBucketOfRelation("candidate-contains-existing", smallCount),
+    ]);
+
+    render(<PreviewOverlapsBlock overlaps={overlaps} candidate="anything" />);
+
+    const bulkToggle = screen.getByTestId(
+      "handwavy-preview-overlap-bulk-toggle",
+    );
+    fireEvent.click(bulkToggle); // Collapse all.
+
+    const buckets = screen.getAllByTestId("handwavy-preview-overlap-bucket");
+    const equalBucket = buckets.find(
+      (b) => b.getAttribute("data-relation") === "equal",
+    )!;
+    const supersedeBucket = buckets.find(
+      (b) =>
+        b.getAttribute("data-relation") === "candidate-contains-existing",
+    )!;
+
+    fireEvent.click(
+      within(equalBucket).getByTestId("handwavy-preview-overlap-bucket-toggle"),
+    );
+
+    expect(equalBucket).toHaveAttribute(
+      "data-handwavy-overlap-bucket-collapsed",
+      "false",
+    );
+    expect(supersedeBucket).toHaveAttribute(
+      "data-handwavy-overlap-bucket-collapsed",
+      "true",
+    );
+    // Only the equal bucket's rows are visible.
+    expect(
+      within(equalBucket).getAllByTestId("handwavy-preview-overlap-row"),
+    ).toHaveLength(smallCount);
+    expect(
+      within(supersedeBucket).queryAllByTestId(
+        "handwavy-preview-overlap-row",
+      ),
+    ).toHaveLength(0);
+    // And the bulk label tracks the new mixed state.
+    expect(bulkToggle).toHaveTextContent(/Expand all/i);
+  });
+
+  it("survives a rerender from null/empty overlaps to populated overlaps without hook-order errors", () => {
+    // Regression: the bulk-toggle hook lives at the top of
+    // `PreviewOverlapsBlock`, BEFORE the "no overlaps yet" early return.
+    // The host page renders the block unconditionally and the dry-run
+    // preview transitions `overlaps` from null → populated as the
+    // request resolves, so the same component instance must be able to
+    // mount with no overlaps and then re-render with overlaps without
+    // tripping React's "Rendered more hooks than during the previous
+    // render" runtime error.
+    const { rerender } = render(
+      <PreviewOverlapsBlock overlaps={null} candidate="anything" />,
+    );
+    expect(
+      screen.queryByTestId("handwavy-preview-overlaps"),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <PreviewOverlapsBlock
+        overlaps={{ total: 0, matches: [] }}
+        candidate="anything"
+      />,
+    );
+    expect(
+      screen.queryByTestId("handwavy-preview-overlaps"),
+    ).not.toBeInTheDocument();
+
+    const overlaps = makeOverlaps([
+      ...makeBucketOfRelation(
+        "existing-contains-candidate",
+        PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD + 2,
+      ),
+      ...makeBucketOfRelation("equal", 2),
+    ]);
+    rerender(
+      <PreviewOverlapsBlock overlaps={overlaps} candidate="anything" />,
+    );
+
+    // The block now renders, the size-based default put the oversized
+    // bucket into a collapsed state, and the bulk toggle is wired up
+    // and clickable — proving hooks survived the null → populated
+    // transition.
+    expect(screen.getByTestId("handwavy-preview-overlaps")).toBeInTheDocument();
+    const bulkToggle = screen.getByTestId(
+      "handwavy-preview-overlap-bulk-toggle",
+    );
+    expect(bulkToggle).toHaveTextContent(/Expand all/i);
+    fireEvent.click(bulkToggle);
+    const buckets = screen.getAllByTestId("handwavy-preview-overlap-bucket");
+    for (const b of buckets) {
+      expect(b).toHaveAttribute(
+        "data-handwavy-overlap-bucket-collapsed",
+        "false",
+      );
+    }
+  });
+
+  it("flips every bucket back open after a 'Collapse all' followed by 'Expand all'", () => {
+    // Round-trip the bulk toggle: starts all-expanded → collapse all →
+    // expand all. Confirms the second click reads the now-collapsed
+    // state and uniformly re-opens every bucket (rather than stale
+    // closure capturing the original state).
+    const smallCount = 3;
+    const overlaps = makeOverlaps([
+      ...makeBucketOfRelation("equal", smallCount),
+      ...makeBucketOfRelation("candidate-contains-existing", smallCount),
+      ...makeBucketOfRelation("existing-contains-candidate", smallCount),
+    ]);
+
+    render(<PreviewOverlapsBlock overlaps={overlaps} candidate="anything" />);
+
+    const bulkToggle = screen.getByTestId(
+      "handwavy-preview-overlap-bulk-toggle",
+    );
+    fireEvent.click(bulkToggle); // Collapse all.
+    fireEvent.click(bulkToggle); // Expand all again.
+
+    const buckets = screen.getAllByTestId("handwavy-preview-overlap-bucket");
+    expect(buckets).toHaveLength(3);
+    for (const b of buckets) {
+      expect(b).toHaveAttribute(
+        "data-handwavy-overlap-bucket-collapsed",
+        "false",
+      );
+    }
+    expect(
+      screen.getAllByTestId("handwavy-preview-overlap-row"),
+    ).toHaveLength(smallCount * 3);
+    expect(bulkToggle).toHaveTextContent(/Collapse all/i);
+  });
+});
+
 describe("PreviewOverlapsBlock — Remove all overlapping (Task #315)", () => {
   it("renders the header bulk action when 2+ rows are eligible (equal + supersede)", () => {
     const overlaps = makeOverlaps([
