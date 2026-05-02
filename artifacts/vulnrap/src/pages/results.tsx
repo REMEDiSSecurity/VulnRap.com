@@ -16,7 +16,7 @@ import { SettingsButton } from "@/components/settings-panel";
 import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCustom, adjustScore, adjustTier, SENSITIVITY_PRESETS, type VulnRapSettings, type SensitivityPreset } from "@/lib/settings";
 import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
-import { HighlightedReport } from "@/components/evidence-highlighter";
+import { HighlightedReport, type ReportScrollTarget } from "@/components/evidence-highlighter";
 import { DiagnosticsPanel, STRUCTURAL_MARKER_LABELS, buildMarkdownSummary, loadDiagnosticsForExport as loadCachedDiagnosticsForExport, type DiagnosticsResponse } from "@/components/diagnostics-panel";
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
@@ -1115,6 +1115,22 @@ export default function Results() {
   const [showAllEvidence, setShowAllEvidence] = useState(false);
   const [exporting, setExporting] = useState<"json" | "txt" | null>(null);
   const [sensitivity, setSensitivity] = useState<SensitivityPreset>(() => getSettings().sensitivityPreset);
+  // Task #451: shared scroll-target state for the structural-fabrication
+  // markers. Both the diagnostics panel's STRUCTURAL_FABRICATION block and
+  // the Evidence Signals card render those markers; clicking either kind
+  // updates this state and the `<HighlightedReport>` panel below scrolls
+  // its `<pre>` to the target line and flashes it. The `nonce` increments
+  // on every click so re-clicking the same marker still re-triggers the
+  // scroll+flash effect (React's `useEffect` dep on the target object
+  // identity wouldn't fire if we kept passing the same `{line}` value).
+  const [reportScrollTarget, setReportScrollTarget] =
+    useState<ReportScrollTarget | null>(null);
+  const handleStructuralMarkerClick = (line: number) => {
+    setReportScrollTarget((prev) => ({
+      line,
+      nonce: (prev?.nonce ?? 0) + 1,
+    }));
+  };
   const handleSensitivityChange = (preset: SensitivityPreset) => {
     setSensitivity(preset);
     saveSettings({ sensitivityPreset: preset });
@@ -1384,7 +1400,18 @@ export default function Results() {
     // Task #435: structured marker payload populated for the
     // hallucination_structural_fabrication evidence row, so each fabrication
     // tell can be rendered as its own bullet (id label + description).
-    context?: { markers?: Array<{ id: string; description: string }> };
+    context?: {
+      markers?: Array<{
+        id: string;
+        description: string;
+        // Task #451: optional offset/line range pointing into the original
+        // report markdown. When present, the Evidence Signals card renders
+        // the marker as a clickable button that scrolls the report panel
+        // to the offending line — same affordance as the diagnostics
+        // panel's STRUCTURAL_FABRICATION block.
+        range?: { start: number; end: number; line: number };
+      }>;
+    };
   }> | undefined;
   const activeVerification = report.verification as Verification | null | undefined;
   const triage = report.triageRecommendation as TriageRecommendation | null | undefined;
@@ -1646,7 +1673,12 @@ export default function Results() {
         </Card>
       )}
 
-      {vulnrap && <DiagnosticsPanel reportId={report.id} />}
+      {vulnrap && (
+        <DiagnosticsPanel
+          reportId={report.id}
+          onStructuralMarkerClick={handleStructuralMarkerClick}
+        />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 glass-card rounded-xl opacity-90">
@@ -1964,24 +1996,66 @@ export default function Results() {
                         className="mt-2 space-y-1.5"
                         data-testid="hallucination-structural-fabrication-markers"
                       >
-                        {markers.map((m) => (
-                          <li
-                            key={m.id}
-                            className="text-[11px] font-mono space-y-0.5"
-                          >
-                            <div className="flex items-baseline gap-1.5 flex-wrap">
-                              <span className="text-red-400/90 font-semibold">
-                                {STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}
-                              </span>
-                              <span className="text-muted-foreground">
-                                ({m.id})
-                              </span>
-                            </div>
-                            <div className="text-foreground/80 leading-snug">
-                              {m.description}
-                            </div>
-                          </li>
-                        ))}
+                        {markers.map((m) => {
+                          // Task #451: mirror the diagnostics-panel
+                          // affordance — when the marker carries a `range`
+                          // (newer detectors do, older persisted reports
+                          // may not), render the bullet as a clickable
+                          // button that scrolls the report panel below to
+                          // the offending line. Without a range we fall
+                          // back to the existing static `<li>` so legacy
+                          // payloads keep rendering as they did pre-#451.
+                          const range = m.range;
+                          const body = (
+                            <>
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span className="text-red-400/90 font-semibold">
+                                  {STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  ({m.id})
+                                </span>
+                                {range && (
+                                  <span className="text-[10px] font-normal text-red-300/70 uppercase tracking-wide">
+                                    line {range.line}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-foreground/80 leading-snug">
+                                {m.description}
+                              </div>
+                            </>
+                          );
+                          if (range) {
+                            return (
+                              <li
+                                key={m.id}
+                                className="text-[11px] font-mono space-y-0.5"
+                              >
+                                <button
+                                  type="button"
+                                  data-testid={`evidence-structural-marker-${m.id}`}
+                                  data-marker-line={range.line}
+                                  onClick={() =>
+                                    handleStructuralMarkerClick(range.line)
+                                  }
+                                  className="w-full text-left rounded-sm space-y-0.5 px-1 -mx-1 py-0.5 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400/60 transition-colors cursor-pointer"
+                                  title={`Jump to line ${range.line} in the report`}
+                                >
+                                  {body}
+                                </button>
+                              </li>
+                            );
+                          }
+                          return (
+                            <li
+                              key={m.id}
+                              className="text-[11px] font-mono space-y-0.5"
+                            >
+                              {body}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                     {item.matched && (
@@ -2348,6 +2422,7 @@ export default function Results() {
           evidence={evidence ?? []}
           humanIndicators={humanIndicators}
           typeLabels={EVIDENCE_TYPE_LABELS}
+          scrollTarget={reportScrollTarget}
         />
       )}
 

@@ -51,6 +51,13 @@ export interface AvriEngine2AbsencePenalty {
 export interface AvriEngine2StructuralMarker {
   id: string;
   description: string;
+  /** Task #451: location of the offending excerpt inside the original
+   * report text (`report.redactedText`), used by the diagnostics panel to
+   * make each marker bullet a clickable jump into the rendered report.
+   * Optional because reports analyzed before the field shipped won't carry
+   * it; consumers without a report-text panel (markdown formatter,
+   * triage export) ignore it. */
+  range?: { start: number; end: number; line: number };
 }
 
 export interface AvriEngine2CrashTrace {

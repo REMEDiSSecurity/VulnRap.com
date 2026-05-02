@@ -87,14 +87,19 @@ const SAMPLE_DIAGNOSTICS = {
   },
 };
 
-function renderWithClient() {
+function renderWithClient(
+  props: { onStructuralMarkerClick?: (line: number) => void } = {},
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <MemoryRouter>
       <QueryClientProvider client={client}>
-        <DiagnosticsPanel reportId={REPORT_ID} />
+        <DiagnosticsPanel
+          reportId={REPORT_ID}
+          onStructuralMarkerClick={props.onStructuralMarkerClick}
+        />
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -556,6 +561,203 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(
       screen.queryByText("STRIPPED_CRASH_TRACE"),
     ).not.toBeInTheDocument();
+  });
+
+  it("makes STRUCTURAL_FABRICATION markers clickable and invokes onStructuralMarkerClick with the line number when range is present (Task #451)", async () => {
+    // Same shape as the Task #317 test but the markers carry a `range`
+    // payload (start/end char offsets + 1-based line number into the
+    // original report markdown). The diagnostics panel must:
+    //   1. Render each marker as a `<button data-testid="structural-marker-${id}">`
+    //      with `data-marker-line` reflecting `range.line`.
+    //   2. Fire the `onStructuralMarkerClick` callback with that line
+    //      number when the bullet is clicked, so the parent page can
+    //      scroll its `<HighlightedReport>` panel to the offending line.
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        avri: {
+          family: "MEMORY_CORRUPTION",
+          familyName: "Memory corruption / unsafe C",
+          classification: {
+            confidence: "HIGH" as const,
+            reason: "matched member CWE-787",
+            evidence: ["CWE-787"],
+            technology: null,
+          },
+          goldHitCount: 0,
+          velocityPenalty: 0,
+          templatePenalty: 0,
+          rawCompositeBeforeBehavioralPenalties: 28,
+        },
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 28,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "MEMORY_CORRUPTION",
+                  familyName: "Memory corruption / unsafe C",
+                  baseScore: 22,
+                  goldHitCount: 0,
+                  goldTotalCount: 8,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  crashTrace: {
+                    framesAnalyzed: 6,
+                    goodFrames: 5,
+                    placeholderFrames: 0,
+                    isStripped: false,
+                    reason: null,
+                    revokedGoldHits: [],
+                    penalty: 0,
+                    hasStructuralFabrication: true,
+                    structuralFabricationPenalty: -12,
+                    structuralMarkers: [
+                      {
+                        id: "round_function_offsets",
+                        description:
+                          "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000)",
+                        range: { start: 120, end: 140, line: 7 },
+                      },
+                      {
+                        id: "thread_id_inconsistency",
+                        description:
+                          "Trace references `thread T0`/`T1` but no `==<pid>==` header is present",
+                        range: { start: 250, end: 285, line: 14 },
+                      },
+                    ],
+                  },
+                  rawAvriScore: 10,
+                  legacyScore: 45,
+                  blendedScore: 28,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const onStructuralMarkerClick = vi.fn();
+    const user = userEvent.setup();
+    renderWithClient({ onStructuralMarkerClick });
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    const roundBtn = await screen.findByTestId(
+      "structural-marker-round_function_offsets",
+    );
+    const threadBtn = await screen.findByTestId(
+      "structural-marker-thread_id_inconsistency",
+    );
+
+    // Both markers expose their target line via a data attribute (handy
+    // for e2e tests that don't want to spy on the React handler).
+    expect(roundBtn).toHaveAttribute("data-marker-line", "7");
+    expect(threadBtn).toHaveAttribute("data-marker-line", "14");
+
+    // The bullet must be a real <button> so it gets keyboard focus and
+    // assistive tech announces it as actionable.
+    expect(roundBtn.tagName).toBe("BUTTON");
+
+    await user.click(roundBtn);
+    expect(onStructuralMarkerClick).toHaveBeenCalledTimes(1);
+    expect(onStructuralMarkerClick).toHaveBeenLastCalledWith(7);
+
+    await user.click(threadBtn);
+    expect(onStructuralMarkerClick).toHaveBeenCalledTimes(2);
+    expect(onStructuralMarkerClick).toHaveBeenLastCalledWith(14);
+
+    // Re-clicking the same marker still fires the callback so the parent
+    // page can re-trigger its scroll+flash effect (the parent owns nonce
+    // bumping; the panel just forwards every click).
+    await user.click(roundBtn);
+    expect(onStructuralMarkerClick).toHaveBeenCalledTimes(3);
+    expect(onStructuralMarkerClick).toHaveBeenLastCalledWith(7);
+  });
+
+  it("renders STRUCTURAL_FABRICATION markers as plain <li> when no range is present, preserving the Task #317 layout", async () => {
+    // Backward-compat for older persisted reports whose detectors ran
+    // before Task #451 attached `range` to each marker. Without a range
+    // we fall back to a plain `<li>` (no button, no data-testid) and the
+    // `onStructuralMarkerClick` callback — even when wired — never
+    // fires because there's nothing to click.
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        engines: {
+          ...SAMPLE_DIAGNOSTICS.engines,
+          engines: [
+            {
+              engine: "Technical Substance Analyzer",
+              score: 28,
+              verdict: "RED" as const,
+              confidence: "MEDIUM" as const,
+              signalBreakdown: {
+                avri: {
+                  family: "MEMORY_CORRUPTION",
+                  familyName: "Memory corruption / unsafe C",
+                  baseScore: 22,
+                  goldHitCount: 0,
+                  goldTotalCount: 8,
+                  goldHits: [],
+                  goldMisses: [],
+                  absencePenalty: 0,
+                  absencePenalties: [],
+                  contradictions: [],
+                  contradictionPenalty: 0,
+                  crashTrace: {
+                    framesAnalyzed: 6,
+                    goodFrames: 5,
+                    placeholderFrames: 0,
+                    isStripped: false,
+                    reason: null,
+                    revokedGoldHits: [],
+                    penalty: 0,
+                    hasStructuralFabrication: true,
+                    structuralFabricationPenalty: -12,
+                    structuralMarkers: [
+                      {
+                        id: "round_function_offsets",
+                        description:
+                          "3 frames carry round/zero function offsets",
+                      },
+                    ],
+                  },
+                  rawAvriScore: 10,
+                  legacyScore: 45,
+                  blendedScore: 28,
+                },
+              },
+            },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const onStructuralMarkerClick = vi.fn();
+    const user = userEvent.setup();
+    renderWithClient({ onStructuralMarkerClick });
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("(round_function_offsets)")).toBeInTheDocument();
+    });
+
+    // No clickable button is rendered for the rangeless marker.
+    expect(
+      screen.queryByTestId("structural-marker-round_function_offsets"),
+    ).not.toBeInTheDocument();
+    expect(onStructuralMarkerClick).not.toHaveBeenCalled();
   });
 
   it("renders STRUCTURAL_FABRICATION with subsumed-penalty wording when stripped-trace already fired (Task #317)", async () => {

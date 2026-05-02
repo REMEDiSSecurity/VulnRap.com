@@ -94,6 +94,51 @@ export interface StructuralMarker {
     // by the same predicate rather than slipping through entirely.
     | "fabricated_proc_status";
   description: string;
+  /** Task #451: location of the offending excerpt inside the original
+   * report text, so the diagnostics panel can make each marker bullet
+   * clickable and the report-text panel can scroll to the exact line that
+   * tripped the detector. `start`/`end` are character offsets into the
+   * `text` argument that was passed to `detectStructuralFabrication`;
+   * `line` is the 1-based line number containing `start`. Optional so
+   * legacy persisted reports analyzed before this field shipped continue
+   * to render normally. */
+  range?: { start: number; end: number; line: number };
+}
+
+/** A frame line tagged with its position in the original text. The frame
+ * detectors (round offsets, numbering gaps, implausible offsets) need to
+ * know not just the line content but where that content lives in the
+ * source so they can attach a `range` to the marker they emit. */
+interface FrameLine {
+  /** Raw frame line content (matches `FRAME_LINES_RE`). */
+  text: string;
+  /** Character offset of the first character of `text` in the original
+   * input string passed to `detectStructuralFabrication`. */
+  start: number;
+  /** 1-based line number of `start` in the original input string. */
+  line: number;
+}
+
+/** Count newlines preceding `index` to produce the 1-based line number of
+ * the character at `index`. Cheap O(index) walk — fine for the trace-
+ * length inputs we evaluate (≤50 KiB after `sanitizeForAnalysis`). */
+function lineNumberAt(text: string, index: number): number {
+  let line = 1;
+  const cap = Math.min(index, text.length);
+  for (let i = 0; i < cap; i++) {
+    if (text.charCodeAt(i) === 10) line++;
+  }
+  return line;
+}
+
+function rangeAt(
+  text: string,
+  start: number,
+  length: number,
+): { start: number; end: number; line: number } {
+  const safeStart = Math.max(0, Math.min(start, text.length));
+  const safeEnd = Math.max(safeStart, Math.min(safeStart + length, text.length));
+  return { start: safeStart, end: safeEnd, line: lineNumberAt(text, safeStart) };
 }
 
 // Frame-line shapes we recognize:
@@ -162,25 +207,31 @@ function isRoundFunctionOffset(hex: string): boolean {
   return /^[1-9a-f][0-9a-f]*0{2,}$/i.test(h);
 }
 
-function detectRoundFunctionOffsets(frameLines: string[]): StructuralMarker | null {
+function detectRoundFunctionOffsets(
+  frames: FrameLine[],
+  text: string,
+): StructuralMarker | null {
   // Match `name+0xOFFSET` inside frame lines. The capture is the offset hex.
   // We deliberately restrict to frame lines (not the whole text) so prose
   // discussing a bug ("the patch sits at func+0x100") doesn't trigger us.
   const re = /\b\w+\+0x([0-9a-fA-F]+)\b/g;
   const roundOffsets: string[] = [];
-  for (const line of frameLines) {
+  let firstHit: FrameLine | null = null;
+  for (const f of frames) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
-    while ((m = re.exec(line)) !== null) {
+    while ((m = re.exec(f.text)) !== null) {
       if (isRoundFunctionOffset(m[1])) {
         roundOffsets.push(`0x${m[1]}`);
+        if (!firstHit) firstHit = f;
       }
     }
   }
-  if (roundOffsets.length >= 2) {
+  if (roundOffsets.length >= 2 && firstHit) {
     return {
       id: "round_function_offsets",
       description: `${roundOffsets.length} frames carry round/zero function offsets (${roundOffsets.slice(0, 4).join(", ")}); real offsets are non-zero and non-round`,
+      range: rangeAt(text, firstHit.start, firstHit.text.length),
     };
   }
   return null;
@@ -190,11 +241,14 @@ function detectRoundFunctionOffsets(frameLines: string[]): StructuralMarker | nu
  * contiguous — `#0, #1, #2, ...` with no gaps. Hand-edited slop traces
  * sometimes skip a number (`#0, #1, #3`). A reset to `#0` is allowed
  * (ASan emits multiple blocks per error: READ, freed-by, allocated-by). */
-function detectFrameNumberingGaps(frameLines: string[]): StructuralMarker | null {
+function detectFrameNumberingGaps(
+  frames: FrameLine[],
+  text: string,
+): StructuralMarker | null {
   const numRe = /(?:^|[^\w#])(?:#(\d+)|frame\s+(\d+):)/i;
   let prev = -1;
-  for (const line of frameLines) {
-    const m = line.match(numRe);
+  for (const f of frames) {
+    const m = f.text.match(numRe);
     if (!m) continue;
     const n = Number(m[1] ?? m[2]);
     if (!Number.isFinite(n)) continue;
@@ -210,6 +264,7 @@ function detectFrameNumberingGaps(frameLines: string[]): StructuralMarker | null
       return {
         id: "frame_numbering_gaps",
         description: `Frame numbering jumps from #${prev} to #${n}; real sanitizer output is contiguous within a block`,
+        range: rangeAt(text, f.start, f.text.length),
       };
     }
     // n <= prev (and n != 0): treat as a new block reset point so we don't
@@ -225,11 +280,13 @@ function detectFrameNumberingGaps(frameLines: string[]): StructuralMarker | null
  * the thread blocks (or fabricating them outright) produces a thread mention
  * with no PID anchor. */
 function detectThreadIdInconsistency(text: string): StructuralMarker | null {
-  if (!/\bthread\s+T\d+\b/i.test(text)) return null;
+  const m = /\bthread\s+T\d+\b/i.exec(text);
+  if (!m) return null;
   if (/==\d+==/.test(text)) return null;
   return {
     id: "thread_id_inconsistency",
     description: "Trace references `thread T0`/`T1` but no `==<pid>==` header is present (real ASan/TSan output always anchors thread blocks to a PID)",
+    range: rangeAt(text, m.index, m[0].length),
   };
 }
 
@@ -239,23 +296,27 @@ function detectThreadIdInconsistency(text: string): StructuralMarker | null {
  * suspiciously round, and in hex which ASan never uses). Either tell flags. */
 function detectRoundHeapRegionSize(text: string): StructuralMarker | null {
   // 1. Hex region size — wrong format regardless of value.
-  const hexM = text.match(/\bregion\s*size\s*:\s*0x([0-9a-fA-F]+)\b/i);
+  const hexRe = /\bregion\s*size\s*:\s*0x([0-9a-fA-F]+)\b/i;
+  const hexM = hexRe.exec(text);
   if (hexM) {
     return {
       id: "round_heap_region_size",
       description: `Heap "region size: 0x${hexM[1]}" in hex; real ASan emits "<N>-byte region [0x..., 0x...)" in decimal`,
+      range: rangeAt(text, hexM.index, hexM[0].length),
     };
   }
   // 2. Decimal region size that lands on an exact 256/4096/65536 boundary
   //    AND lacks the bracketed range. Real allocators round up unpredictably,
   //    so a textbook 256/1024/4096 with no [start,end) is a fabrication tell.
-  const decM = text.match(/\bregion\s*size\s*:\s*(\d+)\b(?!\s*\[)/i);
+  const decRe = /\bregion\s*size\s*:\s*(\d+)\b(?!\s*\[)/i;
+  const decM = decRe.exec(text);
   if (decM) {
     const v = Number(decM[1]);
     if (v > 0 && (v === 256 || v === 1024 || v === 4096 || v === 65536)) {
       return {
         id: "round_heap_region_size",
         description: `Heap "region size: ${v}" is a textbook power-of-two with no bracketed range; real ASan emits "<N>-byte region [0x..., 0x...)"`,
+        range: rangeAt(text, decM.index, decM[0].length),
       };
     }
   }
@@ -286,28 +347,33 @@ const TINY_OFFSET_MAX = 0x4; // exclusive — values 0x1, 0x2, 0x3 sit in the pr
 const HUGE_OFFSET_MIN = 0x100000; // inclusive — implies a 1 MiB+ function
 
 function detectImplausibleFunctionOffsets(
-  frameLines: string[],
+  frames: FrameLine[],
+  text: string,
 ): StructuralMarker | null {
   const tells: string[] = [];
-  for (const line of frameLines) {
+  let firstHit: FrameLine | null = null;
+  for (const f of frames) {
     IN_FN_OFFSET_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
-    while ((m = IN_FN_OFFSET_RE.exec(line)) !== null) {
+    while ((m = IN_FN_OFFSET_RE.exec(f.text)) !== null) {
       const fn = m[1];
       const offsetHex = m[2];
       const value = parseInt(offsetHex, 16);
       if (!Number.isFinite(value)) continue;
       if (value > 0 && value < TINY_OFFSET_MAX) {
         tells.push(`${fn}+0x${offsetHex} (in prologue)`);
+        if (!firstHit) firstHit = f;
       } else if (value >= HUGE_OFFSET_MIN) {
         tells.push(`${fn}+0x${offsetHex} (implies ≥1 MiB function)`);
+        if (!firstHit) firstHit = f;
       }
     }
   }
-  if (tells.length >= 2) {
+  if (tells.length >= 2 && firstHit) {
     return {
       id: "implausible_function_offset",
       description: `${tells.length} frames carry function offsets outside realistic bounds (${tells.slice(0, 3).join(", ")}); real offsets sit between the prologue and the function epilogue`,
+      range: rangeAt(text, firstHit.start, firstHit.text.length),
     };
   }
   return null;
@@ -334,6 +400,7 @@ function detectImplausibleThreadIds(text: string): StructuralMarker | null {
       return {
         id: "implausible_thread_id",
         description: `PID ${pid} in \`==${m[1]}==\` header is outside the realistic Linux PID range (1..${LINUX_PID_MAX})`,
+        range: rangeAt(text, m.index, m[0].length),
       };
     }
   }
@@ -346,6 +413,7 @@ function detectImplausibleThreadIds(text: string): StructuralMarker | null {
       return {
         id: "implausible_thread_id",
         description: `Thread \`T${n}\` is outside the realistic sanitizer thread-id range (T0..T${PLAUSIBLE_THREAD_MAX}); real reports rarely climb past a couple of dozen`,
+        range: rangeAt(text, m.index, m[0].length),
       };
     }
   }
@@ -370,23 +438,32 @@ const NON_OVERFLOW_BUG_RE =
 
 function detectRegionSizeVsAccessSize(text: string): StructuralMarker | null {
   let regionSize: number | null = null;
-  const bracketM = text.match(REGION_BRACKETED_RE);
+  let regionMatch: RegExpExecArray | null = null;
+  const bracketRe = new RegExp(REGION_BRACKETED_RE.source, REGION_BRACKETED_RE.flags);
+  const bracketM = bracketRe.exec(text);
   if (bracketM) {
     regionSize = Number(bracketM[1]);
+    regionMatch = bracketM;
   } else {
-    const decM = text.match(REGION_DECIMAL_RE);
-    if (decM) regionSize = Number(decM[1]);
+    const decRe = new RegExp(REGION_DECIMAL_RE.source, REGION_DECIMAL_RE.flags);
+    const decM = decRe.exec(text);
+    if (decM) {
+      regionSize = Number(decM[1]);
+      regionMatch = decM;
+    }
   }
-  if (regionSize === null || !Number.isFinite(regionSize)) return null;
+  if (regionSize === null || !Number.isFinite(regionSize) || !regionMatch) return null;
 
   if (regionSize === 0) {
     return {
       id: "region_size_vs_access_size",
       description: "Heap region size is reported as 0 bytes; real allocations are non-zero",
+      range: rangeAt(text, regionMatch.index, regionMatch[0].length),
     };
   }
 
-  const accessM = text.match(ACCESS_SIZE_RE);
+  const accessRe = new RegExp(ACCESS_SIZE_RE.source, ACCESS_SIZE_RE.flags);
+  const accessM = accessRe.exec(text);
   if (!accessM) return null;
   const accessSize = Number(accessM[1]);
   if (!Number.isFinite(accessSize) || accessSize <= 0) return null;
@@ -401,6 +478,10 @@ function detectRegionSizeVsAccessSize(text: string): StructuralMarker | null {
     return {
       id: "region_size_vs_access_size",
       description: `Access size ${accessSize} exceeds the reported ${regionSize}-byte region for a use-after-free / double-free; the access on a freed chunk fits inside the original allocation`,
+      // Anchor on the access-size header — it is the more specific claim
+      // the report makes ("READ of size N") and points reviewers at the
+      // bug class declaration line rather than the heap metadata footer.
+      range: rangeAt(text, accessM.index, accessM[0].length),
     };
   }
   return null;
@@ -452,10 +533,15 @@ function isSuspiciousRegisterValue(hex: string): boolean {
 
 function detectFabricatedRegisterState(text: string): StructuralMarker | null {
   REGISTER_DUMP_RE.lastIndex = 0;
-  const entries: { name: string; value: string }[] = [];
+  const entries: { name: string; value: string; index: number; length: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = REGISTER_DUMP_RE.exec(text)) !== null) {
-    entries.push({ name: m[1].toUpperCase(), value: m[2].toLowerCase() });
+    entries.push({
+      name: m[1].toUpperCase(),
+      value: m[2].toLowerCase(),
+      index: m.index,
+      length: m[0].length,
+    });
   }
   // Need at least four register lines before judging — fewer than that is
   // a one-off mention of a pointer value, not a dump.
@@ -480,17 +566,20 @@ function detectFabricatedRegisterState(text: string): StructuralMarker | null {
   // An entry is suspicious if either tell fires; every entry is counted at
   // most once even when both checks would catch it.
   let suspicious = 0;
+  let firstSuspicious: typeof entries[number] | null = null;
   for (const e of entries) {
     const stripped = e.value.replace(/^0+/, "") || "0";
     if (isSuspiciousRegisterValue(e.value) || repeatedValues.has(stripped)) {
       suspicious++;
+      if (!firstSuspicious) firstSuspicious = e;
     }
   }
 
-  if (suspicious >= 4 && suspicious / entries.length >= 0.5) {
+  if (suspicious >= 4 && suspicious / entries.length >= 0.5 && firstSuspicious) {
     return {
       id: "fabricated_register_state",
       description: `${suspicious}/${entries.length} register values are textbook-round (≤6 hex digits with ≥3 trailing zeros) or repeated across registers; real register dumps are pseudo-random pointers/constants`,
+      range: rangeAt(text, firstSuspicious.index, firstSuspicious.length),
     };
   }
   return null;
@@ -519,7 +608,7 @@ const PAGE_SIZE = BigInt("0x1000");
 
 function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
   MAPS_LINE_RE.lastIndex = 0;
-  const ranges: { start: bigint; end: bigint }[] = [];
+  const ranges: { start: bigint; end: bigint; index: number; length: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = MAPS_LINE_RE.exec(text)) !== null) {
     // The regex restricts both groups to [0-9a-fA-F]+, so the BigInt
@@ -527,6 +616,8 @@ function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
     ranges.push({
       start: BigInt("0x" + m[1]),
       end: BigInt("0x" + m[2]),
+      index: m.index,
+      length: m[0].length,
     });
   }
   // Need ≥2 lines before judging — a stray hex-hex pair on its own line
@@ -540,6 +631,7 @@ function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
       return {
         id: "fabricated_memory_map",
         description: `Memory-map range 0x${r.start.toString(16)}-0x${r.end.toString(16)} has end ≤ start; real /proc/self/maps entries are non-empty (end strictly greater than start)`,
+        range: rangeAt(text, r.index, r.length),
       };
     }
   }
@@ -550,6 +642,7 @@ function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
       return {
         id: "fabricated_memory_map",
         description: `Memory-map range starts at 0x${r.start.toString(16)} which is below Linux mmap_min_addr (0x10000); real userspace mappings never sit in the low 64 KiB`,
+        range: rangeAt(text, r.index, r.length),
       };
     }
   }
@@ -562,11 +655,14 @@ function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
       return {
         id: "fabricated_memory_map",
         description: `Memory-map range 0x${r.start.toString(16)}-0x${r.end.toString(16)} is not 4 KiB page-aligned; real /proc/self/maps entries always start and end on page boundaries`,
+        range: rangeAt(text, r.index, r.length),
       };
     }
   }
 
   // 4. Overlapping ranges — kernel coalesces or splits, never overlaps.
+  // Sort by start address but preserve the original (index, length) so the
+  // marker range still points at a real source line in `text`.
   const sorted = [...ranges].sort((a, b) =>
     a.start < b.start ? -1 : a.start > b.start ? 1 : 0,
   );
@@ -575,6 +671,7 @@ function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
       return {
         id: "fabricated_memory_map",
         description: `Memory-map range 0x${sorted[i].start.toString(16)}-0x${sorted[i].end.toString(16)} overlaps the previous range ending at 0x${sorted[i - 1].end.toString(16)}; real /proc/self/maps entries never overlap`,
+        range: rangeAt(text, sorted[i].index, sorted[i].length),
       };
     }
   }
@@ -614,11 +711,13 @@ function isPowerOfTwo(n: number): boolean {
 
 function detectFabricatedProcStatus(text: string): StructuralMarker | null {
   PROC_STATUS_VM_RE.lastIndex = 0;
-  const entries: { name: string; value: number }[] = [];
+  const entries: { name: string; value: number; index: number; length: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = PROC_STATUS_VM_RE.exec(text)) !== null) {
     const v = Number(m[2]);
-    if (Number.isFinite(v)) entries.push({ name: m[1], value: v });
+    if (Number.isFinite(v)) {
+      entries.push({ name: m[1], value: v, index: m.index, length: m[0].length });
+    }
   }
   if (entries.length < 3) return null;
 
@@ -633,6 +732,7 @@ function detectFabricatedProcStatus(text: string): StructuralMarker | null {
     return {
       id: "fabricated_proc_status",
       description: `${suspicious.length}/${entries.length} /proc/self/status Vm fields are exact powers of two ≥ 1 MiB (${summary}); real kernels emit pseudo-random page-aligned kB counts`,
+      range: rangeAt(text, suspicious[0].index, suspicious[0].length),
     };
   }
   return null;
@@ -682,11 +782,31 @@ function detectMalformedShadowBytes(text: string): StructuralMarker | null {
   // insert one between the buggy row and its neighbours); the first
   // non-blank non-row line ends the block (typically the legend header
   // `Shadow byte legend (...)` or surrounding prose).
-  const after = text.slice(headerMatch.index + headerMatch[0].length);
+  const headerEnd = headerMatch.index + headerMatch[0].length;
+  const after = text.slice(headerEnd);
+  // Track per-line offsets back into the original `text` so each error
+  // marker can carry an accurate `range`. We split on `\n` (preserving
+  // CRLF length via the +1 below, since the regex matched both `\r\n` and
+  // `\n` boundaries equally for our purposes).
   const lines = after.split(/\r?\n/);
+  let cursor = headerEnd;
   let hasBuggyMarker = false;
-  const rows: { width: number; raw: string }[] = [];
-  for (const line of lines) {
+  const rows: { width: number; raw: string; index: number; length: number }[] = [];
+  // Preserve the per-row newline length so cursor stays accurate even when
+  // the trace mixes `\n` and `\r\n` line endings.
+  const newlineLengths: number[] = [];
+  let scanIdx = headerEnd;
+  for (let i = 0; i < lines.length; i++) {
+    const len = lines[i].length;
+    const after2 = text.slice(scanIdx + len, scanIdx + len + 2);
+    const nl = after2.startsWith("\r\n") ? 2 : after2.startsWith("\n") ? 1 : 0;
+    newlineLengths.push(nl);
+    scanIdx += len + nl;
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineStart = cursor;
+    cursor += line.length + (newlineLengths[i] ?? 0);
     if (line.trim() === "") continue;
     const m = line.match(SHADOW_ROW_RE);
     if (!m) break;
@@ -704,15 +824,17 @@ function detectMalformedShadowBytes(text: string): StructuralMarker | null {
       return {
         id: "malformed_shadow_bytes",
         description: `Shadow byte row contains non-hex-pair tokens: "${line.trim()}"`,
+        range: rangeAt(text, lineStart, line.length),
       };
     }
-    rows.push({ width: bytes.length, raw: line.trim() });
+    rows.push({ width: bytes.length, raw: line.trim(), index: lineStart, length: line.length });
   }
 
   if (rows.length === 0) {
     return {
       id: "malformed_shadow_bytes",
       description: `Trace contains "Shadow bytes around the buggy address" header but no shadow rows follow it; real ASan always prints the grid after the header`,
+      range: rangeAt(text, headerMatch.index, headerMatch[0].length),
     };
   }
 
@@ -721,6 +843,7 @@ function detectMalformedShadowBytes(text: string): StructuralMarker | null {
     return {
       id: "malformed_shadow_bytes",
       description: `Shadow byte row has ${wrongWidth.width} hex byte pairs (expected ${EXPECTED_SHADOW_ROW_WIDTH}): "${wrongWidth.raw}"`,
+      range: rangeAt(text, wrongWidth.index, wrongWidth.length),
     };
   }
 
@@ -728,6 +851,9 @@ function detectMalformedShadowBytes(text: string): StructuralMarker | null {
     return {
       id: "malformed_shadow_bytes",
       description: `Shadow bytes section is missing the "=>" buggy-address marker on every row; real ASan always marks the row containing the faulting address`,
+      // No single buggy row to point at — anchor on the section header so
+      // reviewers land on the start of the grid.
+      range: rangeAt(text, headerMatch.index, headerMatch[0].length),
     };
   }
 
@@ -735,6 +861,7 @@ function detectMalformedShadowBytes(text: string): StructuralMarker | null {
     return {
       id: "malformed_shadow_bytes",
       description: `Shadow bytes section lacks the legend (e.g., "Addressable: 00", "Heap left redzone: fa", "Freed heap region: fd"); real ASan output always emits the legend below the grid`,
+      range: rangeAt(text, headerMatch.index, headerMatch[0].length),
     };
   }
 
@@ -774,12 +901,18 @@ const THREAD_ROLE_RES: RegExp[] = [
 
 function detectThreadIdMismatch(text: string): StructuralMarker | null {
   const ids = new Set<number>();
+  // Track the earliest role-anchor hit so we can anchor the marker's
+  // `range` (Task #451) on the first offending line in the report.
+  let firstHit: { index: number; length: number } | null = null;
   for (const re of THREAD_ROLE_RES) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
       const n = Number(m[1]);
       if (Number.isFinite(n)) ids.add(n);
+      if (firstHit === null || m.index < firstHit.index) {
+        firstHit = { index: m.index, length: m[0].length };
+      }
     }
   }
   // Per the task spec: 3+ distinct role-tagged thread IDs in a single
@@ -788,30 +921,55 @@ function detectThreadIdMismatch(text: string): StructuralMarker | null {
   // legit fixtures (T1-01-uaf-libfoo, T1-AVRI-firefox-uaf,
   // T1-AVRI-cve-2025-0725-curl, SYMBOL_RICH_TSAN_TRACE) all use ≤2
   // distinct role-tagged thread IDs and stay below.
-  if (ids.size < 3) return null;
+  if (ids.size < 3 || firstHit === null) return null;
   const sorted = [...ids].sort((a, b) => a - b);
   return {
     id: "thread_id_mismatch",
     description: `Trace references ${ids.size} distinct thread IDs across role anchors (T${sorted.join(", T")}); real sanitizer output keeps the role-tagged thread IDs of a single error report consistent (used == freed == allocated for a UAF, or a 2-thread writer/reader pair for a TSan race)`,
+    range: rangeAt(text, firstHit.index, firstHit.length),
   };
+}
+
+/** Build the list of frame lines tagged with their position in `text` so
+ * the frame-based detectors can attach a `range` to the marker they emit.
+ * `FRAME_LINES_RE` is a global multiline regex; `matchAll` gives us every
+ * match's start index in the source. */
+function collectFrameLines(text: string): FrameLine[] {
+  const out: FrameLine[] = [];
+  // `FRAME_LINES_RE` is shared module state with `lastIndex`; clone it so
+  // we never reset state for callers iterating the regex elsewhere.
+  const re = new RegExp(FRAME_LINES_RE.source, FRAME_LINES_RE.flags);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    out.push({
+      text: m[0],
+      start: m.index,
+      line: lineNumberAt(text, m.index),
+    });
+    // Guard against zero-length matches advancing the cursor by hand —
+    // `FRAME_LINES_RE` requires non-empty matches but we keep this for
+    // safety in case the pattern ever loosens.
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  return out;
 }
 
 /** Run all structural-fabrication detectors and return the markers that
  * fired. Exported so the hallucination detector can hook the same predicates
  * without re-tokenising the trace. */
 export function detectStructuralFabrication(text: string): StructuralMarker[] {
-  const frameLines = text.match(FRAME_LINES_RE) ?? [];
+  const frames = collectFrameLines(text);
   const markers: StructuralMarker[] = [];
-  const a = detectRoundFunctionOffsets(frameLines);
+  const a = detectRoundFunctionOffsets(frames, text);
   if (a) markers.push(a);
-  const b = detectFrameNumberingGaps(frameLines);
+  const b = detectFrameNumberingGaps(frames, text);
   if (b) markers.push(b);
   const c = detectThreadIdInconsistency(text);
   if (c) markers.push(c);
   const d = detectRoundHeapRegionSize(text);
   if (d) markers.push(d);
   // Task #303 bounds detectors.
-  const e = detectImplausibleFunctionOffsets(frameLines);
+  const e = detectImplausibleFunctionOffsets(frames, text);
   if (e) markers.push(e);
   const f = detectImplausibleThreadIds(text);
   if (f) markers.push(f);

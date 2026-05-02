@@ -226,7 +226,20 @@ export async function loadDiagnosticsForExport(
   });
 }
 
-export function DiagnosticsPanel({ reportId }: { reportId: number }) {
+export function DiagnosticsPanel({
+  reportId,
+  onStructuralMarkerClick,
+}: {
+  reportId: number;
+  /** Task #451: invoked when a STRUCTURAL_FABRICATION marker bullet that
+   * carries a `range` is clicked. The callback receives the 1-based line
+   * number into the original report text so the parent page can scroll its
+   * `<HighlightedReport>` panel to the offending line. When omitted (or
+   * when a marker has no `range`), the marker renders as plain text and is
+   * not clickable — preserving the existing diagnostics-panel test
+   * fixtures that pass markers without ranges. */
+  onStructuralMarkerClick?: (line: number) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
 
@@ -394,6 +407,7 @@ export function DiagnosticsPanel({ reportId }: { reportId: number }) {
                 engines={data.engines?.engines ?? []}
                 overrides={overrides}
                 cachedFamily={data.cachedAvriFamily ?? null}
+                onStructuralMarkerClick={onStructuralMarkerClick}
               />
 
               {signalsSummary && (
@@ -660,6 +674,7 @@ function AvriFamilySection({
   engines,
   overrides,
   cachedFamily,
+  onStructuralMarkerClick,
 }: {
   avri: AvriDiagnosticsBlock | null;
   engines: EngineResult[];
@@ -671,6 +686,10 @@ function AvriFamilySection({
    * filter is grouping it under.
    */
   cachedFamily?: string | null;
+  /** Task #451: forwarded from `<DiagnosticsPanel>`. When present, each
+   * STRUCTURAL_FABRICATION marker that has a `range` renders as a clickable
+   * button that scrolls the report panel above to the offending line. */
+  onStructuralMarkerClick?: (line: number) => void;
 }) {
   const e2 = engines.find((e) => /Technical Substance/i.test(e.engine));
   const e2Avri = (e2?.signalBreakdown?.avri ?? null) as AvriEngine2Block | null;
@@ -1030,24 +1049,66 @@ function AvriFamilySection({
                     hits this combination.
                   </p>
                   <ul className="space-y-1.5">
-                    {crashTrace.structuralMarkers!.map((m) => (
-                      <li
-                        key={m.id}
-                        className="text-[11px] font-mono space-y-0.5"
-                      >
-                        <div className="flex items-baseline gap-1.5 flex-wrap">
-                          <span className="text-red-400/90 font-semibold">
-                            {STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}
-                          </span>
-                          <span className="text-muted-foreground">
-                            ({m.id})
-                          </span>
-                        </div>
-                        <div className="text-foreground/80 leading-snug">
-                          {m.description}
-                        </div>
-                      </li>
-                    ))}
+                    {crashTrace.structuralMarkers!.map((m) => {
+                      // Task #451: a marker is clickable only when both the
+                      // detector recorded a `range` (older fixtures and
+                      // legacy persisted reports may not) and the parent
+                      // page wired an `onStructuralMarkerClick` handler.
+                      // Otherwise we render the same `<li>` as before so
+                      // the existing Task #317 visual treatment and tests
+                      // continue to pass unchanged.
+                      const clickable =
+                        m.range != null && onStructuralMarkerClick != null;
+                      const body = (
+                        <>
+                          <div className="flex items-baseline gap-1.5 flex-wrap">
+                            <span className="text-red-400/90 font-semibold">
+                              {STRUCTURAL_MARKER_LABELS[m.id] ?? m.id}
+                            </span>
+                            <span className="text-muted-foreground">
+                              ({m.id})
+                            </span>
+                            {clickable && (
+                              <span className="text-[10px] font-normal text-red-300/70 uppercase tracking-wide">
+                                line {m.range!.line}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-foreground/80 leading-snug">
+                            {m.description}
+                          </div>
+                        </>
+                      );
+                      if (clickable) {
+                        return (
+                          <li
+                            key={m.id}
+                            className="text-[11px] font-mono space-y-0.5"
+                          >
+                            <button
+                              type="button"
+                              data-testid={`structural-marker-${m.id}`}
+                              data-marker-line={m.range!.line}
+                              onClick={() =>
+                                onStructuralMarkerClick!(m.range!.line)
+                              }
+                              className="w-full text-left rounded-sm space-y-0.5 px-1 -mx-1 py-0.5 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400/60 transition-colors cursor-pointer"
+                              title={`Jump to line ${m.range!.line} in the report`}
+                            >
+                              {body}
+                            </button>
+                          </li>
+                        );
+                      }
+                      return (
+                        <li
+                          key={m.id}
+                          className="text-[11px] font-mono space-y-0.5"
+                        >
+                          {body}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}

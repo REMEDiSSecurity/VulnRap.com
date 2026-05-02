@@ -782,6 +782,13 @@ export function runEngine2Avri(
           structuralMarkers: crashTrace.structuralMarkers.map((m) => ({
             id: m.id,
             description: m.description,
+            // Task #451: persist the optional `{start, end, line}` range so
+            // the diagnostics panel can render each marker as a clickable
+            // bullet that scrolls the report-text panel to the offending
+            // line. Older detectors / fixtures may omit `range`; spreading
+            // it conditionally keeps the persisted JSON tight (no `range:
+            // undefined` stored) and backward-compatible.
+            ...(m.range ? { range: m.range } : {}),
           })),
           hasStructuralFabrication: crashTrace.hasStructuralFabrication,
           structuralFabricationPenalty: -structuralFabPenalty,
