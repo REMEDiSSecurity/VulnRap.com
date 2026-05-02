@@ -32,6 +32,14 @@ lib/
 - If you modify `lib/api-spec/openapi.yaml`, regenerate client code with `pnpm --filter @workspace/api-spec run codegen`
 - If you modify `lib/db/src/schema/`, push changes with `pnpm --filter @workspace/db run push`
 
+### How `pnpm typecheck` is wired
+
+The shared libs in `lib/<name>/` are TypeScript composite project references. They emit `.d.ts` files into a gitignored `lib/<name>/dist/` (driven by `lib/<name>/tsconfig.tsbuildinfo`). Every artifact (`artifacts/*/tsconfig.json`) consumes those dists via project references, and each artifact's own `typecheck` script is just `tsc -p tsconfig.json --noEmit` — it will silently read whatever `.d.ts` happens to be on disk.
+
+To stop artifact typechecks from running against stale generated types, the root `pnpm typecheck` script always runs `pnpm run typecheck:libs` (i.e. `tsc --build`) **before** fanning out to the artifact typechecks. `tsc --build` is incremental, so this is effectively free in steady state but guarantees that an edit under `lib/db/src/`, `lib/avri-rubric/src/`, or `lib/api-zod/src/` is reflected in the dist outputs the artifacts then consume — without requiring a fresh `pnpm install` or a manual `pnpm typecheck:libs` first.
+
+The same `tsc --build` step also runs as part of `postinstall` and inside `scripts/verify-codegen.mjs`. The explicit invocation in the root `typecheck` script is the belt-and-braces safeguard so the dependency does not rely on a side effect of either of those — please keep it there. If you ever see a phantom "no exported member …" error against a lib (or, worse, suspect a real lib schema change is going undetected by the artifact typecheck), suspect a stale `lib/<name>/dist/` first: run `pnpm typecheck:libs`, or delete `lib/*/dist` and `lib/*/tsconfig.tsbuildinfo` and re-run `pnpm typecheck`, before chasing it as a real type error.
+
 ## Areas Where Help is Wanted
 
 - Improving the sloppiness detection heuristics (`artifacts/api-server/src/lib/sloppiness.ts`)
