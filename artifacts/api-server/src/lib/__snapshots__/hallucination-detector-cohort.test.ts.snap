@@ -364,6 +364,15 @@ exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > p
     ],
     "totalWeight": 32,
   },
+  "T4-15-fake-thread-id-mismatch": {
+    "signals": [
+      "empty_disclosure_claim",
+      "fabricated_pid",
+      "phantom_exploit_script",
+      "structural_fabrication",
+    ],
+    "totalWeight": 35,
+  },
   "T4-16-fake-graphql-impossible-shape": {
     "signals": [
       "impossible_graphql_response",

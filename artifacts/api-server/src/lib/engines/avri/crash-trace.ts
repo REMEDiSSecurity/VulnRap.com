@@ -72,7 +72,17 @@ export interface StructuralMarker {
     // redzone: fa, Freed heap region: fd, …). A fabricated block
     // routinely picks the wrong row width, omits the `=>` marker, or
     // skips the legend entirely.
-    | "malformed_shadow_bytes";
+    | "malformed_shadow_bytes"
+    // Task #433: ≥3 distinct thread IDs appear across the role-tagged
+    // anchors of a single ASan/TSan trace (the "READ/WRITE thread T<x>"
+    // block header, "freed by thread T<y>", "previously allocated by
+    // thread T<z>"). The Sprint 13B-2 `thread_id_inconsistency` detector
+    // already catches a `thread T<n>` mention with no `==<pid>==` header;
+    // this one catches the inverse — a header is present but the body's
+    // thread IDs disagree with each other across roles, which real
+    // sanitizer output never does (the same thread typically dominates,
+    // and the IDs cluster in a small range).
+    | "thread_id_mismatch";
   description: string;
 }
 
@@ -655,6 +665,61 @@ function detectMalformedShadowBytes(text: string): StructuralMarker | null {
   return null;
 }
 
+// Task #433 thread-ID-mismatch detector ------------------------------------
+//
+// Sprint 13B-2's `thread_id_inconsistency` catches `thread T<n>` mentions
+// with no `==<pid>==` header at all. Task #303's `implausible_thread_id`
+// catches T<n> values outside the realistic envelope (PID 0 / >4_194_304,
+// thread T<n> with n>1024). Neither catches the most common LLM tell:
+// a header IS present and every individual T<n> is in range, but the
+// body's per-role thread IDs don't agree — `READ ... thread T0`, `freed
+// by thread T7`, `previously allocated by thread T2`. In real ASan/TSan
+// output the same thread ID typically dominates the role anchors of a
+// single error report (most often used == freed == allocated for a UAF;
+// TSan races are a 2-thread writer/reader pair). Three or more distinct
+// thread IDs scattered across the role anchors of one error report is
+// the heuristic tell this detector picks up.
+
+// Role-anchored "thread T<n>" patterns. We deliberately scope to the
+// canonical role positions a real sanitizer emits, NOT bare "thread T<n>"
+// in prose, so a writer who mentions threads in their narrative doesn't
+// trip the rule. The intent is "role anchors only" so we have a tight
+// signal even for short report excerpts.
+const THREAD_ROLE_RES: RegExp[] = [
+  // ASan / TSan block header: "READ of size 8 at 0x... thread T0",
+  //   "WRITE of size 4 at 0x... by thread T1", "Read of size 8 ... by thread T3",
+  //   "Previous read of size 8 at 0x... by thread T1".
+  /\b(?:READ|WRITE|read|write)\s+of\s+size\s+\d+\s+at\s+0x[0-9a-fA-F]+\s+(?:by\s+)?thread\s+T(\d+)/gi,
+  // ASan free-by trailer.
+  /\bfreed\s+by\s+thread\s+T(\d+)/gi,
+  // ASan allocated-by / previously-allocated-by trailer.
+  /\b(?:previously\s+)?allocated\s+by\s+thread\s+T(\d+)/gi,
+];
+
+function detectThreadIdMismatch(text: string): StructuralMarker | null {
+  const ids = new Set<number>();
+  for (const re of THREAD_ROLE_RES) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n)) ids.add(n);
+    }
+  }
+  // Per the task spec: 3+ distinct role-tagged thread IDs in a single
+  // trace is the firing condition. Single-thread UAFs and 2-thread TSan
+  // races fall below this threshold by construction; the four named
+  // legit fixtures (T1-01-uaf-libfoo, T1-AVRI-firefox-uaf,
+  // T1-AVRI-cve-2025-0725-curl, SYMBOL_RICH_TSAN_TRACE) all use ≤2
+  // distinct role-tagged thread IDs and stay below.
+  if (ids.size < 3) return null;
+  const sorted = [...ids].sort((a, b) => a - b);
+  return {
+    id: "thread_id_mismatch",
+    description: `Trace references ${ids.size} distinct thread IDs across role anchors (T${sorted.join(", T")}); real sanitizer output keeps the role-tagged thread IDs of a single error report consistent (used == freed == allocated for a UAF, or a 2-thread writer/reader pair for a TSan race)`,
+  };
+}
+
 /** Run all structural-fabrication detectors and return the markers that
  * fired. Exported so the hallucination detector can hook the same predicates
  * without re-tokenising the trace. */
@@ -682,8 +747,11 @@ export function detectStructuralFabrication(text: string): StructuralMarker[] {
   const i = detectFabricatedMemoryMap(text);
   if (i) markers.push(i);
   // Task #434 shadow-bytes detector.
-  const j = detectMalformedShadowBytes(text);
-  if (j) markers.push(j);
+  const j1 = detectMalformedShadowBytes(text);
+  if (j1) markers.push(j1);
+  // Task #433 thread-ID-mismatch detector.
+  const j2 = detectThreadIdMismatch(text);
+  if (j2) markers.push(j2);
   return markers;
 }
 

@@ -2303,6 +2303,46 @@ Working PoC in exploit.py (not attached). Severity: Critical. CVSS: 10.0.`,
     expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
   },
   {
+    id: "T4-15-fake-thread-id-mismatch",
+    tier: "T4_HALLUCINATED",
+    condemnedBy: "HallucinationDetector",
+    // Trips Task #433 `thread_id_mismatch`: the role-tagged thread IDs
+    // disagree across the READ / freed-by / previously-allocated-by
+    // anchors (T0 / T7 / T2 — three distinct IDs spanning a range of 7).
+    // Real ASan output keeps thread IDs consistent within an error
+    // report; LLM-fabricated dumps frequently scatter random T-numbers.
+    // Also fires `round_function_offsets` (+0x100 / +0x200 / +0x300) so
+    // the structural-fabrication marker count reaches 2 and the
+    // hallucination override kicks in. Magic PID 12345 + the structural
+    // primary trips fabricated_pid as the third condemning signal.
+    text: `# Heap-use-after-free in libqux session cache (CVE-2099-30314)
+
+Discovered via automated AI-assisted code analysis of the session cache
+module; the model rated confidence "very high" so I am submitting as
+Critical. I have not produced a runnable C reproducer — exploit.py is
+private and embargoed under responsible disclosure.
+
+\`\`\`asan
+==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0xa1c0
+READ of size 8 at 0xa1c0 thread T0
+    #0 0x4001 in cache_lookup+0x100 src/cache.c:184
+    #1 0x4002 in handle_request+0x200 src/server.c:412
+    #2 0x4003 in worker_loop+0x300 src/worker.c:88
+freed by thread T7 here:
+    #0 0x4abf in __interceptor_free
+    #1 0x4ac0 in cache_evict src/cache.c:97
+previously allocated by thread T2 here:
+    #0 0x4ad0 in __interceptor_malloc
+    #1 0x4ad1 in cache_insert src/cache.c:53
+\`\`\`
+
+Working PoC in exploit.py (not attached). Severity: Critical. CVSS: 10.0.`,
+    expectedComposite: [0, 35],
+    // See T4-12 note for why Engine 2 widens to [0, 40] for this cohort.
+    expectedEngine2: [0, 40],
+    expectedTriage: ["CHALLENGE_REPORTER", "AUTO_CLOSE", "MANUAL_REVIEW"],
+  },
+  {
     id: "T4-10-fake-openssl-regression",
     tier: "T4_HALLUCINATED",
     condemnedBy: "HallucinationDetector",
