@@ -4,10 +4,119 @@ import { Separator } from "@/components/ui/separator";
 import { Shield, Bug, Wrench, Sparkles, Lock, Trash2, Eye, Code2, Globe, Brain, Crosshair, Search, Target, BarChart3, BookOpen, FileText, Zap, FlaskConical, ListChecks, Layout, Link2 } from "lucide-react";
 import { useEffect } from "react";
 
-export const CURRENT_VERSION = "3.9.1";
-export const RELEASE_DATE = "2026-04-30";
+export const CURRENT_VERSION = "3.10.0";
+export const RELEASE_DATE = "2026-05-02";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.10.0",
+    date: "2026-05-02",
+    label: "Sprint 14 — Detection rigor, calibration reproducibility, reviewer tooling",
+    labelColor: "border-violet-500 text-violet-300",
+    sections: [
+      {
+        icon: <Crosshair className="w-4 h-4 text-violet-300" />,
+        title: "LLM cost gate now driven by the composite, not the heuristic alone",
+        type: "improvement",
+        items: [
+          "evaluateLlmGate now takes the composite score alongside the heuristic. The Task #311 calibration audit had identified 16 borderline-composite slop fixtures where the heuristic was ~0 but the composite was in the 30–55 range — exactly the band the gate was designed to fire on. The previous heuristic-only path skipped all 16 silently",
+          "New telemetry reasons surfaced: fired_borderline_composite, skipped_above_borderline_composite, skipped_below_borderline_composite, skipped_composite_borderline_heuristic_confirms_slop. The diagnostics panel renders the new cases and the markdown export quotes the composite the gate evaluated against",
+          "Verified on /api/test/run across the 74-fixture battery: 16 fired_borderline_composite, 10 skipped_above, 48 skipped_below. Composite-driven path fires on all 16 calibration targets with no regression on the legit cohort",
+          "Legacy heuristic-only path preserved when composite is null (or NaN / non-finite) so non-AVRI callers still work exactly as before",
+        ],
+      },
+      {
+        icon: <Brain className="w-4 h-4 text-violet-300" />,
+        title: "Substance LLM tightened against evidence-free overshoot",
+        type: "improvement",
+        items: [
+          "Investigation of the disagreement-floor audit found 5 of 6 audited T3_SLOP fixtures where gpt-5-nano was rating reports +10 to +25 above the heuristic. Root cause: the prompt rewarded plausibility-of-vulnerability-class without requiring evidence, so any fluent prose naming a real CWE landed near 70 on domainCoherence",
+          "SYSTEM_PROMPT_FULL and SYSTEM_PROMPT_COMPACT now cap domainCoherence at 60 when only the bug class is named, pocValidity at 25 for symbolless sanitizer traces, and validityScore at 30 for reports with no PoC / sanitizer trace / file / function / CVE / line",
+          "Defense-in-depth: computeValidityScore now caps llmRaw at heuristic when the LLM's own claim extraction confirms the report is evidence-free (hasPoC=false AND pocValidity≤20 AND no claimed files/functions/CVEs/lines AND llmRaw > heuristic). The 6-condition AND-gate is mathematically unable to fire on a real legit report",
+          "Calibration result on /api/test/run?withLlm=1: T3_SLOP llmHigherCount dropped from 6 to 1 (83% reduction). T1_LEGIT passRate unchanged. evidenceFreeCapAppliedByTier reports the cap fired on 3 T3_SLOP fixtures and zero legit fixtures",
+          "Telemetry: ValidityFusionAudit gains evidenceFreeCapApplied flag per row; auditTelemetry.validityFusion adds evidenceFreeCapAppliedCount, evidenceFreeCapAppliedByTier, llmHigherCount, llmHigherByTier aggregates so trend regressions surface in the next audit run",
+        ],
+      },
+      {
+        icon: <Eye className="w-4 h-4 text-violet-300" />,
+        title: "Response-body payload echo no longer earns concrete-payload credit",
+        type: "improvement",
+        items: [
+          "Found a slop fixture (slop-13) that had to use a bracketed <attackerPayload> placeholder in its fabricated HTTP response because pasting a literal <script>alert(1)</script> would float the report back into YELLOW — the WEB_CLIENT concrete_payload gold signal was matching from anywhere in the report, including inside response bytes the response-side validator just flagged as fabricated",
+          "Added RAW_HTTP_RESPONSE_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY map and a strip-and-retest pass after the existing blanket response-side revocation. Body-payload gold signals are re-tested against text with the fake response bytes blanked via stripFakeResponses; revoked only when the pattern no longer matches, so prose-carried payloads survive",
+          "New fixture slop-14-fabricated-xss-response-with-script pastes a literal <script>alert(1)</script> inside a fake response and pins expectMaxScore 35",
+        ],
+      },
+      {
+        icon: <Bug className="w-4 h-4 text-violet-300" />,
+        title: "Crash-trace fabrication detectors widened",
+        type: "improvement",
+        items: [
+          "/proc/self/status excerpts: new detectFabricatedProcStatus catches reports padded with VmPeak / VmSize / VmRSS / VmHWM / VmData / VmStk / VmExe / VmLib / VmPTE / VmSwap lines where ≥2 of them carry exact power-of-two kB values at or above 1 MiB. The 1 MiB floor avoids tripping on small processes whose VmStk / VmExe legitimately land on small powers of two. New marker fabricated_proc_status",
+          "ARM64 / RISC-V register dumps: REGISTER_DUMP_RE was x86-only, so AI-authored crash reports that padded with X0..X30 / W0..W30 / PSTATE or x0..x31 register tables slipped through entirely. Regex extended; the existing fabricated_register_state marker now catches the non-x86 cases too with no other changes",
+          "New benchmark fixture slop-15-fabricated-arm64-registers-and-proc-status combines a realistic ARM64 ASan trace with a textbook register dump and a power-of-two /proc/self/status excerpt — locks in both detectors against regression",
+        ],
+      },
+      {
+        icon: <Search className="w-4 h-4 text-violet-300" />,
+        title: "Plain-English labels on raw-HTTP fabrication tells and gold-signal categories",
+        type: "improvement",
+        items: [
+          "FAKE_RAW_HTTP block in the diagnostics panel now lists per-signal headlines under both the request and response sub-blocks (e.g. \"Header values look like placeholders rather than real data\" alongside the placeholder_headers id). RAW_HTTP_SIGNAL_LABELS lookup table is the single source of truth, also consumed by the markdown export",
+          "Gold-signal categories in the Strong-Evidence Bonus section get the same treatment via GOLD_SIGNAL_LABELS in @workspace/avri-rubric (\"+5 real_crash_trace — Real ASan/sanitizer crash trace\"). A sync test fails if any weighted id is missing a label or any stale label exists for a removed id",
+          "/reports/:id/triage-report markdown export now emits the same Strong-Evidence Bonus block the panel shows — bonus / cap / per-signal table — so triage threads quoting the export are self-documenting",
+        ],
+      },
+      {
+        icon: <FlaskConical className="w-4 h-4 text-emerald-300" />,
+        title: "Disagreement-floor audit is now reproducible across runs",
+        type: "improvement",
+        items: [
+          "/api/test/run?withLlm=1 accepts a new ?runs=N parameter (default 3, clamp 1..10) that samples each fixture's LLM N times via a new analyzeSlopWithLLMDetailed path with bypassCache=true, so reviewers can see whether the floor verdict varies across draws or is stable",
+          "ValidityFusionAggregate gains runs / fixtureCount / attemptCount / llmFailureCount, perRunFloorFireCount[] / perRunFloorFireRate[] arrays, fixtureFloorFireDistribution {alwaysFired, neverFired, sometimesFired}, and variance {mean, min, max, stdDev, rangeAcrossRuns}. Legacy fields preserved so existing dashboards keep working",
+          "Diagnostics panel and markdown export now carry a stability clarifier under Score Audit: heuristic and gate counts are stable; llmRaw, Δ, blended, finalApplied and the floor verdict come from a single LLM draw, run /api/test/run?withLlm=1&runs=N for the distribution",
+          "Failure path is also surfaced explicitly: failures (timeout, bad JSON, unknown shape) carry attempts + error in the per-fixture _audit instead of being flattened to null. fixtureFloorFireDistribution does NOT fold failures into \"neverFired\"",
+        ],
+      },
+      {
+        icon: <ListChecks className="w-4 h-4 text-emerald-300" />,
+        title: "Labeled corpus seeded so production-scan e2e isn't vacuous",
+        type: "improvement",
+        items: [
+          "playwright globalSetup waits for /api/healthz then bulk-seeds up to 150 labeled rows tagged with file_name prefix 'e2e-labeled-corpus-' so the production-scan-window test (Task #325) actually exercises the cap. On a fresh CI database the prior assertion was vacuous — only 6 hand-written rows existed, so the test would pass even if the .limit(N) clause were silently dropped",
+          "Idempotent across reruns (existing=N → inserted=0). Cycles all 6 valid vulnrapCompositeLabel values; content text deliberately avoids the spec's sentinel tokens. E2E_NO_WEBSERVER and E2E_SKIP_LABELED_CORPUS_SEED=1 escape hatches preserved",
+          "Confirmed: cold run inserts 150 rows in ~140ms; warm run finds existing=150 and inserts 0 in ~30ms. Both Task #325 specs now pass with corpusSize binding the smallSize=100 check non-vacuously",
+        ],
+      },
+      {
+        icon: <Wrench className="w-4 h-4 text-cyan-300" />,
+        title: "Reviewer tooling — hand-wavy phrase admin",
+        type: "feature",
+        items: [
+          "Open add-preview's overlap warnings now refresh after Reinstate (per-row history, batch \"Reinstate all\", partial-batch from preview, post-Trash Undo, batch undo banner) AND after Edit-rename, not just after Remove. The Task #314 helper was renamed refreshOpenAddPreview to reflect the broader scope",
+          "Bulk-retire button now shows a cached \"(would un-flag N reports)\" hint when every eligible overlap phrase resolves to a cached dry-run impact. Sums corpus + production validDetectionsLost from the per-row preview cache, so reviewers see the impact without opening the preview. Single uncached phrase collapses the hint — no extra request, no spinner",
+          "\"Reset to default (2000)\" button next to the shared production-scan window input. Clears the persisted localStorage entry so the next page load also starts at the default. Disabled while a preview/confirm mutation is in flight",
+          "Coverage-gap banner inside the bulk-removal preview now carries an inline \"Rescan up to 10,000 reports\" button. Cancels any in-flight debounced post-drop refetch, bumps the productionScanLimitInput to MAX so subsequent drops use the wider window, and replaces the bulk preview in place. Suppresses itself once productionLimit equals the cap",
+          "Batch reinstate confirm dialog now shows the same \"N of M may overwrite recent edits\" conflict chip the picker rows and history-panel headers already showed. A reviewer who missed the header chip and clicks \"Reinstate all\" gets a last-chance warning before committing",
+          "Both conflict-chip call sites consolidated into a single shared HandwavyRemovalBatchConflictChip component (toggle mode for picker rows, static mode for history-panel headers). Mirrors the earlier HandwavyCategoryFlipBadge and HandwavyRenameBadge consolidations",
+          "\"Undo all (N)\" button on the post-Trash single-undo stack walks every entry through reinstateHandwavyPhrase, leaves failed entries in the stack so they can be retried, and emits one aggregate \"Undid N phrases\" toast at the end. Per-row Undo / Dismiss disable while the bulk pass runs",
+          "Centralized bailOnCooldown(\"Bulk removal\") inside confirmBulkRemove itself, so any future caller is automatically protected. Removed the now-redundant per-caller bail in handleRetryFailedBulkResults; kept the per-caller bail in confirmBulkRemoveFromPreview so an active cooldown surfaces the toast WITHOUT first tearing down the preview the reviewer is still reading",
+          "Picker-preview GET silently auto-retries once on transient blips (transport errors and 5xx) before showing the error state. 4xx skip the retry. New e2e spec uses MutationObserver to verify no error-state flicker plus exactly 2 detail calls",
+        ],
+      },
+      {
+        icon: <Lock className="w-4 h-4 text-amber-400" />,
+        title: "Platform robustness",
+        type: "fix",
+        items: [
+          "useGuardedNavigate now handles the rest of the NavigateFunction overload set: numeric back-delta and { replace: true } variants. proceedPendingNavigation compensates for the popstate sentinel so verbatim replay actually steps the right number of entries back / replaces the right slot. Locked in by sr-only Playwright drive-points and two new tests",
+          "scripts/check-artifact-paths.test.mjs runs as part of typecheck and test pipelines, flagging any two artifacts whose paths overlap (with the catch-all \"/\" specially allowed alongside non-\"/\" prefixes). Would have caught the Task #324 outage where api-server claimed \"/\" and stole all routes from the vulnrap dev server",
+          "GET /stats/trends now zod-validates its response body via GetTrendsResponse.parse(...) before res.json(...), matching the pattern used by every other /stats handler. A future refactor that renames a field or drops a tier now returns 500 instead of silently shipping a wrong-shape body to the homepage",
+          "Reviewer-tunable archetype-window test no longer flakes under shuffle. Describe-level beforeEach DELETEs persisted config before every spec so the \"default when nothing is configured\" assertion always starts clean",
+        ],
+      },
+    ],
+  },
   {
     version: "3.9.1",
     date: "2026-04-30",
