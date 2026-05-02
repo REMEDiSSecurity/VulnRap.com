@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setCalibrationToken } from "@workspace/api-client-react";
 import type {
   HandwavyMarker,
+  HandwavyHistoryEntry,
   HandwavyPhrasesList,
   HandwavyPhraseRemovalBatchesList,
 } from "@workspace/api-client-react";
@@ -25,14 +26,33 @@ import { HandwavyPhrasesAdmin } from "./feedback-analytics";
 // the quick-action remove succeeds, the row for the just-removed phrase
 // disappears from the preview without the reviewer touching the candidate
 // input.
+//
+// Task #443 extends the same hook to the reinstate / edit-rename success
+// paths so a phrase coming BACK onto the active list (per-row history
+// Reinstate, batch reinstate, post-Trash Undo, "Undo this batch", and the
+// applyEdit rename branch) gets reflected in the open preview's overlap
+// snapshot too. The second describe block below pins the reinstate path
+// specifically — it asserts that after a per-row history reinstate the
+// overlap row APPEARS in the preview without the reviewer touching the
+// candidate input, mirroring the post-remove coverage above.
 
 const OVERLAP_PHRASE = "do not have a reproducer";
 const OTHER_PHRASE = "synergistic threat surface";
 const CANDIDATE_PHRASE = "do not have a reproducer";
+// Task #443 — used by the edit-rename test below: an unrelated phrase
+// that the reviewer renames TO the CANDIDATE_PHRASE, which is what
+// makes the overlap row appear in the open preview after the rename.
+const PHRASE_TO_RENAME = "outdated draft phrase";
 
-// Internal mock state — mutated by the DELETE handler so subsequent GETs
-// and the post-remove dry-run reflect the curated list AFTER the remove.
+// Internal mock state — mutated by the DELETE / POST-reinstate handlers so
+// subsequent GETs and the post-mutation dry-run reflect the curated list
+// AFTER the mutation.
 let activePhrases: HandwavyMarker[] = [];
+// History rows surfaced by the GET /handwavy-phrases response. Mirrors
+// the audit log shape: a removed phrase keeps its row (with reinstated:
+// false) until a reinstate flips the flag. The reinstate POST handler
+// below mutates this in lockstep with `activePhrases`.
+let activeHistory: HandwavyHistoryEntry[] = [];
 
 function makeMarker(phrase: string): HandwavyMarker {
   return {
@@ -142,7 +162,100 @@ function installFetchMock(): ReturnType<typeof vi.spyOn> {
     ) {
       return jsonResponse(REMOVAL_BATCHES);
     }
+    // Task #443 — single-phrase reinstate POST. Mutates `activePhrases`
+    // and flips the matching `activeHistory` row's `reinstated` flag so
+    // the post-reinstate `refreshOpenAddPreview` dry-run sees the phrase
+    // back on the active list. Routed BEFORE the `/handwavy-phrases`
+    // catch-all because the reinstate URL also contains that prefix.
+    if (
+      url.includes("/api/feedback/calibration/handwavy-phrases/reinstate") &&
+      !url.includes("/reinstate-batch") &&
+      method === "POST"
+    ) {
+      let body: { phrase?: string; removedAt?: string } = {};
+      try {
+        body = JSON.parse((init?.body as string) ?? "{}");
+      } catch {
+        /* fall through */
+      }
+      const targetPhrase = body.phrase ?? "";
+      const targetRemovedAt = body.removedAt ?? "";
+      // Add the phrase back if it isn't already on the active list — the
+      // server's reinstate is idempotent against the active list, but
+      // the mock keeps the same shape for clarity.
+      if (!activePhrases.some((p) => p.phrase === targetPhrase)) {
+        activePhrases = [...activePhrases, makeMarker(targetPhrase)];
+      }
+      // Flip the matching history row to reinstated=true so the
+      // refreshed history list won't render a duplicate Reinstate
+      // button after refresh.
+      activeHistory = activeHistory.map((h) =>
+        h.phrase === targetPhrase && String(h.removedAt) === targetRemovedAt
+          ? {
+              ...h,
+              reinstated: true,
+              reinstatedBy: "reviewer-a@example.com",
+              reinstatedAt: new Date().toISOString(),
+            }
+          : h,
+      );
+      return jsonResponse({
+        reinstated: true,
+        phrase: targetPhrase,
+        category: "absence",
+        total: activePhrases.length,
+        phrases: activePhrases,
+        history: activeHistory,
+      });
+    }
     if (url.includes("/api/feedback/calibration/handwavy-phrases")) {
+      // Task #443 — edit-rename PATCH. Mutates `activePhrases` so the
+      // post-rename `refreshOpenAddPreview` dry-run reflects the swapped
+      // entry. Category/rationale-only edits (no `newPhrase` in the body
+      // or a `newPhrase` that normalizes equal to `phrase`) are still
+      // accepted but leave the active list untouched, mirroring the
+      // server's contract.
+      if (method === "PATCH") {
+        let body: {
+          phrase?: string;
+          newPhrase?: string;
+          category?: "absence" | "hedging" | "buzzword";
+          rationale?: string;
+        } = {};
+        try {
+          body = JSON.parse((init?.body as string) ?? "{}");
+        } catch {
+          /* fall through */
+        }
+        const original = body.phrase ?? "";
+        const next = body.newPhrase
+          ?.toLowerCase()
+          .replace(/\s+/g, " ")
+          .trim();
+        const originalNorm = original
+          .toLowerCase()
+          .replace(/\s+/g, " ")
+          .trim();
+        const renamed = !!next && next.length > 0 && next !== originalNorm;
+        if (renamed) {
+          activePhrases = activePhrases
+            .filter((p) => p.phrase !== original)
+            .concat([
+              {
+                ...makeMarker(next!),
+                category: body.category ?? "absence",
+                rationale: body.rationale ?? "seed",
+              },
+            ]);
+        }
+        return jsonResponse({
+          edited: true,
+          phrase: renamed ? next! : originalNorm,
+          category: body.category ?? "absence",
+          total: activePhrases.length,
+          phrases: activePhrases,
+        });
+      }
       if (method === "POST") {
         // Add-phrase dry-run preview. The candidate is read off the body so
         // the same handler serves both the initial "Preview impact" click
@@ -211,11 +324,13 @@ function installFetchMock(): ReturnType<typeof vi.spyOn> {
           history: [],
         });
       }
-      // GET: return the current active list.
+      // GET: return the current active list plus the (possibly mutated)
+      // history so the audit-trail UI reflects the latest reinstate
+      // state after refresh().
       return jsonResponse({
         phrases: activePhrases,
         total: activePhrases.length,
-        history: [],
+        history: activeHistory,
       } satisfies HandwavyPhrasesList);
     }
     // Anything else (calibration report, scoring config, analytics, ...)
@@ -252,6 +367,7 @@ describe("Task #314 — preview overlap refresh after a quick-action remove", ()
     // empty-list state would hide unrelated UI affordances and make
     // mismatches harder to localize).
     activePhrases = [makeMarker(OVERLAP_PHRASE), makeMarker(OTHER_PHRASE)];
+    activeHistory = [];
     setCalibrationToken("test-token");
     fetchSpy = installFetchMock();
   });
@@ -294,7 +410,9 @@ describe("Task #314 — preview overlap refresh after a quick-action remove", ()
     // Click the "Remove existing" quick-action for the overlap row.
     // Routes through requestRemove -> requestRemoveWithImpactPreview ->
     // (zero-impact dry-run) -> handleRemove -> live DELETE -> refresh()
-    // + Task #314's refreshOpenPreviewAfterRemoval().
+    // + Task #314's refreshOpenAddPreview() (renamed from
+    // `refreshOpenPreviewAfterRemoval` in Task #443 once the same
+    // helper started covering reinstate / edit-rename too).
     fireEvent.click(
       within(initialRows[0]).getByTestId("handwavy-preview-overlap-remove"),
     );
@@ -357,5 +475,303 @@ describe("Task #314 — preview overlap refresh after a quick-action remove", ()
       .slice(liveDeleteIdx + 1)
       .filter((c: FetchCall) => c.method === "POST");
     expect(postsAfterLiveDelete.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// Task #443 — mirror coverage for the OTHER side of the curated-list
+// edit: a per-row history Reinstate puts the phrase BACK on the active
+// list, which means the previewed candidate's `dryRunOverlaps` snapshot
+// MUST gain the just-reinstated row without the reviewer touching the
+// candidate input. The Task #314 helper was already structured to be
+// reusable; this test pins the wiring into `handleReinstate`'s success
+// path.
+describe("Task #443 — preview overlap refresh after a per-row reinstate", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn> | null = null;
+  // Stable history identifier — must match between the seeded history
+  // row, the per-row Reinstate button's `removedAt` payload, and the
+  // mock POST handler that flips `reinstated: true`.
+  const REMOVED_AT = "2026-04-15T09:30:00.000Z";
+
+  beforeEach(() => {
+    // Initial state: OVERLAP_PHRASE is NOT on the active list — it sits
+    // in the history as a removed row instead. So the open preview
+    // starts with zero overlap rows for the candidate (which equals
+    // OVERLAP_PHRASE), and the reinstate is what makes the overlap
+    // appear. OTHER_PHRASE is kept on the active list so unrelated UI
+    // affordances (input enablement, history toggle visibility, etc.)
+    // remain in their normal state.
+    activePhrases = [makeMarker(OTHER_PHRASE)];
+    activeHistory = [
+      {
+        phrase: OVERLAP_PHRASE,
+        category: "absence",
+        addedBy: "reviewer-a@example.com",
+        addedAt: "2026-04-01T10:00:00.000Z",
+        rationale: "seed",
+        removedBy: "reviewer-a@example.com",
+        removedAt: REMOVED_AT,
+        reinstated: false,
+      },
+    ];
+    setCalibrationToken("test-token");
+    fetchSpy = installFetchMock();
+  });
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+    fetchSpy = null;
+    setCalibrationToken(null);
+  });
+
+  it("adds the overlap row for the just-reinstated phrase to the open preview without the reviewer touching the candidate input", async () => {
+    renderAdmin();
+
+    // Wait for the active list to load so the candidate input is enabled.
+    await waitFor(() => {
+      expect(screen.getByTestId("handwavy-input")).not.toBeDisabled();
+    });
+
+    // Type the candidate (which equals the REMOVED phrase still sitting
+    // in the history). The dry-run overlap snapshot at this point should
+    // contain ZERO rows because the curated list does not yet include
+    // OVERLAP_PHRASE.
+    fireEvent.change(screen.getByTestId("handwavy-input"), {
+      target: { value: CANDIDATE_PHRASE },
+    });
+
+    // Open the preview. The dry-run POST returns no overlap rows because
+    // OVERLAP_PHRASE isn't on the active list yet.
+    fireEvent.click(screen.getByTestId("handwavy-add"));
+
+    // Wait for the preview confirm button to appear (preview is open).
+    await screen.findByTestId("handwavy-preview-confirm");
+    // No overlap row exists at this point — the overlaps block is only
+    // rendered when there is at least one match, so we assert directly
+    // on the absence of a row.
+    expect(
+      screen.queryByTestId("handwavy-preview-overlap-row"),
+    ).not.toBeInTheDocument();
+
+    // Expand the removal-history panel so the per-row Reinstate button
+    // becomes reachable. The toggle is collapsed by default.
+    fireEvent.click(screen.getByTestId("handwavy-history-toggle"));
+    const historyList = await screen.findByTestId("handwavy-history-list");
+
+    // Click the Reinstate button on the OVERLAP_PHRASE history row. This
+    // opens the confirmation dialog rather than reinstating directly —
+    // mirrors the production path so we don't bypass the gate.
+    const historyRow = within(historyList)
+      .getAllByTestId("handwavy-history-row")
+      .find(
+        (row) =>
+          row.getAttribute("data-handwavy-history-phrase") === OVERLAP_PHRASE,
+      );
+    expect(historyRow).toBeDefined();
+    fireEvent.click(within(historyRow!).getByTestId("handwavy-reinstate"));
+
+    // Confirm the reinstate. Routes through handleReinstate -> live POST
+    // /reinstate -> refresh() + Task #443's refreshOpenAddPreview().
+    const confirmDialog = await screen.findByTestId(
+      "handwavy-reinstate-confirm",
+    );
+    fireEvent.click(
+      within(confirmDialog).getByTestId("handwavy-reinstate-confirm-confirm"),
+    );
+
+    // The overlap row for the just-reinstated phrase MUST appear in the
+    // open preview without any further reviewer interaction. We pin
+    // both the row's presence and the panel-still-open assertion so a
+    // future regression that "fixed" the stale-overlap symptom by
+    // dismissing the panel on reinstate is also flagged.
+    await waitFor(() => {
+      const row = screen.queryByTestId("handwavy-preview-overlap-row");
+      expect(row).toBeInTheDocument();
+      expect(row).toHaveAttribute(
+        "data-handwavy-overlap-phrase",
+        OVERLAP_PHRASE,
+      );
+    });
+    expect(screen.getByTestId("handwavy-preview-confirm")).toBeInTheDocument();
+
+    // The candidate input must NOT have been touched: its value still
+    // matches what the reviewer typed.
+    expect(screen.getByTestId("handwavy-input")).toHaveValue(CANDIDATE_PHRASE);
+
+    // And a fresh add dry-run POST must have fired AFTER the live
+    // /reinstate POST — that's the actual mechanism Task #443 added.
+    // Anchoring the test to the refresh hook itself (rather than just
+    // the downstream symptom of the row appearing) ensures a future
+    // refactor that achieves the same UI by some other means still
+    // trips this test if it skipped the documented re-issue.
+    type FetchCallSummary = { url: string; method: string };
+    const calls: FetchCallSummary[] =
+      fetchSpy?.mock.calls.map(
+        ([input, init]: [RequestInfo | URL, RequestInit | undefined]) => {
+          const url =
+            typeof input === "string"
+              ? input
+              : input instanceof URL
+                ? input.toString()
+                : (input as Request).url;
+          const method = ((init?.method ?? "GET") as string).toUpperCase();
+          return { url, method };
+        },
+      ) ?? [];
+    const reinstateIdx = calls.findIndex(
+      (c: FetchCallSummary) =>
+        c.method === "POST" &&
+        c.url.includes(
+          "/api/feedback/calibration/handwavy-phrases/reinstate",
+        ) &&
+        !c.url.includes("/reinstate-batch"),
+    );
+    expect(reinstateIdx).toBeGreaterThanOrEqual(0);
+    // After the live /reinstate POST landed, an add-phrase dry-run POST
+    // must have fired. The add-phrase URL is the bare `/handwavy-phrases`
+    // endpoint (no `/reinstate` or `/reinstate-batch` suffix) with a POST
+    // method — distinguish carefully so a stray `/reinstate` POST doesn't
+    // satisfy the assertion.
+    const dryRunPostsAfterReinstate = calls
+      .slice(reinstateIdx + 1)
+      .filter(
+        (c: FetchCallSummary) =>
+          c.method === "POST" &&
+          c.url.includes("/api/feedback/calibration/handwavy-phrases") &&
+          !c.url.includes("/reinstate"),
+      );
+    expect(dryRunPostsAfterReinstate.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// Task #443 — second mirror coverage: a rename via Edit removes the
+// original normalized phrase from the active list and adds the new
+// normalized phrase. Either side of that swap can change the open
+// add-preview's `dryRunOverlaps` snapshot, so `applyEdit` (rename
+// branch only — gated on `renamed && result.edited !== false`) wires
+// the same `refreshOpenAddPreview()` hook in. This test pins that
+// wiring: when the reviewer renames an unrelated phrase TO the
+// previewed candidate, the overlap row APPEARS without touching the
+// candidate input. (Category/rationale-only edits don't need this
+// coverage — they don't change the active list and therefore can't
+// change overlaps; the production guard skips the refresh in that
+// case.)
+describe("Task #443 — preview overlap refresh after an edit-rename", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+  beforeEach(() => {
+    // Active list: one phrase the reviewer will rename TO the
+    // candidate (PHRASE_TO_RENAME), plus an unrelated OTHER_PHRASE so
+    // the list isn't pathologically small. Neither phrase equals
+    // CANDIDATE_PHRASE at preview-open time, so the overlaps block
+    // starts empty.
+    activePhrases = [
+      makeMarker(PHRASE_TO_RENAME),
+      makeMarker(OTHER_PHRASE),
+    ];
+    activeHistory = [];
+    setCalibrationToken("test-token");
+    fetchSpy = installFetchMock();
+  });
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+    fetchSpy = null;
+    setCalibrationToken(null);
+  });
+
+  it("adds the overlap row for the renamed phrase to the open preview without the reviewer touching the candidate input", async () => {
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("handwavy-input")).not.toBeDisabled();
+    });
+
+    // Type the candidate. Since neither active-list phrase matches
+    // CANDIDATE_PHRASE yet, the dry-run overlaps block stays empty.
+    fireEvent.change(screen.getByTestId("handwavy-input"), {
+      target: { value: CANDIDATE_PHRASE },
+    });
+
+    // Open the preview.
+    fireEvent.click(screen.getByTestId("handwavy-add"));
+    await screen.findByTestId("handwavy-preview-confirm");
+    expect(
+      screen.queryByTestId("handwavy-preview-overlap-row"),
+    ).not.toBeInTheDocument();
+
+    // Find the row for PHRASE_TO_RENAME and click its Edit affordance.
+    // The HandwavyPhrasesAdmin renders one Edit button per active row;
+    // we filter by the row's label to target the right phrase.
+    const editButtons = await screen.findAllByTestId("handwavy-edit");
+    const editButtonForRename = editButtons.find(
+      (btn) =>
+        btn.getAttribute("aria-label") === `Edit phrase ${PHRASE_TO_RENAME}`,
+    );
+    expect(editButtonForRename).toBeDefined();
+    fireEvent.click(editButtonForRename!);
+
+    // Rewrite the phrase text so the saved edit is a rename to
+    // CANDIDATE_PHRASE. The handwavy-edit-phrase input only renders
+    // for the row that's currently in edit mode.
+    const editInput = await screen.findByTestId("handwavy-edit-phrase");
+    fireEvent.change(editInput, { target: { value: CANDIDATE_PHRASE } });
+
+    // Save. handleSaveEdit issues a zero-impact dry-run (the DELETE
+    // handler returns SINGLE_ZERO_IMPACT for any phrase), so applyEdit
+    // fires directly without the impact-preview gate. The PATCH then
+    // mutates `activePhrases` and Task #443's refreshOpenAddPreview()
+    // re-issues the add dry-run.
+    fireEvent.click(screen.getByTestId("handwavy-edit-save"));
+
+    // The overlap row for the renamed-to phrase MUST appear in the
+    // open preview. We pin both the row's presence and the panel-
+    // still-open assertion so a future regression that "fixed" the
+    // stale-overlap symptom by simply dismissing the preview is also
+    // flagged.
+    await waitFor(() => {
+      const row = screen.queryByTestId("handwavy-preview-overlap-row");
+      expect(row).toBeInTheDocument();
+      expect(row).toHaveAttribute(
+        "data-handwavy-overlap-phrase",
+        CANDIDATE_PHRASE,
+      );
+    });
+    expect(screen.getByTestId("handwavy-preview-confirm")).toBeInTheDocument();
+
+    // The candidate input must NOT have been touched.
+    expect(screen.getByTestId("handwavy-input")).toHaveValue(CANDIDATE_PHRASE);
+
+    // And a fresh add dry-run POST must have fired AFTER the live
+    // PATCH — that's the actual mechanism Task #443 added on the
+    // edit-rename path.
+    type FetchCallSummary = { url: string; method: string };
+    const calls: FetchCallSummary[] =
+      fetchSpy?.mock.calls.map(
+        ([input, init]: [RequestInfo | URL, RequestInit | undefined]) => {
+          const url =
+            typeof input === "string"
+              ? input
+              : input instanceof URL
+                ? input.toString()
+                : (input as Request).url;
+          const method = ((init?.method ?? "GET") as string).toUpperCase();
+          return { url, method };
+        },
+      ) ?? [];
+    const patchIdx = calls.findIndex(
+      (c: FetchCallSummary) =>
+        c.method === "PATCH" &&
+        c.url.includes("/api/feedback/calibration/handwavy-phrases"),
+    );
+    expect(patchIdx).toBeGreaterThanOrEqual(0);
+    const dryRunPostsAfterPatch = calls
+      .slice(patchIdx + 1)
+      .filter(
+        (c: FetchCallSummary) =>
+          c.method === "POST" &&
+          c.url.includes("/api/feedback/calibration/handwavy-phrases") &&
+          !c.url.includes("/reinstate"),
+      );
+    expect(dryRunPostsAfterPatch.length).toBeGreaterThanOrEqual(1);
   });
 });

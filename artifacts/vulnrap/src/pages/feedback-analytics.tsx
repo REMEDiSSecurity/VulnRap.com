@@ -3267,15 +3267,17 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     // before clicking "Add" the same way the CLI does.
     overlaps: HandwavyPhraseDryRunOverlaps | null;
   } | null>(null);
-  // Task #314 — mirror the latest `preview` value into a ref so the
-  // post-remove refresh helper (`refreshOpenPreviewAfterRemoval`) can
-  // read it without becoming a dependency on every async path that
-  // calls it. The helper runs from `handleRemove` /
-  // `confirmBulkRemove`, both of which are called via stale closures
-  // captured by event handlers; reading off the ref guarantees we
-  // always see the panel's current state (e.g. the reviewer dismissing
-  // the panel between the live DELETE returning 200 and our
-  // refresh-dry-run landing).
+  // Task #314 / Task #443 — mirror the latest `preview` value into a
+  // ref so the open-preview refresh helper (`refreshOpenAddPreview`)
+  // can read it without becoming a dependency on every async path that
+  // calls it. The helper runs from `handleRemove` / `confirmBulkRemove`
+  // (Task #314), `handleReinstate` / `handleReinstateBatch` /
+  // `handleReinstateBatchSubset` / `handleUndoSingleRemove` /
+  // `handleUndoBulkBatch` / `applyEdit` rename branch (Task #443) — all
+  // of which are called via stale closures captured by event handlers;
+  // reading off the ref guarantees we always see the panel's current
+  // state (e.g. the reviewer dismissing the panel between the live
+  // mutation returning 200 and our refresh-dry-run landing).
   const previewRef = useRef(preview);
   useEffect(() => {
     previewRef.current = preview;
@@ -3956,6 +3958,17 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       setEditing(null);
       setEditPreview(null);
       refresh();
+      // Task #443 — an edit-rename PATCH drops the original normalized
+      // phrase from the active list and adds the new one. Either side of
+      // that swap can change the open add-preview's overlap snapshot, so
+      // mirror the post-remove / post-reinstate refresh hook here. We
+      // skip the refresh when the server reported `edited: false`
+      // (no-op revert) or when no rename happened (category/rationale-
+      // only edits don't change which phrases are on the active list and
+      // therefore can't change `dryRunOverlaps`).
+      if (renamed && result.edited !== false) {
+        void refreshOpenAddPreview();
+      }
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
@@ -4112,22 +4125,30 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     }
   };
 
-  // Task #314 — re-issue the open dry-run preview's `addHandwavyPhrase`
-  // dryRun call so its `overlaps` (and corpus / production scan blocks)
-  // reflect the curated list AFTER a successful removal. The original
-  // preview's `overlaps` field is captured at preview-open time and never
-  // refetches on its own, so without this hook a reviewer who removed a
-  // duplicate via the in-panel "Remove existing" quick-action — or via any
-  // other path while the panel happens to be open (per-row trash, batch
-  // confirm) — would keep seeing the just-removed phrase listed as an
-  // overlap until they dismissed and re-ran the preview. We intentionally
-  // refresh ALL of the preview's dry-run-derived fields, not just
-  // `overlaps`, so the panel can never end up with mixed-version state
-  // (e.g. an overlap snapshot from after the remove paired with a corpus
-  // sample from before it). Best-effort: a failed refetch swallows the
-  // error rather than surfacing a separate "Preview refresh failed" toast
-  // on top of the success toast the live DELETE just produced.
-  const refreshOpenPreviewAfterRemoval = async (): Promise<void> => {
+  // Task #314 / Task #443 — re-issue the open dry-run preview's
+  // `addHandwavyPhrase` dryRun call so its `overlaps` (and corpus /
+  // production scan blocks) reflect the curated list AFTER a successful
+  // mutation that changed it. The original preview's `overlaps` field is
+  // captured at preview-open time and never refetches on its own, so
+  // without this hook a reviewer who changed the curated list while the
+  // panel happened to be open would keep seeing a stale snapshot until
+  // they dismissed and re-ran the preview. Wired into every path that can
+  // change which phrases are on the active list while a preview is open:
+  //   • Task #314 — single / bulk REMOVE (per-row trash, batch confirm,
+  //     overlap-row "Remove existing" quick-action).
+  //   • Task #443 — single / batch REINSTATE (per-row history Reinstate,
+  //     post-Trash single Undo, batch "Reinstate all", partial-batch
+  //     reinstate, "Undo this batch" on the bulk-remove banner).
+  //   • Task #443 — Edit-rename PATCH (drops the original normalized
+  //     phrase from the active list and adds a new one — either side of
+  //     that swap can change the overlap snapshot).
+  // We intentionally refresh ALL of the preview's dry-run-derived fields,
+  // not just `overlaps`, so the panel can never end up with mixed-version
+  // state (e.g. an overlap snapshot from after the mutation paired with a
+  // corpus sample from before it). Best-effort: a failed refetch swallows
+  // the error rather than surfacing a separate "Preview refresh failed"
+  // toast on top of the success toast the live mutation just produced.
+  const refreshOpenAddPreview = async (): Promise<void> => {
     const current = previewRef.current;
     if (!current) return;
     const candidate = current.phrase;
@@ -4214,7 +4235,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       // here. Fired without `await` so the live-DELETE success path
       // returns immediately; the helper itself bails when no preview is
       // open and reconciles candidate identity inside `setPreview`.
-      void refreshOpenPreviewAfterRemoval();
+      void refreshOpenAddPreview();
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
@@ -4253,6 +4274,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         prev.filter((e) => e.removedAt !== entry.removedAt),
       );
       refresh();
+      // Task #443 — the post-Trash Undo is a single-phrase reinstate
+      // under the hood; mirror `handleReinstate` so the open add-preview's
+      // overlap snapshot picks the phrase back up without the reviewer
+      // having to dismiss and re-run the preview.
+      void refreshOpenAddPreview();
     } catch (err) {
       const status = (err as { status?: number } | null)?.status;
       if (status === 404) {
@@ -4268,6 +4294,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           description: `"${entry.phrase}" was already reinstated elsewhere.`,
         });
         refresh();
+        // Task #443 — the 404 path means the phrase is already back on
+        // the active list (reinstated elsewhere). The refresh() above
+        // pulls it into `phrases`; refresh the open add-preview too so
+        // the overlap snapshot reflects the same reality.
+        void refreshOpenAddPreview();
       } else if (!isCalibrationMutationAuthError(err)) {
         // Task #297 — skip duplicate toast when the rejected-token banner is showing.
         const msg = err instanceof Error ? err.message : "Failed to reinstate phrase.";
@@ -4628,6 +4659,14 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       }
     }
     refresh();
+    // Task #443 — "Undo this batch" reinstates one or more phrases per
+    // pass. Fire unconditionally for the same reason the per-row reinstate
+    // and batch reinstate paths do: a 404 / "already reinstated" outcome
+    // means the curated list moved (just from a different code path), and
+    // the helper itself bails when no preview is open. The cost of one
+    // no-op dry-run is lower than the cost of leaving a stale overlap
+    // visible after a concurrent edit elsewhere.
+    void refreshOpenAddPreview();
     setBulkResults({
       kind: "undo",
       rows: results,
@@ -5122,7 +5161,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     // callout. Skipped when nothing was removed (server rejected every
     // phrase / sticky auth failure) since the curated list is unchanged.
     if (results.some((r) => r.status === "removed")) {
-      void refreshOpenPreviewAfterRemoval();
+      void refreshOpenAddPreview();
     }
     // Drop successfully-removed phrases from the selection so the next batch
     // doesn't try to act on them again.
@@ -5251,6 +5290,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         description: `"${entry.phrase}" is back on the active list with its original ${CATEGORY_LABELS[entry.category as keyof typeof CATEGORY_LABELS] ?? entry.category ?? "absence"} context.`,
       });
       refresh();
+      // Task #443 — a reinstate puts the phrase BACK on the active list,
+      // so the open add-preview's overlap snapshot must pick it up. The
+      // helper itself bails when no preview is open and reconciles
+      // candidate identity inside `setPreview`.
+      void refreshOpenAddPreview();
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
@@ -5331,6 +5375,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             : `Every phrase in the subset was already accounted for${skipNote}.`,
       });
       refresh();
+      // Task #443 — fire unconditionally on a successful subset-reinstate
+      // response (including all-skipped outcomes where
+      // `reinstatedCount === 0`). The helper itself bails when no preview
+      // is open and reconciles candidate identity inside `setPreview`, so
+      // the cost of one no-op dry-run is lower than the cost of leaving
+      // a stale overlap visible when the server's "skipped" reason is
+      // "already active because another tab reinstated it" — i.e. the
+      // curated list DID change relative to the open preview even though
+      // this particular call didn't move it.
+      void refreshOpenAddPreview();
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
@@ -5374,6 +5428,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         prev && prev.removedAtIso === removedAtIso ? null : prev,
       );
       refresh();
+      // Task #443 — same reasoning as the partial-batch reinstate above:
+      // fire unconditionally on success (including all-skipped outcomes)
+      // so a concurrent edit elsewhere can't leave a stale overlap row
+      // visible in the open add-preview.
+      void refreshOpenAddPreview();
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
