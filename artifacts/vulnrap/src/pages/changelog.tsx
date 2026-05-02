@@ -26,13 +26,14 @@ const CHANGELOG: ChangelogEntry[] = [
       },
       {
         icon: <ListChecks className="w-4 h-4 text-amber-400" />,
-        title: "AVRI/legacy 50/50 blend ratio change (task #298) deferred to ~v3.10.0",
+        title: "AVRI/legacy 50/50 blend ratio change (task #298 / #436) still deferred to ~v3.10.0",
         type: "improvement",
         items: [
           "Sprint 13A's v3.9.0 release notes flagged that the AVRI/legacy substance blend (avriWeight = 0.5 inside runEngine2Avri) should be revisited \"two weeks (≈one sprint) after the v3.9.0 rollout … by then the analysis_traces table will hold a representative sample of AVRI-vs-legacy disagreements\"",
           "v3.9.0 shipped 2026-04-29. As of today (2026-04-30) the production analysis_traces table holds 30 rows, all dated 2026-04-20 → 2026-04-25 — i.e. zero post-flip traces and zero rows with VULNRAP_USE_AVRI=true. The premise that motivates a ratio change does not hold yet, so avriWeight stays at 0.5 in this release",
           "Even setting the date issue aside, the pre-v3.9.1 trace shape only stored composite.overallScore — there was no way to recover the AVRI-vs-legacy split per report. The trace extension above is the prerequisite that has to ship first; the ratio change is queued for the sprint after ~2 weeks of enriched traces accumulate",
           "No fixture-battery numbers move in this release: benchmark.test.ts and e3-substance-gate.test.ts run against the same 0.5/0.5 blend and stay green (slop/legit gap unchanged at 31, ≥25 calibration target preserved)",
+          "Task #436 attempted on 2026-04-30 confirmed the same data gap (0 AVRI-path rows in production) and captured a synthetic-fixture snapshot plus the production-data SQL queries to re-run next sprint in artifacts/api-server/docs/calibration/2026-04-30-avri-blend-calibration.md. Headline synthetic findings: most slop fixtures have rawAvri ≤ legacy so a higher avriWeight pushes them further down (the desired direction), but two curl-slop fixtures invert that pattern — curl-slop-h1-3116935-des-ntlm-broken-crypto (rawAvri 84, legacy 17) and curl-slop-h1-3340109-fabricated-asan (rawAvri 68, legacy 28) — both families where AVRI's gold-signal rubric mistakes weak slop for evidence and the legacy probes catch it. The first synthetic slop-side risk is curl-slop-h1-3116935 crossing the BMR (≥60) gate at w=0.65 (substance 51→61); the first synthetic legit-side risk is legit-06-open-redirect-cve-2017-7233-django dropping below the E3 gate at w=0.55+. The 0.25 rescue override does not fire on any synthetic fixture (its full predicate also requires gold-signal hits, no family contradictions, and no stripped/structural/fake-HTTP fabrication; its target shapes — shell TOCTOU, CORS-credentials misconfig — aren't in the battery), so confirming the override still earns its keep must be done from production traces. Synthetic numbers are not the basis for the eventual ratio decision; the doc carries the queries that are",
         ],
       },
     ],
