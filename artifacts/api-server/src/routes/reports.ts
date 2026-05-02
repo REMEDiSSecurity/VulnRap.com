@@ -1252,7 +1252,7 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       vulnrapEngineResults: reportsTable.vulnrapEngineResults,
     })
     .from(reportsTable)
-    .where(eq(reportsTable.contentHash, contentHash))
+    .where(and(eq(reportsTable.contentHash, contentHash), eq(reportsTable.showInFeed, true)))
     .limit(1);
 
   if (cachedReports.length > 0) {
@@ -1685,7 +1685,7 @@ router.get("/reports/lookup/:hash", async (req, res): Promise<void> => {
   const [report] = await db
     .select()
     .from(reportsTable)
-    .where(eq(reportsTable.contentHash, params.data.hash));
+    .where(and(eq(reportsTable.contentHash, params.data.hash), eq(reportsTable.showInFeed, true)));
 
   if (!report) {
     const response = LookupByHashResponse.parse({

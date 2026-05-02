@@ -80,6 +80,7 @@ router.get("/stats/recent", async (_req, res): Promise<void> => {
       createdAt: reportsTable.createdAt,
     })
     .from(reportsTable)
+    .where(eq(reportsTable.showInFeed, true))
     .orderBy(sql`${reportsTable.createdAt} desc`)
     .limit(20);
 
