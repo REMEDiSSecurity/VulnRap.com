@@ -6018,6 +6018,22 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     });
   };
 
+  // Task #513 — inverse of `dropPhraseFromReinstatePreview`. Lets reviewers
+  // restore an accidentally-dropped row to the pending reinstate set without
+  // re-previewing the whole batch (which would otherwise wipe their other
+  // drop selections). Counts on the panel are derived from `droppedPhrases`,
+  // so removing the entry here is enough to flip the row back to
+  // "would reinstate" and bump the summary numbers back up.
+  const restorePhraseToReinstatePreview = (phrase: string) => {
+    setReinstatePreview((prev) => {
+      if (!prev) return prev;
+      if (!prev.droppedPhrases.has(phrase)) return prev;
+      const next = new Set(prev.droppedPhrases);
+      next.delete(phrase);
+      return { ...prev, droppedPhrases: next };
+    });
+  };
+
   // Task #254 — partial-batch reinstate. Task #360 collapsed this back
   // into a single round-trip via the /reinstate-batch `phrases` allow-
   // list, so the dropped rows stay on the removal-history list as
@@ -11090,6 +11106,30 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                         title="Skip this phrase — leave it removed"
                                       >
                                         <XIcon className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                    {/* Task #513 — undo affordance for a row
+                                        the reviewer just dropped. Restoring
+                                        here reverses the drop without losing
+                                        the rest of the drop selections, so
+                                        reviewers don't have to re-preview the
+                                        whole batch to recover from a misclick. */}
+                                    {isDropped && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          restorePhraseToReinstatePreview(
+                                            r.phrase,
+                                          )
+                                        }
+                                        disabled={confirming}
+                                        className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-emerald-300 hover:bg-emerald-300/10 focus:outline-none focus:ring-1 focus:ring-emerald-300/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        data-testid="handwavy-reinstate-preview-result-restore"
+                                        data-phrase={r.phrase}
+                                        aria-label={`Undo drop of "${r.phrase}" — put it back into the pending reinstate set`}
+                                        title="Undo drop — put this phrase back into the pending reinstate set"
+                                      >
+                                        <Undo2 className="w-3 h-3" />
                                       </button>
                                     )}
                                   </li>
