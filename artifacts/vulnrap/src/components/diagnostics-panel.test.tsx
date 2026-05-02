@@ -1914,15 +1914,17 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(first.composite?.score).toBe(73);
     expect(second).toBe(first);
 
-    const diagnosticsCalls = fetchSpy.mock.calls.filter(([input]) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : (input as Request).url;
-      return url.includes(`/api/reports/${REPORT_ID}/diagnostics`);
-    });
+    const diagnosticsCalls = fetchSpy.mock.calls.filter(
+      ([input]: [RequestInfo | URL, RequestInit?]) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : (input as Request).url;
+        return url.includes(`/api/reports/${REPORT_ID}/diagnostics`);
+      },
+    );
     expect(diagnosticsCalls).toHaveLength(1);
 
     const cached = client.getQueryData<DiagnosticsResponse>(

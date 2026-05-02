@@ -322,37 +322,40 @@ describe("Task #314 — preview overlap refresh after a quick-action remove", ()
     // downstream symptom (the row disappearing), so a future refactor
     // that achieves the same UI by some other means still trips this
     // test if it skipped the documented re-issue.
-    const calls =
-      fetchSpy?.mock.calls.map(([input, init]) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof URL
-              ? input.toString()
-              : (input as Request).url;
-        const method = ((init?.method ?? "GET") as string).toUpperCase();
-        let body: { dryRun?: boolean } = {};
-        if (typeof init?.body === "string") {
-          try {
-            body = JSON.parse(init.body);
-          } catch {
-            /* fall through */
+    type FetchCall = { url: string; method: string; body: { dryRun?: boolean } };
+    const calls: FetchCall[] =
+      fetchSpy?.mock.calls.map(
+        ([input, init]: [RequestInfo | URL, RequestInit?]) => {
+          const url =
+            typeof input === "string"
+              ? input
+              : input instanceof URL
+                ? input.toString()
+                : (input as Request).url;
+          const method = ((init?.method ?? "GET") as string).toUpperCase();
+          let body: { dryRun?: boolean } = {};
+          if (typeof init?.body === "string") {
+            try {
+              body = JSON.parse(init.body);
+            } catch {
+              /* fall through */
+            }
           }
-        }
-        return { url, method, body };
-      }) ?? [];
-    const phrasesCalls = calls.filter((c) =>
+          return { url, method, body };
+        },
+      ) ?? [];
+    const phrasesCalls = calls.filter((c: FetchCall) =>
       c.url.includes("/api/feedback/calibration/handwavy-phrases"),
     );
     // Live DELETE is the one WITHOUT `dryRun: true` (the zero-impact
     // dry-run check fires first, then the real DELETE).
     const liveDeleteIdx = phrasesCalls.findIndex(
-      (c) => c.method === "DELETE" && c.body.dryRun !== true,
+      (c: FetchCall) => c.method === "DELETE" && c.body.dryRun !== true,
     );
     expect(liveDeleteIdx).toBeGreaterThanOrEqual(0);
     const postsAfterLiveDelete = phrasesCalls
       .slice(liveDeleteIdx + 1)
-      .filter((c) => c.method === "POST");
+      .filter((c: FetchCall) => c.method === "POST");
     expect(postsAfterLiveDelete.length).toBeGreaterThanOrEqual(1);
   });
 });

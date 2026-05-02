@@ -215,9 +215,9 @@ describe("buildRearmHistoryCsv", () => {
   it("leaves missing optional fields as empty cells (no 'undefined')", () => {
     const csv = buildRearmHistoryCsv([
       {
-        key: "FAMILY_SHIFT::2026-04-20::xss",
+        key: "FAMILY_MEAN_SHIFT::2026-04-20::xss",
         weekStart: "2026-04-20",
-        kind: "FAMILY_SHIFT",
+        kind: "FAMILY_MEAN_SHIFT",
         originalNotifiedAt: "2026-04-21T10:30:00.000Z",
         originalDetail: "xss family mean shifted by 6pt week-over-week.",
         rearmedAt: "2026-04-22T08:15:00.000Z",
@@ -225,7 +225,7 @@ describe("buildRearmHistoryCsv", () => {
     ]);
     const lines = csv.split("\r\n");
     expect(lines[1]).toBe(
-      "2026-04-22T08:15:00.000Z,,,FAMILY_SHIFT::2026-04-20::xss,2026-04-20,FAMILY_SHIFT,2026-04-21T10:30:00.000Z,xss family mean shifted by 6pt week-over-week.",
+      "2026-04-22T08:15:00.000Z,,,FAMILY_MEAN_SHIFT::2026-04-20::xss,2026-04-20,FAMILY_MEAN_SHIFT,2026-04-21T10:30:00.000Z,xss family mean shifted by 6pt week-over-week.",
     );
     expect(csv).not.toContain("undefined");
   });
@@ -235,7 +235,7 @@ describe("buildRearmHistoryCsv", () => {
       {
         key: "K",
         weekStart: "2026-04-20",
-        kind: "FAMILY_SHIFT",
+        kind: "FAMILY_MEAN_SHIFT",
         originalNotifiedAt: "2026-04-21T10:30:00.000Z",
         originalDetail: 'has, comma and "quoted" word\nplus newline',
         rearmedAt: "2026-04-22T08:15:00.000Z",
@@ -245,7 +245,7 @@ describe("buildRearmHistoryCsv", () => {
     ]);
     const lines = csv.split("\r\n");
     expect(lines[1]).toBe(
-      '2026-04-22T08:15:00.000Z,bob,"single, line",K,2026-04-20,FAMILY_SHIFT,2026-04-21T10:30:00.000Z,"has, comma and ""quoted"" word\nplus newline"',
+      '2026-04-22T08:15:00.000Z,bob,"single, line",K,2026-04-20,FAMILY_MEAN_SHIFT,2026-04-21T10:30:00.000Z,"has, comma and ""quoted"" word\nplus newline"',
     );
   });
 });
