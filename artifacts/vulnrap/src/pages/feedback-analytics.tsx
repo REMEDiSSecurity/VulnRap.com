@@ -2157,6 +2157,18 @@ export function BulkRemovalImpactBlock({
   // weaker recent-only signal. Only consulted on the production block;
   // the curated benchmark caller can omit it.
   productionLimit,
+  // Task #464 — when both `onRescanFullArchive` and `rescanCap` are
+  // provided AND the coverage-gap banner is rendered AND the current
+  // scan window is below the cap, the banner gains a "Rescan up to N
+  // reports" button that re-issues the bulk-remove dry-run with the
+  // production-scan window bumped to the cap. `rescanning` flips the
+  // button to a brief loading state. Only the bulk-remove preview wires
+  // these up; the per-row Trash and edit-rename callers omit them so
+  // their banner stays informational-only (they have no panel-scoped
+  // re-fetch hook to call into).
+  onRescanFullArchive,
+  rescanning = false,
+  rescanCap,
 }: {
   kind: "curated" | "production";
   title: string;
@@ -2165,6 +2177,9 @@ export function BulkRemovalImpactBlock({
   emptyHint: string;
   hideSampleMatchesDetails?: boolean;
   productionLimit?: number | null;
+  onRescanFullArchive?: () => void;
+  rescanning?: boolean;
+  rescanCap?: number;
 }) {
   const lost = impact.validDetectionsLost;
   const dropped = impact.falsePositivesDropped;
@@ -2251,20 +2266,53 @@ export function BulkRemovalImpactBlock({
           </div>
         </div>
       )}
-      {showCoverageGap && (
-        <div
-          className="flex items-start gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200"
-          data-testid="handwavy-bulk-preview-production-coverage-gap"
-        >
-          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
-          <span>
-            Scanning {productionLimit!.toLocaleString()} of ~
-            {impact.archiveTotal!.toLocaleString()} archived reports — recent
-            reporter behavior only. Older reports are not in this preview and
-            could still be un-flagged by the bulk removal.
-          </span>
-        </div>
-      )}
+      {showCoverageGap && (() => {
+        // Task #464 — only render the inline rescan button when the
+        // panel-scoped callback is wired in AND there is still room to
+        // widen the scan window. When the window already sits at the
+        // cap (e.g. the reviewer just rescanned and the archive is
+        // larger than the cap, or they manually maxed the dropdown),
+        // the banner re-renders with the higher numbers but the button
+        // is suppressed — there is nothing more to fetch.
+        const showRescanButton =
+          onRescanFullArchive != null &&
+          rescanCap != null &&
+          productionLimit! < rescanCap;
+        return (
+          <div
+            className="flex items-start gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200"
+            data-testid="handwavy-bulk-preview-production-coverage-gap"
+          >
+            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
+            <div className="flex-1 min-w-0 space-y-1">
+              <div>
+                Scanning {productionLimit!.toLocaleString()} of ~
+                {impact.archiveTotal!.toLocaleString()} archived reports —
+                recent reporter behavior only. Older reports are not in this
+                preview and could still be un-flagged by the bulk removal.
+              </div>
+              {showRescanButton && (
+                <button
+                  type="button"
+                  onClick={onRescanFullArchive}
+                  disabled={rescanning}
+                  className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-100 hover:bg-amber-500/20 hover:text-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-300/60 disabled:opacity-60 disabled:cursor-not-allowed"
+                  data-testid="handwavy-bulk-preview-production-coverage-gap-rescan"
+                  aria-label={`Rescan with the production-scan window widened to ${rescanCap!.toLocaleString()} reports`}
+                  title="Re-run the bulk-remove dry-run with the widest production-scan window"
+                >
+                  <RefreshCw
+                    className={cn("w-3 h-3", rescanning && "animate-spin")}
+                  />
+                  {rescanning
+                    ? "Rescanning…"
+                    : `Rescan up to ${rescanCap!.toLocaleString()} reports`}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
       {impact.warning ? (
         <div
           className="text-red-200 text-[11px]"
@@ -4860,6 +4908,14 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   const [bulkPreviewRefetchFailed, setBulkPreviewRefetchFailed] =
     useState(false);
 
+  // Task #464 — loading state for the in-banner "Rescan up to N reports"
+  // button (rendered inside `BulkRemovalImpactBlock`'s coverage-gap
+  // notice). Flips `true` while the widened-window dry-run is in flight
+  // so the button shows a spinner and disables itself, preventing a
+  // double-click from firing two rescans against the same selection.
+  const [bulkPreviewRescanningFullArchive, setBulkPreviewRescanningFullArchive] =
+    useState(false);
+
   // `keepIndicator` is set when the cancel is part of a chained re-schedule
   // (a second drop arriving before the first refetch lands) — clearing
   // the indicator there would briefly hide it between the two refetches
@@ -5001,6 +5057,104 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     if (!bulkPreview) return;
     setBulkPreviewRefetchFailed(false);
     scheduleBulkPreviewRefetch(bulkPreview.requestedPhrases);
+  };
+
+  // Task #464 — rescan the open bulk-remove preview against the widest
+  // production-scan window (the `CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX`
+  // cap). Wired up from the in-banner "Rescan up to N reports" button
+  // inside the coverage-gap notice in `BulkRemovalImpactBlock`. Before
+  // this, a reviewer who saw the coverage-gap warning had to back out
+  // of the preview, find the production-scan dropdown in the toolbar,
+  // bump the value, and re-fire the bulk-remove preview — three places
+  // to hunt for, four clicks of friction. The button collapses that to
+  // a single click that:
+  //   1. Cancels any in-flight debounced post-drop refetch so its
+  //      smaller-window response can't clobber the rescan reply.
+  //   2. Bumps the persistent production-scan input to the cap so any
+  //      subsequent post-drop refetches (and other calibration tools
+  //      sharing the input) also use the wider window — otherwise the
+  //      next drop would shrink the figures right back down to the
+  //      previous default and re-trigger the same banner.
+  //   3. Issues a fresh `removeHandwavyPhrase` dry-run with
+  //      `productionScanLimit: MAX` for the current `requestedPhrases`,
+  //      replacing `bulkPreview.data` in place so the impact panel
+  //      refreshes without closing.
+  // The post-rescan response carries the wider `dryRunImpact.productionLimit`
+  // back, so the banner re-renders with the higher numbers and (because
+  // the new `productionLimit` matches the cap) suppresses its own
+  // rescan button — even when the archive is still larger than the cap
+  // and the coverage-gap notice itself remains. We also reset
+  // `acknowledged` to `false` when the wider scan reports zero valid
+  // detections lost, mirroring the post-drop refetch logic.
+  const rescanBulkPreviewFullArchive = async () => {
+    if (!bulkPreview) return;
+    if (bailOnCooldown("Rescan bulk removal")) return;
+    cancelBulkPreviewRefetch();
+    setBulkPreviewRescanningFullArchive(true);
+    setProductionScanLimitInput(
+      String(CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX),
+    );
+    const phrasesToScan = [...bulkPreview.requestedPhrases];
+    try {
+      const resp = await removeHandwavyPhrase({
+        phrases: phrasesToScan,
+        dryRun: true,
+        productionScanLimit: CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX,
+      });
+      if (
+        !("dryRun" in resp) ||
+        resp.dryRun !== true ||
+        !("dryRunImpact" in resp)
+      ) {
+        toast({
+          title: "Rescan unavailable",
+          description:
+            "The server did not return a removal preview. The current scan window is unchanged — please retry.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setBulkPreview((prev) => {
+        if (!prev) return prev;
+        // If the reviewer dropped (or re-previewed) a different phrase
+        // set after we fired the rescan, applying it would silently
+        // re-introduce stale impact numbers — drop the rescan response
+        // on the floor and let the post-drop debounced refetch own the
+        // refresh from here.
+        if (
+          prev.requestedPhrases.length !== phrasesToScan.length ||
+          !phrasesToScan.every((p) => prev.requestedPhrases.includes(p))
+        ) {
+          return prev;
+        }
+        const corpusLost = resp.dryRunImpact.corpus.validDetectionsLost;
+        const productionLost =
+          resp.dryRunImpact.production?.validDetectionsLost ?? 0;
+        const stillRequiresAck = corpusLost + productionLost > 0;
+        return {
+          ...prev,
+          data: resp,
+          acknowledged: stillRequiresAck ? prev.acknowledged : false,
+        };
+      });
+      // A fresh response landed, so any prior "couldn't refresh impact"
+      // hint from a stale post-drop refetch is no longer accurate.
+      setBulkPreviewRefetchFailed(false);
+    } catch (err) {
+      if (!isCalibrationMutationAuthError(err)) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Failed to rescan removal preview.";
+        toast({
+          title: "Rescan failed",
+          description: msg,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setBulkPreviewRescanningFullArchive(false);
+    }
   };
 
   const setBulkPreviewAcknowledged = (ack: boolean) => {
@@ -7080,6 +7234,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   emptyHint="No production detections would be lost"
                   hideSampleMatchesDetails
                   productionLimit={productionLimit}
+                  // Task #464 — wire up the in-banner rescan affordance
+                  // for the coverage-gap notice so reviewers can widen
+                  // the production-scan window to its cap and re-run
+                  // the bulk-remove dry-run without leaving the panel.
+                  // Only the bulk-preview caller wires these in; the
+                  // per-row Trash and edit-rename callers omit them so
+                  // their banners stay informational-only.
+                  onRescanFullArchive={rescanBulkPreviewFullArchive}
+                  rescanning={bulkPreviewRescanningFullArchive}
+                  rescanCap={CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}
                 />
               ) : (
                 <div
