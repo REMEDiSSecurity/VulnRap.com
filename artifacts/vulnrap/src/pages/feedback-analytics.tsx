@@ -11129,7 +11129,24 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               }
             }}
           >
-            Reinstate batch
+            {(() => {
+              // Task #479 — mirror the picker preview confirm
+              // (Task #341): when the reviewer has dropped at least
+              // one row via the trim chips so phrasesToReinstate is a
+              // strict subset of the original batch, surface the
+              // remaining count on the button itself instead of the
+              // generic "Reinstate batch" label.
+              if (
+                reinstateBatchConfirm &&
+                reinstateBatchConfirm.phrasesToReinstate.length !==
+                  reinstateBatchConfirm.originalPhraseCount
+              ) {
+                const remaining =
+                  reinstateBatchConfirm.phrasesToReinstate.length;
+                return `Reinstate ${remaining} remaining phrase${remaining === 1 ? "" : "s"}`;
+              }
+              return "Reinstate batch";
+            })()}
           </AlertDialogAction>
         </AlertDialogFooter>
             </>

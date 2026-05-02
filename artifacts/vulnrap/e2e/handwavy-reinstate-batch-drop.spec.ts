@@ -101,9 +101,20 @@ test.describe("FLAT hand-wavy phrase panel — batch reinstate confirm 'drop one
         dialog.getByTestId("handwavy-reinstate-batch-confirm-dropped-note"),
       ).toContainText("1 phrase will stay on the removal-history list");
 
+      // Task #479 — once at least one row has been dropped via the trim
+      // chips, the Confirm button surfaces the remaining count instead
+      // of the generic "Reinstate batch" label, mirroring the picker
+      // preview dialog (Task #341).
+      const confirmBtn = dialog.getByTestId(
+        "handwavy-reinstate-batch-confirm-confirm",
+      );
+      await expect(confirmBtn).toHaveText(
+        `Reinstate ${remainingPhrases.length} remaining phrase${remainingPhrases.length === 1 ? "" : "s"}`,
+      );
+
       // Confirm. Per-phrase reinstates fire for the remaining rows; the
       // dropped phrase is left as removed.
-      await dialog.getByTestId("handwavy-reinstate-batch-confirm-confirm").click();
+      await confirmBtn.click();
       await expect(dialog).toHaveCount(0, { timeout: 5_000 });
 
       // The remaining phrases should reappear in the active list and flip to
