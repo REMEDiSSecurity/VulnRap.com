@@ -85,6 +85,13 @@ const FULLY_PARALLEL = process.env.E2E_FULLY_PARALLEL === "1";
 
 export default defineConfig({
   testDir: "./e2e",
+  // Task #458 — Top up the labeled-corpus marker rows before any spec
+  // runs so the Task #325 production-scan-limit spec's strict-increase
+  // branch is non-vacuous on a fresh DB. The setup waits for
+  // /api/healthz to confirm the api-server's startup migrations have
+  // finished, then bulk-inserts the missing rows (idempotent — see the
+  // file's header comment for the marker semantics).
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: FULLY_PARALLEL,
   workers: WORKERS,
   retries: process.env.CI ? 1 : 0,
