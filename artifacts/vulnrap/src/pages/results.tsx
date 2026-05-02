@@ -1105,6 +1105,58 @@ function ComparePanel({ reportId, matchId, matchSimilarity, matchType, settings 
   );
 }
 
+// Task #606: evidence CSV export. Reviewers asked for a flat, one-row-per
+// evidence-signal export so they can pivot/sort impossibility tells in a
+// spreadsheet without re-parsing the joined description sentence. The
+// existing JSON export already round-trips the structured `markers` field
+// (it just spreads the API response), but JSON isn't easy to filter in a
+// triage spreadsheet. The CSV mirrors the same column shape as the on-page
+// Evidence Signals card and adds a comma-joined `markers` cell that lists
+// each impossibility tell ID — flat marker IDs from `evidence.markers`
+// (impossible_http_response, impossible_graphql_response) AND structured
+// marker IDs from `evidence.context.markers[].id`
+// (hallucination_structural_fabrication). Existing CSV consumers reading
+// just the description column keep working — the `markers` cell is purely
+// additive at the end of each row.
+type EvidenceCsvRow = {
+  type: string;
+  description: string;
+  weight: number;
+  matched?: string | null;
+  markers?: string[] | null;
+  context?: { markers?: Array<{ id: string }> } | null;
+};
+
+function escapeEvidenceCsvField(value: string | number | null | undefined): string {
+  if (value == null) return "";
+  const s = String(value);
+  if (/[",\r\n]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+export function buildEvidenceCsv(evidence: EvidenceCsvRow[]): string {
+  const header = ["type", "description", "weight", "matched", "markers"].join(",");
+  const rows = evidence.map((e) => {
+    const flatMarkers = Array.isArray(e.markers) ? e.markers : [];
+    const ctxMarkers = Array.isArray(e.context?.markers)
+      ? (e.context!.markers!
+          .map((m) => (m && typeof m.id === "string" ? m.id : null))
+          .filter((id): id is string => id != null))
+      : [];
+    const allMarkers = [...flatMarkers, ...ctxMarkers];
+    return [
+      escapeEvidenceCsvField(e.type),
+      escapeEvidenceCsvField(e.description),
+      escapeEvidenceCsvField(e.weight),
+      escapeEvidenceCsvField(e.matched),
+      escapeEvidenceCsvField(allMarkers.join(", ")),
+    ].join(",");
+  });
+  return [header, ...rows].join("\r\n");
+}
+
 export default function Results() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id || "0", 10);
@@ -1113,7 +1165,7 @@ export default function Results() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [expandedCompare, setExpandedCompare] = useState<number | null>(null);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
-  const [exporting, setExporting] = useState<"json" | "txt" | null>(null);
+  const [exporting, setExporting] = useState<"json" | "txt" | "csv" | null>(null);
   const [sensitivity, setSensitivity] = useState<SensitivityPreset>(() => getSettings().sensitivityPreset);
   // Task #451: shared scroll-target state for the structural-fabrication
   // markers. Both the diagnostics panel's STRUCTURAL_FABRICATION block and
@@ -1188,6 +1240,28 @@ export default function Results() {
         title: "Exported",
         description: diagnostics ? "JSON report downloaded with diagnostics." : "JSON report downloaded (diagnostics omitted).",
       });
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  // Task #606: flat one-row-per-evidence CSV with a `markers` column that
+  // lists the structured impossibility tell IDs alongside the existing
+  // description sentence.
+  const exportCsv = () => {
+    if (!report || exporting) return;
+    setExporting("csv");
+    try {
+      const ev = (report.evidence as EvidenceCsvRow[] | undefined) ?? [];
+      const csv = buildEvidenceCsv(ev);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vulnrap-evidence-${anonymizeId(id)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Exported", description: "Evidence CSV downloaded." });
     } finally {
       setExporting(null);
     }
@@ -1466,6 +1540,17 @@ export default function Results() {
           <Button variant="outline" onClick={exportJSON} disabled={exporting !== null} className="gap-2 glass-card hover:border-primary/30">
             {exporting === "json" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             {exporting === "json" ? "Exporting..." : "JSON"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={exportCsv}
+            disabled={exporting !== null}
+            className="gap-2 glass-card hover:border-primary/30"
+            data-testid="export-evidence-csv"
+            title="Download evidence rows as CSV (one row per signal, with a markers column listing impossibility tell IDs)."
+          >
+            {exporting === "csv" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {exporting === "csv" ? "Exporting..." : "CSV"}
           </Button>
           <Button variant="outline" onClick={exportText} disabled={exporting !== null} className="gap-2 glass-card hover:border-primary/30">
             {exporting === "txt" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
