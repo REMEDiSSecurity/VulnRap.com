@@ -256,6 +256,20 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       const pickerBtn = pickerRow.getByTestId("handwavy-removal-batches-reinstate");
       await expect(pickerBtn).toBeVisible();
       await expect(pickerBtn).toBeEnabled();
+
+      // Task #480 — the row button must surface the not-yet-reinstated
+      // count BEFORE the dialog opens so reviewers can prioritise across
+      // many partial batches without clicking each one. Here 1 of 8 has
+      // been individually reinstated, so 7 are pending and the row
+      // button label gains a "(7 left)" suffix.
+      await expect(pickerBtn).toHaveText(
+        new RegExp(`Reinstate this batch \\(${phrases.length - 1} left\\)`),
+      );
+      await expect(pickerBtn).toHaveAttribute(
+        "data-remaining-count",
+        String(phrases.length - 1),
+      );
+
       await pickerBtn.click();
 
       const previewDialog = page.getByTestId(

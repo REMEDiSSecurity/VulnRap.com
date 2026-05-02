@@ -3630,6 +3630,26 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     }
     return map;
   }, [history]);
+  // Task #480 — count of inner phrases already individually reinstated
+  // per batch, indexed by removedAt. Sourced from the same history
+  // payload the picker already consumes, so the picker row button can
+  // surface "(N left)" without an extra API call. Whole-batch
+  // `reinstated === true` rows render the "Already reinstated" badge
+  // instead of this button, so they're a no-op here.
+  const reinstatedCountByBatchRemovedAt = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const h of history as Array<{
+      removedAt?: string;
+      phrases?: Array<{ reinstated?: boolean }>;
+    }>) {
+      if (!Array.isArray(h.phrases) || h.phrases.length === 0) continue;
+      const key = String(h.removedAt ?? "");
+      if (!key) continue;
+      const reinstated = h.phrases.filter((p) => p.reinstated === true).length;
+      map.set(key, reinstated);
+    }
+    return map;
+  }, [history]);
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(
     () => new Set<string>(),
   );
@@ -9432,6 +9452,26 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     Array.isArray(fullPhrases) &&
                     fullPhrases.length > samples.length;
                   const isExpanded = expandable && expandedBatches.has(removedAtIso);
+                  // Task #480 — partial-reinstate awareness on the row
+                  // button. The whole-batch picker summary only carries
+                  // an "all reinstated" boolean, but the local history
+                  // payload knows the per-phrase reinstated flags, so
+                  // we can derive the remaining count without an extra
+                  // API call. Only surface the "(N left)" suffix when a
+                  // strict subset has been individually reinstated —
+                  // 0 reinstated keeps the original copy clean, and
+                  // N === phraseCount falls through to the "Already
+                  // reinstated" badge branch above.
+                  const pickerReinstatedCount =
+                    reinstatedCountByBatchRemovedAt.get(removedAtIso) ?? 0;
+                  const pickerRemainingCount = Math.max(
+                    0,
+                    phraseCount - pickerReinstatedCount,
+                  );
+                  const showRemainingSuffix =
+                    phraseCount > 0 &&
+                    pickerReinstatedCount > 0 &&
+                    pickerReinstatedCount < phraseCount;
                   // Task #340 — track whether THIS row's conflict popover
                   // is currently open. The chip becomes a button that
                   // toggles the inline list of conflicting phrases below
@@ -9532,7 +9572,16 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                   }
                                   data-testid="handwavy-removal-batches-reinstate"
                                   data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                                  aria-label={`Preview and reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`}
+                                  data-remaining-count={
+                                    showRemainingSuffix
+                                      ? pickerRemainingCount
+                                      : undefined
+                                  }
+                                  aria-label={
+                                    showRemainingSuffix
+                                      ? `Preview and reinstate the ${pickerRemainingCount} remaining phrase${pickerRemainingCount === 1 ? "" : "s"} from this batch of ${phraseCount} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
+                                      : `Preview and reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
+                                  }
                                   aria-describedby={pickerReinstateHintId}
                                 >
                                   <RotateCcw className="w-3 h-3 mr-1" />
@@ -9540,7 +9589,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                     ? "Reinstating…"
                                     : busy === previewKey
                                       ? "Loading preview…"
-                                      : "Reinstate this batch"}
+                                      : showRemainingSuffix
+                                        ? `Reinstate this batch (${pickerRemainingCount} left)`
+                                        : "Reinstate this batch"}
                                 </Button>
                                 {pickerReinstateHintId && (
                                   <div className="basis-full">
