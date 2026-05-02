@@ -257,6 +257,42 @@ This is a critical vulnerability that lets attackers run arbitrary
 JavaScript in the victim's browser. Please award maximum bounty.`,
     expectMaxScore: 35,
   },
+  // Task #454. Calibration companion to slop-13: the WEB_CLIENT
+  // fabricated-response fixture pastes a literal
+  // `<script>alert(1)</script>` inside the fake `HTTP/1.1 200 OK`
+  // body instead of the bracketed `<attackerPayload>` slot slop-13
+  // had to use. Without the response-side body-payload strip-and-
+  // retest, `concrete_payload` (+22) would survive even though the
+  // only "payload" is the same fabricated bytes the response-side
+  // validator just rejected (`reflection_or_dom_proof` is already
+  // revoked via the blanket map). With the new strip-and-retest the
+  // engine re-tests `concrete_payload`'s `<script[^>]*>` alternation
+  // against text with the fake response bytes blanked — no surrounding
+  // prose carries a `<script>` token here, so the +22 is revoked and
+  // the composite stays ≤35.
+  {
+    name: "slop-14-fabricated-xss-response-with-script",
+    forceAvri: true,
+    claimedCwes: ["CWE-79"],
+    text: `# Reflected XSS in /search via q parameter
+
+There is an XSS issue in the /search endpoint of the application.
+When the attacker supplies a payload via the q parameter, the
+server echoes it back inside the search-bar widget without HTML-
+encoding. The HTTP exchange below was captured during testing and
+demonstrates the unsafe echo.
+
+\`\`\`http
+HTTP/1.1 200 OK
+Content-Type: text/html
+
+<html><body><h1>Search results for the supplied term</h1><input name="q" value="<script>alert(1)</script>"></body></html>
+\`\`\`
+
+This is a critical vulnerability that lets attackers run arbitrary
+JavaScript in the victim's browser. Please award maximum bounty.`,
+    expectMaxScore: 35,
+  },
   // Sprint 13B-3 (Task #304) calibration fixtures for the new
   // `impossible_http_response` hallucination signal. Each fixture
   // pastes a fenced HTTP excerpt that a real HTTP/1.1 stack never

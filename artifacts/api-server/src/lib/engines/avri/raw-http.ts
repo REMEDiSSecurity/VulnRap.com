@@ -1747,3 +1747,37 @@ export function rawHttpResponseGoldSignalIdsFor(
 ): ReadonlySet<string> | null {
   return RAW_HTTP_RESPONSE_GOLD_SIGNAL_IDS_BY_FAMILY[familyId] ?? null;
 }
+
+/** Per-family map of payload-class gold-signal IDs whose only "evidence"
+ * may live inside a fabricated HTTP response body. Mirrors the
+ * request-side `RAW_HTTP_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY` map and
+ * the strip-and-retest pattern used there, but for response bytes:
+ * when the response-side validator flags a `HTTP/1.1 …` block as
+ * fabricated the engine re-tests these signals against text with the
+ * fake response bytes blanked. If the signal pattern only matched
+ * inside the fake response (no surrounding prose / legitimate excerpt
+ * carries the same payload bytes), the gold point is revoked.
+ *
+ * WEB_CLIENT: `concrete_payload` rewards a literal XSS/JS payload
+ *   (`<script>`, `<img onerror=`, `javascript:`, `document.cookie`,
+ *   etc). A slop XSS report can paste a fake `HTTP/1.1 200 OK` block
+ *   whose HTML body contains a literal `<script>alert(1)</script>` —
+ *   the response-side validator already revokes the
+ *   `reflection_or_dom_proof` point via the blanket map above, but
+ *   without this strip-and-retest pass the +22 `concrete_payload`
+ *   point survives even though the only "payload" is the same
+ *   fabricated bytes. Adding `concrete_payload` here is the response
+ *   -side equivalent of the INJECTION request-body strip-and-retest. */
+export const RAW_HTTP_RESPONSE_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  WEB_CLIENT: new Set([
+    "concrete_payload",
+  ]),
+};
+
+export function rawHttpResponseBodyPayloadGoldSignalIdsFor(
+  familyId: string,
+): ReadonlySet<string> | null {
+  return RAW_HTTP_RESPONSE_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY[familyId] ?? null;
+}

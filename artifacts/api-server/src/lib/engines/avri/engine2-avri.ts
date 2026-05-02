@@ -19,6 +19,8 @@ import {
   rawHttpGoldSignalIdsFor,
   rawHttpBodyPayloadGoldSignalIdsFor,
   rawHttpResponseGoldSignalIdsFor,
+  rawHttpResponseBodyPayloadGoldSignalIdsFor,
+  stripFakeResponses,
   stripPlaceholderBodies,
   type RawHttpEvaluation,
   type RawHttpResponseEvaluation,
@@ -466,6 +468,45 @@ export function runEngine2Avri(
         } else {
           remaining.push(hit);
         }
+      }
+      goldHits.length = 0;
+      goldHits.push(...remaining);
+    }
+
+    // Task #454 — response-side body-payload strip-and-retest. The
+    // blanket revocation above only covers gold signals whose evidence
+    // is the response shape itself (`reflection_or_dom_proof`). It does
+    // NOT cover payload-class signals (e.g. WEB_CLIENT
+    // `concrete_payload`, +22) that match anywhere in the report — so
+    // a slop XSS report that pastes a literal `<script>alert(1)</script>`
+    // inside a fabricated `HTTP/1.1 200 OK` body would keep the +22
+    // even though the only "payload" is the same fabricated bytes the
+    // validator just rejected. Mirror the request-side body-payload
+    // path: re-test the family's response-body-payload signals against
+    // text with the fake response bytes blanked, and revoke the point
+    // when the pattern no longer matches (i.e. the only match was
+    // inside the fake response). Surrounding prose / legitimate
+    // excerpts that carry the same payload bytes survive stripping
+    // and keep the point.
+    const responseBodyPayloadIds = rawHttpResponseBodyPayloadGoldSignalIdsFor(family.id);
+    if (
+      responseBodyPayloadIds &&
+      rawHttpResponse.isFake &&
+      rawHttpResponse.fakeResponseRanges.length > 0
+    ) {
+      const stripped = stripFakeResponses(httpAugmentedText, rawHttpResponse);
+      const remaining: typeof goldHits = [];
+      for (const hit of goldHits) {
+        if (responseBodyPayloadIds.has(hit.id)) {
+          const sigDef = family.goldSignals.find((g) => g.id === hit.id);
+          if (sigDef && !sigDef.pattern.test(stripped)) {
+            revokedRawHttpHits.push(hit);
+            revokedResponseHits.push(hit);
+            goldTotal -= hit.points;
+            continue;
+          }
+        }
+        remaining.push(hit);
       }
       goldHits.length = 0;
       goldHits.push(...remaining);

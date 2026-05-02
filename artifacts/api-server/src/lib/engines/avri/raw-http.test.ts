@@ -2626,4 +2626,63 @@ describe("runEngine2Avri — WEB_CLIENT fabricated-response integration", () => 
     expect(rawHttp?.response?.isFake).toBe(true);
     expect(rawHttp?.response?.responsesFlagged ?? 0).toBeGreaterThanOrEqual(1);
   });
+
+  // Task #454 — response-side body-payload strip-and-retest. A slop
+  // XSS report whose ONLY `<script>` token lives inside a fabricated
+  // `HTTP/1.1 200 OK` body must lose the +22 `concrete_payload` gold
+  // hit too, not just the +12 `reflection_or_dom_proof` already
+  // covered by the blanket revocation map.
+  it("revokes concrete_payload when the only XSS payload bytes live inside a fabricated response", () => {
+    const fixture = [
+      "# Reflected XSS in /search via q parameter",
+      "",
+      "The /search endpoint reflects the q parameter without HTML-encoding.",
+      "The HTTP exchange below shows the unsafe echo.",
+      "",
+      "```http",
+      "HTTP/1.1 200 OK",
+      "Content-Type: text/html",
+      "",
+      '<html><body><input name="q" value="<script>alert(1)</script>"></body></html>',
+      "```",
+      "",
+      "Please award bounty.",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, WEB);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("concrete_payload");
+    expect(survivingIds).not.toContain("reflection_or_dom_proof");
+  });
+
+  // Symmetric guard: when a real XSS payload lives in surrounding prose
+  // (outside any fabricated response block), the strip-and-retest pass
+  // must NOT revoke `concrete_payload` — the `<script>` token still
+  // matches in the stripped text.
+  it("keeps concrete_payload when an XSS payload also appears outside the fabricated response", () => {
+    const fixture = [
+      "# Reflected XSS in /search via q parameter",
+      "",
+      "The reporter sent the payload `<script>alert(1)</script>` in the q",
+      "parameter and observed it echoed back in the response below.",
+      "",
+      "```http",
+      "HTTP/1.1 200 OK",
+      "Content-Type: text/html",
+      "",
+      '<html><body><input name="q" value="<script>alert(1)</script>"></body></html>',
+      "```",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, WEB);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    // Response is still flagged fake (no Date/Server/incidentals), so
+    // FAKE_RAW_HTTP fires — but the payload also lives in prose so
+    // `concrete_payload` survives the strip-and-retest.
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).toContain("concrete_payload");
+  });
 });
