@@ -1,4 +1,4 @@
-import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp, Plug } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -258,6 +258,46 @@ curl -X POST https://vulnrap.com/api/reports/check \\
             </Card>
           ))}
         </div>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
+          <Plug className="w-5 h-5 text-primary" />
+          Integration Recipes
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          End-to-end walkthroughs for wiring VulnRap into specific triage platforms. Pure docs — copy the scripts, adapt to your environment.
+        </p>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Badge variant="outline" className="border-primary/40 text-primary text-[10px] font-mono uppercase">HackerOne</Badge>
+              Score every report, comment back, optionally auto-close
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Wire H1's <code className="font-mono text-xs text-foreground">report-created</code> webhook into{" "}
+              <code className="font-mono text-xs text-foreground">/api/reports/check</code>, post the composite score as an internal comment,
+              and (opt-in) close the AUTO_CLOSE tier with a templated reply. Reference shell + Python scripts inline.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a
+              href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/hackerone.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              data-testid="link-hackerone-recipe"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Read the HackerOne recipe
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <p className="text-[11px] text-muted-foreground/60 italic mt-2">
+              Repo path: <code className="font-mono">artifacts/api-server/docs/integrations/hackerone.md</code>
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="glass-card rounded-xl">

@@ -1,0 +1,356 @@
+# HackerOne integration recipe
+
+> Wire VulnRap into your HackerOne triage queue: score every incoming
+> report, post the result back as an internal comment, and (optionally)
+> auto-close the ones the matrix puts in the AUTO_CLOSE band.
+>
+> No code is shipped to HackerOne. This is a recipe — copy the scripts,
+> point them at your program, and adapt to taste.
+
+## Audience
+
+Triagers and PSIRT engineers who already use HackerOne's REST API and
+just want a turnkey way to plug VulnRap into the queue. This doc
+assumes you have:
+
+- A HackerOne API token with `read` + `write` scopes for your program
+  (Settings → Program → API tokens). OAuth apps are out of scope here;
+  a manual token is fine.
+- The program handle (e.g. `acme-inc`).
+- A box that can receive HackerOne webhooks (or run a poller) and reach
+  `https://vulnrap.com/api/...`.
+
+VulnRap itself needs no API key — every endpoint used below is open and
+anonymous (rate-limited at 30 analyses / 15 min / IP). If you triage at
+volume, run the integration from a small fleet so you do not share an
+egress IP with the rest of your team.
+
+## What this recipe wires up
+
+1. **HackerOne webhook → your handler** for the `report-created` event.
+2. **Your handler → `POST /api/reports/check`** to score the report
+   without storing anything on the public VulnRap feed.
+3. **Your handler → HackerOne `internal-comments`** to post the
+   composite score, the recommended triage action, and a link to the
+   pipeline-diagnostics blob.
+4. **(Optional) Auto-close on the AUTO_CLOSE tier** by calling the
+   HackerOne `state_changes` endpoint with `not-applicable` plus a
+   templated message asking for original research.
+
+The `/api/reports/check` endpoint runs the full pipeline (multi-engine
+consensus, similarity matching, redaction, AVRI gold signals) but does
+**not** persist the report. Use `POST /api/reports` instead if you want
+the analysis to land on the public feed and contribute to platform
+calibration.
+
+## The triage matrix at a glance
+
+The composite score returned by VulnRap maps to one of five triage
+actions. The mapping is the same one used by the public report view:
+
+| Composite | Recommended action  | Suggested H1 move                 |
+| --------: | ------------------- | --------------------------------- |
+|     ≥ 65  | `PRIORITIZE`        | Assign to senior triager + tag    |
+|     ≥ 55  | `MANUAL_REVIEW`     | Standard human review             |
+|     ≥ 40  | `STANDARD_TRIAGE`   | Normal queue                      |
+|     ≥ 25  | `CHALLENGE_REPORTER`| Post the generated questions      |
+|     <  25 | `AUTO_CLOSE`        | Close as `not-applicable`         |
+
+Override: if AVRI gold-signal hits ≥ 2 and composite ≥ 40, the action
+is upgraded to `PRIORITIZE` regardless of band. Use this as a hard stop
+against ever auto-closing a report with strong family-specific
+evidence.
+
+The `recommendation.action` field on `/api/reports/check` already
+contains the right enum value — you do not need to re-implement the
+matrix client-side.
+
+## Step 1 — Set up the HackerOne webhook
+
+In the HackerOne program admin UI:
+
+1. Go to **Settings → Program → Webhooks → Add webhook**.
+2. URL: your handler endpoint (e.g.
+   `https://triage.acme.example/h1-hooks`).
+3. Subscribed event: **report-created** (add **report-updated** later
+   if you want to re-score on edits).
+4. Secret: generate a long random string and store it as
+   `H1_WEBHOOK_SECRET` on your handler box.
+
+HackerOne signs webhook payloads with HMAC-SHA256 in the
+`X-HackerOne-Signature` header. Verify it before doing any work:
+
+```python
+import hmac, hashlib, os
+
+def verify_h1_signature(raw_body: bytes, header_value: str) -> bool:
+    secret = os.environ["H1_WEBHOOK_SECRET"].encode()
+    expected = "sha256=" + hmac.new(secret, raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, header_value or "")
+```
+
+If you cannot expose a public endpoint, skip the webhook and run the
+poller from Step 4 on a 1-minute cron instead. The scoring/posting
+logic is identical.
+
+## Step 2 — Score the report
+
+Pull the report body via the HackerOne API, then send it to
+`/api/reports/check`. The `rawText` form field accepts the full
+Markdown body unchanged.
+
+```bash
+#!/usr/bin/env bash
+# fetch-and-score.sh <report-id>
+set -euo pipefail
+
+REPORT_ID="$1"
+: "${H1_USER:?H1 API username required}"
+: "${H1_TOKEN:?H1 API token required}"
+
+# 1. Pull the report from HackerOne
+REPORT_JSON=$(curl -fsS \
+  -u "$H1_USER:$H1_TOKEN" \
+  "https://api.hackerone.com/v1/reports/$REPORT_ID")
+
+TITLE=$(echo "$REPORT_JSON" | jq -r '.data.attributes.title')
+BODY=$(echo "$REPORT_JSON"  | jq -r '.data.attributes.vulnerability_information')
+
+# 2. Score it through VulnRap (no storage)
+SCORED=$(curl -fsS -X POST https://vulnrap.com/api/reports/check \
+  -F "rawText=$(printf '%s\n\n%s' "$TITLE" "$BODY")")
+
+COMPOSITE=$(echo "$SCORED" | jq -r '.vulnrap.compositeScore')
+ACTION=$(echo "$SCORED"    | jq -r '.recommendation.action // "STANDARD_TRIAGE"')
+LABEL=$(echo "$SCORED"     | jq -r '.vulnrap.compositeLabel // .slopTier')
+
+echo "report=$REPORT_ID composite=$COMPOSITE action=$ACTION label=\"$LABEL\""
+```
+
+`POST /api/reports/check` returns the same shape as `POST /api/reports`
+minus the persisted fields (`id`, `deleteToken`). The fields you'll
+typically pluck out:
+
+| Path                              | What it is                                |
+| --------------------------------- | ----------------------------------------- |
+| `vulnrap.compositeScore`          | 0–100, higher = better quality            |
+| `vulnrap.compositeLabel`          | Human label (e.g. "Likely Human")         |
+| `vulnrap.engines[]`               | Per-engine score + verdict + reasoning    |
+| `recommendation.action`           | One of the five triage enum values        |
+| `recommendation.reason`           | One-liner the matrix used                 |
+| `recommendation.challengeQuestions` | Pre-generated challenge prompts         |
+| `similarityMatches[]`             | Existing reports with overlapping content |
+| `slopScore` / `slopTier`          | Legacy single-axis projection             |
+
+## Step 3 — Post the score back as an internal comment
+
+HackerOne's `activities` API takes an internal comment in one POST.
+Internal comments are visible to your team only — never to the
+reporter — so they're the right home for the triage telemetry.
+
+```python
+# post_score_comment.py
+import os, json, requests
+
+H1_USER  = os.environ["H1_USER"]
+H1_TOKEN = os.environ["H1_TOKEN"]
+
+def post_internal_comment(report_id: int, scored: dict) -> None:
+    composite = scored["vulnrap"]["compositeScore"]
+    label     = scored["vulnrap"].get("compositeLabel") or scored.get("slopTier", "?")
+    action    = scored.get("recommendation", {}).get("action", "STANDARD_TRIAGE")
+    reason    = scored.get("recommendation", {}).get("reason", "")
+    dupes     = len(scored.get("similarityMatches") or [])
+    engines   = scored.get("vulnrap", {}).get("engines", [])
+
+    engine_lines = "\n".join(
+        f"- **{e['engine']}**: {e['score']}/100 — {e.get('verdict', '?')}"
+        for e in engines
+    ) or "_no engine breakdown_"
+
+    body = f"""**VulnRap analysis** — composite **{composite}/100** ({label})
+
+Recommended triage action: `{action}`
+{reason}
+
+{engine_lines}
+
+Similar prior reports: **{dupes}**
+"""
+
+    payload = {
+        "data": {
+            "type": "activity-comment",
+            "attributes": {
+                "message":  body,
+                "internal": True,
+            },
+        }
+    }
+
+    r = requests.post(
+        f"https://api.hackerone.com/v1/reports/{report_id}/activities",
+        auth=(H1_USER, H1_TOKEN),
+        headers={"Content-Type": "application/json"},
+        data=json.dumps(payload),
+        timeout=15,
+    )
+    r.raise_for_status()
+```
+
+Tips:
+
+- Leave `internal: True` on. The reporter must never see the raw
+  composite — they see your triage decision, not the score behind it.
+- Add a permalink to the diagnostics blob if you also called
+  `POST /api/reports` (which persists). The blob lives at
+  `https://vulnrap.com/api/reports/<id>/diagnostics` and powers the
+  "Why this score?" panel — useful when a senior reviewer asks how
+  the matrix landed where it did.
+
+## Step 4 — Auto-close the AUTO_CLOSE tier
+
+This is opt-in. The recommendation is conservative, but you should
+still gate it behind:
+
+- `recommendation.action == "AUTO_CLOSE"` (composite < 25), **and**
+- No AVRI gold hits (the matrix already overrides upward, but belt &
+  braces — check `vulnrap.engines` for the Technical Substance
+  Analyzer entry and confirm `signalBreakdown.avri.goldHitCount`
+  is 0), **and**
+- `similarityMatches.length == 0` is **not** required — duplicates of
+  known fabricated reports are exactly the case you want to close.
+
+```python
+# auto_close.py
+import os, json, requests
+
+H1_USER  = os.environ["H1_USER"]
+H1_TOKEN = os.environ["H1_TOKEN"]
+
+CLOSE_MESSAGE = (
+    "Thanks for the submission. After automated review we were unable "
+    "to identify original research or a reproducible impact in this "
+    "report. We're closing as Not Applicable. If you believe this is "
+    "incorrect, please reply with the specific request/response, "
+    "stack trace, or commit hash that demonstrates the issue and we "
+    "will reopen."
+)
+
+def should_auto_close(scored: dict) -> bool:
+    if scored.get("recommendation", {}).get("action") != "AUTO_CLOSE":
+        return False
+    for e in scored.get("vulnrap", {}).get("engines", []):
+        if e.get("engine") == "Technical Substance Analyzer":
+            gold = (e.get("signalBreakdown", {})
+                     .get("avri", {})
+                     .get("goldHitCount", 0))
+            if gold > 0:
+                return False
+    return True
+
+def auto_close(report_id: int, scored: dict) -> bool:
+    if not should_auto_close(scored):
+        return False
+    payload = {
+        "data": {
+            "type": "state-change",
+            "attributes": {
+                "state":   "not-applicable",
+                "message": CLOSE_MESSAGE,
+            },
+        }
+    }
+    r = requests.post(
+        f"https://api.hackerone.com/v1/reports/{report_id}/state_changes",
+        auth=(H1_USER, H1_TOKEN),
+        headers={"Content-Type": "application/json"},
+        data=json.dumps(payload),
+        timeout=15,
+    )
+    r.raise_for_status()
+    return True
+```
+
+We strongly recommend running the close script in **dry-run mode for at
+least a week** before flipping it on — log what you *would* have closed
+and have a senior triager spot-check the list. The composite is
+calibrated against a public corpus, but every program's inbound mix is
+different.
+
+## Putting it together
+
+Minimal end-to-end handler. Drop it in any WSGI/ASGI/Lambda runner —
+the only HTTP surface is `POST /h1-hooks`.
+
+```python
+# h1_hooks.py
+from flask import Flask, request, abort
+import os, requests
+
+from post_score_comment import post_internal_comment
+from auto_close          import auto_close
+
+app = Flask(__name__)
+
+H1_USER  = os.environ["H1_USER"]
+H1_TOKEN = os.environ["H1_TOKEN"]
+
+@app.post("/h1-hooks")
+def h1_hooks():
+    raw = request.get_data()
+    if not verify_h1_signature(raw, request.headers.get("X-HackerOne-Signature", "")):
+        abort(401)
+
+    payload = request.get_json(silent=True) or {}
+    if payload.get("type") != "report-created":
+        return ("", 204)
+
+    report_id = payload["report"]["id"]
+
+    # 1. Pull the report
+    r = requests.get(
+        f"https://api.hackerone.com/v1/reports/{report_id}",
+        auth=(H1_USER, H1_TOKEN), timeout=15,
+    )
+    r.raise_for_status()
+    attrs = r.json()["data"]["attributes"]
+    text  = f"{attrs['title']}\n\n{attrs['vulnerability_information']}"
+
+    # 2. Score
+    scored = requests.post(
+        "https://vulnrap.com/api/reports/check",
+        data={"rawText": text}, timeout=30,
+    ).json()
+
+    # 3. Comment
+    post_internal_comment(report_id, scored)
+
+    # 4. Optional auto-close
+    auto_close(report_id, scored)
+
+    return ("", 204)
+```
+
+## Operational notes
+
+- **Rate limits.** VulnRap caps at 30 analyses / 15 min / IP. If your
+  inbox is hotter than that, batch through a small worker pool with
+  exponential backoff on 429 — don't retry-storm.
+- **Privacy.** Report text is auto-redacted server-side before any
+  storage path. `/api/reports/check` doesn't store at all, so the
+  reporter's PII never leaves your handler in a persisted form.
+- **Idempotency.** `report-created` can fire more than once. Key your
+  internal comment by report id + a tag in the body (e.g. a leading
+  `[vulnrap-auto]`) so you can short-circuit duplicates.
+- **Failure mode.** If the score call fails, **post nothing and let
+  the human triage normally.** Never block a report on this pipeline.
+
+## See also
+
+- [`/developers`](https://vulnrap.com/developers) — full API reference,
+  Swagger UI, more sample scripts.
+- [`/api/reports/:id/diagnostics`](https://vulnrap.com/developers#diagnostics)
+  — the per-engine pipeline trace that powers the "Why this score?"
+  panel. Drop the URL into your internal comment so reviewers can dig
+  in without leaving HackerOne.
