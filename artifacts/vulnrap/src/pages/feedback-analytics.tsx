@@ -1647,6 +1647,34 @@ export function PreviewOverlapsBlock({
   // duplicate dry-run on top of an in-flight or open panel.
   bulkOverlappingBusy?: boolean;
 }) {
+  // Task #440 — lift each bucket's collapsed/expanded preference up here
+  // so the reviewer's choice survives the per-keystroke overlap-snapshot
+  // churn. The bucket child's own `useState` reset on every refresh
+  // because keyed children remount when the relation drops out of (and
+  // later returns to) the snapshot. Storing the override at this level
+  // means the choice survives those re-renders but still resets when the
+  // whole block unmounts (preview dismissed/confirmed) so fresh sessions
+  // open with the documented auto-collapse defaults. Hooks are declared
+  // before the early-null-return below so the hook count stays stable
+  // across renders that toggle between empty and non-empty overlap
+  // snapshots (a common case during dry-run refreshes).
+  const [collapsedByRelation, setCollapsedByRelation] = useState<
+    Map<HandwavyPhraseDryRunOverlapsMatchesItemRelation, boolean>
+  >(() => new Map());
+  const handleSetBucketCollapsed = useCallback(
+    (
+      relation: HandwavyPhraseDryRunOverlapsMatchesItemRelation,
+      collapsed: boolean,
+    ) => {
+      setCollapsedByRelation((prev) => {
+        if (prev.get(relation) === collapsed) return prev;
+        const next = new Map(prev);
+        next.set(relation, collapsed);
+        return next;
+      });
+    },
+    [],
+  );
   if (!overlaps || overlaps.matches.length === 0) return null;
   const noun = overlaps.total === 1 ? "entry" : "entries";
   const bucketOrder: HandwavyPhraseDryRunOverlapsMatchesItemRelation[] = [
@@ -1731,16 +1759,27 @@ export function PreviewOverlapsBlock({
         )}
       </div>
       <div className="space-y-1.5">
-        {buckets.map((bucket) => (
-          <PreviewOverlapBucketBlock
-            key={bucket.relation}
-            bucket={bucket}
-            onJumpToActivePhrase={onJumpToActivePhrase}
-            onRequestRemoveExisting={onRequestRemoveExisting}
-            mutationsAllowed={mutationsAllowed}
-            removeBusyPhrase={removeBusyPhrase}
-          />
-        ))}
+        {buckets.map((bucket) => {
+          // Task #440 — defer to the reviewer's stored preference if they
+          // ever toggled this bucket; otherwise fall back to the
+          // row-count auto-collapse default. `undefined` lets the child
+          // tell whether the reviewer has expressed a choice yet.
+          const collapsedOverride = collapsedByRelation.has(bucket.relation)
+            ? collapsedByRelation.get(bucket.relation)
+            : undefined;
+          return (
+            <PreviewOverlapBucketBlock
+              key={bucket.relation}
+              bucket={bucket}
+              collapsedOverride={collapsedOverride}
+              onCollapsedChange={handleSetBucketCollapsed}
+              onJumpToActivePhrase={onJumpToActivePhrase}
+              onRequestRemoveExisting={onRequestRemoveExisting}
+              mutationsAllowed={mutationsAllowed}
+              removeBusyPhrase={removeBusyPhrase}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -1756,14 +1795,22 @@ export function PreviewOverlapsBlock({
 // of entries.
 export const PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD = 5;
 
-// Task #308 — one bucket inside `PreviewOverlapsBlock`. Extracted so each
-// bucket gets its own `useState` for collapsed/expanded; the parent map can't
-// hold per-bucket state without a child component. Default collapsed state is
-// derived from the bucket's row count so opening the preview already shows a
-// compact panel when a bucket is large; reviewers can flip individual buckets
-// independently after that.
+// Task #308 — one bucket inside `PreviewOverlapsBlock`. Default collapsed
+// state is derived from the bucket's row count so opening the preview
+// already shows a compact panel when a bucket is large; reviewers can flip
+// individual buckets independently after that.
+//
+// Task #440 — collapse state is now controlled by `PreviewOverlapsBlock`
+// (keyed by relation) so the reviewer's choice survives a bucket
+// disappearing and reappearing across overlap-snapshot refreshes during a
+// candidate edit session. `collapsedOverride === undefined` means the
+// reviewer hasn't expressed a choice yet, so the row-count auto-collapse
+// default applies; once they toggle, we report the new value to the parent
+// which keeps it across re-renders.
 function PreviewOverlapBucketBlock({
   bucket,
+  collapsedOverride,
+  onCollapsedChange,
   onJumpToActivePhrase,
   onRequestRemoveExisting,
   mutationsAllowed,
@@ -1773,6 +1820,11 @@ function PreviewOverlapBucketBlock({
     relation: HandwavyPhraseDryRunOverlapsMatchesItemRelation;
     matches: HandwavyPhraseDryRunOverlapsMatchesItem[];
   };
+  collapsedOverride?: boolean;
+  onCollapsedChange?: (
+    relation: HandwavyPhraseDryRunOverlapsMatchesItemRelation,
+    collapsed: boolean,
+  ) => void;
   onJumpToActivePhrase?: (phrase: string) => void;
   onRequestRemoveExisting?: (phrase: string) => void;
   mutationsAllowed?: boolean;
@@ -1780,7 +1832,11 @@ function PreviewOverlapBucketBlock({
 }) {
   const startsCollapsed =
     bucket.matches.length > PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD;
-  const [collapsed, setCollapsed] = useState(startsCollapsed);
+  const collapsed =
+    collapsedOverride === undefined ? startsCollapsed : collapsedOverride;
+  const setCollapsed = (next: boolean) => {
+    onCollapsedChange?.(bucket.relation, next);
+  };
   const bucketNoun = describeOverlapBucketNoun(
     bucket.relation,
     bucket.matches.length,
@@ -1797,7 +1853,7 @@ function PreviewOverlapBucketBlock({
     >
       <button
         type="button"
-        onClick={() => setCollapsed((prev) => !prev)}
+        onClick={() => setCollapsed(!collapsed)}
         aria-expanded={!collapsed}
         aria-label={toggleAriaLabel}
         className="flex items-center gap-1 rounded-sm text-[10px] font-semibold text-red-200/90 uppercase tracking-wide hover:text-red-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70"
