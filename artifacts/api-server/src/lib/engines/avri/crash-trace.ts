@@ -73,6 +73,19 @@ export interface StructuralMarker {
     // routinely picks the wrong row width, omits the `=>` marker, or
     // skips the legend entirely.
     | "malformed_shadow_bytes"
+    // Task #608: semantic check on the same ASan "Shadow bytes around the
+    // buggy address" section — the buggy byte enclosed in `[ ]` on the
+    // `=>` row must match the bug class declared in the
+    // `ERROR: AddressSanitizer: <bug-class>` header. Real ASan tags the
+    // buggy byte with the shadow value matching the bug class
+    // (heap-use-after-free → fd, heap-buffer-overflow → fa/fb/01-07,
+    // stack-buffer-overflow → f1/f2/f3, …). LLM fabrications routinely
+    // paint the buggy row with a value picked at random from the legend
+    // without consulting the header. Task #434's structural detector
+    // catches wrong row width / missing `=>` / absent legend; this one
+    // closes the residual gap where the *shape* checks all pass but the
+    // grid pattern *contradicts* the declared bug class.
+    | "shadow_byte_class_mismatch"
     // Task #433: ≥3 distinct thread IDs appear across the role-tagged
     // anchors of a single ASan/TSan trace (the "READ/WRITE thread T<x>"
     // block header, "freed by thread T<y>", "previously allocated by
@@ -868,6 +881,227 @@ function detectMalformedShadowBytes(text: string): StructuralMarker | null {
   return null;
 }
 
+// Task #608 ASan shadow-byte class-mismatch detector --------------------
+//
+// Task #434 added the structural `malformed_shadow_bytes` detector that
+// catches shadow blocks with the wrong row width, a missing `=>` marker,
+// or an absent legend. It does NOT catch a deeper class of fakes: a
+// shadow block whose grid *pattern* contradicts the declared bug class
+// — for example, a buggy row painted entirely with `fa` (heap left
+// redzone) under a `heap-use-after-free` header (whose buggy byte should
+// be `fd`, "Freed heap region"). Those reports survive the shape checks
+// because the row width, marker, and legend are all present.
+//
+// Real ASan tags the bracketed buggy byte on the `=>` row with the
+// shadow value matching the bug class:
+//   heap-use-after-free / double-free / bad-free  → fd
+//   heap-buffer-overflow / heap-buffer-underflow  → fa / fb / 01..07
+//   stack-buffer-overflow / stack-buffer-underflow / stack-overflow
+//                                                 → f1 / f2 / f3
+//   stack-use-after-return                        → f5
+//   stack-use-after-scope                         → f8
+//   global-buffer-overflow                        → f9
+//   container-overflow                            → fc
+//   intra-object-overflow                         → bb
+//   use-after-poison                              → f7
+//   dynamic-stack-buffer-overflow                 → cb / cc
+// LLM fabrications routinely paint the buggy row with a value picked at
+// random from the legend without consulting the header.
+//
+// This detector fires when:
+//   1. A "Shadow bytes around the buggy address" section is present, AND
+//   2. The `=>` row carries a bracketed `[xx]` buggy byte, AND
+//   3. The `ERROR: AddressSanitizer: <bug-class>` header declares a
+//      recognised bug class, AND
+//   4. The bracketed byte is NOT in the expected set for that bug class.
+// Traces that omit the shadow section, omit the `=>` row, or use an
+// unrecognised bug class are left to the existing shape detector and
+// to the trace-validity scoring.
+
+interface BugClassExpectation {
+  pattern: RegExp;
+  label: string;
+  expected: ReadonlySet<string>;
+}
+
+// `ERROR: AddressSanitizer: <bug-class> ...` — the bug class is the
+// hyphenated/space-separated phrase between the `:` and the next
+// punctuation/`on address`/end-of-line. We capture a generous slice and
+// run the per-class patterns against it (and against the surrounding
+// header line as a fallback) so wrappers like `==N==ERROR:
+// AddressSanitizer: heap-use-after-free on address ...` classify cleanly.
+const ASAN_BUG_CLASS_HEADER_RE =
+  /AddressSanitizer\s*:\s*([A-Za-z][A-Za-z0-9_-]*(?:[-\s][A-Za-z0-9_]+){0,5})/i;
+
+// `[xx]` bracketed buggy byte on the `=>` row. ASan brackets exactly one
+// byte per row; if a fabrication brackets multiple we take the first.
+const SHADOW_BUGGY_BYTE_RE = /\[([0-9a-fA-F]{2})\]/;
+
+// Order matters: more specific patterns come first so e.g.
+// `stack-use-after-return` matches its dedicated entry before falling
+// through to the generic `use-after-...` rules.
+const BUG_CLASS_EXPECTATIONS: readonly BugClassExpectation[] = [
+  {
+    pattern: /stack[-\s]use[-\s]after[-\s]return/i,
+    label: "stack-use-after-return",
+    expected: new Set(["f5"]),
+  },
+  {
+    pattern: /stack[-\s]use[-\s]after[-\s]scope/i,
+    label: "stack-use-after-scope",
+    expected: new Set(["f8"]),
+  },
+  {
+    pattern: /heap[-\s]use[-\s]after[-\s]free/i,
+    label: "heap-use-after-free",
+    expected: new Set(["fd"]),
+  },
+  {
+    pattern: /(?:double[-\s]free|bad[-\s]free|invalid[-\s]free)/i,
+    label: "double-free/bad-free",
+    expected: new Set(["fd"]),
+  },
+  {
+    pattern: /global[-\s]buffer[-\s](?:overflow|underflow)/i,
+    label: "global-buffer-overflow",
+    expected: new Set(["f9"]),
+  },
+  {
+    pattern: /container[-\s]overflow/i,
+    label: "container-overflow",
+    expected: new Set(["fc"]),
+  },
+  {
+    pattern: /intra[-\s]object[-\s](?:overflow|redzone)/i,
+    label: "intra-object-overflow",
+    expected: new Set(["bb"]),
+  },
+  {
+    pattern: /use[-\s]after[-\s]poison/i,
+    label: "use-after-poison",
+    expected: new Set(["f7"]),
+  },
+  {
+    pattern: /dynamic[-\s]stack[-\s]buffer[-\s](?:overflow|underflow)/i,
+    label: "dynamic-stack-buffer-overflow",
+    expected: new Set(["cb", "cc"]),
+  },
+  {
+    pattern: /stack[-\s]buffer[-\s](?:overflow|underflow)|stack[-\s]overflow/i,
+    label: "stack-buffer-overflow",
+    expected: new Set(["f1", "f2", "f3"]),
+  },
+  {
+    pattern: /heap[-\s]buffer[-\s](?:overflow|underflow)|heap[-\s]overflow/i,
+    label: "heap-buffer-overflow",
+    expected: new Set([
+      "fa",
+      "fb",
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+    ]),
+  },
+  // Fallback for plain `use-after-free` (no `heap-` prefix). ASan emits
+  // this only for the heap variant in practice; the stack variants always
+  // carry their `stack-` prefix.
+  {
+    pattern: /use[-\s]after[-\s]free/i,
+    label: "use-after-free",
+    expected: new Set(["fd"]),
+  },
+];
+
+function classifyAsanBugClass(
+  text: string,
+): { label: string; expected: ReadonlySet<string> } | null {
+  const headerM = ASAN_BUG_CLASS_HEADER_RE.exec(text);
+  if (!headerM) return null;
+  const bugClassPhrase = headerM[1];
+  for (const exp of BUG_CLASS_EXPECTATIONS) {
+    if (exp.pattern.test(bugClassPhrase)) {
+      return { label: exp.label, expected: exp.expected };
+    }
+  }
+  // Fall back to matching against the whole header line (some generators
+  // wrap the bug class onto the next line or insert extra punctuation
+  // the phrase regex stops at).
+  const lineEnd = text.indexOf("\n", headerM.index);
+  const headerSlice = text.slice(
+    headerM.index,
+    lineEnd === -1 ? text.length : lineEnd,
+  );
+  for (const exp of BUG_CLASS_EXPECTATIONS) {
+    if (exp.pattern.test(headerSlice)) {
+      return { label: exp.label, expected: exp.expected };
+    }
+  }
+  return null;
+}
+
+function detectShadowByteClassMismatch(text: string): StructuralMarker | null {
+  // No shadow-bytes section → nothing to evaluate. The cheap header probe
+  // also short-circuits the bug-class regex on traces that don't paint a
+  // grid at all.
+  const headerMatch = SHADOW_BYTES_HEADER_RE.exec(text);
+  if (!headerMatch) return null;
+
+  // Locate the `=>` row carrying a `[xx]` buggy-byte marker. We only scan
+  // shadow rows immediately following the header so a `[xx]` token in
+  // surrounding prose can't be mistaken for the buggy byte.
+  const headerEnd = headerMatch.index + headerMatch[0].length;
+  const after = text.slice(headerEnd);
+  const lines = after.split(/\r?\n/);
+  // Recompute per-line newline lengths exactly like
+  // `detectMalformedShadowBytes` so cursor math stays accurate across
+  // mixed `\n` / `\r\n` line endings.
+  const newlineLengths: number[] = [];
+  let scanIdx = headerEnd;
+  for (let i = 0; i < lines.length; i++) {
+    const len = lines[i].length;
+    const ahead = text.slice(scanIdx + len, scanIdx + len + 2);
+    const nl = ahead.startsWith("\r\n") ? 2 : ahead.startsWith("\n") ? 1 : 0;
+    newlineLengths.push(nl);
+    scanIdx += len + nl;
+  }
+  let buggyByte: string | null = null;
+  let buggyRange: { start: number; length: number } | null = null;
+  let cursor = headerEnd;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineStart = cursor;
+    cursor += line.length + (newlineLengths[i] ?? 0);
+    if (line.trim() === "") continue;
+    const rowM = line.match(SHADOW_ROW_RE);
+    if (!rowM) break; // first non-row line ends the grid
+    if (!rowM[1]) continue; // not the `=>` row
+    const buggyM = SHADOW_BUGGY_BYTE_RE.exec(line);
+    if (!buggyM) continue; // `=>` row but no `[xx]` — leave to the shape detector
+    buggyByte = buggyM[1].toLowerCase();
+    buggyRange = {
+      start: lineStart + (buggyM.index ?? 0),
+      length: buggyM[0].length,
+    };
+    break;
+  }
+  if (!buggyByte || !buggyRange) return null;
+
+  const cls = classifyAsanBugClass(text);
+  if (!cls) return null;
+  if (cls.expected.has(buggyByte)) return null;
+
+  const expectedList = [...cls.expected].slice(0, 6).join(", ");
+  return {
+    id: "shadow_byte_class_mismatch",
+    description: `Shadow grid buggy byte \`[${buggyByte}]\` contradicts the declared bug class "${cls.label}" (expected one of: ${expectedList}); real ASan tags the buggy byte with the shadow value matching the bug class`,
+    range: rangeAt(text, buggyRange.start, buggyRange.length),
+  };
+}
+
 // Task #433 thread-ID-mismatch detector ------------------------------------
 //
 // Sprint 13B-2's `thread_id_inconsistency` catches `thread T<n>` mentions
@@ -983,6 +1217,13 @@ export function detectStructuralFabrication(text: string): StructuralMarker[] {
   // Task #434 shadow-bytes detector.
   const j1 = detectMalformedShadowBytes(text);
   if (j1) markers.push(j1);
+  // Task #608 shadow-byte class-mismatch detector. The shape detector
+  // above catches wrong row width / missing `=>` / absent legend; this
+  // semantic check fires when the *bracketed buggy byte* contradicts the
+  // bug class declared in the ASan header even though the grid shape is
+  // intact.
+  const j1b = detectShadowByteClassMismatch(text);
+  if (j1b) markers.push(j1b);
   // Task #433 thread-ID-mismatch detector.
   const j2 = detectThreadIdMismatch(text);
   if (j2) markers.push(j2);

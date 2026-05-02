@@ -740,6 +740,194 @@ The exact shadow bytes have been redacted from this report.`;
   });
 });
 
+// --- Task #608: shadow-byte class-mismatch detector ------------------------
+
+describe("detectStructuralFabrication — Task #608 shadow_byte_class_mismatch", () => {
+  it("flags `[fa]` buggy byte under a heap-use-after-free header (expected fd)", () => {
+    // Grid shape is intact (16 byte pairs, `=>` marker, legend present)
+    // so the Task #434 shape detector stays quiet — but the bracketed
+    // buggy byte is `fa` (heap left redzone) when the bug class declared
+    // in the header is heap-use-after-free, whose buggy byte should be
+    // `fd` (Freed heap region).
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=>0x0c047fff7f90: fa fa[fa]fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c047fff7fa0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Heap left redzone:       fa
+  Freed heap region:       fd`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("shadow_byte_class_mismatch");
+    // The shape detector must stay quiet — the row width / `=>` / legend
+    // are all in order so `malformed_shadow_bytes` would be a false hit.
+    expect(ids).not.toContain("malformed_shadow_bytes");
+  });
+
+  it("flags `[fd]` buggy byte under a heap-buffer-overflow header (expected fa/fb/01-07)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60200000a000
+WRITE of size 4 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x0c047fff7f90: 00 00[fd]fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x0c047fff7fa0: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Heap left redzone:       fa
+  Freed heap region:       fd`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("shadow_byte_class_mismatch");
+  });
+
+  it("flags `[fa]` buggy byte under a stack-buffer-overflow header (expected f1/f2/f3)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7ffd00000000
+WRITE of size 4 at 0x7ffd00000000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x10003fff8000: f1 f1 f1 f1 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x10003fff8010: 00 00[fa]fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x10003fff8020: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Heap left redzone:       fa
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("shadow_byte_class_mismatch");
+  });
+
+  it("does NOT fire on a well-formed UAF block with the correct `[fd]` buggy byte", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f70: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x0c047fff7f80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=>0x0c047fff7f90: fa fa[fd]fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x0c047fff7fa0: fd fd fd fd fd fd fd fd fa fa fa fa fa fa fa fa
+  0x0c047fff7fb0: fa fa fa fa fa fa fa fa 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Heap left redzone:       fa
+  Freed heap region:       fd`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("shadow_byte_class_mismatch");
+  });
+
+  it("does NOT fire on a well-formed heap-buffer-overflow block with `[fa]` buggy byte", () => {
+    // `fa` (heap left redzone) and `fb` (heap right redzone) are both
+    // legitimate buggy bytes for heap-buffer-overflow.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60200000a000
+WRITE of size 4 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x0c047fff7f90: 00 00 00[fa]fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c047fff7fa0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Heap left redzone:       fa`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("shadow_byte_class_mismatch");
+  });
+
+  it("does NOT fire on a well-formed stack-use-after-return block with `[f5]` buggy byte", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: stack-use-after-return on address 0x7ffd00000000
+READ of size 8 at 0x7ffd00000000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x10003fff8000: f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5
+=>0x10003fff8010: f5 f5[f5]f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5
+  0x10003fff8020: f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5 f5
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Stack after return:      f5`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("shadow_byte_class_mismatch");
+  });
+
+  it("does NOT fire when the trace has no shadow-bytes section at all", () => {
+    const ids = detectStructuralFabrication(SYMBOL_RICH_TRACE).map((m) => m.id);
+    expect(ids).not.toContain("shadow_byte_class_mismatch");
+  });
+
+  it("does NOT fire when the bug class is unrecognised (no semantic baseline to compare against)", () => {
+    // `negative-size-param` is a real ASan classifier but doesn't have a
+    // single canonical buggy-byte value — the detector deliberately
+    // skips traces whose bug class isn't on the recognised list rather
+    // than flagging false positives.
+    const trace = `==12345==ERROR: AddressSanitizer: negative-size-param on address 0x60200000a000
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x0c047fff7f90: 00 00[fa]fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c047fff7fa0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Heap left redzone:       fa`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("shadow_byte_class_mismatch");
+  });
+
+  it("does NOT fire when the `=>` row has no `[xx]` bracket (left to the shape detector)", () => {
+    // The shape detector (`malformed_shadow_bytes`) flags the missing
+    // marker via the row regex; this detector quietly bails.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x60200000a000
+READ of size 8 at 0x60200000a000 thread T0
+    #0 0x4001000 in foo src/foo.c:1
+Shadow bytes around the buggy address:
+  0x0c047fff7f80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=>0x0c047fff7f90: fa fa fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x0c047fff7fa0: fd fd fd fd fd fd fd fd fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Heap left redzone:       fa
+  Freed heap region:       fd`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("shadow_byte_class_mismatch");
+  });
+});
+
+describe("detectStructuralFabrication — Task #608 named-legit-fixture regression", () => {
+  // Pull the legit fixtures from the catalogue so any future edit that
+  // accidentally introduces a contradictory shadow block fails loudly
+  // instead of drifting silently. The four canonical legit traces (and
+  // SYMBOL_RICH_TSAN_TRACE / SYMBOL_RICH_TRACE) carry no shadow section
+  // at all today, so the detector must stay silent.
+  const allFixtures = [
+    ...TEST_FIXTURE_COHORTS.T1,
+    ...TEST_FIXTURE_COHORTS.T2,
+    ...TEST_FIXTURE_COHORTS.T3,
+  ];
+  it.each([
+    ["T1-01-uaf-libfoo"],
+    ["T1-AVRI-firefox-uaf"],
+    ["T1-AVRI-cve-2025-0725-curl"],
+    ["SYMBOL_RICH_TSAN_TRACE"],
+    ["SYMBOL_RICH_TRACE"],
+  ])("does NOT fire shadow_byte_class_mismatch on %s", (fixtureId) => {
+    let trace: string;
+    if (fixtureId === "SYMBOL_RICH_TSAN_TRACE") {
+      trace = SYMBOL_RICH_TSAN_TRACE;
+    } else if (fixtureId === "SYMBOL_RICH_TRACE") {
+      trace = SYMBOL_RICH_TRACE;
+    } else {
+      const fixture = allFixtures.find((f) => f.id === fixtureId);
+      expect(fixture, `missing fixture ${fixtureId}`).toBeDefined();
+      trace = fixture!.text;
+    }
+    expect(trace).toBeTruthy();
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("shadow_byte_class_mismatch");
+  });
+});
+
 // --- Task #433: thread-ID-mismatch detector --------------------------------
 
 describe("detectStructuralFabrication — Task #433 thread_id_mismatch", () => {
