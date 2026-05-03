@@ -22,6 +22,7 @@ import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { TriageEngineCard, type VulnrapEngineResultPanel } from "@/components/triage-engine-card";
 import { CohortBaselineRibbon } from "@/components/cohort-baseline-ribbon";
+import { AbPresetComparison } from "@/components/ab-preset-comparison";
 import { VerificationTrustPanel } from "@/components/verification-trust-panel";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -1894,6 +1895,14 @@ export default function Results() {
             <CohortBaselineRibbon
               score={vulnrap.compositeScore}
               cwe={report.avriFamily ?? null}
+            />
+            <AbPresetComparison
+              canonicalScore={report.slopScore}
+              breakdown={breakdown}
+              humanIndicators={humanIndicators}
+              evidence={evidence ?? []}
+              thresholdLow={settings.slopThresholdLow}
+              thresholdHigh={settings.slopThresholdHigh}
             />
             {triageChecks.length > 0 && (
               <VerificationTrustPanel checks={triageChecks} summary={triageSummary} />
