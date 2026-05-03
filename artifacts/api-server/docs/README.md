@@ -30,6 +30,32 @@ source.
   generator script — edit there, never edit the generated `.md`
   directly.
 
+- **[`parallelization-runbook.md`](./parallelization-runbook.md)**
+  Generated batch plan for the active task queue. Inventories every
+  active project task, builds the file-conflict graph, and groups
+  tasks into ordered "waves" where every task in a wave is
+  file-disjoint from the others — so we don't release batches that
+  collide on hot files (`feedback-analytics.tsx`, `reports.ts`,
+  `openapi.yaml`, ...). Includes a "Recommended next batch" callout.
+
+  Regenerate (writes the file):
+
+  ```bash
+  node scripts/regenerate-parallelization-runbook.mjs
+  ```
+
+  CI-friendly check (exit non-zero if regenerating would change the
+  file; the time-sensitive `Generated:` line is ignored):
+
+  ```bash
+  node scripts/regenerate-parallelization-runbook.mjs --check
+  ```
+
+  The script reads its input from the committed snapshot at
+  `scripts/data/active-tasks.snapshot.json`; the snapshot is refreshed
+  from a code_execution environment that has the project-task surface
+  available.
+
 ## `calibration/`
 
 - `2026-04-30-avri-blend-calibration.md` — substance/legacy ratio
