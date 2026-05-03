@@ -18,6 +18,28 @@ jobs:
     name: codegen / typecheck / unit tests / format
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Task #723 — Provision a Postgres service so the @workspace/db
+    # migration suite can apply every migration from empty against a real
+    # database on every PR. The connection details are passed to the
+    # migration test via TEST_DATABASE_URL below; tests that don't need
+    # the DB ignore it. Pinned to postgres:16 to match the version
+    # declared in docker-compose.yml.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vulnrap
+          POSTGRES_PASSWORD: vulnrap
+          POSTGRES_DB: vulnrap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vulnrap"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://vulnrap:vulnrap@localhost:5432/vulnrap_test
     steps:
       - name: Checkout
         uses: actions/checkout@v4

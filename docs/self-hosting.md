@@ -167,7 +167,10 @@ Schedule one of these from cron / your VPS provider's snapshot system.
 
 ---
 
-## 7. Upgrading
+## 7. Upgrading & Database Migrations
+
+VulnRap uses [Drizzle](https://orm.drizzle.team/) for schema management with a
+**versioned, file-based migration set** that lives under `lib/db/drizzle/`.
 
 ```bash
 git pull
@@ -175,10 +178,87 @@ docker compose build --pull            # rebuild against the latest base image
 docker compose up -d
 ```
 
-The api-server applies any new additive migrations on the next boot.
-There is no separate "migrate then start" step. If a release ever
-requires destructive schema work, the release notes will say so
+The api-server applies any new additive migrations on the next boot automatically
+(`runStartupMigrations()` in `artifacts/api-server/src/lib/startup-migrations.ts`).
+There is no separate "migrate then start" step required in the container.
+
+If the migrator fails when `NODE_ENV=production`, the api-server **refuses
+to start** rather than serve traffic against an unknown schema state.
+Inspect the error in your logs, run `pnpm --filter @workspace/db run migrate`
+manually to confirm the failure, fix the underlying issue, and restart. If
+you genuinely want the legacy "log the error and serve anyway" behaviour
+(e.g. you apply migrations through a separate pipeline and the boot-time
+runner is just a safety net), set `IGNORE_MIGRATION_FAILURES=1`.
+
+This is the recommended flow for single-instance deployments and is what the
+hosted Replit deployment uses.
+
+#### Upgrading from a pre-#723 install (baseline adoption)
+
+If your installation predates task #723 — i.e. you have been running on
+the older `drizzle-kit push` + boot-time additive-DDL flow — your
+database already has every table the new migration set would create,
+but `drizzle.__drizzle_migrations` does not exist yet. The migrator
+handles this automatically: on the first run against a non-empty
+schema with an empty journal, it stamps the journal as if every
+existing migration had already been applied (a "baseline adoption"
+step) and then starts running new migrations going forward. You do
+not need to do anything special — `pnpm migrate` (or the boot-time
+runner) is safe to run against your existing database on the first
+upgrade.
+
+### Option B — explicit `pnpm migrate` in your deploy pipeline
+
+If you run multiple replicas or want migrations to be a separate, observable
+deploy step, set `RUN_STARTUP_MIGRATIONS=0` in the api-server's environment
+and run the migrator yourself before restarting the app:
+
+```bash
+# from the repo root, with DATABASE_URL pointed at your production DB
+pnpm --filter @workspace/db run migrate
+```
+
+If a release ever requires destructive schema work, the release notes will say so
 explicitly.
+
+### Modifying the schema (Contributors)
+
+Schema changes are **never** applied with `drizzle-kit push` against
+production — `push` diffs the schema files against the live database and
+applies the result with no review step, which can drop columns or wipe data.
+The `push` script in `lib/db/package.json` enforces this with a guard that
+refuses to run when `NODE_ENV=production`.
+
+The flow for a schema change is:
+
+```bash
+# 1. Edit lib/db/src/schema/<file>.ts in your branch.
+
+# 2. Generate a versioned migration from the schema diff. This writes a
+#    new lib/db/drizzle/NNNN_<name>.sql plus an updated meta/ snapshot.
+pnpm --filter @workspace/db run generate
+
+# 3. Review the generated SQL. Edit it if drizzle-kit chose a destructive
+#    plan (e.g. column rename emitted as drop + add) — drizzle-kit will
+#    happily apply hand-edited migrations as long as you keep the snapshot
+#    chain consistent. Run `pnpm --filter @workspace/db run check` to
+#    verify the chain.
+$EDITOR lib/db/drizzle/NNNN_*.sql
+
+# 4. Commit the SQL file AND the meta/_journal.json + meta/NNNN_snapshot.json
+#    updates together. The CI migration test re-applies every file from
+#    empty on every PR; if the SQL doesn't match the schema files the
+#    test will fail loudly.
+git add lib/db/drizzle/
+git commit -m "db: <describe the change>"
+```
+
+For local development you can still iterate quickly with
+`pnpm --filter @workspace/db run push` (or `push:dev`), which bypasses the
+versioned flow and applies the schema diff directly. **This is local dev
+only — never run it against production.** Once you are happy with the
+schema in your branch, generate the versioned migration as above before
+opening the PR.
 
 ---
 
@@ -280,6 +360,28 @@ deployment it's useful to know what the equivalents are:
   locally on an arm host or with QEMU.
 - **Switching the Replit deployment to use this image.** Replit Deploy
   keeps its current path; this Dockerfile exists for self-hosters.
+
+---
+
+## Migration test in CI
+
+Every PR runs `pnpm --filter @workspace/db run test`, which:
+
+1. Provisions an empty Postgres (the `services.postgres` block in
+   `.github/workflows/ci.yml`).
+2. Applies every migration in `lib/db/drizzle/` from scratch.
+3. Asserts a representative table from each migration file exists, the
+   `is_holdout` column on `user_feedback` is in place, and the expression-
+   based unique index `uniq_report_rescore_log_daily` was created.
+4. Re-applies every migration and asserts the second pass is a no-op
+   (column counts unchanged; the journal still has exactly one row per
+   migration file).
+5. Runs `drizzle-kit check` to confirm the journal/snapshot chain is
+   consistent.
+
+A migration that doesn't match the schema files, a hand-edited SQL file
+with a stale snapshot, or a migration that fails to be idempotent will
+fail this test on the PR.
 
 ---
 

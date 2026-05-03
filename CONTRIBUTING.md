@@ -7,7 +7,7 @@ Thanks for your interest in improving VulnRap. This project is open source and c
 1. Fork the repository and clone it locally
 2. Install dependencies: `pnpm install`
 3. Copy `.env.example` to `.env` and configure your PostgreSQL connection
-4. Push the database schema: `pnpm --filter @workspace/db run push`
+4. Apply database migrations: `pnpm --filter @workspace/db run migrate`
 5. Generate API client code: `pnpm --filter @workspace/api-spec run codegen`
 6. Seed example data: `pnpm --filter @workspace/api-server run seed`
 7. Start the API server: `pnpm --filter @workspace/api-server run dev`
@@ -30,7 +30,16 @@ lib/
 
 - Run `pnpm run typecheck` before submitting changes
 - If you modify `lib/api-spec/openapi.yaml`, regenerate client code with `pnpm --filter @workspace/api-spec run codegen`
-- If you modify `lib/db/src/schema/`, push changes with `pnpm --filter @workspace/db run push`
+- If you modify `lib/db/src/schema/`, generate a versioned migration with
+  `pnpm --filter @workspace/db run generate`, review the SQL it writes
+  under `lib/db/drizzle/`, and commit the file together with the
+  updated `meta/_journal.json` and snapshot. Then apply it locally with
+  `pnpm --filter @workspace/db run migrate`.
+  - For fast schema iteration in your local dev DB you can still use
+    `pnpm --filter @workspace/db run push` (alias: `push:dev`). **Local
+    dev only — never run against production.** The script refuses to
+    run when `NODE_ENV=production`. See [`docs/self-hosting.md`](docs/self-hosting.md)
+    for the full upgrade flow.
 
 ### How `pnpm typecheck` is wired
 

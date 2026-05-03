@@ -35,8 +35,8 @@ echo "Installing dependencies..."
 pnpm install
 
 echo ""
-echo "Pushing database schema..."
-pnpm --filter @workspace/db run push
+echo "Applying database migrations..."
+pnpm --filter @workspace/db run migrate
 
 echo ""
 echo "Generating API client code..."

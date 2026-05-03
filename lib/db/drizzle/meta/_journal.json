@@ -15,6 +15,13 @@
       "when": 1777789996857,
       "tag": "0001_charming_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777794532150,
+      "tag": "0002_curious_randall_flagg",
+      "breakpoints": true
     }
   ]
 }

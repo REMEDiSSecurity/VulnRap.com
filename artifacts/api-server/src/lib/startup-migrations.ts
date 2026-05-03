@@ -1,8 +1,47 @@
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
+import { runMigrations } from "@workspace/db/migrate";
 import { logger } from "./logger";
 
-type AdditiveMigration = {
+// Task #723 — Boot-time migration runner.
+//
+// Two distinct concerns live in this file, in this order:
+//
+//   1. The official Drizzle file-based migrator. This applies every
+//      versioned migration in `lib/db/drizzle/` against `DATABASE_URL`
+//      and records what it has applied in the
+//      `drizzle.__drizzle_migrations` journal table, so re-running is a
+//      safe no-op. This is the canonical upgrade path for self-hosters
+//      AND for the hosted Replit deployment — keeping the boot-time
+//      runner here means a self-hoster who deploys via "git pull &&
+//      restart" continues to get zero-touch upgrades and never has to
+//      remember the separate `pnpm migrate` step.
+//
+//      Self-hosters who prefer an explicit deploy-then-migrate flow can
+//      set `RUN_STARTUP_MIGRATIONS=0`, in which case the boot-time
+//      migrator short-circuits and the operator is expected to run
+//      `pnpm --filter @workspace/db run migrate` separately as part of
+//      their deploy pipeline.
+//
+//   2. A small set of *runtime-managed* DDL operations that intentionally
+//      do not live in the versioned migration set:
+//
+//        * `page_views` — owned entirely by the api-server (excluded
+//          from drizzle's schema scan, see lib/db/src/schema/index.ts)
+//          because the Replit deploy validator's dev↔prod schema diff
+//          would otherwise reject any reshape of its historical broken
+//          column shapes. Runs in production only; in dev page_views is
+//          deliberately absent and the two raw-SQL queries that read it
+//          will 500 (acceptable: visitor analytics is non-critical).
+//
+// All idempotent additive migrations that previously lived here as
+// inline `ALTER TABLE … IF NOT EXISTS` statements have been folded into
+// the versioned migration set (`lib/db/drizzle/0000_*.sql` →
+// `lib/db/drizzle/0002_*.sql`). They no longer need a runtime
+// counterpart because the migrator's journal makes the apply
+// exactly-once-per-DB.
+
+type RuntimeMigration = {
   id: string;
   description: string;
   statements: string[];
@@ -12,39 +51,7 @@ type AdditiveMigration = {
   productionOnly?: boolean;
 };
 
-const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
-  {
-    id: "2026-04-23-add-reports-avri-family",
-    description: "Add nullable avri_family column + index to reports",
-    statements: [
-      `ALTER TABLE reports ADD COLUMN IF NOT EXISTS avri_family varchar(32)`,
-      `CREATE INDEX IF NOT EXISTS idx_reports_avri_family ON reports (avri_family)`,
-    ],
-  },
-  {
-    id: "2026-04-23-add-lsh-buckets-gin-index",
-    description: "Add GIN index on lsh_buckets JSONB for efficient containment queries",
-    statements: [
-      `CREATE INDEX IF NOT EXISTS idx_reports_lsh_buckets ON reports USING gin (lsh_buckets)`,
-    ],
-  },
-  {
-    id: "2026-04-30-add-fabricated-evidence-cache",
-    description: "Add cached fake_raw_http / stripped_crash_trace columns + partial indexes for the AVRI fabricated-evidence feed filter",
-    statements: [
-      `ALTER TABLE reports ADD COLUMN IF NOT EXISTS fake_raw_http boolean NOT NULL DEFAULT false`,
-      `ALTER TABLE reports ADD COLUMN IF NOT EXISTS stripped_crash_trace boolean NOT NULL DEFAULT false`,
-      `CREATE INDEX IF NOT EXISTS idx_reports_fake_raw_http ON reports (show_in_feed, created_at) WHERE fake_raw_http = true`,
-      `CREATE INDEX IF NOT EXISTS idx_reports_stripped_crash_trace ON reports (show_in_feed, created_at) WHERE stripped_crash_trace = true`,
-    ],
-  },
-  {
-    id: "2026-05-03-add-reports-engine-versions",
-    description: "Task #624 — Add nullable engine_versions JSONB column to reports for per-report engine version pinning",
-    statements: [
-      `ALTER TABLE reports ADD COLUMN IF NOT EXISTS engine_versions jsonb`,
-    ],
-  },
+const RUNTIME_MIGRATIONS: RuntimeMigration[] = [
   {
     // page_views is materialized only in production. Replit's deploy validator
     // performs a live dev↔prod schema diff; if the dev DB had page_views with
@@ -58,20 +65,10 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
     // 500 in development (table doesn't exist) — this is acceptable because
     // visitor analytics is a non-critical read/write path.
     id: "2026-04-25-rebuild-page-views-visitor-schema",
-    description: "Rebuild page_views table whenever its column shape doesn't match the expected (visitor_hash varchar(64), view_date date, created_at timestamptz) layout (production only)",
+    description:
+      "Rebuild page_views table whenever its column shape doesn't match the expected (visitor_hash varchar(64), view_date date, created_at timestamptz) layout (production only)",
     productionOnly: true,
     statements: [
-      // page_views is owned entirely by this startup migration — it is excluded
-      // from drizzle-kit's schema scan (see lib/db/src/schema/index.ts) so the
-      // deploy pipeline never tries to ALTER it.
-      //
-      // Across earlier deploys the table has been provisioned in three different
-      // broken shapes (legacy path/count columns, intermediate timestamp without
-      // tz, current varchar created_at + integer visitor_hash). Rather than
-      // try to migrate each variant in place, we verify the table matches the
-      // expected shape exactly and rebuild from scratch otherwise. This is safe
-      // because page_views holds only ephemeral visitor analytics — no user
-      // data lives here — and is empty in production today.
       `DO $$
        DECLARE
          needs_rebuild boolean := false;
@@ -124,134 +121,49 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
       `CREATE INDEX IF NOT EXISTS idx_page_views_date ON page_views (view_date)`,
     ],
   },
-  {
-    // Task #620 — append-only log of nightly score-stability re-scores.
-    // Drives the calibration page's tier-flip chart and the
-    // >2%-flip-rate alert. Created in dev too so route + e2e tests can
-    // exercise the surface against a live Postgres.
-    id: "2026-05-03-add-report-rescore-log",
-    description: "Add report_rescore_log table for the score stability monitor",
-    statements: [
-      `CREATE TABLE IF NOT EXISTS report_rescore_log (
-         id serial PRIMARY KEY,
-         report_id integer NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-         old_score integer NOT NULL,
-         new_score integer NOT NULL,
-         old_tier varchar(30) NOT NULL,
-         new_tier varchar(30) NOT NULL,
-         scored_at timestamptz NOT NULL DEFAULT now(),
-         code_version varchar(64) NOT NULL DEFAULT 'unknown'
-       )`,
-      `CREATE INDEX IF NOT EXISTS idx_report_rescore_log_scored_at ON report_rescore_log (scored_at)`,
-      `CREATE INDEX IF NOT EXISTS idx_report_rescore_log_report_id ON report_rescore_log (report_id)`,
-    ],
-  },
-  {
-    // Task #620 — daily idempotency for the rescore log.
-    //
-    // Without this, a retry after a partial failure (or a second replica
-    // running its own scheduler tick on the same day) re-appends rows
-    // for the same reports, inflating denominators and flip counts in
-    // the calibration chart and potentially firing false-positive alerts.
-    //
-    // The unique key is (report_id, code_version, scored_date) where
-    // scored_date is `scored_at` truncated to a UTC calendar day — same
-    // bucketing the chart uses. INSERTs use ON CONFLICT DO NOTHING so
-    // both the retry case and the multi-replica race resolve to "first
-    // writer wins, everyone else is a no-op".
-    id: "2026-05-03-add-report-rescore-log-daily-unique",
-    description:
-      "Add unique (report_id, code_version, scored_date UTC) index to make the nightly rescore pass idempotent across retries and replicas",
-    statements: [
-      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_report_rescore_log_daily
-         ON report_rescore_log (
-           report_id,
-           code_version,
-           ((scored_at AT TIME ZONE 'UTC')::date)
-         )`,
-    ],
-  },
-  {
-    // Task #639 — Shadow scoring side table.
-    //
-    // Append-only mirror of the live score for every production report
-    // submitted while `SHADOW_SCORING_ENABLED=1`. Lets reviewers spot
-    // tier-flip / score-delta regressions in the in-flight scoring
-    // change before promoting it to live. Created in dev too so the
-    // route + UI tests can exercise the surface against a real
-    // Postgres.
-    id: "2026-05-03-add-report-shadow-scores",
-    description: "Add report_shadow_scores table for shadow scoring mode (Task #639)",
-    statements: [
-      `CREATE TABLE IF NOT EXISTS report_shadow_scores (
-         id serial PRIMARY KEY,
-         report_id integer NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-         live_score integer NOT NULL,
-         live_tier varchar(30) NOT NULL,
-         shadow_score integer NOT NULL,
-         shadow_tier varchar(30) NOT NULL,
-         score_diff integer NOT NULL,
-         tier_diverged boolean NOT NULL DEFAULT false,
-         shadow_version varchar(64) NOT NULL DEFAULT 'unknown',
-         scored_at timestamptz NOT NULL DEFAULT now()
-       )`,
-      `CREATE INDEX IF NOT EXISTS idx_report_shadow_scores_scored_at ON report_shadow_scores (scored_at)`,
-      `CREATE INDEX IF NOT EXISTS idx_report_shadow_scores_report_id ON report_shadow_scores (report_id)`,
-      `CREATE INDEX IF NOT EXISTS idx_report_shadow_scores_diverged ON report_shadow_scores (tier_diverged)`,
-    ],
-  },
-  {
-    // Task #640 — Locked 20% holdout split for honest precision/recall.
-    // Calibration today trains and evaluates on every feedback row, so the
-    // numbers it reports are optimistic. Stamp every feedback row with a
-    // deterministic `is_holdout` flag derived from `hashtext(id::text)`
-    // (Postgres-builtin, immutable, byte-stable) so the same id always
-    // resolves to the same bucket. Calibration suggestions exclude
-    // is_holdout=true; the new /feedback/holdout-eval endpoint computes
-    // precision/recall ONLY from the holdout rows for honest numbers
-    // reviewers can trust.
-    //
-    // Backfill is idempotent: every existing row is re-stamped from the
-    // hash, which is fine because the hash is deterministic. Newly
-    // inserted rows are stamped in the POST /feedback handler.
-    id: "2026-05-03-add-user-feedback-holdout",
-    description:
-      "Add deterministic is_holdout flag + index to user_feedback and backfill from hashtext(id) (Task #640)",
-    statements: [
-      `ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS is_holdout boolean NOT NULL DEFAULT false`,
-      `CREATE INDEX IF NOT EXISTS idx_user_feedback_is_holdout ON user_feedback (is_holdout)`,
-      `UPDATE user_feedback SET is_holdout = ((abs(hashtext(id::text)) % 5) = 0)
-         WHERE is_holdout <> ((abs(hashtext(id::text)) % 5) = 0)`,
-    ],
-  },
-  {
-    // Task #673 — Reviewer-managed webhook subscriptions. Created in dev
-    // too so route + UI tests can exercise the surface against a live
-    // Postgres. `event_types` is a text[] so adding new event types later
-    // does not require an ALTER. `secret_hash` stores the SHA-256 of the
-    // per-webhook signing secret; the raw secret is returned exactly once
-    // at creation time and never persisted plaintext.
-    id: "2026-05-03-add-webhooks",
-    description: "Add webhooks table for reviewer-managed event delivery (Task #673)",
-    statements: [
-      `CREATE TABLE IF NOT EXISTS webhooks (
-         id serial PRIMARY KEY,
-         url varchar(1000) NOT NULL,
-         secret_hash varchar(64) NOT NULL,
-         event_types text[] NOT NULL,
-         created_at timestamptz NOT NULL DEFAULT now(),
-         last_delivered_at timestamptz,
-         failure_count integer NOT NULL DEFAULT 0
-       )`,
-      `CREATE INDEX IF NOT EXISTS idx_webhooks_created_at ON webhooks (created_at)`,
-    ],
-  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {
+  // (1) Versioned Drizzle migrations. Opt-out for self-hosters who prefer
+  // an explicit `pnpm migrate` step in their deploy pipeline.
   const isProduction = process.env.NODE_ENV === "production";
+  const runVersioned = process.env.RUN_STARTUP_MIGRATIONS !== "0";
+  if (runVersioned) {
+    try {
+      await runMigrations({
+        log: (msg) => logger.info({ migrator: "drizzle" }, `[startup-migrations] ${msg}`),
+      });
+    } catch (err) {
+      // FAIL-FAST in production. Serving requests against an unknown
+      // schema state can corrupt data (e.g. an INSERT against a table
+      // that doesn't have its newest NOT NULL column) or silently 500
+      // every request that hits a missing table. The default policy
+      // is therefore to refuse to start. Self-hosters who explicitly
+      // want the legacy "log + continue" behaviour (e.g. they apply
+      // migrations through a separate pipeline and the boot-time
+      // runner is just a safety net) can set
+      // `IGNORE_MIGRATION_FAILURES=1`.
+      const ignoreFailures = process.env.IGNORE_MIGRATION_FAILURES === "1";
+      if (isProduction && !ignoreFailures) {
+        logger.fatal(
+          { err },
+          "[startup-migrations] versioned migration runner FAILED in production — refusing to start. Inspect the error, run `pnpm --filter @workspace/db run migrate` manually, then restart. Override (NOT recommended) with IGNORE_MIGRATION_FAILURES=1.",
+        );
+        process.exit(1);
+      }
+      logger.error(
+        { err },
+        "[startup-migrations] versioned migration runner FAILED — continuing anyway (NODE_ENV is not production or IGNORE_MIGRATION_FAILURES=1). Schema may be out of date.",
+      );
+    }
+  } else {
+    logger.info(
+      "[startup-migrations] RUN_STARTUP_MIGRATIONS=0; skipping versioned migrator (run `pnpm --filter @workspace/db run migrate` manually before this process is expected to serve)",
+    );
+  }
 
-  for (const migration of ADDITIVE_MIGRATIONS) {
+  // (2) Runtime-managed DDL (page_views). `isProduction` is declared above.
+  for (const migration of RUNTIME_MIGRATIONS) {
     if (migration.productionOnly && !isProduction) {
       logger.info(
         { migrationId: migration.id },
