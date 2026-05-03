@@ -16048,7 +16048,20 @@ function NotifiedFlagsPanel({
     }
     setBulkBusy(true);
     try {
-      const resp = await rearmAvriDriftNotifications({ keys });
+      // Forward reviewer/rationale audit context to the backend so every
+      // bulk re-arm entry in the audit log is attributable, mirroring
+      // the per-row Re-arm path. Both fields are optional and only sent
+      // when non-empty.
+      const body: {
+        keys: string[];
+        reviewer?: string;
+        rationale?: string;
+      } = { keys };
+      const trimmedReviewer = reviewer.trim();
+      if (trimmedReviewer.length > 0) body.reviewer = trimmedReviewer;
+      const trimmedRationale = rationale.trim();
+      if (trimmedRationale.length > 0) body.rationale = trimmedRationale;
+      const resp = await rearmAvriDriftNotifications(body);
       const rearmed = resp.rearmed ?? 0;
       const notFound = (resp.notFound ?? []).length;
       const parts: string[] = [];
@@ -16069,8 +16082,14 @@ function NotifiedFlagsPanel({
         for (const k of keys) next.delete(k);
         return next;
       });
+      // Clear the shared rationale after a successful submit so the next
+      // action starts from a blank note, matching the per-row behaviour.
+      if (rearmed > 0) onRationaleChange("");
       queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
       queryClient.invalidateQueries({ queryKey: driftReportQueryKey });
+      // Refresh the audit log too so the new bulk entries appear in the
+      // "Recently re-armed" sibling panel without polling lag.
+      queryClient.invalidateQueries({ queryKey: rearmHistoryQueryKey });
       await refetch();
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {

@@ -129,6 +129,8 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 interface RearmCall {
   keys: string[];
+  reviewer?: string;
+  rationale?: string;
 }
 
 interface MockHandle {
@@ -177,10 +179,18 @@ function installFetchMock(): MockHandle {
       url.includes("/api/feedback/calibration/avri-drift/notifications/rearm")
     ) {
       const body = init?.body
-        ? (JSON.parse(init.body as string) as { keys?: string[] })
+        ? (JSON.parse(init.body as string) as {
+            keys?: string[];
+            reviewer?: string;
+            rationale?: string;
+          })
         : {};
       const keys = Array.isArray(body.keys) ? body.keys : [];
-      rearmCalls.push({ keys: [...keys] });
+      rearmCalls.push({
+        keys: [...keys],
+        reviewer: body.reviewer,
+        rationale: body.rationale,
+      });
       const removed: NotifiedRecord[] = [];
       const notFound: string[] = [];
       for (const k of keys) {
@@ -452,6 +462,77 @@ describe("NotifiedFlagsPanel — bulk re-arm bar (Task #408 / #280)", () => {
         screen.queryByTestId("notified-flags-bulk-bar"),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("forwards the trimmed reviewer + rationale on the bulk re-arm POST and clears the rationale after success (Task #740)", async () => {
+    mock = installFetchMock();
+    const user = userEvent.setup();
+    renderPage();
+    await waitForRowsToRender();
+
+    const reviewerInput = await screen.findByTestId(
+      "avri-drift-rearm-reviewer",
+    );
+    const rationaleInput = await screen.findByTestId(
+      "avri-drift-rearm-rationale",
+    );
+    // Surrounding whitespace must be stripped before the field is sent;
+    // the per-row path already does this and the bulk path is expected
+    // to mirror it so audit log entries are attributable in the same
+    // shape regardless of which button the reviewer used.
+    await user.type(reviewerInput, "  alice@example.com  ");
+    await user.type(rationaleInput, "  fix-by date passed, re-paging  ");
+
+    await user.click(
+      screen.getByTestId(`notified-flag-checkbox-${SEEDED_NOTIFIED[0]!.key}`),
+    );
+    await user.click(
+      screen.getByTestId(`notified-flag-checkbox-${SEEDED_NOTIFIED[1]!.key}`),
+    );
+
+    await user.click(await screen.findByTestId("notified-flags-bulk-rearm"));
+
+    await waitFor(() => {
+      expect(mock.rearmCalls).toHaveLength(1);
+    });
+    const call = mock.rearmCalls[0]!;
+    expect(call.keys.sort()).toEqual(
+      [SEEDED_NOTIFIED[0]!.key, SEEDED_NOTIFIED[1]!.key].sort(),
+    );
+    expect(call.reviewer).toBe("alice@example.com");
+    expect(call.rationale).toBe("fix-by date passed, re-paging");
+
+    // The shared rationale must clear after a successful bulk submit so
+    // a stale note from the previous batch can't silently attach itself
+    // to the next action — the per-row path has the same behaviour.
+    await waitFor(() => {
+      expect(rationaleInput).toHaveValue("");
+    });
+    // Reviewer is persisted between sessions, so the bulk submit should
+    // leave it untouched (cleared rationale only).
+    expect(reviewerInput).toHaveValue("alice@example.com");
+  });
+
+  it("omits reviewer + rationale fields when both inputs are blank (Task #740)", async () => {
+    mock = installFetchMock();
+    const user = userEvent.setup();
+    renderPage();
+    await waitForRowsToRender();
+
+    await user.click(
+      screen.getByTestId(`notified-flag-checkbox-${SEEDED_NOTIFIED[0]!.key}`),
+    );
+    await user.click(await screen.findByTestId("notified-flags-bulk-rearm"));
+
+    await waitFor(() => {
+      expect(mock.rearmCalls).toHaveLength(1);
+    });
+    // Both fields are optional; sending an empty string would land an
+    // empty audit-log column instead of a clean "no reviewer" gap, so
+    // the UI must omit them entirely when blank — same contract as the
+    // per-row path.
+    expect(mock.rearmCalls[0]!.reviewer).toBeUndefined();
+    expect(mock.rearmCalls[0]!.rationale).toBeUndefined();
   });
 
   it("auto-prunes a ticked key from the selection when the per-row Re-arm finishes", async () => {
