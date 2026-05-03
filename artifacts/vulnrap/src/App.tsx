@@ -43,6 +43,7 @@ const ReportsExplorer = lazyRetry(() => import("@/pages/reports"));
 const Transparency = lazyRetry(() => import("@/pages/transparency"));
 const Community = lazyRetry(() => import("@/pages/community"));
 const Architecture = lazyRetry(() => import("@/pages/architecture"));
+const EnginesSubstance = lazyRetry(() => import("@/pages/engines-substance"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -83,6 +84,7 @@ function AppRoutes() {
             <Route path="/transparency" element={<Transparency />} />
             <Route path="/community" element={<Community />} />
             <Route path="/architecture" element={<Architecture />} />
+            <Route path="/engines/substance" element={<EnginesSubstance />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
