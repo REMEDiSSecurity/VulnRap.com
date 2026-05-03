@@ -4,7 +4,7 @@ import {
   Activity, Search, Code, BookOpen, MessageSquare, Menu, X, Github,
   Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
   ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library,
-  ScrollText, Scale, Compass, Rocket, Sliders, Images, ShieldAlert, Radar, BadgeCheck,
+  ScrollText, Scale, Compass, Rocket, Sliders, Images, ShieldAlert, Radar, BadgeCheck, Layers,
   Map as MapIcon, Siren, HeartPulse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -86,6 +86,7 @@ const NAV: NavEntry[] = [
       { to: "/architecture", label: "Architecture", icon: <Network className="w-4 h-4" />, description: "Pipeline diagram and request flow for integrators." },
       { to: "/engines/substance", label: "Substance Engine", icon: <FlaskConical className="w-4 h-4" />, description: "Engine 2 deep-dive: technical substance density." },
       { to: "/engines/cwe-coherence", label: "CWE Coherence Engine", icon: <Network className="w-4 h-4" />, description: "Engine 3 deep-dive: catches reports whose body describes a different CWE than the one claimed." },
+      { to: "/engines/avri", label: "AVRI Engine", icon: <Layers className="w-4 h-4" />, description: "Family-aware rubric: 9 weakness families, gold signals, absence penalties." },
       { to: "/presets", label: "Presets", icon: <Library className="w-4 h-4" />, description: "Curated sensitivity + per-engine weight profiles for common triage workflows." },
       { to: "/whitepaper", label: "Whitepaper", icon: <ScrollText className="w-4 h-4" />, description: "Long-form, citation-style methodology document — print-friendly." },
       { to: "/compare-detectors", label: "Compare Detectors", icon: <Scale className="w-4 h-4" />, description: "Capability matrix vs. generic LLM detectors, plagiarism checkers, and manual triage." },

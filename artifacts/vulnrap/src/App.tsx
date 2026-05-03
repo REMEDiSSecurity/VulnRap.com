@@ -50,6 +50,7 @@ const Community = lazyRetry(() => import("@/pages/community"));
 const Architecture = lazyRetry(() => import("@/pages/architecture"));
 const EnginesSubstance = lazyRetry(() => import("@/pages/engines-substance"));
 const EnginesCwe = lazyRetry(() => import("@/pages/engines-cwe"));
+const EnginesAvri = lazyRetry(() => import("@/pages/engines-avri"));
 const Presets = lazyRetry(() => import("@/pages/presets"));
 const RedactionExamples = lazyRetry(() => import("@/pages/redaction-examples"));
 const GoodReport = lazyRetry(() => import("@/pages/good-report"));
@@ -115,6 +116,7 @@ function AppRoutes() {
             <Route path="/architecture" element={<Architecture />} />
             <Route path="/engines/substance" element={<EnginesSubstance />} />
             <Route path="/engines/cwe-coherence" element={<EnginesCwe />} />
+            <Route path="/engines/avri" element={<EnginesAvri />} />
             <Route path="/presets" element={<Presets />} />
             <Route path="/redaction-examples" element={<RedactionExamples />} />
             <Route path="/docs/good-report" element={<GoodReport />} />
