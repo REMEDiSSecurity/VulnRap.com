@@ -277,7 +277,7 @@ function classifyByVulnType(text: string): ClassificationResult | null {
     XSS: "WEB_CLIENT",
     SQLi: "INJECTION",
     SSRF: "WEB_CLIENT",
-    XXE: "WEB_CLIENT",
+    XXE: "DESERIALIZATION",
     "Buffer Overflow": "MEMORY_CORRUPTION",
     "Use After Free": "MEMORY_CORRUPTION",
     "Path Traversal": "WEB_CLIENT",

@@ -322,7 +322,7 @@ const WEB_CLIENT: FamilyRubric = {
     {
       id: "cwe_correct_class",
       description: "Mentions a WEB_CLIENT-family CWE",
-      pattern: /cwe-(22|79|80|83|352|451|601|611|918|1021)/i,
+      pattern: /cwe-(22|79|80|83|352|451|601|918|1021)/i,
       points: 4,
     },
   ],
@@ -364,7 +364,6 @@ const WEB_CLIENT: FamilyRubric = {
     "352",
     "451",
     "601",
-    "611",
     "918",
     "1021",
   ],
