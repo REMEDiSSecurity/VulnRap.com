@@ -13,6 +13,8 @@ import { BlogFieldTestV350 } from "@/components/blog-field-test-v350";
 import { BlogAvriSprint11 } from "@/components/blog-avri-sprint11";
 import { BlogSubstanceGate } from "@/components/blog-substance-gate";
 import { BlogSprint14Rigor } from "@/components/blog-sprint14-rigor";
+import { BlogUpdate9ShowOurWork } from "@/components/blog-update9-show-our-work";
+import { BlogUpdate10ByoFixtures } from "@/components/blog-update10-byo-fixtures";
 import { BlogUpdate13McpLaunch } from "@/components/blog-update13-mcp-launch";
 
 function FirstPost() {
@@ -161,6 +163,18 @@ export default function Blog() {
       <Card className="glass-card rounded-xl">
         <CardContent className="p-8">
           <BlogUpdate13McpLaunch />
+        </CardContent>
+      </Card>
+
+      <Card className="glass-card rounded-xl">
+        <CardContent className="p-8">
+          <BlogUpdate10ByoFixtures />
+        </CardContent>
+      </Card>
+
+      <Card className="glass-card rounded-xl">
+        <CardContent className="p-8">
+          <BlogUpdate9ShowOurWork />
         </CardContent>
       </Card>
 
