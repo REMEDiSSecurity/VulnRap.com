@@ -167,6 +167,27 @@ export interface DiagnosticsResponse {
     avri: string;
     fusion: string;
   } | null;
+  /**
+   * Task #644 — cross-AI-agent fingerprint. Heuristic detector that picks
+   * which AI agent (or "human") the report prose most likely came from.
+   * Pure stylistic signal — never a hard attribution claim. `unknown` is
+   * returned for short / generic prose and is rendered as such.
+   */
+  agentFingerprint?: {
+    likelyAgent: "gpt4" | "claude" | "gemini" | "cursor-agent" | "replit-agent" | "human" | "unknown";
+    likelyAgentLabel: string;
+    confidence: number;
+    scores: Record<string, number>;
+    matches: Array<{ id: string; description: string; weight: number; excerpt?: string }>;
+    features: {
+      wordCount: number;
+      sentenceCount: number;
+      avgSentenceLen: number;
+      emDashCount: number;
+      boldHeaderCount: number;
+      bulletCount: number;
+    };
+  } | null;
 }
 
 // Task #209 — these mirror the server types in routes/reports.ts and
@@ -488,6 +509,13 @@ export function DiagnosticsPanel({
                       </div>
                     )}
                   </section>
+                </>
+              )}
+
+              {data.agentFingerprint && (
+                <>
+                  <Separator className="bg-border/30" />
+                  <AgentFingerprintSection fingerprint={data.agentFingerprint} />
                 </>
               )}
 
@@ -2267,6 +2295,119 @@ function EngineRow({ eng }: { eng: EngineResult }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Task #644 — Cross-AI-agent fingerprint section. Renders the heuristic
+ * detector's verdict (one of GPT-4 / Claude / Gemini / Cursor agent /
+ * Replit agent / Human / Unknown) plus the rules that voted, the per-
+ * candidate raw scores, and the lightweight stylometric features. Always
+ * framed as a "likely fingerprint" — never a hard attribution claim — and
+ * collapses to a low-key "Unknown" pill when the body is too short or
+ * generic to score.
+ */
+function AgentFingerprintSection({
+  fingerprint,
+}: {
+  fingerprint: NonNullable<DiagnosticsResponse["agentFingerprint"]>;
+}) {
+  const isUnknown = fingerprint.likelyAgent === "unknown";
+  const pct = Math.round(fingerprint.confidence * 100);
+  const AGENT_LABEL: Record<string, string> = {
+    gpt4: "GPT-4 / ChatGPT",
+    claude: "Claude",
+    gemini: "Gemini",
+    "cursor-agent": "Cursor agent",
+    "replit-agent": "Replit agent",
+    human: "Human",
+  };
+  const tone = isUnknown
+    ? "text-muted-foreground border-muted-foreground/30"
+    : fingerprint.likelyAgent === "human"
+    ? "text-green-400 border-green-500/40"
+    : "text-purple-400 border-purple-500/40";
+
+  // Sort the raw per-candidate scores high → low so the runner-up sits
+  // right under the winner for at-a-glance disambiguation.
+  const sortedScores = Object.entries(fingerprint.scores)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  return (
+    <section className="space-y-2" data-testid="agent-fingerprint-section">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+          Likely AI-Agent Fingerprint
+        </div>
+        <Badge
+          variant="outline"
+          className="text-[10px] px-1.5 py-0 h-4 font-mono normal-case text-muted-foreground border-muted-foreground/30"
+        >
+          Heuristic · not attribution
+        </Badge>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Badge variant="outline" className={cn("text-[11px] px-2 py-0.5 font-mono", tone)}>
+          {fingerprint.likelyAgentLabel}
+        </Badge>
+        {!isUnknown && (
+          <span className="text-[11px] font-mono text-muted-foreground">
+            confidence {pct}%
+          </span>
+        )}
+      </div>
+      {isUnknown && (
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Not enough stylistic evidence in the report body to point to a specific
+          agent. Short or generic prose collapses to <span className="font-mono">Unknown</span> by design.
+        </p>
+      )}
+      {sortedScores.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+          {sortedScores.map(([agent, score]) => (
+            <div
+              key={agent}
+              className="flex items-center justify-between rounded-md border border-border/40 bg-muted/10 px-2 py-1"
+            >
+              <span className="text-[11px] truncate">{AGENT_LABEL[agent] ?? agent}</span>
+              <span className="text-[11px] font-mono text-muted-foreground ml-2">
+                {score}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {fingerprint.matches.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Rules that fired
+          </div>
+          <ul className="space-y-0.5">
+            {fingerprint.matches.map((m) => (
+              <li key={m.id} className="text-[11px] font-mono text-muted-foreground leading-snug">
+                · <span className="text-foreground">+{m.weight}</span> {m.description}
+                {m.excerpt && (
+                  <span className="text-muted-foreground/80"> — “{m.excerpt}”</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+        <Stat label="Words" value={`${fingerprint.features.wordCount}`} />
+        <Stat
+          label="Avg sentence"
+          value={fingerprint.features.avgSentenceLen.toFixed(1)}
+          sub="words"
+        />
+        <Stat label="Em-dashes" value={`${fingerprint.features.emDashCount}`} />
+        <Stat label="Bold headers" value={`${fingerprint.features.boldHeaderCount}`} />
+        <Stat label="Bullets" value={`${fingerprint.features.bulletCount}`} />
+        <Stat label="Sentences" value={`${fingerprint.features.sentenceCount}`} />
+      </div>
+    </section>
   );
 }
 

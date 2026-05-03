@@ -28,6 +28,7 @@ import { analyzeFactual } from "../lib/factual-verification";
 import { fuseScores, recomputeSlopScoreWithoutLlm, type FusionResult, type EvidenceItem, type Quadrant, type Archetype, type AnalysisMode } from "../lib/score-fusion";
 import { generateConfigImpactNotices, type ConfigImpactNotice } from "../lib/config-notices";
 import { redactReport } from "../lib/redactor";
+import { detectAgentFingerprint, AGENT_DISPLAY_LABEL } from "../lib/agent-fingerprint";
 import { parseSections, findSectionMatches } from "../lib/section-parser";
 import { sanitizeText, sanitizeForAnalysis, sanitizeFileName, detectBinaryContent } from "../lib/sanitize";
 import { extractTextFromPdf } from "../lib/pdf";
@@ -2155,6 +2156,26 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
     // diagnostics-panel footer can render an exact pin. `null` for legacy
     // rows analyzed before the column shipped.
     engineVersions: report.engineVersions ?? null,
+    // Task #644 — cross-AI-agent fingerprint detector. Computed inline at
+    // request time over the persisted report body so it can light up for
+    // legacy rows too. Pure heuristic — never claims certainty (confidence
+    // is capped at 0.95) and falls through to "unknown" on short or
+    // generic prose. Surfaced as an evidence signal on the diagnostics
+    // panel so reviewers can see WHICH agent the prose looks like, in
+    // addition to whether it looks AI-authored at all.
+    agentFingerprint: (() => {
+      const body = report.contentText ?? "";
+      const r = detectAgentFingerprint(body);
+      return {
+        likelyAgent: r.likelyAgent,
+        likelyAgentLabel: AGENT_DISPLAY_LABEL[r.likelyAgent],
+        confidence: r.confidence,
+        scores: r.scores,
+        // Cap matches list so the JSON stays small for large reports.
+        matches: r.matches.slice(0, 12),
+        features: r.features,
+      };
+    })(),
   });
 });
 
