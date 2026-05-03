@@ -1,0 +1,37 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Release name: {{ .Release.Name }}
+Namespace:    {{ .Release.Namespace }}
+
+1. Check that pods are running:
+   kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/instance={{ .Release.Name }}"
+
+{{- if .Values.ingress.enabled }}
+
+2. The API is reachable via Ingress at:
+{{- range .Values.ingress.hosts }}
+   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+
+{{- else if contains "LoadBalancer" .Values.service.type }}
+
+2. Wait for the LoadBalancer external IP:
+   kubectl --namespace {{ .Release.Namespace }} get svc -w {{ include "vulnrap.fullname" . }}
+
+{{- else }}
+
+2. Forward a local port to the service:
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "vulnrap.fullname" . }} 8080:{{ .Values.service.port }}
+   Then open http://localhost:8080/api/health
+
+{{- end }}
+
+3. Override sensitive values (DATABASE_URL, OPENAI_API_KEY, etc.) on upgrade:
+   helm upgrade {{ .Release.Name }} ./deploy/helm/vulnrap \
+     --set-string secrets.data.DATABASE_URL="postgresql://user:pass@host:5432/db" \
+     --set-string secrets.data.OPENAI_API_KEY="sk-..."
+
+   Or point at an existing Secret you manage out-of-band:
+   helm upgrade {{ .Release.Name }} ./deploy/helm/vulnrap \
+     --set secrets.create=false \
+     --set secrets.existingSecret=my-vulnrap-secret

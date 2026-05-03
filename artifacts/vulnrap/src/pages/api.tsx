@@ -1,4 +1,4 @@
-import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp, Plug, Bot, Download, Image as ImageIcon } from "lucide-react";
+import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp, Plug, Bot, Download, Image as ImageIcon, Server } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -625,6 +625,78 @@ jobs:
             </a>
             <p className="text-[11px] text-muted-foreground/60 italic mt-2">
               Repo path: <code className="font-mono">artifacts/api-server/docs/integrations/bugcrowd.md</code>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
+          <Server className="w-5 h-5 text-primary" />
+          Self-Hosting
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Run VulnRap on your own infrastructure. Two reference deployment paths — pick the one that matches your stack.
+        </p>
+
+        <Card className="glass-card rounded-xl" data-testid="card-self-host-compose">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Badge variant="outline" className="border-blue-500 text-blue-500 text-[10px] font-mono uppercase">Docker Compose</Badge>
+              <code className="text-primary font-mono text-xs">docker-compose.yml</code>
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Single-host PostgreSQL setup for local development and small deployments. Lives at the repo root.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a
+              href="https://github.com/vulnrap/vulnrap/blob/main/docker-compose.yml"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              data-testid="link-compose-file"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              View docker-compose.yml
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card rounded-xl" data-testid="card-self-host-helm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Badge variant="outline" className="border-cyan-500 text-cyan-500 text-[10px] font-mono uppercase">Helm</Badge>
+              <code className="text-primary font-mono text-xs">deploy/helm/vulnrap</code>
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Kubernetes Helm chart for production deployments. Ships Deployment, Service, optional Ingress, ConfigMap,
+              Secret stub, ServiceAccount, and an optional HorizontalPodAutoscaler. Lints clean with{" "}
+              <code className="font-mono text-xs text-foreground">helm lint</code>. Bring your own PostgreSQL.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <CopyBlock language="bash" code={`git clone https://github.com/vulnrap/vulnrap.git
+cd vulnrap
+
+helm install vulnrap ./deploy/helm/vulnrap \\
+  --namespace vulnrap --create-namespace \\
+  --set-string secrets.data.DATABASE_URL="postgresql://vulnrap:vulnrap@my-pg:5432/vulnrap" \\
+  --set-string secrets.data.OPENAI_API_KEY="sk-..."`} />
+            <a
+              href="https://github.com/vulnrap/vulnrap/blob/main/deploy/helm/vulnrap/README.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              data-testid="link-helm-chart-readme"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Read the Helm chart docs
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <p className="text-[11px] text-muted-foreground/60 italic">
+              Repo path: <code className="font-mono">deploy/helm/vulnrap/</code> — verify with <code className="font-mono">helm lint ./deploy/helm/vulnrap</code>.
             </p>
           </CardContent>
         </Card>

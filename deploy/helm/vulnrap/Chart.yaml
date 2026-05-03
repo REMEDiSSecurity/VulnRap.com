@@ -1,0 +1,20 @@
+apiVersion: v2
+name: vulnrap
+description: Helm chart for self-hosting the VulnRap API server (companion to the docker-compose example)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.24.0-0"
+home: https://vulnrap.com
+sources:
+  - https://github.com/vulnrap/vulnrap
+keywords:
+  - vulnrap
+  - vulnerability
+  - psirt
+  - security
+  - slop-detection
+maintainers:
+  - name: VulnRap
+    url: https://vulnrap.com
+icon: https://vulnrap.com/favicon.ico

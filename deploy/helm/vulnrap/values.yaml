@@ -1,0 +1,148 @@
+# Default values for the vulnrap Helm chart.
+# This is a YAML-formatted file. Each key is documented inline.
+
+# -- Override the chart name (used in resource names).
+nameOverride: ""
+# -- Override the full release name (used in resource names).
+fullnameOverride: ""
+
+image:
+  # -- Container image repository for the VulnRap API server.
+  repository: ghcr.io/vulnrap/vulnrap
+  # -- Image tag. Defaults to the chart's appVersion when unset.
+  tag: ""
+  # -- Image pull policy.
+  pullPolicy: IfNotPresent
+
+# -- Image pull secrets for private registries.
+imagePullSecrets: []
+
+# -- Number of API server replicas.
+replicaCount: 2
+
+# -- Pod-level annotations.
+podAnnotations: {}
+# -- Pod-level labels.
+podLabels: {}
+
+# -- Pod security context.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# -- Container security context.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+serviceAccount:
+  # -- Whether a ServiceAccount should be created.
+  create: true
+  # -- Annotations to add to the ServiceAccount.
+  annotations: {}
+  # -- Name of the ServiceAccount. Generated when empty.
+  name: ""
+
+service:
+  # -- Service type (ClusterIP, NodePort, LoadBalancer).
+  type: ClusterIP
+  # -- Service port exposed in-cluster.
+  port: 80
+  # -- Container port the API server listens on (matches `env.PORT`).
+  targetPort: 8080
+  # -- Annotations to add to the Service.
+  annotations: {}
+
+ingress:
+  # -- Enable Ingress for external HTTP access.
+  enabled: false
+  # -- IngressClass name (e.g. "nginx", "traefik").
+  className: ""
+  # -- Ingress annotations (cert-manager, controllers, etc.).
+  annotations: {}
+  hosts:
+    - host: vulnrap.local
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS configuration for the Ingress.
+  tls: []
+  # - secretName: vulnrap-tls
+  #   hosts:
+  #     - vulnrap.local
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+autoscaling:
+  # -- Enable a HorizontalPodAutoscaler.
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+
+# -- Liveness probe configuration. Set `enabled: false` to disable.
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /api/health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+# -- Readiness probe configuration. Set `enabled: false` to disable.
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /api/health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# -- Node selector for scheduling.
+nodeSelector: {}
+# -- Tolerations for scheduling.
+tolerations: []
+# -- Affinity rules for scheduling.
+affinity: {}
+
+# -- Non-sensitive environment variables, surfaced via ConfigMap.
+env:
+  PORT: "8080"
+  NODE_ENV: "production"
+  PUBLIC_URL: "https://vulnrap.local"
+  ALLOWED_ORIGINS: "https://vulnrap.local"
+  # OPENAI_BASE_URL: "https://api.openai.com/v1"
+  # OPENAI_MODEL: "gpt-4o-mini"
+
+# -- Extra environment variables (advanced; use `secrets` for sensitive values).
+extraEnv: []
+# - name: FEATURE_FLAG_X
+#   value: "true"
+
+secrets:
+  # -- When true, the chart creates a Secret stub from `secrets.data`.
+  # When false, you must provide a Secret named `secrets.existingSecret`.
+  create: true
+  # -- Use a pre-existing Secret instead of creating one.
+  existingSecret: ""
+  # -- Sensitive values mounted as environment variables. DO NOT commit real secrets here;
+  # override with `--set-string` / `--set-file` or use `existingSecret`.
+  data:
+    DATABASE_URL: "postgresql://vulnrap:vulnrap@vulnrap-postgresql:5432/vulnrap"
+    OPENAI_API_KEY: ""
+
+postgresql:
+  # -- Quick toggle indicating whether you're bringing your own database.
+  # This chart does NOT bundle a Postgres subchart — wire your own (Bitnami,
+  # CloudNativePG, RDS, etc.) and point `secrets.data.DATABASE_URL` at it.
+  external: true
