@@ -5,10 +5,11 @@
 // because the predicates exercise jsonb-specific SQL — `EXISTS`,
 // `jsonb_array_elements`, and `coalesce(..., '[]'::jsonb)` — that the
 // existing fake-DB harness in routes/reports.feed-fabricated.test.ts
-// cannot evaluate. A regression that drops the coalesce, swaps `LIKE
-// 'hallucination_%'` for the wrong prefix, or flips the `--rescore`
-// branch would still pass mock-DB tests; only this real-DB run catches
-// it.
+// cannot evaluate. A regression that drops the coalesce, swaps the
+// escaped `LIKE 'hallucination\_%' ESCAPE '\'` pattern for the wrong
+// prefix (or drops the escape so the `_` becomes a wildcard again), or
+// flips the `--rescore` branch would still pass mock-DB tests; only
+// this real-DB run catches it.
 //
 // Isolation: each run creates a unique schema (`test_backfill_<rand>`),
 // creates a `reports` table inside it that mirrors the columns the
@@ -157,16 +158,23 @@ beforeAll(async () => {
   ids.scoredOtherEvidence = await insertRow(
     "scored-other",
     60,
-    // Note: cannot use a value like "hallucinationFakeMatch" here as a
-    // negative case — SQL LIKE treats `_` as a single-char wildcard, so
-    // `hallucinationFakeMatch` actually MATCHES `'hallucination_%'`
-    // (the `_` matches the `F`). That is the production behavior of
-    // the predicate today and we intentionally do not assert against
-    // it. The genuine negative case the predicate guarantees is that
-    // the LIKE is anchored at the start of the string (no leading `%`),
-    // so a value where `hallucination_` appears mid-string does NOT
-    // match.
-    [{ type: "x_hallucination_substring_marker", weight: 5 }],
+    // Two negative cases bundled into this row's evidence array:
+    //   1. `x_hallucination_substring_marker` — `hallucination_` appears
+    //      mid-string, so the start-anchored LIKE must not match it
+    //      (guards against a regression that adds a leading `%`).
+    //   2. `hallucinationFakeMatch` — no underscore separator after
+    //      `hallucination`. Because the LIKE pattern escapes the `_`
+    //      (`'hallucination\_%' ESCAPE '\'`), the `_` is a literal
+    //      character, so this string must NOT match. Without the
+    //      escape, SQL would treat `_` as a single-char wildcard and
+    //      this value would slip through, letting the downstream JS
+    //      code see an evidence type its `startsWith("hallucination_")`
+    //      check would then reject — wasting the rescore worker's
+    //      time. This is the regression the task fixes.
+    [
+      { type: "x_hallucination_substring_marker", weight: 5 },
+      { type: "hallucinationFakeMatch", weight: 5 },
+    ],
   );
 }, 30000);
 
@@ -252,12 +260,20 @@ describe("buildRescoreCandidateFilters — real-Postgres integration", () => {
     ]);
   });
 
-  it("LIKE 'hallucination_%' is start-anchored: types where the prefix appears mid-string are excluded, and arbitrary unrelated types are excluded", async () => {
-    // The scoredOtherEvidence row's evidence type is
-    // `x_hallucination_substring_marker` — `hallucination_` appears in
-    // the middle of the string but not at the start, so the
-    // start-anchored LIKE must NOT match it. This guards against a
-    // regression that adds a leading `%` to the pattern.
+  it("LIKE pattern is start-anchored, treats `_` as a literal, and excludes arbitrary unrelated types", async () => {
+    // The scoredOtherEvidence row's evidence array carries two
+    // negative cases:
+    //   - `x_hallucination_substring_marker` — `hallucination_` appears
+    //     mid-string but not at the start, so the start-anchored LIKE
+    //     must NOT match it (guards against a regression that adds a
+    //     leading `%`).
+    //   - `hallucinationFakeMatch` — would match `'hallucination_%'`
+    //     under SQL's default semantics (the `_` is a single-char
+    //     wildcard that would consume the `F`). The escaped pattern
+    //     `'hallucination\_%' ESCAPE '\'` makes the `_` literal, so
+    //     this value must NOT match. This is the regression the task
+    //     fixes; if either negative case were to slip through, this
+    //     row would appear in `got`.
     //
     // The nullCompositeOtherEvidence row's type is `low_quality_marker`
     // — no `hallucination` substring at all, so it must also be
@@ -284,14 +300,14 @@ describe("buildRescoreCandidateFilters — real-Postgres integration", () => {
     expect(got).not.toContain(ids.scoredNullEvidence);
   });
 
-  it("emitted SQL contains the coalesce + LIKE 'hallucination_%' shape so a regression that rewrites either piece is caught at the source", async () => {
+  it("emitted SQL contains the coalesce + escaped LIKE 'hallucination\\_%' shape so a regression that rewrites either piece is caught at the source", async () => {
     // Belt-and-braces: render the predicate to a parameterized SQL
-    // string and assert the two structural pieces the task spec calls
-    // out (coalesce-over-evidence and the prefix-anchored LIKE) are
-    // present. The behavioral assertions above already catch most
-    // regressions; this guards against silent rewrites that happen to
-    // be functionally equivalent on the seeded rows but drift from
-    // the documented predicate shape.
+    // string and assert the structural pieces the task spec calls
+    // out (coalesce-over-evidence and the prefix-anchored LIKE with
+    // an escaped underscore) are present. The behavioral assertions
+    // above already catch most regressions; this guards against
+    // silent rewrites that happen to be functionally equivalent on
+    // the seeded rows but drift from the documented predicate shape.
     const filters = buildRescoreCandidateFilters({
       rescore: false,
       onlyWithCachedHallucination: true,
@@ -305,7 +321,13 @@ describe("buildRescoreCandidateFilters — real-Postgres integration", () => {
       .where(and(...filters))
       .toSQL();
     expect(stmt.sql.toLowerCase()).toContain("coalesce");
-    expect(stmt.sql).toContain("'hallucination_%'");
+    // Escaped pattern: `\_` is a literal underscore, and an explicit
+    // `ESCAPE '\'` clause tells Postgres which character is the
+    // escape. Both pieces must appear together — asserting just the
+    // pattern would miss a regression that drops the ESCAPE clause
+    // and silently re-enables the `_`-as-wildcard behavior.
+    expect(stmt.sql).toContain("'hallucination\\_%'");
+    expect(stmt.sql).toContain("ESCAPE '\\'");
     expect(stmt.sql.toLowerCase()).toContain("jsonb_array_elements");
   });
 });

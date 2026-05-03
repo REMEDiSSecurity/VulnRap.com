@@ -263,10 +263,17 @@ export function buildRescoreCandidateFilters(opts: {
   rescore: boolean;
   onlyWithCachedHallucination: boolean;
 }): SQL[] {
+  // The LIKE pattern escapes the underscore (`\_`) so it matches a
+  // literal `_` instead of SQL's single-character wildcard. Without the
+  // escape, a value like `hallucinationFakeMatch` would also match (the
+  // `_` wildcard would consume the `F`), letting unrelated evidence
+  // types through the filter even though the downstream JS code in
+  // `reconstructHallucinationSignals` only consumes types whose prefix
+  // is the literal `hallucination_`.
   const hallucinationFilter = sql`EXISTS (
     SELECT 1
     FROM jsonb_array_elements(coalesce(${reportsTable.evidence}, '[]'::jsonb)) AS e
-    WHERE e->>'type' LIKE 'hallucination_%'
+    WHERE e->>'type' LIKE 'hallucination\\_%' ESCAPE '\\'
   )`;
   return [
     opts.rescore
