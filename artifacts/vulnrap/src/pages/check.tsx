@@ -16,6 +16,7 @@ import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCust
 import { AnalysisStepper } from "@/components/analysis-stepper";
 import { CustomRedactionPanel } from "@/components/custom-redaction-panel";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
+import { QualityPreviewSidebar } from "@/components/quality-preview-sidebar";
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { STRUCTURAL_MARKER_LABELS } from "@/components/diagnostics-panel";
 import {
@@ -714,6 +715,10 @@ export default function Check() {
           </Button>
         </CardFooter>
       </Card>
+
+      {inputMode === "text" && rawText.trim().length > 0 && (
+        <QualityPreviewSidebar text={rawText} />
+      )}
 
       <AnalysisStepper isActive={checkMutation.isPending} mode="check" className="my-4" />
 

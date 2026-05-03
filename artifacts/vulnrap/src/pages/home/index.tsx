@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { cn, anonymizeId } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { AnalysisStepper } from "@/components/analysis-stepper";
+import { QualityPreviewSidebar } from "@/components/quality-preview-sidebar";
 import logoSrc from "@/assets/logo.png";
 
 import { MAX_TEXT_LENGTH, validateFile, type InputMode, type UploadStage } from "./utils";
@@ -614,6 +615,10 @@ export default function Home() {
           </p>
         </CardFooter>
       </Card>
+
+      {inputMode === "text" && rawText.trim().length > 0 && (
+        <QualityPreviewSidebar text={rawText} />
+      )}
 
       <AnalysisStepper isActive={isProcessing && stage !== "done"} mode="submit" className="my-4" />
 
