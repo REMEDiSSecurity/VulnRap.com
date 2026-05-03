@@ -378,6 +378,67 @@ declaring `paths = ["/api"]` (NOT `["/api", "/"]`) so the workspace
 path router does not steal `/` from the Vite dev server — see
 `artifacts/api-server/.replit-artifact/artifact.toml` for the rationale.
 
+### Pre-merge scoring gate
+
+Before any change to scoring-relevant code merges (`lib/` workspace
+packages or `artifacts/api-server/src/lib/` — engines, calibration,
+fusion, hallucination detection), `scripts/post-merge.sh` runs
+`scripts/scoring-gate.sh`, which executes two layers of regression
+defense:
+
+1. **Golden corpus regression** — every `*.regression.test.ts` under
+   `artifacts/api-server/test/regression/` is run via vitest. These
+   tests pin a curated fixture battery so any tier movement on the
+   seeded corpus fails loudly.
+2. **Production replay** — `scripts/scoring-gate-replay.mjs` pulls
+   the most recent 100 reports from `DATABASE_URL`, recomputes the
+   `slopTier` through the *current* scoring pipeline, and fails if
+   the tier-flip rate exceeds **0.5%** (i.e. more than zero flips on
+   100 reports). A per-fixture diff is printed to stdout so you can
+   see exactly which reports moved between tiers and by how much.
+
+Run the gate manually at any time:
+
+```bash
+bash scripts/scoring-gate.sh
+```
+
+Tunables (handy for local iteration):
+
+```bash
+# Replay only the last 25 reports instead of 100.
+SCORING_GATE_REPLAY_LIMIT=25 bash scripts/scoring-gate.sh
+
+# Loosen the threshold to 2% (0.02) when investigating noisy diffs.
+SCORING_GATE_FLIP_THRESHOLD=0.02 bash scripts/scoring-gate.sh
+```
+
+#### Bypassing the gate (intentional calibration changes)
+
+Some changes — recalibrating engine weights, lowering a tier
+threshold after a corpus refresh, fixing a known bug in a signal
+detector — *should* move tiers on production data. That is the whole
+point of the change. In those cases, bypass the gate explicitly:
+
+```bash
+SCORING_GATE_BYPASS=1 bash scripts/post-merge.sh
+```
+
+When you bypass:
+
+- **Explain why in the merge commit message.** The next reviewer
+  needs to be able to tell "deliberate recalibration" from "I was
+  in a hurry and skipped the gate".
+- **Update the golden corpus snapshots in the same PR.** Otherwise
+  the next change that *should* fail the gate will pass because the
+  snapshots are stale.
+- **Re-run the gate without the bypass after merging** so the new
+  baseline is recorded as the next reference point.
+
+`SCORING_GATE_BYPASS=1` logs a one-line marker to the post-merge
+output (`[scoring-gate] BYPASS=1 — skipping golden corpus + replay`)
+so the bypass is visible in any log review.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
