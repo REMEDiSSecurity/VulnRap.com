@@ -285,8 +285,43 @@ if (process.env.NODE_ENV === "production") {
     "dist",
     "public",
   );
-  app.use(express.static(frontendDir, { maxAge: "1d" }));
+  // Task #726 — Long-cache hashed assets and never-cache the SPA shell.
+  // Vite emits hashed filenames under /assets/* (see rollup output config),
+  // so they're safe to mark `immutable` for a full year. The HTML shell
+  // and any non-/assets/ static file (favicons, robots.txt, sitemap.xml,
+  // prerender output) must revalidate on every load so a fresh deploy is
+  // visible immediately.
+  const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+  app.use(
+    express.static(frontendDir, {
+      etag: true,
+      lastModified: true,
+      setHeaders: (res, filePath) => {
+        const rel = path
+          .relative(frontendDir, filePath)
+          .split(path.sep)
+          .join("/");
+        if (rel.startsWith("assets/")) {
+          res.setHeader(
+            "Cache-Control",
+            `public, max-age=${ONE_YEAR_SECONDS}, immutable`,
+          );
+        } else if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache");
+        } else {
+          // Favicons / robots.txt / sitemap.xml / prerender shells — short
+          // cache with revalidation so a deploy propagates within minutes
+          // instead of waiting for a hard refresh.
+          res.setHeader(
+            "Cache-Control",
+            "public, max-age=300, must-revalidate",
+          );
+        }
+      },
+    }),
+  );
   app.use((_req, res) => {
+    res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.join(frontendDir, "index.html"));
   });
 }

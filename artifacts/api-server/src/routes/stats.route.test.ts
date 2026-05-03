@@ -60,6 +60,15 @@ const executeMock = vi.fn() as unknown as ExecuteFn & {
 // touch select (the visitor analytics tests) keep passing.
 const selectQueue: unknown[][] = [];
 
+// Task #726 — query-budget harness. Counts every top-level `db.select(...)`
+// invocation per request so we can assert a hard ceiling on round-trips per
+// endpoint. The conditional-GET 304 short-circuit, for example, must use
+// exactly one query (the MAX(created_at) freshness probe) and skip the
+// 4-6 follow-up selects the full 200 path runs. A regression here means
+// a future refactor accidentally moved the cache check below the heavy
+// queries — caught in CI instead of in production.
+let selectCallCount = 0;
+
 // A thenable chain that accepts every method drizzle's select-chain exposes
 // (.from / .where / .orderBy / .limit / .groupBy) and resolves to a
 // pre-seeded row array when awaited. This avoids modeling actual Drizzle
@@ -105,6 +114,7 @@ vi.mock("@workspace/db", async () => {
       // thenable so the handler can await it regardless of which methods
       // it chains.
       select: () => {
+        selectCallCount += 1;
         const rows = selectQueue.length > 0 ? selectQueue.shift()! : [];
         return makeSelectChain(rows);
       },
@@ -143,6 +153,7 @@ afterAll(async () => {
 beforeEach(() => {
   (executeMock as unknown as { mockReset: () => void }).mockReset();
   selectQueue.length = 0;
+  selectCallCount = 0;
 });
 
 interface HttpResponse<T> {
@@ -380,11 +391,16 @@ const TRENDS_CACHE_CONTROL = "public, max-age=120, stale-while-revalidate=300";
 
 describe("GET /stats", () => {
   it("returns aggregate stats with the expected shape and homepage cache header", async () => {
-    // Handler issues 4 db.select(...) calls in this exact order:
-    //   1) totals          — count(*), avg slop, full / similarity_only
-    //   2) duplicateCounts — count(*) where similarityMatches is non-empty
-    //   3) todayCounts     — count(*) since today 00:00
-    //   4) weekCounts      — count(*) since 7 days ago
+    // Handler issues 5 db.select(...) calls in this exact order:
+    //   1) freshnessProbe  — MAX(created_at) for the Last-Modified header (Task #726)
+    //   2) totals          — count(*), avg slop, full / similarity_only
+    //   3) duplicateCounts — count(*) where similarityMatches is non-empty
+    //   4) todayCounts     — count(*) since today 00:00
+    //   5) weekCounts      — count(*) since 7 days ago
+    // Empty rows for the freshness probe → handler skips Last-Modified
+    // and falls through to the full 200 path (req.fresh is false because
+    // this request has no If-Modified-Since header).
+    selectQueue.push([]);
     selectQueue.push([
       {
         totalReports: 12,
@@ -473,9 +489,10 @@ describe("GET /stats/recent", () => {
 
 describe("GET /stats/distribution", () => {
   it("returns 5 score buckets, the total, and the homepage cache header", async () => {
-    // Handler issues a single db.select(...) call returning one row with the
-    // total + 5 bucket counts (b0..b4) corresponding to the bucket defs in
-    // the handler.
+    // Handler issues 2 db.select(...) calls:
+    //   1) freshnessProbe — MAX(created_at) for Last-Modified (Task #726)
+    //   2) bucket aggregate — total + 5 bucket counts (b0..b4)
+    selectQueue.push([]);
     selectQueue.push([{ total: 50, b0: 10, b1: 8, b2: 12, b3: 14, b4: 6 }]);
 
     const r = await request<{
@@ -503,10 +520,12 @@ describe("GET /stats/distribution", () => {
 
 describe("GET /stats/trends", () => {
   it("returns daily report + feedback trends with the trends cache header", async () => {
-    // Handler issues 3 db.select(...) calls in this exact order:
-    //   1) dailyReports  — per-day counts + tier breakdown for reports
-    //   2) dailyFeedback — per-day count + avg + helpful counts for feedback
-    //   3) totals        — totalReports + totalFeedback
+    // Handler issues 4 db.select(...) calls in this exact order:
+    //   1) freshnessProbe — MAX(created_at) for Last-Modified (Task #726)
+    //   2) dailyReports   — per-day counts + tier breakdown for reports
+    //   3) dailyFeedback  — per-day count + avg + helpful counts for feedback
+    //   4) totals         — totalReports + totalFeedback
+    selectQueue.push([]);
     selectQueue.push([
       {
         date: "2026-04-28",
@@ -603,8 +622,9 @@ describe("GET /stats/trends", () => {
   });
 
   it("clamps the days query param into [7, 365]", async () => {
-    // Empty rows for all 3 select calls are fine — we only care about the
-    // clamped echo in the response body.
+    // Empty rows for all 4 select calls (freshness probe + 3 aggregates)
+    // are fine — we only care about the clamped echo in the response body.
+    selectQueue.push([]);
     selectQueue.push([]);
     selectQueue.push([]);
     selectQueue.push([{ totalReports: 0, totalFeedback: 0 }]);
@@ -612,5 +632,93 @@ describe("GET /stats/trends", () => {
     const r = await request<{ days: number }>("GET", "/stats/trends?days=999");
     expect(r.status).toBe(200);
     expect(r.body.days).toBe(365);
+  });
+});
+
+// Task #726 — Query budget tests. Each /stats* endpoint MUST stay under a
+// hard ceiling of round-trips so a future "let me just add one more
+// `db.select` to enrich the response" doesn't silently quadruple the
+// homepage's TTFB. Numbers are derived from reading the handler today
+// and bumping by zero — so any growth is intentional, reviewed, and
+// requires updating both the budget here AND `docs/performance.md`.
+describe("Task #726 — query budgets", () => {
+  it("GET /stats issues at most 5 selects on the 200 path", async () => {
+    // 1× Last-Modified probe + 4× existing aggregate selects (totals,
+    // duplicateCounts, todayCounts, weekCounts). Anything higher means
+    // the dashboard request fan-out grew silently. Rows must have the
+    // real shape because the handler destructures `[totals]` etc. and
+    // immediately reads named columns.
+    selectQueue.push([]); // freshness probe
+    selectQueue.push([
+      { totalReports: 0, avgSlopScore: 0, fullCount: 0, similarityOnlyCount: 0 },
+    ]);
+    selectQueue.push([{ duplicatesDetected: 0 }]);
+    selectQueue.push([{ count: 0 }]);
+    selectQueue.push([{ count: 0 }]);
+
+    const r = await request("GET", "/stats");
+    expect(r.status).toBe(200);
+    expect(selectCallCount).toBeLessThanOrEqual(5);
+  });
+
+  it("GET /stats short-circuits to 304 with exactly 1 select when If-Modified-Since matches", async () => {
+    // Seed one row with a known last-modified, then re-request with the
+    // same If-Modified-Since header. The conditional-GET branch must
+    // return 304 after the single freshness probe and skip every
+    // follow-up select.
+    const lastMod = new Date("2026-04-30T12:00:00Z");
+    selectQueue.push([{ lastModified: lastMod }]);
+    // Real-shape fall-through rows in case the handler ever skips the
+    // 304 short-circuit — we want to assert it doesn't, not crash the
+    // test if it does.
+    selectQueue.push([
+      { totalReports: 0, avgSlopScore: 0, fullCount: 0, similarityOnlyCount: 0 },
+    ]);
+    selectQueue.push([{ duplicatesDetected: 0 }]);
+    selectQueue.push([{ count: 0 }]);
+    selectQueue.push([{ count: 0 }]);
+
+    const url = new URL(`${baseUrl}/stats`);
+    const ims = lastMod.toUTCString();
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        {
+          method: "GET",
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname,
+          headers: { "If-Modified-Since": ims },
+        },
+        (res) => {
+          res.on("data", () => {});
+          res.on("end", () => resolve(res.statusCode ?? 0));
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+    expect(status).toBe(304);
+    expect(selectCallCount).toBe(1);
+  });
+
+  it("GET /stats/distribution issues at most 2 selects on the 200 path", async () => {
+    // 1× Last-Modified probe + 1× bucket aggregate.
+    selectQueue.push([]); // freshness probe
+    selectQueue.push([{ total: 0, b0: 0, b1: 0, b2: 0, b3: 0, b4: 0 }]);
+    const r = await request("GET", "/stats/distribution");
+    expect(r.status).toBe(200);
+    expect(selectCallCount).toBeLessThanOrEqual(2);
+  });
+
+  it("GET /stats/trends issues at most 4 selects on the 200 path", async () => {
+    // 1× Last-Modified probe + 3× existing aggregates (per-day report
+    // bucket, per-day feedback bucket, totals row).
+    selectQueue.push([]); // freshness probe
+    selectQueue.push([]); // dailyReports
+    selectQueue.push([]); // dailyFeedback
+    selectQueue.push([{ totalReports: 0, totalFeedback: 0 }]);
+    const r = await request("GET", "/stats/trends?days=7");
+    expect(r.status).toBe(200);
+    expect(selectCallCount).toBeLessThanOrEqual(4);
   });
 });

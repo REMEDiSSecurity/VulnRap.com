@@ -1,0 +1,36 @@
+{
+  "//": "Task #726 — Performance audit budgets. `lhci autorun` boots `vite preview` on the workspace, hits the four key routes, and fails CI if any category score drops below the threshold. Numbers are conservative-but-meaningful: they catch a regression that ships an extra ~200KB of JS to the landing path or breaks a11y on the dashboard, without false-positiving on Lighthouse run-to-run noise.",
+  "ci": {
+    "collect": {
+      "startServerCommand": "pnpm --filter @workspace/vulnrap run serve",
+      "startServerReadyPattern": "Local:",
+      "startServerReadyTimeout": 60000,
+      "url": [
+        "http://localhost:5173/",
+        "http://localhost:5173/results/1",
+        "http://localhost:5173/stats",
+        "http://localhost:5173/developers"
+      ],
+      "numberOfRuns": 1,
+      "settings": {
+        "preset": "desktop",
+        "skipAudits": [
+          "uses-http2",
+          "is-on-https",
+          "redirects-http"
+        ]
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.85 }],
+        "categories:accessibility": ["error", { "minScore": 0.9 }],
+        "categories:best-practices": ["warn", { "minScore": 0.9 }],
+        "categories:seo": ["warn", { "minScore": 0.9 }]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
+  }
+}

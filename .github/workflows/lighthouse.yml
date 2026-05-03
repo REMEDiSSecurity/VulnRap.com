@@ -1,0 +1,89 @@
+name: Lighthouse CI
+
+# Task #726 — Performance audit. Boots the SPA preview server AND the
+# api-server (the four audited routes hit /api/stats, /api/reports/:id,
+# etc. on first paint), runs Lighthouse against the four key routes
+# (landing, results, stats, developers), and fails the PR if any score
+# drops below the budget in `lighthouserc.json`. Without the api-server
+# the lazy /api/* fetches would 502 and Lighthouse would score the page
+# as broken instead of slow.
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/vulnrap/**"
+      - "artifacts/api-server/src/app.ts"
+      - ".github/workflows/lighthouse.yml"
+      - "lighthouserc.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    name: Lighthouse budgets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SPA (no prerender — Lighthouse exercises the SSR'd shell)
+        run: pnpm --filter @workspace/vulnrap run build:no-prerender
+
+      - name: Upload bundle visualizer
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-stats
+          path: artifacts/vulnrap/dist/public/stats.html
+          if-no-files-found: warn
+
+      - name: Build api-server
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Boot api-server (background, port 8080 — vite preview proxies /api here)
+        env:
+          NODE_ENV: development
+          PORT: "8080"
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgres://lhci:lhci@localhost:5432/lhci' }}
+        run: |
+          pnpm --filter @workspace/api-server run start > /tmp/api-server.log 2>&1 &
+          echo $! > /tmp/api-server.pid
+          # Poll the healthcheck for up to 30s so Lighthouse never races a cold start.
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/api/healthz > /dev/null; then
+              echo "api-server up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "api-server did not become healthy" >&2
+          tail -100 /tmp/api-server.log >&2 || true
+          exit 1
+        continue-on-error: true
+
+      - name: Run Lighthouse CI
+        run: |
+          npx --yes @lhci/cli@0.14.x autorun \
+            --config=./lighthouserc.json
+        env:
+          LHCI_BUILD_CONTEXT__CURRENT_HASH: ${{ github.sha }}
+
+      - name: Stop api-server
+        if: always()
+        run: |
+          if [ -f /tmp/api-server.pid ]; then
+            kill "$(cat /tmp/api-server.pid)" 2>/dev/null || true
+          fi

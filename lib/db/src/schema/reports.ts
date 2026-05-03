@@ -185,6 +185,19 @@ export const reportsTable = pgTable(
       .on(table.showInFeed, table.createdAt)
       .where(sql`${table.strippedCrashTrace} = true`),
     index("idx_reports_lsh_buckets").using("gin", table.lshBuckets),
+    // Task #726 — Performance audit indexes. Each was added in
+    // 0003_perf_audit_indexes.sql; the schema declarations below keep
+    // drizzle-kit's introspection diff clean so a future `drizzle-kit
+    // generate` doesn't recreate them.
+    index("idx_reports_delete_token")
+      .on(table.deleteToken)
+      .where(sql`${table.deleteToken} <> ''`),
+    index("idx_reports_content_mode_similarity")
+      .on(table.contentMode)
+      .where(sql`${table.contentMode} <> 'full'`),
+    index("idx_reports_vulnrap_composite_null")
+      .on(table.createdAt)
+      .where(sql`${table.vulnrapCompositeScore} IS NULL`),
   ],
 );
 

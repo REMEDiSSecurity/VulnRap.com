@@ -470,6 +470,21 @@ When you bypass:
 output (`[scoring-gate] BYPASS=1 — skipping golden corpus + replay`)
 so the bypass is visible in any log review.
 
+## Performance
+
+The project ships with measured performance budgets enforced in CI.
+See [`docs/performance.md`](docs/performance.md) for the baseline, the
+wins that shipped, and how to reproduce the measurements locally.
+
+Highlights:
+
+- Every page is lazy-route-split (see `artifacts/vulnrap/src/App.tsx`).
+- Hashed static assets are served `Cache-Control: public, max-age=31536000, immutable`; the SPA shell is `no-cache`.
+- `GET /api/reports/:id` honors `Last-Modified` / `If-Modified-Since` and short-circuits to `304`.
+- Three partial indexes (`0002_perf_audit_indexes.sql`) cover the lookup-by-token, `content_mode` breakdown, and `vulnrap_composite_score IS NULL` rescore-backfill paths.
+- `rollup-plugin-visualizer` writes `dist/public/stats.html` on every production build; CI uploads it as a build artifact.
+- `Lighthouse CI` (`.github/workflows/lighthouse.yml`) enforces per-category score thresholds for the four key routes (`/`, `/results/:id`, `/stats`, `/developers`).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.

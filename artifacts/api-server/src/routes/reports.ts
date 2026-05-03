@@ -2360,6 +2360,18 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  // Task #726 — Conditional GET. The report payload is immutable from the
+  // client's perspective once the row is written (re-scores produce a new
+  // entry), so `Last-Modified: createdAt` is correct. Express's built-in
+  // ETag (weak, content-hashed) still fires on res.json() below; both
+  // validators short-circuit to 304 via res.fresh.
+  res.setHeader("Last-Modified", report.createdAt.toUTCString());
+  res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+  if (req.fresh) {
+    res.status(304).end();
+    return;
+  }
+
   let verification: VerificationResult | null = null;
   if (report.redactedText) {
     try {

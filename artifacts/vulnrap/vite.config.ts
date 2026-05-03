@@ -2,6 +2,7 @@ import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { visualizer } from "rollup-plugin-visualizer";
 
 const port = Number(process.env.PORT) || 5173;
 const basePath = process.env.BASE_PATH || "/";
@@ -27,7 +28,24 @@ function ogAbsoluteUrls() {
 
 export default defineConfig({
   base: basePath,
-  plugins: [react(), tailwindcss(), ogAbsoluteUrls()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    ogAbsoluteUrls(),
+    // Task #726 — Bundle visualization. Generates dist/public/stats.html
+    // (treemap + sunburst + network) on every production build so CI can
+    // upload it as an artifact. `gzipSize`/`brotliSize` are on so the
+    // numbers in docs/performance.md line up with what the edge actually
+    // serves. `emitFile: true` writes into the build output dir; the
+    // generated HTML is harmless to ship but is not linked from the SPA.
+    visualizer({
+      filename: "stats.html",
+      template: "treemap",
+      gzipSize: true,
+      brotliSize: true,
+      emitFile: true,
+    }) as unknown as import("vite").PluginOption,
+  ],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),

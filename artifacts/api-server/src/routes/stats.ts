@@ -20,7 +20,30 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-router.get("/stats", async (_req, res): Promise<void> => {
+// Task #726 — Conditional GET helper for the dashboard endpoints. The
+// freshness signal is the most-recent reports.created_at; clients that
+// have already seen that snapshot get a 304 instead of a re-rendered
+// (and zod-revalidated) JSON payload. Returns null when the table is
+// empty, in which case the caller skips Last-Modified entirely so a
+// browser cache from a populated env doesn't pin an empty response.
+async function getReportsLastModified(): Promise<Date | null> {
+  const [row] = await db
+    .select({ lastModified: sql<Date | null>`max(${reportsTable.createdAt})` })
+    .from(reportsTable);
+  return row?.lastModified ?? null;
+}
+
+router.get("/stats", async (req, res): Promise<void> => {
+  const lastMod = await getReportsLastModified();
+  if (lastMod) {
+    res.setHeader("Last-Modified", lastMod.toUTCString());
+  }
+  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+  if (req.fresh) {
+    res.status(304).end();
+    return;
+  }
+
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekStart = new Date(todayStart);
@@ -109,7 +132,17 @@ router.get("/stats/recent", async (_req, res): Promise<void> => {
   res.json(response);
 });
 
-router.get("/stats/distribution", async (_req, res): Promise<void> => {
+router.get("/stats/distribution", async (req, res): Promise<void> => {
+  const lastMod = await getReportsLastModified();
+  if (lastMod) {
+    res.setHeader("Last-Modified", lastMod.toUTCString());
+  }
+  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+  if (req.fresh) {
+    res.status(304).end();
+    return;
+  }
+
   const bucketDefs = [
     { label: "Clean", min: 0, max: 20 },
     { label: "Likely Human", min: 21, max: 35 },
@@ -244,6 +277,16 @@ router.get("/stats/visitors", async (_req, res): Promise<void> => {
 });
 
 router.get("/stats/trends", async (req, res): Promise<void> => {
+  const lastMod = await getReportsLastModified();
+  if (lastMod) {
+    res.setHeader("Last-Modified", lastMod.toUTCString());
+  }
+  res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
+  if (req.fresh) {
+    res.status(304).end();
+    return;
+  }
+
   const daysParam = parseInt(req.query?.days as string) || 90;
   const days = Math.min(Math.max(daysParam, 7), 365);
   const cutoff = new Date();
