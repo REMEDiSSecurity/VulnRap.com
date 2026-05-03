@@ -97,6 +97,7 @@ import type {
   ScoreStabilitySummary,
   ScoringConfigResponse,
   ShadowDriftReport,
+  ShowcaseResponse,
   SlopDistribution,
   SubmitFeedbackWithChallenge,
   SubmitReportBody,
@@ -3274,6 +3275,90 @@ export function useListIncidents<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListIncidentsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #694 — Returns the hand-curated "interesting reports"
+rendered on `/showcase`: high-confidence catches, edge cases,
+and surprising engine agreements. Sourced from a static JSON
+file (`data/showcase.json`) shipped with the api-server; safe
+to cache for an hour. Each entry carries a redacted excerpt,
+the composite score + tier, a one-paragraph "why this is
+interesting" note, and a `reportId` pointing at a seed report
+so click-through resolves on `/results/<reportId>`.
+
+ * @summary List curator-picked interesting reports
+ */
+export const getListShowcaseUrl = () => {
+  return `/api/showcase`;
+};
+
+export const listShowcase = async (
+  options?: RequestInit,
+): Promise<ShowcaseResponse> => {
+  return customFetch<ShowcaseResponse>(getListShowcaseUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListShowcaseQueryKey = () => {
+  return [`/api/showcase`] as const;
+};
+
+export const getListShowcaseQueryOptions = <
+  TData = Awaited<ReturnType<typeof listShowcase>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listShowcase>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListShowcaseQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listShowcase>>> = ({
+    signal,
+  }) => listShowcase({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listShowcase>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListShowcaseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listShowcase>>
+>;
+export type ListShowcaseQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List curator-picked interesting reports
+ */
+
+export function useListShowcase<
+  TData = Awaited<ReturnType<typeof listShowcase>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listShowcase>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListShowcaseQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

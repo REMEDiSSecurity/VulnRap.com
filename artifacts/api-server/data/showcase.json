@@ -1,0 +1,86 @@
+{
+  "$comment": "Task #694 — Curated /showcase entries. Hand-picked 'interesting reports' from production: high-confidence catches, edge cases, surprising agreements. Each entry renders a card on /showcase with a redacted excerpt, the composite score, a one-paragraph 'why this is interesting' note, and a link to /results/<reportId>. The reportId points at one of the seed reports inserted by `pnpm --filter @workspace/api-server seed` so click-through resolves in any environment that has been seeded. Edit this file (and bump the version) — there is no admin UI.",
+  "version": "1.0.0",
+  "entries": [
+    {
+      "id": "high-confidence-buzzword-soup",
+      "title": "Buzzword soup with no technical artefacts",
+      "category": "high_confidence",
+      "score": 94,
+      "tier": "obvious_slop",
+      "excerpt": "It is important to note that in today's evolving digital landscape, the authentication mechanism represents a significant area of concern. A holistic, defense-in-depth approach should be leveraged to ensure robust security posture across all attack surfaces.",
+      "whyInteresting": "Every engine agreed on this one within milliseconds — no CWE, no endpoint, no payload, no version, just two pages of marketing prose. A textbook example of what the substance engine flags before the LLM even runs, and a useful reference point when calibrating thresholds: if your config doesn't catch this, it isn't catching anything.",
+      "reportId": 4
+    },
+    {
+      "id": "high-confidence-llm-disclosure",
+      "title": "Forgot to delete the LLM disclaimer",
+      "category": "high_confidence",
+      "score": 97,
+      "tier": "obvious_slop",
+      "excerpt": "Certainly! Here is a comprehensive overview of the security posture. As an AI language model, I cannot test the live system, but it bears mentioning that proactive measures should be taken…",
+      "whyInteresting": "Pure self-disclosure: the submitter pasted the model's preamble into the report verbatim. The AI-self-disclosure detector fires hard and the substance engine sees nothing concrete to balance it out. Catching these is trivial; the value of the showcase entry is showing that they actually arrive in production.",
+      "reportId": 4
+    },
+    {
+      "id": "edge-case-cwe-mismatch",
+      "title": "Body describes CWE-79, header claims CWE-89",
+      "category": "edge_case",
+      "score": 71,
+      "tier": "subtle_slop",
+      "excerpt": "Title: SQL Injection in /api/v2/users/profile (CWE-89). The application reflects the supplied 'name' parameter into the rendered profile page without HTML-encoding, allowing an attacker to inject <script> tags that execute in another user's browser.",
+      "whyInteresting": "The CWE-coherence engine is the only one that catches this — the body is a perfectly reasonable XSS write-up, but the submitter slapped a CWE-89 label on it (probably to maximise bounty). Substance and linguistic both score it clean. A neat illustration that a single specialist signal can flip the verdict on otherwise well-written reports.",
+      "reportId": 1
+    },
+    {
+      "id": "edge-case-fabricated-cve",
+      "title": "References a CVE that does not exist",
+      "category": "edge_case",
+      "score": 78,
+      "tier": "subtle_slop",
+      "excerpt": "This vulnerability is a variant of CVE-2024-99812 (SSRF in the webhook dispatcher). The same root cause appears here in the /v3/integrations/test endpoint, which fetches arbitrary URLs without scheme or host validation.",
+      "whyInteresting": "CVE-2024-99812 was never assigned. The fabricated-citation detector catches it; the rest of the report is otherwise plausible enough to slip past a tired triager. This is the failure mode generic LLM detectors miss entirely — the prose is fine, the structure is fine, the only tell is that the cited authority does not exist.",
+      "reportId": 2
+    },
+    {
+      "id": "edge-case-borderline-real-bug",
+      "title": "Real bug, but written like marketing copy",
+      "category": "edge_case",
+      "score": 49,
+      "tier": "borderline",
+      "excerpt": "The session-cookie rotation logic in /auth/refresh creates a window where the previous session ID remains valid for up to 90 seconds after a refresh, enabling session-fixation in our SSO flow. Reproduced on prod at 14:02 UTC; PCAP attached.",
+      "whyInteresting": "This one sits right on the threshold and is meant to. The reproduction trace and timestamp pull the score down; the surrounding prose is buzzword-heavy and pulls it back up. Borderline scores are where the platform earns its keep — a triager who skips low-score reports won't miss this one, but one who rejects everything above 70 would.",
+      "reportId": 3
+    },
+    {
+      "id": "agreement-clean-human-report",
+      "title": "Three engines independently agree: clean",
+      "category": "surprising_agreement",
+      "score": 9,
+      "tier": "clean",
+      "excerpt": "Affected: app v4.12.3 (commit 3a91f0e). Reproducer: see attached repro.py — sends a 9000-byte UTF-8 payload to /v1/upload, server responds 500 with stack trace exposing the absolute container path. Expected: 413 with no path leakage. Patch suggestion in PR #4421.",
+      "whyInteresting": "All three engines landed within four points of each other on the clean side — a useful counterpoint to the slop entries. When substance, linguistic, and CWE-coherence all agree on 'this is a real human reporter', the composite is boring on purpose. The interesting bit is how rare the alignment is: most reports get pulled in opposite directions by at least one engine.",
+      "reportId": 5
+    },
+    {
+      "id": "agreement-mid-tier-llm-assist",
+      "title": "Human-authored, LLM-polished — and the engines noticed",
+      "category": "surprising_agreement",
+      "score": 38,
+      "tier": "borderline",
+      "excerpt": "I discovered a server-side request forgery in the avatar import endpoint. The handler accepts a URL parameter and fetches it server-side without validating the host, which an attacker could potentially leverage to access internal metadata services on the AWS infrastructure.",
+      "whyInteresting": "Substance loved it (concrete endpoint, named cloud, plausible primitive). Linguistic flagged 'could potentially leverage' as low-grade LLM hedging. The composite settled in the mid-30s — a fair representation of what 'human discovery, AI rewrite' looks like at the score level. Good reference for teams writing internal style guides about how much polishing is too much.",
+      "reportId": 6
+    },
+    {
+      "id": "high-confidence-template-spam",
+      "title": "Same template, fifth submission this week",
+      "category": "high_confidence",
+      "score": 89,
+      "tier": "obvious_slop",
+      "excerpt": "Hello team, I would like to report a critical vulnerability in your application. The vulnerability allows an attacker to perform unauthorized actions. I request you to acknowledge this report and provide a bounty as per your policy. Please confirm at the earliest.",
+      "whyInteresting": "The similarity engine matched this against four prior submissions from different aliases, all within seven days. Substance was already going to flag it (zero technical content) but the duplicate-detection signal is what makes this a useful showcase entry: the platform's value compounds the more reports it has seen.",
+      "reportId": 4
+    }
+  ]
+}

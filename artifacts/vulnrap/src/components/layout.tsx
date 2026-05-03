@@ -408,6 +408,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link to="/stats" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Stats</Link>
               <Link to="/transparency" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Impact</Link>
               <Link to="/status" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Status</Link>
+              <Link to="/showcase" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Showcase</Link>
               <Link to="/community" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Community</Link>
               <button
                 type="button"

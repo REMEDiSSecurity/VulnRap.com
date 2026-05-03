@@ -3763,6 +3763,70 @@ export const ListIncidentsResponse = zod
   );
 
 /**
+ * Task #694 — Returns the hand-curated "interesting reports"
+rendered on `/showcase`: high-confidence catches, edge cases,
+and surprising engine agreements. Sourced from a static JSON
+file (`data/showcase.json`) shipped with the api-server; safe
+to cache for an hour. Each entry carries a redacted excerpt,
+the composite score + tier, a one-paragraph "why this is
+interesting" note, and a `reportId` pointing at a seed report
+so click-through resolves on `/results/<reportId>`.
+
+ * @summary List curator-picked interesting reports
+ */
+export const listShowcaseResponseEntriesItemScoreMin = 0;
+export const listShowcaseResponseEntriesItemScoreMax = 100;
+
+export const ListShowcaseResponse = zod
+  .object({
+    version: zod.string(),
+    entries: zod.array(
+      zod
+        .object({
+          id: zod
+            .string()
+            .describe(
+              "Opaque slug for the showcase entry (stable across curator edits).",
+            ),
+          title: zod.string().describe("Card title."),
+          category: zod
+            .enum(["high_confidence", "edge_case", "surprising_agreement"])
+            .describe("Curator-assigned bucket the entry illustrates."),
+          score: zod
+            .number()
+            .min(listShowcaseResponseEntriesItemScoreMin)
+            .max(listShowcaseResponseEntriesItemScoreMax)
+            .describe(
+              "Final composite slop score for the report (0 clean → 100 slop).",
+            ),
+          tier: zod
+            .enum(["clean", "borderline", "subtle_slop", "obvious_slop"])
+            .describe("Slop tier label that goes with the score."),
+          excerpt: zod
+            .string()
+            .describe("Short redacted excerpt from the report content."),
+          whyInteresting: zod
+            .string()
+            .describe(
+              "One-paragraph curator note explaining why this report was picked.",
+            ),
+          reportId: zod
+            .number()
+            .min(1)
+            .describe(
+              "Seed report id; click-through opens `\/results\/<reportId>`.",
+            ),
+        })
+        .describe(
+          "A single curator-picked interesting report shown on `\/showcase`.",
+        ),
+    ),
+  })
+  .describe(
+    "Curated showcase entries returned by `GET \/api\/showcase`. The\n`version` string lets clients cache-bust when curators ship a\nnew revision of `showcase.json`.\n",
+  );
+
+/**
  * Task #617 — Public, read-only summary of the rolling weekly
 T1-vs-T3 mean composite spread. Wraps the internal AVRI drift
 compute and strips every reviewer-only field (cohort sample IDs,

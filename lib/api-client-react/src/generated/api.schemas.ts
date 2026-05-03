@@ -3922,6 +3922,71 @@ export interface GalleryResponse {
 }
 
 /**
+ * Curator-assigned bucket the entry illustrates.
+ */
+export type ShowcaseEntryCategory =
+  (typeof ShowcaseEntryCategory)[keyof typeof ShowcaseEntryCategory];
+
+export const ShowcaseEntryCategory = {
+  high_confidence: "high_confidence",
+  edge_case: "edge_case",
+  surprising_agreement: "surprising_agreement",
+} as const;
+
+/**
+ * Slop tier label that goes with the score.
+ */
+export type ShowcaseEntryTier =
+  (typeof ShowcaseEntryTier)[keyof typeof ShowcaseEntryTier];
+
+export const ShowcaseEntryTier = {
+  clean: "clean",
+  borderline: "borderline",
+  subtle_slop: "subtle_slop",
+  obvious_slop: "obvious_slop",
+} as const;
+
+/**
+ * A single curator-picked interesting report shown on `/showcase`.
+ */
+export interface ShowcaseEntry {
+  /** Opaque slug for the showcase entry (stable across curator edits). */
+  id: string;
+  /** Card title. */
+  title: string;
+  /** Curator-assigned bucket the entry illustrates. */
+  category: ShowcaseEntryCategory;
+  /**
+   * Final composite slop score for the report (0 clean → 100 slop).
+   * @minimum 0
+   * @maximum 100
+   */
+  score: number;
+  /** Slop tier label that goes with the score. */
+  tier: ShowcaseEntryTier;
+  /** Short redacted excerpt from the report content. */
+  excerpt: string;
+  /** One-paragraph curator note explaining why this report was picked. */
+  whyInteresting: string;
+  /**
+   * Seed report id; click-through opens `/results/<reportId>`.
+   * @minimum 1
+   */
+  reportId: number;
+}
+
+/**
+ * Curated showcase entries returned by `GET /api/showcase`. The
+`version` string lets clients cache-bust when curators ship a
+new revision of `showcase.json`.
+
+ */
+export interface ShowcaseResponse {
+  version: string;
+  entries: ShowcaseEntry[];
+}
+
+/**
  * Curated public preset library returned by `GET /api/presets`. The
 `version` string lets clients cache-bust when curators ship a new
 revision of `presets.json`.
