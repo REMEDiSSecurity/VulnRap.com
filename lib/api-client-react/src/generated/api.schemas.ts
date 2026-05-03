@@ -1673,6 +1673,60 @@ export interface CalibrationSuggestion {
   basedOnCount: number;
 }
 
+/**
+ * Single weekly data point in the public drift sparkline. Contains
+only the UTC Monday week-start and the redacted T1−T3 composite
+spread; no bucket counts, per-family means, or sample IDs.
+
+ */
+export interface PublicDriftSummaryWeek {
+  /** ISO date (YYYY-MM-DD) of the UTC Monday that starts the week. */
+  weekStart: string;
+  /** Rounded T1−T3 composite mean spread for the week. `null`
+when either bucket failed to meet the minimum sample size,
+so the public widget can skip ineligible weeks without
+leaking the underlying counts.
+ */
+  spread: number | null;
+}
+
+/**
+ * Public-safe wrapper around the internal AVRI drift compute. Only
+weekly redacted spreads + a current/previous/delta summary are
+exposed; reviewer-only fields (per-family means, flags, bucket
+counts, thresholds, bucketing-note, runbook path) are stripped
+upstream so this DTO can be served on `/transparency` without
+leaking internal calibration signals.
+
+ */
+export interface PublicDriftSummary {
+  /** ISO 8601 timestamp when the summary was computed. */
+  generatedAt: string;
+  /**
+   * Up to the last 12 eligible weeks of `{ weekStart, spread }`
+data points, oldest-first. Empty when no weekly aggregate
+has been computed yet so the widget can render an empty
+state.
+
+   * @maxItems 12
+   */
+  weeks: PublicDriftSummaryWeek[];
+  /** Spread for the most recent eligible week, or `null` when unavailable. */
+  currentSpread: number | null;
+  /** Spread for the week prior to the most recent eligible week, or `null` when unavailable. */
+  previousSpread: number | null;
+  /** `currentSpread − previousSpread`, rounded to 1 decimal.
+`null` when either side is unavailable.
+ */
+  delta: number | null;
+  /** True when the most recent eligible week in `weeks` matches
+the UTC Monday of the current week. Lets the widget show a
+"this week" badge vs. an "awaiting this week's aggregate"
+hint without exposing report counts.
+ */
+  hasCurrentWeek: boolean;
+}
+
 export interface AvriDriftFamilyMean {
   family: string;
   count: number;

@@ -20,6 +20,8 @@ tags:
     description: Community newsletter signup
   - name: cohort
     description: Cohort baseline distributions for contextualizing scores
+  - name: public
+    description: Public-safe transparency endpoints (no reviewer-only fields)
 paths:
   /healthz:
     get:
@@ -672,6 +674,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /public/drift-summary:
+    get:
+      operationId: getPublicDriftSummary
+      tags: [public]
+      summary: Public-safe AVRI drift summary for the transparency page
+      description: |
+        Task #617 — Public, read-only summary of the rolling weekly
+        T1-vs-T3 mean composite spread. Wraps the internal AVRI drift
+        compute and strips every reviewer-only field (cohort sample IDs,
+        per-family means, flag detail strings, thresholds,
+        bucketing-note, runbook path, raw bucket counts) so the
+        `/transparency` page can show that the platform actively monitors
+        itself for calibration drift without exposing internal triage
+        signals.
+
+        Returns up to the last 12 eligible weeks of `{ weekStart,
+        spread }` data points plus a current-vs-previous-week delta. If
+        no weekly aggregate has been computed yet, `weeks` is `[]` and
+        the current/previous/delta fields are `null` so the widget can
+        render an empty state.
+      responses:
+        "200":
+          description: Public drift summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicDriftSummary"
 
   /feedback/calibration/auth-brute-force-alerts:
     get:
@@ -3569,6 +3599,72 @@ components:
         basedOnCount:
           type: integer
       required: [parameter, currentValue, suggestedValue, reason, confidence, basedOnCount]
+
+    PublicDriftSummaryWeek:
+      type: object
+      description: |
+        Single weekly data point in the public drift sparkline. Contains
+        only the UTC Monday week-start and the redacted T1−T3 composite
+        spread; no bucket counts, per-family means, or sample IDs.
+      properties:
+        weekStart:
+          type: string
+          description: ISO date (YYYY-MM-DD) of the UTC Monday that starts the week.
+        spread:
+          type: number
+          nullable: true
+          description: |
+            Rounded T1−T3 composite mean spread for the week. `null`
+            when either bucket failed to meet the minimum sample size,
+            so the public widget can skip ineligible weeks without
+            leaking the underlying counts.
+      required: [weekStart, spread]
+
+    PublicDriftSummary:
+      type: object
+      description: |
+        Public-safe wrapper around the internal AVRI drift compute. Only
+        weekly redacted spreads + a current/previous/delta summary are
+        exposed; reviewer-only fields (per-family means, flags, bucket
+        counts, thresholds, bucketing-note, runbook path) are stripped
+        upstream so this DTO can be served on `/transparency` without
+        leaking internal calibration signals.
+      properties:
+        generatedAt:
+          type: string
+          description: ISO 8601 timestamp when the summary was computed.
+        weeks:
+          type: array
+          maxItems: 12
+          description: |
+            Up to the last 12 eligible weeks of `{ weekStart, spread }`
+            data points, oldest-first. Empty when no weekly aggregate
+            has been computed yet so the widget can render an empty
+            state.
+          items:
+            $ref: "#/components/schemas/PublicDriftSummaryWeek"
+        currentSpread:
+          type: number
+          nullable: true
+          description: Spread for the most recent eligible week, or `null` when unavailable.
+        previousSpread:
+          type: number
+          nullable: true
+          description: Spread for the week prior to the most recent eligible week, or `null` when unavailable.
+        delta:
+          type: number
+          nullable: true
+          description: |
+            `currentSpread − previousSpread`, rounded to 1 decimal.
+            `null` when either side is unavailable.
+        hasCurrentWeek:
+          type: boolean
+          description: |
+            True when the most recent eligible week in `weeks` matches
+            the UTC Monday of the current week. Lets the widget show a
+            "this week" badge vs. an "awaiting this week's aggregate"
+            hint without exposing report counts.
+      required: [generatedAt, weeks, currentSpread, previousSpread, delta, hasCurrentWeek]
 
     AvriDriftFamilyMean:
       type: object

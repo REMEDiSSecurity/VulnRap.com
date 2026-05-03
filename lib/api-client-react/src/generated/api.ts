@@ -67,6 +67,7 @@ import type {
   NewsletterSubscribeBody,
   NewsletterSubscribeResponse,
   PlatformStats,
+  PublicDriftSummary,
   RecentActivity,
   ReportAnalysis,
   ReportComparison,
@@ -1886,6 +1887,96 @@ export function useGetAvriDriftRearmHistory<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAvriDriftRearmHistoryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #617 — Public, read-only summary of the rolling weekly
+T1-vs-T3 mean composite spread. Wraps the internal AVRI drift
+compute and strips every reviewer-only field (cohort sample IDs,
+per-family means, flag detail strings, thresholds,
+bucketing-note, runbook path, raw bucket counts) so the
+`/transparency` page can show that the platform actively monitors
+itself for calibration drift without exposing internal triage
+signals.
+
+Returns up to the last 12 eligible weeks of `{ weekStart,
+spread }` data points plus a current-vs-previous-week delta. If
+no weekly aggregate has been computed yet, `weeks` is `[]` and
+the current/previous/delta fields are `null` so the widget can
+render an empty state.
+
+ * @summary Public-safe AVRI drift summary for the transparency page
+ */
+export const getGetPublicDriftSummaryUrl = () => {
+  return `/api/public/drift-summary`;
+};
+
+export const getPublicDriftSummary = async (
+  options?: RequestInit,
+): Promise<PublicDriftSummary> => {
+  return customFetch<PublicDriftSummary>(getGetPublicDriftSummaryUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPublicDriftSummaryQueryKey = () => {
+  return [`/api/public/drift-summary`] as const;
+};
+
+export const getGetPublicDriftSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPublicDriftSummary>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicDriftSummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPublicDriftSummaryQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPublicDriftSummary>>
+  > = ({ signal }) => getPublicDriftSummary({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicDriftSummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPublicDriftSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPublicDriftSummary>>
+>;
+export type GetPublicDriftSummaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Public-safe AVRI drift summary for the transparency page
+ */
+
+export function useGetPublicDriftSummary<
+  TData = Awaited<ReturnType<typeof getPublicDriftSummary>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicDriftSummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPublicDriftSummaryQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -2905,6 +2905,83 @@ export const GetAvriDriftRearmHistoryResponse = zod
   );
 
 /**
+ * Task #617 — Public, read-only summary of the rolling weekly
+T1-vs-T3 mean composite spread. Wraps the internal AVRI drift
+compute and strips every reviewer-only field (cohort sample IDs,
+per-family means, flag detail strings, thresholds,
+bucketing-note, runbook path, raw bucket counts) so the
+`/transparency` page can show that the platform actively monitors
+itself for calibration drift without exposing internal triage
+signals.
+
+Returns up to the last 12 eligible weeks of `{ weekStart,
+spread }` data points plus a current-vs-previous-week delta. If
+no weekly aggregate has been computed yet, `weeks` is `[]` and
+the current/previous/delta fields are `null` so the widget can
+render an empty state.
+
+ * @summary Public-safe AVRI drift summary for the transparency page
+ */
+export const getPublicDriftSummaryResponseWeeksMax = 12;
+
+export const GetPublicDriftSummaryResponse = zod
+  .object({
+    generatedAt: zod
+      .string()
+      .describe("ISO 8601 timestamp when the summary was computed."),
+    weeks: zod
+      .array(
+        zod
+          .object({
+            weekStart: zod
+              .string()
+              .describe(
+                "ISO date (YYYY-MM-DD) of the UTC Monday that starts the week.",
+              ),
+            spread: zod
+              .number()
+              .nullable()
+              .describe(
+                "Rounded T1−T3 composite mean spread for the week. `null`\nwhen either bucket failed to meet the minimum sample size,\nso the public widget can skip ineligible weeks without\nleaking the underlying counts.\n",
+              ),
+          })
+          .describe(
+            "Single weekly data point in the public drift sparkline. Contains\nonly the UTC Monday week-start and the redacted T1−T3 composite\nspread; no bucket counts, per-family means, or sample IDs.\n",
+          ),
+      )
+      .max(getPublicDriftSummaryResponseWeeksMax)
+      .describe(
+        "Up to the last 12 eligible weeks of `{ weekStart, spread }`\ndata points, oldest-first. Empty when no weekly aggregate\nhas been computed yet so the widget can render an empty\nstate.\n",
+      ),
+    currentSpread: zod
+      .number()
+      .nullable()
+      .describe(
+        "Spread for the most recent eligible week, or `null` when unavailable.",
+      ),
+    previousSpread: zod
+      .number()
+      .nullable()
+      .describe(
+        "Spread for the week prior to the most recent eligible week, or `null` when unavailable.",
+      ),
+    delta: zod
+      .number()
+      .nullable()
+      .describe(
+        "`currentSpread − previousSpread`, rounded to 1 decimal.\n`null` when either side is unavailable.\n",
+      ),
+    hasCurrentWeek: zod
+      .boolean()
+      .describe(
+        'True when the most recent eligible week in `weeks` matches\nthe UTC Monday of the current week. Lets the widget show a\n\"this week\" badge vs. an \"awaiting this week\'s aggregate\"\nhint without exposing report counts.\n',
+      ),
+  })
+  .describe(
+    "Public-safe wrapper around the internal AVRI drift compute. Only\nweekly redacted spreads + a current\/previous\/delta summary are\nexposed; reviewer-only fields (per-family means, flags, bucket\ncounts, thresholds, bucketing-note, runbook path) are stripped\nupstream so this DTO can be served on `\/transparency` without\nleaking internal calibration signals.\n",
+  );
+
+/**
  * Task #399 — Bounded snapshot of the in-process ring buffer of
 dispatched calibration-auth brute-force alerts so reviewers can
 confirm at a glance whether the latest alert was them

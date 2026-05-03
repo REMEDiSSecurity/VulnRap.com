@@ -151,6 +151,8 @@ export * from "./newsletterSubscribeBody";
 export * from "./newsletterSubscribeResponse";
 export * from "./platformStats";
 export * from "./platformStatsReportsByMode";
+export * from "./publicDriftSummary";
+export * from "./publicDriftSummaryWeek";
 export * from "./recentActivity";
 export * from "./recentActivityRecentReportsItem";
 export * from "./redactionSummary";

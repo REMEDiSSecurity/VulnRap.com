@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, BarChart3, Users, FileText, ThumbsUp, Activity, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TransparencyDriftWidget } from "@/components/transparency-drift-widget";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -280,6 +281,10 @@ export default function Transparency() {
           </CardContent>
         </Card>
       </div>
+
+      <section aria-label="Calibration drift self-check">
+        <TransparencyDriftWidget />
+      </section>
 
       <Card className="glass-card rounded-xl">
         <CardContent className="p-5">
