@@ -16,11 +16,11 @@ export default function Security() {
         </p>
       </div>
 
-      <Card className="bg-card/40 backdrop-blur border-primary/20">
+      <Card id="report" className="bg-card/40 backdrop-blur border-primary/20">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-primary">
             <Bug className="w-5 h-5" />
-            Reporting a Vulnerability
+            Report a Security Issue
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
@@ -38,7 +38,13 @@ export default function Security() {
             <p>
               Subject line: <span className="font-mono text-xs text-foreground">VulnRap Security Report</span>
             </p>
+            <p>
+              PGP key fingerprint: <span className="font-mono text-xs text-foreground">TBD — request via email</span>
+            </p>
           </div>
+          <p>
+            Our full disclosure policy — including scope, safe-harbor language, and response SLAs — is published in <a href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">SECURITY.md</a> at the repository root, and the machine-readable version is at <a href="/.well-known/security.txt" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-mono text-xs">/.well-known/security.txt</a> per RFC 9116.
+          </p>
         </CardContent>
       </Card>
 
