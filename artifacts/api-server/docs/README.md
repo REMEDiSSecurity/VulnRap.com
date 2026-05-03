@@ -56,6 +56,39 @@ source.
   from a code_execution environment that has the project-task surface
   available.
 
+## `retrospectives/`
+
+- **`<YYYY-MM-DD>-24h-recap.md`** — rolling 24-hour engineering
+  recap, generated from `git log` + the route table in
+  `artifacts/vulnrap/src/App.tsx` + the on-disk scoring-regression
+  artifact (when present). Sections: headline stat chips, what
+  landed (by surface bucket), how the analysis got better, what's
+  now visible to users, what's still in flight, operational
+  lessons, credit accounting, plus a paste-ready marketing draft.
+
+  Regenerate / check (mirrors the state-of-platform script
+  conventions):
+
+  ```bash
+  node scripts/regenerate-24h-recap.mjs            # write
+  node scripts/regenerate-24h-recap.mjs --check    # CI-safe
+  node scripts/regenerate-24h-recap.mjs --window=48h
+  node scripts/regenerate-24h-recap.mjs --since=2026-05-02T00:00:00Z
+  ```
+
+  The window anchors to the HEAD commit's timestamp, not wall-clock,
+  so the same repo state always regenerates the same doc. The
+  `Generated:` line is the only date-sensitive field and is ignored
+  by `--check`.
+
+  For accurate "what's still in flight" counts, snapshot the live
+  project-task ledger to `.local/tasks/_status-snapshot.json` before
+  regenerating (call `listProjectTasks({ state: "IN_PROGRESS" })` and
+  `listProjectTasks({ state: "PENDING" })` and serialize as
+  `{ generatedAt, inProgress: [...], pending: [...] }`). When that
+  file is absent, the regenerator falls back to a best-effort
+  task-plan-on-disk proxy and labels it as such in the doc.
+
 ## `calibration/`
 
 - `2026-04-30-avri-blend-calibration.md` — substance/legacy ratio

@@ -742,6 +742,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 {t("nav.changelog")}
               </Link>
+              <a
+                href="https://github.com/REMEDiSSecurity/VulnRap.Com/tree/main/artifacts/api-server/docs/retrospectives"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+                title="Rolling 24-hour engineering recap"
+              >
+                Latest 24h recap →
+              </a>
               <Link
                 to="/roadmap"
                 className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
