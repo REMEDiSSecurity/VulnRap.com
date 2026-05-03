@@ -382,6 +382,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link to="/batch" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Batch</Link>
               <Link to="/compare" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Compare</Link>
               <Link to="/use-cases" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Use Cases</Link>
+              <Link to="/pricing" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Pricing</Link>
             </div>
 
             <div className="flex flex-col gap-2">
