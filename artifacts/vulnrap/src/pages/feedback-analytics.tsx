@@ -35,6 +35,7 @@ import {
   type ShadowDriftRow,
   useGetCalibrationAuthBruteForceAlerts,
   getGetCalibrationAuthBruteForceAlertsQueryKey,
+  ackCalibrationAuthBruteForceAlert,
   rearmAvriDriftNotifications,
   ApiError,
   type AvriDriftNotificationRecord,
@@ -14741,6 +14742,8 @@ function CalibrationAuthBruteForceAlertsPanel({
           alerts={data.alerts ?? []}
           bufferSize={data.bufferSize}
           now={now}
+          authState={authState}
+          queryKey={queryKey}
         />
       )}
     </div>
@@ -14751,10 +14754,14 @@ function CalibrationAuthBruteForceAlertsContent({
   alerts,
   bufferSize,
   now,
+  authState,
+  queryKey,
 }: {
   alerts: CalibrationAuthBruteForceAlertEntry[];
   bufferSize: number;
   now: number;
+  authState: CalibrationAuthState;
+  queryKey: ReturnType<typeof getGetCalibrationAuthBruteForceAlertsQueryKey>;
 }) {
   if (alerts.length === 0) {
     return (
@@ -14769,81 +14776,339 @@ function CalibrationAuthBruteForceAlertsContent({
       className="space-y-1.5"
       data-testid="calibration-auth-brute-force-alerts"
     >
-      {alerts.map((alert, idx) => {
-        const detectedAgo = formatRelativeAgo(alert.detectedAt, now);
-        const detectedLabel = detectedAgo ?? alert.detectedAt;
-        const windowLabel = formatMsInterval(alert.windowMs);
-        const status401 = alert.rejectionsByStatus["401"] ?? 0;
-        const status429 = alert.rejectionsByStatus["429"] ?? 0;
-        const gateMutation = alert.rejectionsByGate.mutation ?? 0;
-        const gateStrictRead = alert.rejectionsByGate["strict-read"] ?? 0;
-        return (
-          <li
-            // Two alerts can share the same (ip, detectedAt) only if the
-            // alerter's clock didn't advance between dispatches, so
-            // include the index for a defensive React key.
-            key={`${alert.ip}|${alert.detectedAt}|${idx}`}
-            className="flex items-start gap-2 text-xs p-2 rounded-md border border-orange-400/20 bg-orange-400/[0.03]"
-          >
-            <Badge
-              variant="outline"
-              className="text-[10px] gap-1 font-mono shrink-0 text-orange-400/90 bg-orange-400/10 border-orange-400/30"
-            >
-              <AlertTriangle className="w-3 h-3" />
-              {alert.wrongTokenCount}/{alert.threshold}
-            </Badge>
-            <div className="flex-1 min-w-0 space-y-0.5">
-              <div className="flex items-center gap-2 text-[11px] flex-wrap">
-                <span className="font-mono text-foreground/90 break-all">
-                  {alert.ip}
-                </span>
-                <span className="text-muted-foreground/40">·</span>
-                <span
-                  className="text-muted-foreground/80 tabular-nums"
-                  title={alert.detectedAt}
-                >
-                  {detectedLabel}
-                </span>
-                <span className="text-muted-foreground/40">·</span>
-                <span className="text-muted-foreground/70">
-                  {alert.wrongTokenCount} wrong-token{" "}
-                  {alert.wrongTokenCount === 1 ? "event" : "events"} in{" "}
-                  {windowLabel}
-                </span>
-              </div>
-              <div className="text-[10px] text-muted-foreground/70 font-mono flex items-center gap-2 flex-wrap">
-                <span>
-                  401×{status401} · 429×{status429}
-                </span>
-                <span className="text-muted-foreground/40">·</span>
-                <span>
-                  mutation×{gateMutation} · strict-read×{gateStrictRead}
-                </span>
-              </div>
-              <div className="text-[10px] text-muted-foreground/60 font-mono break-all">
-                last: {alert.lastMethod} {alert.lastRoute}
-              </div>
-              <div className="text-[10px]">
-                <a
-                  href={alert.runbookUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary/80 hover:underline"
-                >
-                  <BookOpen className="w-3 h-3" />
-                  Runbook
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-          </li>
-        );
-      })}
+      {alerts.map((alert, idx) => (
+        <CalibrationAuthBruteForceAlertRow
+          // Two alerts can share the same (ip, detectedAt) only if the
+          // alerter's clock didn't advance between dispatches, so
+          // include the index for a defensive React key.
+          key={`${alert.ip}|${alert.detectedAt}|${idx}`}
+          alert={alert}
+          now={now}
+          authState={authState}
+          queryKey={queryKey}
+        />
+      ))}
       <li className="text-[10px] text-muted-foreground/40 italic pt-1">
         Showing the most recent {alerts.length} of up to {bufferSize} retained
         alerts. Restarting the API server clears the buffer.
       </li>
     </ul>
+  );
+}
+
+// Task #749 — Per-row "Acknowledge" workflow for the recent
+// calibration auth brute-force alerts panel. Lets a reviewer mark
+// the alert identified by `(ip, detectedAt)` as investigated /
+// false-alarm without leaving the calibration page. The reviewer +
+// note inputs are optional; both ride through to an in-memory ack
+// audit attached to the same ring-buffer entry the panel renders
+// (an evicted alert takes its ack with it). Mirrors the AVRI drift
+// re-arm popover pattern (reviewer name in the page-level reviewer
+// field is reused; row-level note is one-off) so reviewers don't
+// have to learn a second affordance for the same shape of action.
+function CalibrationAuthBruteForceAlertRow({
+  alert,
+  now,
+  authState,
+  queryKey,
+}: {
+  alert: CalibrationAuthBruteForceAlertEntry;
+  now: number;
+  authState: CalibrationAuthState;
+  queryKey: ReturnType<typeof getGetCalibrationAuthBruteForceAlertsQueryKey>;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [reviewer, setReviewer] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const detectedAgo = formatRelativeAgo(alert.detectedAt, now);
+  const detectedLabel = detectedAgo ?? alert.detectedAt;
+  const windowLabel = formatMsInterval(alert.windowMs);
+  const status401 = alert.rejectionsByStatus["401"] ?? 0;
+  const status429 = alert.rejectionsByStatus["429"] ?? 0;
+  const gateMutation = alert.rejectionsByGate.mutation ?? 0;
+  const gateStrictRead = alert.rejectionsByGate["strict-read"] ?? 0;
+  const acked = alert.ack !== undefined;
+  const canAck = authState.mutationsAllowed && !acked;
+
+  const handleAck = async () => {
+    if (busy || !canAck) return;
+    setBusy(true);
+    try {
+      const trimmedReviewer = reviewer.trim();
+      const trimmedNote = note.trim();
+      const body: {
+        ip: string;
+        detectedAt: string;
+        reviewer?: string;
+        note?: string;
+      } = { ip: alert.ip, detectedAt: alert.detectedAt };
+      if (trimmedReviewer.length > 0) body.reviewer = trimmedReviewer;
+      if (trimmedNote.length > 0) body.note = trimmedNote;
+      await ackCalibrationAuthBruteForceAlert(body);
+      toast({
+        title: "Alert acknowledged",
+        description: `Marked ${alert.ip} as reviewed.`,
+      });
+      setNoteOpen(false);
+      setNote("");
+      queryClient.invalidateQueries({ queryKey });
+    } catch (err) {
+      // 409 already-acked: refresh so the row picks up the existing
+      // ack (and disables further attempts) instead of just toasting.
+      if (err instanceof ApiError && err.status === 409) {
+        toast({
+          title: "Already acknowledged",
+          description:
+            "Another reviewer got there first — refreshing to show their note.",
+        });
+        queryClient.invalidateQueries({ queryKey });
+        setNoteOpen(false);
+      } else if (err instanceof ApiError && err.status === 404) {
+        toast({
+          title: "Alert no longer in buffer",
+          description:
+            "The alert was evicted from the in-process ring buffer — refreshing.",
+          variant: "destructive",
+        });
+        queryClient.invalidateQueries({ queryKey });
+      } else {
+        const msg =
+          err instanceof Error ? err.message : "Failed to acknowledge alert.";
+        toast({
+          title: "Acknowledge failed",
+          description: msg,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const ackedAtLabel = acked
+    ? (formatAuditTimestamp(alert.ack!.ackedAt) ?? alert.ack!.ackedAt)
+    : null;
+
+  return (
+    <li
+      data-testid="calibration-auth-brute-force-alert-row"
+      data-acked={acked ? "true" : "false"}
+      data-ip={alert.ip}
+      className={cn(
+        "flex items-start gap-2 text-xs p-2 rounded-md border",
+        acked
+          ? "border-emerald-400/20 bg-emerald-400/[0.03]"
+          : "border-orange-400/20 bg-orange-400/[0.03]",
+      )}
+    >
+      <Badge
+        variant="outline"
+        className={cn(
+          "text-[10px] gap-1 font-mono shrink-0",
+          acked
+            ? "text-emerald-400/90 bg-emerald-400/10 border-emerald-400/30"
+            : "text-orange-400/90 bg-orange-400/10 border-orange-400/30",
+        )}
+      >
+        {acked ? (
+          <CheckCircle2 className="w-3 h-3" />
+        ) : (
+          <AlertTriangle className="w-3 h-3" />
+        )}
+        {alert.wrongTokenCount}/{alert.threshold}
+      </Badge>
+      <div className="flex-1 min-w-0 space-y-0.5">
+        <div className="flex items-center gap-2 text-[11px] flex-wrap">
+          <span className="font-mono text-foreground/90 break-all">
+            {alert.ip}
+          </span>
+          <span className="text-muted-foreground/40">·</span>
+          <span
+            className="text-muted-foreground/80 tabular-nums"
+            title={alert.detectedAt}
+          >
+            {detectedLabel}
+          </span>
+          <span className="text-muted-foreground/40">·</span>
+          <span className="text-muted-foreground/70">
+            {alert.wrongTokenCount} wrong-token{" "}
+            {alert.wrongTokenCount === 1 ? "event" : "events"} in {windowLabel}
+          </span>
+        </div>
+        <div className="text-[10px] text-muted-foreground/70 font-mono flex items-center gap-2 flex-wrap">
+          <span>
+            401×{status401} · 429×{status429}
+          </span>
+          <span className="text-muted-foreground/40">·</span>
+          <span>
+            mutation×{gateMutation} · strict-read×{gateStrictRead}
+          </span>
+        </div>
+        <div className="text-[10px] text-muted-foreground/60 font-mono break-all">
+          last: {alert.lastMethod} {alert.lastRoute}
+        </div>
+        <div className="text-[10px]">
+          <a
+            href={alert.runbookUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-primary/80 hover:underline"
+          >
+            <BookOpen className="w-3 h-3" />
+            Runbook
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+        {acked && (
+          <div
+            data-testid="calibration-auth-brute-force-alert-ack"
+            className="text-[10px] text-emerald-400/90 leading-relaxed pt-1 flex items-start gap-1 flex-wrap"
+          >
+            <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0" />
+            <span>
+              Acknowledged
+              {alert.ack!.ackedBy ? (
+                <>
+                  {" "}
+                  by{" "}
+                  <span className="font-mono text-foreground/80">
+                    {alert.ack!.ackedBy}
+                  </span>
+                </>
+              ) : null}
+              {ackedAtLabel ? (
+                <>
+                  {" "}
+                  <span
+                    className="text-muted-foreground/70 tabular-nums"
+                    title={alert.ack!.ackedAt}
+                  >
+                    · {ackedAtLabel}
+                  </span>
+                </>
+              ) : null}
+              {alert.ack!.note ? (
+                <>
+                  {" "}
+                  <span className="text-muted-foreground/70">
+                    · &ldquo;{alert.ack!.note}&rdquo;
+                  </span>
+                </>
+              ) : null}
+            </span>
+          </div>
+        )}
+        {noteOpen && !acked && (
+          <div
+            className="mt-1 p-2 rounded-md border border-primary/30 bg-primary/[0.04] space-y-2"
+            data-testid="calibration-auth-brute-force-alert-ack-popover"
+          >
+            <label className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+              Reviewer (optional)
+            </label>
+            <input
+              type="text"
+              value={reviewer}
+              onChange={(e) => setReviewer(e.target.value)}
+              maxLength={200}
+              placeholder="e.g. alex@vulnrap"
+              className="w-full px-2 py-1 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
+              data-testid="calibration-auth-brute-force-alert-ack-reviewer"
+              aria-label="Reviewer name"
+            />
+            <label className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+              Note (optional)
+            </label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="Why was this a false alarm? (e.g. 'office NAT — confirmed reviewer fat-fingered the token')"
+              className="w-full px-2 py-1 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
+              data-testid="calibration-auth-brute-force-alert-ack-note"
+              aria-label="Acknowledgement note"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+                {note.length}/500
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => {
+                    setNoteOpen(false);
+                    setNote("");
+                  }}
+                  disabled={busy}
+                  data-testid="calibration-auth-brute-force-alert-ack-cancel"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className="h-7 px-2.5 text-[11px] gap-1"
+                  disabled={busy || !canAck}
+                  onClick={handleAck}
+                  data-testid="calibration-auth-brute-force-alert-ack-submit"
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                  {busy ? "Acknowledging…" : "Acknowledge"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      {!acked && (
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[11px] gap-1 shrink-0"
+            disabled={busy || !canAck}
+            onClick={handleAck}
+            data-testid="calibration-auth-brute-force-alert-ack-button"
+            title={
+              authState.mutationsAllowed
+                ? "Mark this alert as investigated. Use 'Ack with note' to attach a rationale."
+                : "A valid reviewer token is required to acknowledge alerts."
+            }
+          >
+            <CheckCircle2 className="w-3 h-3" />
+            {busy ? "Acknowledging…" : "Ack"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-[11px] gap-1 shrink-0"
+            disabled={busy || !authState.mutationsAllowed}
+            onClick={() => setNoteOpen((v) => !v)}
+            aria-expanded={noteOpen}
+            data-testid="calibration-auth-brute-force-alert-ack-note-toggle"
+            title={
+              authState.mutationsAllowed
+                ? "Attach a reviewer name and one-off note before acknowledging."
+                : "A valid reviewer token is required to acknowledge alerts."
+            }
+          >
+            <Pencil className="w-3 h-3" />
+            {noteOpen ? "Cancel" : "Note…"}
+          </Button>
+        </div>
+      )}
+    </li>
   );
 }
 

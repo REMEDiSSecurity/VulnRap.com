@@ -108,11 +108,32 @@ export interface BruteForceAlerterOptions {
 }
 
 /**
+ * Reviewer acknowledgement attached to a dispatched alert. Recorded
+ * in-memory alongside the alert it acks (so an evicted alert takes
+ * its ack with it — there is no orphan-ack state to reconcile). The
+ * shape mirrors the persisted re-arm audit entries (reviewer + free-
+ * form note + wall-clock) so the calibration UI can render both
+ * surfaces with the same `formatAuditTimestamp` helper.
+ */
+export interface BruteForceAlertAck {
+  /** ISO timestamp when the reviewer clicked "ack". */
+  ackedAt: string;
+  /** Optional reviewer display name supplied by the calibration UI. */
+  ackedBy?: string;
+  /** Optional free-form note supplied by the reviewer (e.g. "false alarm — office NAT"). */
+  note?: string;
+}
+
+/**
  * Single entry in the in-process ring buffer of dispatched alerts.
  * Mirrors the webhook payload (minus the constant `event` discriminator
  * and the static `recommendedActions` runbook copy) so the calibration
  * UI can render the same IP / count / window / runbook context that
  * goes into the webhook without round-tripping through pino logs.
+ *
+ * `ack` is populated once a reviewer acknowledges the alert via
+ * `POST /feedback/calibration/auth-brute-force-alerts/ack`; absent
+ * until then.
  */
 export interface RecentBruteForceAlert {
   detectedAt: string;
@@ -127,7 +148,26 @@ export interface RecentBruteForceAlert {
   lastRoute: string;
   lastMethod: string;
   runbookUrl: string;
+  ack?: BruteForceAlertAck;
 }
+
+/** Identifying tuple a caller passes to `ackAlert` to pick the row. */
+export interface BruteForceAlertAckInput {
+  ip: string;
+  detectedAt: string;
+  reviewer?: string;
+  note?: string;
+  /** Override clock for deterministic tests. */
+  now?: () => number;
+}
+
+export type BruteForceAlertAckResult =
+  | { ok: true; alert: RecentBruteForceAlert }
+  | {
+      ok: false;
+      reason: "not-found" | "already-acked";
+      alert?: RecentBruteForceAlert;
+    };
 
 export interface BruteForceAlerter {
   recordWrongTokenEvent(ev: WrongTokenEventInput): void;
@@ -139,6 +179,14 @@ export interface BruteForceAlerter {
    * <= 0 fall back to the default.
    */
   recentAlerts(limit?: number): RecentBruteForceAlert[];
+  /**
+   * Mark the alert identified by (ip, detectedAt) as acknowledged. The
+   * ack rides on the same in-memory ring-buffer entry, so an alert
+   * evicted by FIFO churn takes its ack with it. Returns the updated
+   * alert on success, or a structured failure for the route layer to
+   * map onto a 404 / 409.
+   */
+  ackAlert(input: BruteForceAlertAckInput): BruteForceAlertAckResult;
   /** Test-only: resolves once any in-flight dispatch promise has settled. */
   flushPending(): Promise<void>;
 }
@@ -558,6 +606,33 @@ export function createBruteForceAlerter(
     }
   }
 
+  // Defensive deep-clone for outbound entries so callers can't mutate
+  // the buffer (or, after `ackAlert`, the persisted ack) by editing the
+  // returned object in place.
+  function cloneAlert(entry: RecentBruteForceAlert): RecentBruteForceAlert {
+    const out: RecentBruteForceAlert = {
+      detectedAt: entry.detectedAt,
+      ip: entry.ip,
+      windowMs: entry.windowMs,
+      threshold: entry.threshold,
+      wrongTokenCount: entry.wrongTokenCount,
+      rejectionsByStatus: { ...entry.rejectionsByStatus },
+      rejectionsByGate: { ...entry.rejectionsByGate },
+      firstSeenAt: entry.firstSeenAt,
+      lastSeenAt: entry.lastSeenAt,
+      lastRoute: entry.lastRoute,
+      lastMethod: entry.lastMethod,
+      runbookUrl: entry.runbookUrl,
+    };
+    if (entry.ack) {
+      const ack: BruteForceAlertAck = { ackedAt: entry.ack.ackedAt };
+      if (entry.ack.ackedBy !== undefined) ack.ackedBy = entry.ack.ackedBy;
+      if (entry.ack.note !== undefined) ack.note = entry.ack.note;
+      out.ack = ack;
+    }
+    return out;
+  }
+
   // Seed the in-memory cooldown table from the persisted state file so
   // an attack that crossed the threshold before a deploy doesn't re-fire
   // the alert for the same IP inside its cooldown window after restart.
@@ -763,8 +838,45 @@ export function createBruteForceAlerter(
           : RECENT_ALERTS_DEFAULT_LIMIT;
       // Buffer is oldest-first; flip to newest-first so the dashboard
       // can render the most recent alert at the top of the list.
-      const newestFirst = [...recentAlertsBuffer].reverse();
+      const newestFirst = [...recentAlertsBuffer].reverse().map(cloneAlert);
       return newestFirst.slice(0, requested);
+    },
+    ackAlert(input: BruteForceAlertAckInput): BruteForceAlertAckResult {
+      // (ip, detectedAt) is the row identity exposed to the calibration
+      // UI — it's also the React key the panel uses, so the dashboard's
+      // "ack this row" click maps 1:1 to this lookup. Two alerts can
+      // share the tuple only if the alerter's clock didn't advance
+      // between dispatches (extremely rare); in that case we ack the
+      // newest match — that's the row a reviewer scrolling newest-first
+      // would have clicked.
+      let target: RecentBruteForceAlert | undefined;
+      for (let i = recentAlertsBuffer.length - 1; i >= 0; i -= 1) {
+        const entry = recentAlertsBuffer[i]!;
+        if (entry.ip === input.ip && entry.detectedAt === input.detectedAt) {
+          target = entry;
+          break;
+        }
+      }
+      if (target === undefined) {
+        return { ok: false, reason: "not-found" };
+      }
+      if (target.ack !== undefined) {
+        // Already acked — don't silently overwrite the prior reviewer's
+        // attribution. The route maps this onto a 409 so the UI can
+        // tell the reviewer that someone already handled it.
+        return { ok: false, reason: "already-acked", alert: cloneAlert(target) };
+      }
+      const reviewer =
+        typeof input.reviewer === "string" ? input.reviewer.trim() : "";
+      const note = typeof input.note === "string" ? input.note.trim() : "";
+      const ackNow = (input.now ?? now)();
+      const ack: BruteForceAlertAck = {
+        ackedAt: new Date(ackNow).toISOString(),
+      };
+      if (reviewer.length > 0) ack.ackedBy = reviewer;
+      if (note.length > 0) ack.note = note;
+      target.ack = ack;
+      return { ok: true, alert: cloneAlert(target) };
     },
     async flushPending(): Promise<void> {
       while (inFlight.size > 0) {
@@ -804,6 +916,18 @@ export function getRecentCalibrationAuthBruteForceAlerts(
   limit?: number,
 ): RecentBruteForceAlert[] {
   return getAlerter().recentAlerts(limit);
+}
+
+/**
+ * Top-level entry point for the "ack from the dashboard" workflow.
+ * Backs `POST /feedback/calibration/auth-brute-force-alerts/ack` so a
+ * reviewer can mark the row identified by (ip, detectedAt) as
+ * investigated / false-alarm without leaving the calibration page.
+ */
+export function ackCalibrationAuthBruteForceAlert(
+  input: BruteForceAlertAckInput,
+): BruteForceAlertAckResult {
+  return getAlerter().ackAlert(input);
 }
 
 /** Test seam — replace the lazy alerter (or null to reset). */

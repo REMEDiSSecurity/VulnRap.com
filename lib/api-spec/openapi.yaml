@@ -1481,6 +1481,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /feedback/calibration/auth-brute-force-alerts/ack:
+    post:
+      operationId: ackCalibrationAuthBruteForceAlert
+      tags: [feedback]
+      summary: Acknowledge a calibration auth brute-force alert
+      description: |
+        Task #749 — Mark the alert identified by `(ip, detectedAt)` as
+        acknowledged so the next reviewer to land on the calibration
+        page can tell signal from noise. The optional `reviewer` and
+        `note` body fields populate an in-memory audit trail attached
+        to the same ring-buffer entry the recent-alerts panel renders;
+        an alert evicted by FIFO churn (or a process restart) takes
+        its ack with it, matching the buffer's "in-process only" model.
+
+        Returns 404 when no matching alert is in the ring buffer (it
+        was already evicted, or the API server restarted) and 409 when
+        a different reviewer has already acknowledged the row — in the
+        409 case the response includes the existing `ack` so the UI
+        can display who got there first instead of just toasting an
+        error. Strict-auth because the response echoes the alert's
+        IP / last-route metadata.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalibrationAuthBruteForceAlertAckBody"
+      responses:
+        "200":
+          description: Alert acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalibrationAuthBruteForceAlertAckResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No matching alert in the in-process ring buffer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Alert was already acknowledged by another reviewer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalibrationAuthBruteForceAlertAckConflict"
+
   /feedback/calibration/config:
     get:
       operationId: getScoringConfig
@@ -5753,6 +5812,8 @@ components:
         runbookUrl:
           type: string
           description: Operator runbook URL surfaced in the alert payload.
+        ack:
+          $ref: "#/components/schemas/CalibrationAuthBruteForceAlertAck"
       required:
         - detectedAt
         - ip
@@ -5766,6 +5827,80 @@ components:
         - lastRoute
         - lastMethod
         - runbookUrl
+
+    CalibrationAuthBruteForceAlertAck:
+      type: object
+      description: |
+        Reviewer acknowledgement attached to a dispatched calibration
+        auth brute-force alert. Mirrors the shape of the AVRI drift
+        re-arm audit entries (reviewer + free-form note + wall-clock
+        timestamp) so the dashboard can render both audit trails with
+        the same helpers.
+      properties:
+        ackedAt:
+          type: string
+          format: date-time
+          description: ISO timestamp when the reviewer acknowledged the alert.
+        ackedBy:
+          type: string
+          description: Reviewer name supplied with the ack call (omitted when not provided).
+        note:
+          type: string
+          description: Free-form note supplied with the ack call (omitted when not provided).
+      required: [ackedAt]
+
+    CalibrationAuthBruteForceAlertAckBody:
+      type: object
+      description: |
+        Identifies the alert by `(ip, detectedAt)` — the same tuple
+        the recent-alerts panel uses as a React key — plus optional
+        reviewer attribution and a free-form note.
+      properties:
+        ip:
+          type: string
+          minLength: 1
+          description: Source IP from the alert row to acknowledge.
+        detectedAt:
+          type: string
+          format: date-time
+          description: The `detectedAt` of the alert row to acknowledge.
+        reviewer:
+          type: string
+          maxLength: 200
+          description: Reviewer display name to record on the ack (optional).
+        note:
+          type: string
+          maxLength: 500
+          description: Free-form note describing the disposition (e.g. "false alarm — office NAT").
+      required: [ip, detectedAt]
+
+    CalibrationAuthBruteForceAlertAckResponse:
+      type: object
+      description: |
+        Echoes the now-acked alert (with the `ack` field populated)
+        so the calibration UI can update the row without re-fetching
+        the entire ring buffer.
+      properties:
+        alert:
+          $ref: "#/components/schemas/CalibrationAuthBruteForceAlertEntry"
+      required: [alert]
+
+    CalibrationAuthBruteForceAlertAckConflict:
+      type: object
+      description: |
+        Returned with HTTP 409 when the alert identified by the
+        request body has already been acknowledged by another
+        reviewer. Includes the existing `alert` (with its `ack`
+        populated) so the UI can show who got there first.
+      properties:
+        error:
+          type: string
+        reason:
+          type: string
+          enum: [already-acked]
+        alert:
+          $ref: "#/components/schemas/CalibrationAuthBruteForceAlertEntry"
+      required: [error, reason, alert]
 
     CalibrationAuthBruteForceAlertsList:
       type: object

@@ -56,6 +56,7 @@ import {
 import { auditLogMutationMiddleware } from "../middlewares/audit-log-middleware";
 import {
   getRecentCalibrationAuthBruteForceAlerts,
+  ackCalibrationAuthBruteForceAlert,
   __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS,
 } from "../middlewares/calibration-auth-brute-force-alert";
 import {
@@ -1522,6 +1523,114 @@ router.get(
       res.status(500).json({
         error: "Failed to read recent calibration auth brute-force alerts.",
       });
+    }
+  },
+);
+
+// Task #749 — Let reviewers acknowledge a calibration auth alert from
+// the dashboard. The recent-alerts panel (Task #399) is read-only — a
+// reviewer who confirms an alert was a false alarm (or who's actively
+// investigating) had no way to leave a note for the next reviewer
+// without round-tripping through pino logs. Mirrors the AVRI drift
+// re-arm route's reviewer/note shape so both audit trails feel the
+// same in the UI; differs in that the ack rides on the in-memory ring
+// buffer entry (no separate persisted log) — an evicted alert takes
+// its ack with it, which matches the buffer's "in-process only" model.
+//
+// Strict-auth because the request body echoes back the alert (IP, last
+// route, etc.) on success.
+router.post(
+  "/feedback/calibration/auth-brute-force-alerts/ack",
+  requireCalibrationAuthStrict,
+  (req, res) => {
+    try {
+      const body = (req.body ?? {}) as {
+        ip?: unknown;
+        detectedAt?: unknown;
+        reviewer?: unknown;
+        note?: unknown;
+      };
+      if (typeof body.ip !== "string" || body.ip.trim().length === 0) {
+        res
+          .status(400)
+          .json({ error: "Body must include a non-empty 'ip' string." });
+        return;
+      }
+      if (
+        typeof body.detectedAt !== "string" ||
+        body.detectedAt.trim().length === 0
+      ) {
+        res.status(400).json({
+          error: "Body must include a non-empty 'detectedAt' string.",
+        });
+        return;
+      }
+      // Validate reviewer/note up-front — same length bounds as the
+      // rearm route so the ack audit shape can't grow unboundedly.
+      let reviewer: string | undefined;
+      if (body.reviewer !== undefined) {
+        if (typeof body.reviewer !== "string") {
+          res
+            .status(400)
+            .json({ error: "'reviewer' must be a string when provided." });
+          return;
+        }
+        const trimmed = body.reviewer.trim();
+        if (trimmed.length > 200) {
+          res
+            .status(400)
+            .json({ error: "'reviewer' must be 200 characters or fewer." });
+          return;
+        }
+        if (trimmed.length > 0) reviewer = trimmed;
+      }
+      let note: string | undefined;
+      if (body.note !== undefined) {
+        if (typeof body.note !== "string") {
+          res
+            .status(400)
+            .json({ error: "'note' must be a string when provided." });
+          return;
+        }
+        const trimmed = body.note.trim();
+        if (trimmed.length > 500) {
+          res
+            .status(400)
+            .json({ error: "'note' must be 500 characters or fewer." });
+          return;
+        }
+        if (trimmed.length > 0) note = trimmed;
+      }
+      const result = ackCalibrationAuthBruteForceAlert({
+        ip: body.ip.trim(),
+        detectedAt: body.detectedAt.trim(),
+        reviewer,
+        note,
+      });
+      if (!result.ok) {
+        if (result.reason === "not-found") {
+          res.status(404).json({
+            error:
+              "No matching calibration auth alert in the in-process ring buffer (it may have been evicted by buffer churn or the API server may have restarted).",
+            reason: "not-found",
+          });
+          return;
+        }
+        // already-acked: include the existing ack so the UI can show
+        // who got there first instead of just toasting an error.
+        res.status(409).json({
+          error: "That calibration auth alert has already been acknowledged.",
+          reason: "already-acked",
+          alert: result.alert,
+        });
+        return;
+      }
+      res.status(200).json({ alert: result.alert });
+    } catch (err) {
+      req.log?.error(err, "Failed to acknowledge calibration auth alert");
+      res
+        .status(500)
+        .json({ error: "Failed to acknowledge calibration auth alert." });
     }
   },
 );

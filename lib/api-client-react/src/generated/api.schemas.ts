@@ -2390,6 +2390,23 @@ export type CalibrationAuthBruteForceAlertEntryRejectionsByGate = {
 };
 
 /**
+ * Reviewer acknowledgement attached to a dispatched calibration
+auth brute-force alert. Mirrors the shape of the AVRI drift
+re-arm audit entries (reviewer + free-form note + wall-clock
+timestamp) so the dashboard can render both audit trails with
+the same helpers.
+
+ */
+export interface CalibrationAuthBruteForceAlertAck {
+  /** ISO timestamp when the reviewer acknowledged the alert. */
+  ackedAt: string;
+  /** Reviewer name supplied with the ack call (omitted when not provided). */
+  ackedBy?: string;
+  /** Free-form note supplied with the ack call (omitted when not provided). */
+  note?: string;
+}
+
+/**
  * Single entry in the in-process ring buffer of dispatched
 calibration-auth brute-force alerts. Mirrors the webhook
 payload (sans the constant `event` discriminator and the
@@ -2421,6 +2438,63 @@ export interface CalibrationAuthBruteForceAlertEntry {
   lastMethod: string;
   /** Operator runbook URL surfaced in the alert payload. */
   runbookUrl: string;
+  ack?: CalibrationAuthBruteForceAlertAck;
+}
+
+/**
+ * Identifies the alert by `(ip, detectedAt)` — the same tuple
+the recent-alerts panel uses as a React key — plus optional
+reviewer attribution and a free-form note.
+
+ */
+export interface CalibrationAuthBruteForceAlertAckBody {
+  /**
+   * Source IP from the alert row to acknowledge.
+   * @minLength 1
+   */
+  ip: string;
+  /** The `detectedAt` of the alert row to acknowledge. */
+  detectedAt: string;
+  /**
+   * Reviewer display name to record on the ack (optional).
+   * @maxLength 200
+   */
+  reviewer?: string;
+  /**
+   * Free-form note describing the disposition (e.g. "false alarm — office NAT").
+   * @maxLength 500
+   */
+  note?: string;
+}
+
+/**
+ * Echoes the now-acked alert (with the `ack` field populated)
+so the calibration UI can update the row without re-fetching
+the entire ring buffer.
+
+ */
+export interface CalibrationAuthBruteForceAlertAckResponse {
+  alert: CalibrationAuthBruteForceAlertEntry;
+}
+
+export type CalibrationAuthBruteForceAlertAckConflictReason =
+  (typeof CalibrationAuthBruteForceAlertAckConflictReason)[keyof typeof CalibrationAuthBruteForceAlertAckConflictReason];
+
+export const CalibrationAuthBruteForceAlertAckConflictReason = {
+  "already-acked": "already-acked",
+} as const;
+
+/**
+ * Returned with HTTP 409 when the alert identified by the
+request body has already been acknowledged by another
+reviewer. Includes the existing `alert` (with its `ack`
+populated) so the UI can show who got there first.
+
+ */
+export interface CalibrationAuthBruteForceAlertAckConflict {
+  error: string;
+  reason: CalibrationAuthBruteForceAlertAckConflictReason;
+  alert: CalibrationAuthBruteForceAlertEntry;
 }
 
 /**

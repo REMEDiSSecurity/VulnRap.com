@@ -26,6 +26,9 @@ import type {
   AvriDriftRearmResponse,
   AvriDriftReport,
   AvriDriftSchedulerStatus,
+  CalibrationAuthBruteForceAlertAckBody,
+  CalibrationAuthBruteForceAlertAckConflict,
+  CalibrationAuthBruteForceAlertAckResponse,
   CalibrationAuthBruteForceAlertsList,
   CalibrationAuthStatus,
   CalibrationReport,
@@ -4172,6 +4175,116 @@ export function useGetCalibrationAuthBruteForceAlerts<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Task #749 — Mark the alert identified by `(ip, detectedAt)` as
+acknowledged so the next reviewer to land on the calibration
+page can tell signal from noise. The optional `reviewer` and
+`note` body fields populate an in-memory audit trail attached
+to the same ring-buffer entry the recent-alerts panel renders;
+an alert evicted by FIFO churn (or a process restart) takes
+its ack with it, matching the buffer's "in-process only" model.
+
+Returns 404 when no matching alert is in the ring buffer (it
+was already evicted, or the API server restarted) and 409 when
+a different reviewer has already acknowledged the row — in the
+409 case the response includes the existing `ack` so the UI
+can display who got there first instead of just toasting an
+error. Strict-auth because the response echoes the alert's
+IP / last-route metadata.
+
+ * @summary Acknowledge a calibration auth brute-force alert
+ */
+export const getAckCalibrationAuthBruteForceAlertUrl = () => {
+  return `/api/feedback/calibration/auth-brute-force-alerts/ack`;
+};
+
+export const ackCalibrationAuthBruteForceAlert = async (
+  calibrationAuthBruteForceAlertAckBody: CalibrationAuthBruteForceAlertAckBody,
+  options?: RequestInit,
+): Promise<CalibrationAuthBruteForceAlertAckResponse> => {
+  return customFetch<CalibrationAuthBruteForceAlertAckResponse>(
+    getAckCalibrationAuthBruteForceAlertUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(calibrationAuthBruteForceAlertAckBody),
+    },
+  );
+};
+
+export const getAckCalibrationAuthBruteForceAlertMutationOptions = <
+  TError = ErrorType<ErrorResponse | CalibrationAuthBruteForceAlertAckConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof ackCalibrationAuthBruteForceAlert>>,
+    TError,
+    { data: BodyType<CalibrationAuthBruteForceAlertAckBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof ackCalibrationAuthBruteForceAlert>>,
+  TError,
+  { data: BodyType<CalibrationAuthBruteForceAlertAckBody> },
+  TContext
+> => {
+  const mutationKey = ["ackCalibrationAuthBruteForceAlert"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof ackCalibrationAuthBruteForceAlert>>,
+    { data: BodyType<CalibrationAuthBruteForceAlertAckBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return ackCalibrationAuthBruteForceAlert(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AckCalibrationAuthBruteForceAlertMutationResult = NonNullable<
+  Awaited<ReturnType<typeof ackCalibrationAuthBruteForceAlert>>
+>;
+export type AckCalibrationAuthBruteForceAlertMutationBody =
+  BodyType<CalibrationAuthBruteForceAlertAckBody>;
+export type AckCalibrationAuthBruteForceAlertMutationError = ErrorType<
+  ErrorResponse | CalibrationAuthBruteForceAlertAckConflict
+>;
+
+/**
+ * @summary Acknowledge a calibration auth brute-force alert
+ */
+export const useAckCalibrationAuthBruteForceAlert = <
+  TError = ErrorType<ErrorResponse | CalibrationAuthBruteForceAlertAckConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof ackCalibrationAuthBruteForceAlert>>,
+    TError,
+    { data: BodyType<CalibrationAuthBruteForceAlertAckBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof ackCalibrationAuthBruteForceAlert>>,
+  TError,
+  { data: BodyType<CalibrationAuthBruteForceAlertAckBody> },
+  TContext
+> => {
+  return useMutation(
+    getAckCalibrationAuthBruteForceAlertMutationOptions(options),
+  );
+};
 
 /**
  * Returns the active scoring config version and full version history.

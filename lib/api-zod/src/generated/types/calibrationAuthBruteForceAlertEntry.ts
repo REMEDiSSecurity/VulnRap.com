@@ -5,6 +5,7 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { CalibrationAuthBruteForceAlertAck } from "./calibrationAuthBruteForceAlertAck";
 import type { CalibrationAuthBruteForceAlertEntryRejectionsByGate } from "./calibrationAuthBruteForceAlertEntryRejectionsByGate";
 import type { CalibrationAuthBruteForceAlertEntryRejectionsByStatus } from "./calibrationAuthBruteForceAlertEntryRejectionsByStatus";
 
@@ -40,4 +41,5 @@ export interface CalibrationAuthBruteForceAlertEntry {
   lastMethod: string;
   /** Operator runbook URL surfaced in the alert payload. */
   runbookUrl: string;
+  ack?: CalibrationAuthBruteForceAlertAck;
 }

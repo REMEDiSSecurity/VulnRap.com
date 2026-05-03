@@ -4244,6 +4244,30 @@ export const GetCalibrationAuthBruteForceAlertsResponse = zod
           runbookUrl: zod
             .string()
             .describe("Operator runbook URL surfaced in the alert payload."),
+          ack: zod
+            .object({
+              ackedAt: zod.coerce
+                .date()
+                .describe(
+                  "ISO timestamp when the reviewer acknowledged the alert.",
+                ),
+              ackedBy: zod
+                .string()
+                .optional()
+                .describe(
+                  "Reviewer name supplied with the ack call (omitted when not provided).",
+                ),
+              note: zod
+                .string()
+                .optional()
+                .describe(
+                  "Free-form note supplied with the ack call (omitted when not provided).",
+                ),
+            })
+            .optional()
+            .describe(
+              "Reviewer acknowledgement attached to a dispatched calibration\nauth brute-force alert. Mirrors the shape of the AVRI drift\nre-arm audit entries (reviewer + free-form note + wall-clock\ntimestamp) so the dashboard can render both audit trails with\nthe same helpers.\n",
+            ),
         })
         .describe(
           "Single entry in the in-process ring buffer of dispatched\ncalibration-auth brute-force alerts. Mirrors the webhook\npayload (sans the constant `event` discriminator and the\nstatic `recommendedActions` runbook copy).\n",
@@ -4257,6 +4281,147 @@ export const GetCalibrationAuthBruteForceAlertsResponse = zod
   })
   .describe(
     "Newest-first snapshot of the in-process recent-alerts ring\nbuffer. `bufferSize` is the absolute cap on retained entries\n(older alerts are evicted FIFO); `limit` is the per-request\ncap actually applied.\n",
+  );
+
+/**
+ * Task #749 — Mark the alert identified by `(ip, detectedAt)` as
+acknowledged so the next reviewer to land on the calibration
+page can tell signal from noise. The optional `reviewer` and
+`note` body fields populate an in-memory audit trail attached
+to the same ring-buffer entry the recent-alerts panel renders;
+an alert evicted by FIFO churn (or a process restart) takes
+its ack with it, matching the buffer's "in-process only" model.
+
+Returns 404 when no matching alert is in the ring buffer (it
+was already evicted, or the API server restarted) and 409 when
+a different reviewer has already acknowledged the row — in the
+409 case the response includes the existing `ack` so the UI
+can display who got there first instead of just toasting an
+error. Strict-auth because the response echoes the alert's
+IP / last-route metadata.
+
+ * @summary Acknowledge a calibration auth brute-force alert
+ */
+
+export const ackCalibrationAuthBruteForceAlertBodyReviewerMax = 200;
+
+export const ackCalibrationAuthBruteForceAlertBodyNoteMax = 500;
+
+export const AckCalibrationAuthBruteForceAlertBody = zod
+  .object({
+    ip: zod
+      .string()
+      .min(1)
+      .describe("Source IP from the alert row to acknowledge."),
+    detectedAt: zod.coerce
+      .date()
+      .describe("The `detectedAt` of the alert row to acknowledge."),
+    reviewer: zod
+      .string()
+      .max(ackCalibrationAuthBruteForceAlertBodyReviewerMax)
+      .optional()
+      .describe("Reviewer display name to record on the ack (optional)."),
+    note: zod
+      .string()
+      .max(ackCalibrationAuthBruteForceAlertBodyNoteMax)
+      .optional()
+      .describe(
+        'Free-form note describing the disposition (e.g. \"false alarm — office NAT\").',
+      ),
+  })
+  .describe(
+    "Identifies the alert by `(ip, detectedAt)` — the same tuple\nthe recent-alerts panel uses as a React key — plus optional\nreviewer attribution and a free-form note.\n",
+  );
+
+export const AckCalibrationAuthBruteForceAlertResponse = zod
+  .object({
+    alert: zod
+      .object({
+        detectedAt: zod.coerce
+          .date()
+          .describe(
+            "ISO timestamp when the alert tripped (i.e. the threshold-crossing wrong-token event).",
+          ),
+        ip: zod
+          .string()
+          .describe("Source IP that crossed the per-IP wrong-token threshold."),
+        windowMs: zod
+          .number()
+          .describe("Sliding window (ms) used to count wrong-token events."),
+        threshold: zod
+          .number()
+          .describe(
+            "Number of wrong-token events within `windowMs` that triggered the alert.",
+          ),
+        wrongTokenCount: zod
+          .number()
+          .describe(
+            "Total wrong-token events from the IP within the window at the moment the alert fired.",
+          ),
+        rejectionsByStatus: zod
+          .object({
+            "401": zod.number(),
+            "429": zod.number(),
+          })
+          .describe("Tally of in-window rejections split by HTTP status code."),
+        rejectionsByGate: zod
+          .object({
+            mutation: zod.number(),
+            "strict-read": zod.number(),
+          })
+          .describe(
+            "Tally of in-window rejections split by which calibration gate fired.",
+          ),
+        firstSeenAt: zod.coerce
+          .date()
+          .describe(
+            "ISO timestamp of the oldest in-window wrong-token event from this IP.",
+          ),
+        lastSeenAt: zod.coerce
+          .date()
+          .describe(
+            "ISO timestamp of the newest in-window wrong-token event from this IP (the one that crossed the threshold).",
+          ),
+        lastRoute: zod
+          .string()
+          .describe("Route that the threshold-crossing request hit."),
+        lastMethod: zod
+          .string()
+          .describe("HTTP method of the threshold-crossing request."),
+        runbookUrl: zod
+          .string()
+          .describe("Operator runbook URL surfaced in the alert payload."),
+        ack: zod
+          .object({
+            ackedAt: zod.coerce
+              .date()
+              .describe(
+                "ISO timestamp when the reviewer acknowledged the alert.",
+              ),
+            ackedBy: zod
+              .string()
+              .optional()
+              .describe(
+                "Reviewer name supplied with the ack call (omitted when not provided).",
+              ),
+            note: zod
+              .string()
+              .optional()
+              .describe(
+                "Free-form note supplied with the ack call (omitted when not provided).",
+              ),
+          })
+          .optional()
+          .describe(
+            "Reviewer acknowledgement attached to a dispatched calibration\nauth brute-force alert. Mirrors the shape of the AVRI drift\nre-arm audit entries (reviewer + free-form note + wall-clock\ntimestamp) so the dashboard can render both audit trails with\nthe same helpers.\n",
+          ),
+      })
+      .describe(
+        "Single entry in the in-process ring buffer of dispatched\ncalibration-auth brute-force alerts. Mirrors the webhook\npayload (sans the constant `event` discriminator and the\nstatic `recommendedActions` runbook copy).\n",
+      ),
+  })
+  .describe(
+    "Echoes the now-acked alert (with the `ack` field populated)\nso the calibration UI can update the row without re-fetching\nthe entire ring buffer.\n",
   );
 
 /**

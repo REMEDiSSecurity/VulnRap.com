@@ -473,6 +473,223 @@ describe("GET /feedback/calibration/auth-brute-force-alerts (Task #399)", () => 
   });
 });
 
+// Task #749 — POST /feedback/calibration/auth-brute-force-alerts/ack:
+// per-row reviewer acknowledgement workflow. Identity tuple is
+// (ip, detectedAt). The ack rides on the same in-memory ring-buffer
+// entry as the alert it acks; we exercise the route with a test-only
+// alerter (injected via the public test seam) so the assertions don't
+// depend on log-shipper or webhook side effects.
+describe("POST /feedback/calibration/auth-brute-force-alerts/ack (Task #749)", () => {
+  let restoreAlerter: (() => void) | null = null;
+  let testAlerter: import("../middlewares/calibration-auth-brute-force-alert").BruteForceAlerter | null =
+    null;
+  let nowMs = 1_700_000_000_000;
+
+  beforeEach(async () => {
+    const mod = await import(
+      "../middlewares/calibration-auth-brute-force-alert"
+    );
+    nowMs = 1_700_000_000_000;
+    testAlerter = mod.createBruteForceAlerter({
+      windowMs: 60_000,
+      threshold: 3,
+      webhookUrl: "",
+      runbookUrl: "https://example.test/runbook",
+      statePath: null,
+      now: () => nowMs,
+    });
+    mod.__setBruteForceAlerterForTests(testAlerter);
+    restoreAlerter = () => mod.__setBruteForceAlerterForTests(null);
+
+    // Seed one alert (ip 10.0.0.1) by crossing the threshold.
+    for (let i = 0; i < 3; i++) {
+      testAlerter.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/feedback/calibration/handwavy-phrases",
+        method: "POST",
+        ip: "10.0.0.1",
+      });
+    }
+  });
+
+  afterEach(() => {
+    if (restoreAlerter) {
+      restoreAlerter();
+      restoreAlerter = null;
+    }
+    testAlerter = null;
+  });
+
+  function getSeededAlert() {
+    const alerts = testAlerter!.recentAlerts(10);
+    expect(alerts.length).toBeGreaterThan(0);
+    return alerts[0]!;
+  }
+
+  it("rejects an unauthenticated request with 401", async () => {
+    const seeded = getSeededAlert();
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      { ip: seeded.ip, detectedAt: seeded.detectedAt },
+    );
+    expect(r.status).toBe(401);
+  });
+
+  it("rejects with 400 when ip is missing", async () => {
+    const seeded = getSeededAlert();
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      { detectedAt: seeded.detectedAt },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/ip/i);
+  });
+
+  it("rejects with 400 when detectedAt is missing", async () => {
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      { ip: "10.0.0.1" },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/detectedAt/i);
+  });
+
+  it("rejects with 400 when reviewer exceeds 200 chars", async () => {
+    const seeded = getSeededAlert();
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      {
+        ip: seeded.ip,
+        detectedAt: seeded.detectedAt,
+        reviewer: "a".repeat(201),
+      },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/reviewer/i);
+  });
+
+  it("rejects with 400 when note exceeds 500 chars", async () => {
+    const seeded = getSeededAlert();
+    const r = await request<{ error: string }>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      {
+        ip: seeded.ip,
+        detectedAt: seeded.detectedAt,
+        note: "x".repeat(501),
+      },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/note/i);
+  });
+
+  it("returns 404 when no matching alert is in the ring buffer", async () => {
+    const r = await request<{ error: string; reason: string }>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      { ip: "203.0.113.7", detectedAt: new Date(nowMs).toISOString() },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(404);
+    expect(r.body.reason).toBe("not-found");
+  });
+
+  it("acknowledges a matching alert and echoes the populated ack", async () => {
+    const seeded = getSeededAlert();
+    nowMs += 5_000;
+    const r = await request<{
+      alert: {
+        ip: string;
+        detectedAt: string;
+        ack?: { ackedBy?: string; note?: string; ackedAt: string };
+      };
+    }>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      {
+        ip: seeded.ip,
+        detectedAt: seeded.detectedAt,
+        reviewer: "alex@vulnrap",
+        note: "office NAT — confirmed false alarm",
+      },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.alert.ip).toBe(seeded.ip);
+    expect(r.body.alert.detectedAt).toBe(seeded.detectedAt);
+    expect(r.body.alert.ack).toBeDefined();
+    expect(r.body.alert.ack!.ackedBy).toBe("alex@vulnrap");
+    expect(r.body.alert.ack!.note).toBe("office NAT — confirmed false alarm");
+    expect(typeof r.body.alert.ack!.ackedAt).toBe("string");
+    // The buffer entry was actually mutated.
+    const after = testAlerter!.recentAlerts(10)[0]!;
+    expect(after.ack?.ackedBy).toBe("alex@vulnrap");
+  });
+
+  it("trims & omits empty reviewer / note strings on success", async () => {
+    const seeded = getSeededAlert();
+    const r = await request<{
+      alert: { ack?: { ackedBy?: string; note?: string } };
+    }>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      {
+        ip: seeded.ip,
+        detectedAt: seeded.detectedAt,
+        reviewer: "   ",
+        note: "",
+      },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.alert.ack).toBeDefined();
+    expect(r.body.alert.ack!.ackedBy).toBeUndefined();
+    expect(r.body.alert.ack!.note).toBeUndefined();
+  });
+
+  it("returns 409 with the existing ack when the alert was already acknowledged", async () => {
+    const seeded = getSeededAlert();
+    const first = await request<unknown>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      {
+        ip: seeded.ip,
+        detectedAt: seeded.detectedAt,
+        reviewer: "first-responder",
+      },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(first.status).toBe(200);
+
+    const r = await request<{
+      error: string;
+      reason: string;
+      alert: { ack?: { ackedBy?: string } };
+    }>(
+      "POST",
+      "/feedback/calibration/auth-brute-force-alerts/ack",
+      {
+        ip: seeded.ip,
+        detectedAt: seeded.detectedAt,
+        reviewer: "second-responder",
+      },
+      { "X-Calibration-Token": TOKEN },
+    );
+    expect(r.status).toBe(409);
+    expect(r.body.reason).toBe("already-acked");
+    expect(r.body.alert.ack?.ackedBy).toBe("first-responder");
+  });
+});
+
 // Task #117 — dedicated suite for the open / single-reviewer / local-dev
 // fallback. When CALIBRATION_TOKEN is unset, the auth gate is a no-op and
 // the probe should report serverRequiresToken=false / mutationsAllowed=true
