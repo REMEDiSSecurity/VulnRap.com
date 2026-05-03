@@ -101,6 +101,8 @@ import type {
   SlopDistribution,
   SubmitFeedbackWithChallenge,
   SubmitReportBody,
+  TestYourselfRunBody,
+  TestYourselfRunResponse,
   TrendsData,
   VerificationBadge,
   VisitRecorded,
@@ -6186,4 +6188,109 @@ export const useUpdatePhraseSuggestionStatus = <
   TContext
 > => {
   return useMutation(getUpdatePhraseSuggestionStatusMutationOptions(options));
+};
+
+/**
+ * Bring-your-own fixture battery for power users (PSIRT teams,
+security platforms) who want to validate the engine against
+their own labeled corpus before adopting it.
+
+Accepts up to 50 `{text, label}` rows where `label` is the
+user's expected verdict (`valid` for a real, well-substantiated
+report; `invalid` for slop / fabrication / noise). Each row is
+run through the same composite scoring pipeline used by
+`POST /reports`, the predicted label is derived from the
+composite score (composite >= 50 → `valid`, otherwise
+`invalid`), and an aggregate confusion matrix +
+precision / recall / F1 against the user-supplied labels is
+returned alongside per-row results.
+
+Synchronous; nothing is persisted; no PII redaction is applied
+to the returned per-row text excerpt (the caller already has
+the text). IP rate-limited to 10 runs / day. The "valid" class
+is treated as the positive class for precision / recall.
+
+ * @summary Score a user-supplied labeled fixture battery
+ */
+export const getRunTestYourselfUrl = () => {
+  return `/api/test-yourself/run`;
+};
+
+export const runTestYourself = async (
+  testYourselfRunBody: TestYourselfRunBody,
+  options?: RequestInit,
+): Promise<TestYourselfRunResponse> => {
+  return customFetch<TestYourselfRunResponse>(getRunTestYourselfUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(testYourselfRunBody),
+  });
+};
+
+export const getRunTestYourselfMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runTestYourself>>,
+    TError,
+    { data: BodyType<TestYourselfRunBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runTestYourself>>,
+  TError,
+  { data: BodyType<TestYourselfRunBody> },
+  TContext
+> => {
+  const mutationKey = ["runTestYourself"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runTestYourself>>,
+    { data: BodyType<TestYourselfRunBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return runTestYourself(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunTestYourselfMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runTestYourself>>
+>;
+export type RunTestYourselfMutationBody = BodyType<TestYourselfRunBody>;
+export type RunTestYourselfMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Score a user-supplied labeled fixture battery
+ */
+export const useRunTestYourself = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runTestYourself>>,
+    TError,
+    { data: BodyType<TestYourselfRunBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runTestYourself>>,
+  TError,
+  { data: BodyType<TestYourselfRunBody> },
+  TContext
+> => {
+  return useMutation(getRunTestYourselfMutationOptions(options));
 };

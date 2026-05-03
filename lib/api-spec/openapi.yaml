@@ -40,6 +40,8 @@ tags:
     description: Reviewer-managed webhook subscriptions (Task #673)
   - name: roadmap
     description: Public roadmap (Now / Next / Later)
+  - name: test-yourself
+    description: Bring-your-own labeled fixture battery — score user-supplied rows against the live engines and report precision/recall/F1.
 paths:
   /webhooks:
     get:
@@ -2161,6 +2163,56 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Suggestion not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /test-yourself/run:
+    post:
+      operationId: runTestYourself
+      tags: [test-yourself]
+      summary: Score a user-supplied labeled fixture battery
+      description: |
+        Bring-your-own fixture battery for power users (PSIRT teams,
+        security platforms) who want to validate the engine against
+        their own labeled corpus before adopting it.
+
+        Accepts up to 50 `{text, label}` rows where `label` is the
+        user's expected verdict (`valid` for a real, well-substantiated
+        report; `invalid` for slop / fabrication / noise). Each row is
+        run through the same composite scoring pipeline used by
+        `POST /reports`, the predicted label is derived from the
+        composite score (composite >= 50 → `valid`, otherwise
+        `invalid`), and an aggregate confusion matrix +
+        precision / recall / F1 against the user-supplied labels is
+        returned alongside per-row results.
+
+        Synchronous; nothing is persisted; no PII redaction is applied
+        to the returned per-row text excerpt (the caller already has
+        the text). IP rate-limited to 10 runs / day. The "valid" class
+        is treated as the positive class for precision / recall.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestYourselfRunBody"
+      responses:
+        "200":
+          description: Battery scored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestYourselfRunResponse"
+        "400":
+          description: Invalid request body (missing rows, too many rows, bad labels, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Daily rate limit exceeded for this IP
           content:
             application/json:
               schema:
@@ -7537,3 +7589,129 @@ components:
         id:
           type: integer
       required: [id]
+
+    TestYourselfLabel:
+      type: string
+      enum: [valid, invalid]
+      description: |
+        Binary label used by the bring-your-own fixture battery. `valid`
+        means a real, well-substantiated vulnerability report; `invalid`
+        means slop, fabrication, paraphrased CVE, or otherwise noise.
+        The `valid` class is the positive class for precision / recall.
+
+    TestYourselfRow:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Raw report text (1..50_000 characters).
+          minLength: 1
+          maxLength: 50000
+        label:
+          $ref: "#/components/schemas/TestYourselfLabel"
+      required: [text, label]
+
+    TestYourselfRunBody:
+      type: object
+      properties:
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/TestYourselfRow"
+      required: [rows]
+
+    TestYourselfPerRow:
+      type: object
+      properties:
+        index:
+          type: integer
+          description: Zero-based row index in the submitted battery.
+        textPreview:
+          type: string
+          description: First 240 chars of the row's text, for display.
+        expectedLabel:
+          $ref: "#/components/schemas/TestYourselfLabel"
+        predictedLabel:
+          $ref: "#/components/schemas/TestYourselfLabel"
+        compositeScore:
+          type: integer
+          description: Composite score 0..100 (higher = stronger evidence of a real vulnerability).
+        compositeLabel:
+          type: string
+          description: Engine's raw composite label (e.g. `LIKELY INVALID`, `STRONG`).
+        correct:
+          type: boolean
+          description: True when predictedLabel === expectedLabel.
+      required:
+        - index
+        - textPreview
+        - expectedLabel
+        - predictedLabel
+        - compositeScore
+        - compositeLabel
+        - correct
+
+    TestYourselfConfusionMatrix:
+      type: object
+      properties:
+        truePositive:
+          type: integer
+          description: Predicted `valid` and actually `valid`.
+        falsePositive:
+          type: integer
+          description: Predicted `valid` but actually `invalid`.
+        trueNegative:
+          type: integer
+          description: Predicted `invalid` and actually `invalid`.
+        falseNegative:
+          type: integer
+          description: Predicted `invalid` but actually `valid`.
+      required: [truePositive, falsePositive, trueNegative, falseNegative]
+
+    TestYourselfAggregate:
+      type: object
+      properties:
+        total:
+          type: integer
+        accuracy:
+          type: number
+          format: float
+          description: Fraction of rows where predictedLabel === expectedLabel.
+        precision:
+          type: number
+          format: float
+          description: TP / (TP + FP). 0 when TP+FP == 0.
+        recall:
+          type: number
+          format: float
+          description: TP / (TP + FN). 0 when TP+FN == 0.
+        f1:
+          type: number
+          format: float
+          description: Harmonic mean of precision and recall. 0 when both are 0.
+        confusionMatrix:
+          $ref: "#/components/schemas/TestYourselfConfusionMatrix"
+      required: [total, accuracy, precision, recall, f1, confusionMatrix]
+
+    TestYourselfRunResponse:
+      type: object
+      properties:
+        aggregate:
+          $ref: "#/components/schemas/TestYourselfAggregate"
+        perRow:
+          type: array
+          items:
+            $ref: "#/components/schemas/TestYourselfPerRow"
+        rateLimit:
+          type: object
+          properties:
+            limit:
+              type: integer
+              description: Maximum runs allowed per IP per day.
+            remaining:
+              type: integer
+              description: Runs remaining for this IP in the current 24h window.
+          required: [limit, remaining]
+      required: [aggregate, perRow, rateLimit]

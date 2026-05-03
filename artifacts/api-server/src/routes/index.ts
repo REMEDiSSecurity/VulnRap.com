@@ -21,6 +21,7 @@ import ogCardRouter from "./og-card";
 import embedRouter from "./embed";
 import roadmapRouter from "./roadmap";
 import statusRouter from "./status";
+import testYourselfRouter from "./test-yourself";
 
 const router: IRouter = Router();
 
@@ -44,6 +45,7 @@ router.use(ogCardRouter);
 router.use(embedRouter);
 router.use(roadmapRouter);
 router.use(statusRouter);
+router.use(testYourselfRouter);
 router.use(publicRouter);
 // v3.6.0 §7: Dev-only test endpoint at GET /api/test/run. The handler itself
 // returns 404 in production, so it is safe to mount unconditionally here.

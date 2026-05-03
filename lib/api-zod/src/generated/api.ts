@@ -12775,3 +12775,116 @@ export const UpdatePhraseSuggestionStatusResponse = zod.object({
   id: zod.number(),
   status: zod.enum(["approved", "rejected"]),
 });
+
+/**
+ * Bring-your-own fixture battery for power users (PSIRT teams,
+security platforms) who want to validate the engine against
+their own labeled corpus before adopting it.
+
+Accepts up to 50 `{text, label}` rows where `label` is the
+user's expected verdict (`valid` for a real, well-substantiated
+report; `invalid` for slop / fabrication / noise). Each row is
+run through the same composite scoring pipeline used by
+`POST /reports`, the predicted label is derived from the
+composite score (composite >= 50 → `valid`, otherwise
+`invalid`), and an aggregate confusion matrix +
+precision / recall / F1 against the user-supplied labels is
+returned alongside per-row results.
+
+Synchronous; nothing is persisted; no PII redaction is applied
+to the returned per-row text excerpt (the caller already has
+the text). IP rate-limited to 10 runs / day. The "valid" class
+is treated as the positive class for precision / recall.
+
+ * @summary Score a user-supplied labeled fixture battery
+ */
+export const runTestYourselfBodyRowsItemTextMax = 50000;
+
+export const runTestYourselfBodyRowsMax = 50;
+
+export const RunTestYourselfBody = zod.object({
+  rows: zod
+    .array(
+      zod.object({
+        text: zod
+          .string()
+          .min(1)
+          .max(runTestYourselfBodyRowsItemTextMax)
+          .describe("Raw report text (1..50_000 characters)."),
+        label: zod
+          .enum(["valid", "invalid"])
+          .describe(
+            "Binary label used by the bring-your-own fixture battery. `valid`\nmeans a real, well-substantiated vulnerability report; `invalid`\nmeans slop, fabrication, paraphrased CVE, or otherwise noise.\nThe `valid` class is the positive class for precision \/ recall.\n",
+          ),
+      }),
+    )
+    .min(1)
+    .max(runTestYourselfBodyRowsMax),
+});
+
+export const RunTestYourselfResponse = zod.object({
+  aggregate: zod.object({
+    total: zod.number(),
+    accuracy: zod
+      .number()
+      .describe("Fraction of rows where predictedLabel === expectedLabel."),
+    precision: zod.number().describe("TP \/ (TP + FP). 0 when TP+FP == 0."),
+    recall: zod.number().describe("TP \/ (TP + FN). 0 when TP+FN == 0."),
+    f1: zod
+      .number()
+      .describe("Harmonic mean of precision and recall. 0 when both are 0."),
+    confusionMatrix: zod.object({
+      truePositive: zod
+        .number()
+        .describe("Predicted `valid` and actually `valid`."),
+      falsePositive: zod
+        .number()
+        .describe("Predicted `valid` but actually `invalid`."),
+      trueNegative: zod
+        .number()
+        .describe("Predicted `invalid` and actually `invalid`."),
+      falseNegative: zod
+        .number()
+        .describe("Predicted `invalid` but actually `valid`."),
+    }),
+  }),
+  perRow: zod.array(
+    zod.object({
+      index: zod
+        .number()
+        .describe("Zero-based row index in the submitted battery."),
+      textPreview: zod
+        .string()
+        .describe("First 240 chars of the row's text, for display."),
+      expectedLabel: zod
+        .enum(["valid", "invalid"])
+        .describe(
+          "Binary label used by the bring-your-own fixture battery. `valid`\nmeans a real, well-substantiated vulnerability report; `invalid`\nmeans slop, fabrication, paraphrased CVE, or otherwise noise.\nThe `valid` class is the positive class for precision \/ recall.\n",
+        ),
+      predictedLabel: zod
+        .enum(["valid", "invalid"])
+        .describe(
+          "Binary label used by the bring-your-own fixture battery. `valid`\nmeans a real, well-substantiated vulnerability report; `invalid`\nmeans slop, fabrication, paraphrased CVE, or otherwise noise.\nThe `valid` class is the positive class for precision \/ recall.\n",
+        ),
+      compositeScore: zod
+        .number()
+        .describe(
+          "Composite score 0..100 (higher = stronger evidence of a real vulnerability).",
+        ),
+      compositeLabel: zod
+        .string()
+        .describe(
+          "Engine's raw composite label (e.g. `LIKELY INVALID`, `STRONG`).",
+        ),
+      correct: zod
+        .boolean()
+        .describe("True when predictedLabel === expectedLabel."),
+    }),
+  ),
+  rateLimit: zod.object({
+    limit: zod.number().describe("Maximum runs allowed per IP per day."),
+    remaining: zod
+      .number()
+      .describe("Runs remaining for this IP in the current 24h window."),
+  }),
+});

@@ -4169,6 +4169,91 @@ export interface WebhookDeleteResponse {
 }
 
 /**
+ * Binary label used by the bring-your-own fixture battery. `valid`
+means a real, well-substantiated vulnerability report; `invalid`
+means slop, fabrication, paraphrased CVE, or otherwise noise.
+The `valid` class is the positive class for precision / recall.
+
+ */
+export type TestYourselfLabel =
+  (typeof TestYourselfLabel)[keyof typeof TestYourselfLabel];
+
+export const TestYourselfLabel = {
+  valid: "valid",
+  invalid: "invalid",
+} as const;
+
+export interface TestYourselfRow {
+  /**
+   * Raw report text (1..50_000 characters).
+   * @minLength 1
+   * @maxLength 50000
+   */
+  text: string;
+  label: TestYourselfLabel;
+}
+
+export interface TestYourselfRunBody {
+  /**
+   * @minItems 1
+   * @maxItems 50
+   */
+  rows: TestYourselfRow[];
+}
+
+export interface TestYourselfPerRow {
+  /** Zero-based row index in the submitted battery. */
+  index: number;
+  /** First 240 chars of the row's text, for display. */
+  textPreview: string;
+  expectedLabel: TestYourselfLabel;
+  predictedLabel: TestYourselfLabel;
+  /** Composite score 0..100 (higher = stronger evidence of a real vulnerability). */
+  compositeScore: number;
+  /** Engine's raw composite label (e.g. `LIKELY INVALID`, `STRONG`). */
+  compositeLabel: string;
+  /** True when predictedLabel === expectedLabel. */
+  correct: boolean;
+}
+
+export interface TestYourselfConfusionMatrix {
+  /** Predicted `valid` and actually `valid`. */
+  truePositive: number;
+  /** Predicted `valid` but actually `invalid`. */
+  falsePositive: number;
+  /** Predicted `invalid` and actually `invalid`. */
+  trueNegative: number;
+  /** Predicted `invalid` but actually `valid`. */
+  falseNegative: number;
+}
+
+export interface TestYourselfAggregate {
+  total: number;
+  /** Fraction of rows where predictedLabel === expectedLabel. */
+  accuracy: number;
+  /** TP / (TP + FP). 0 when TP+FP == 0. */
+  precision: number;
+  /** TP / (TP + FN). 0 when TP+FN == 0. */
+  recall: number;
+  /** Harmonic mean of precision and recall. 0 when both are 0. */
+  f1: number;
+  confusionMatrix: TestYourselfConfusionMatrix;
+}
+
+export type TestYourselfRunResponseRateLimit = {
+  /** Maximum runs allowed per IP per day. */
+  limit: number;
+  /** Runs remaining for this IP in the current 24h window. */
+  remaining: number;
+};
+
+export interface TestYourselfRunResponse {
+  aggregate: TestYourselfAggregate;
+  perRow: TestYourselfPerRow[];
+  rateLimit: TestYourselfRunResponseRateLimit;
+}
+
+/**
  * Privacy mode — full shares content, similarity_only stores only hashes
  */
 export type SubmitReportBodyContentMode =
