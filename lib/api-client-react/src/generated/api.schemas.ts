@@ -1342,6 +1342,48 @@ export interface ReportFeed {
   summary: ReportFeedSummary;
 }
 
+export type CohortBaselineBinsItem = {
+  /** Inclusive lower bound of the bucket (0-100). */
+  min: number;
+  /** Exclusive upper bound of the bucket (inclusive on the final bucket). */
+  max: number;
+  /** Number of reports whose composite score falls in this bucket. */
+  count: number;
+};
+
+/**
+ * Last-7d VulnRap composite-score distribution + median for a cohort,
+plus the optional CWE family used to scope the cohort. The 10
+histogram bins partition the score range 0-100 into equal-width
+[min, max) intervals (the last bucket is inclusive of 100). Composite
+score is the metric shown in the big number on the results page
+header, so the percentile rank derived from these bins applies to
+that displayed score.
+
+ */
+export interface CohortBaseline {
+  /**
+   * Cohort scope. Null when the cohort is the full platform-wide
+distribution; otherwise the AVRI rubric family id (e.g. INJECTION).
+When the caller passed an unknown value this is null and the
+platform cohort is returned instead.
+
+   * @nullable
+   */
+  cwe: string | null;
+  /** Width of the rolling window the baseline was computed over (always 7 for v1). */
+  windowDays: number;
+  /** Number of reports in the cohort (sum of bucket counts). */
+  totalReports: number;
+  /**
+   * Median composite score for the cohort. Null when totalReports is 0.
+   * @nullable
+   */
+  median: number | null;
+  /** 10-bucket histogram of composite scores in the cohort. */
+  bins: CohortBaselineBinsItem[];
+}
+
 export type SlopDistributionBucketsItem = {
   label: string;
   min: number;
@@ -3255,6 +3297,16 @@ export type ListHandwavyPhraseRemovalBatchesParams = {
    * @maximum 50
    */
   limit?: number;
+};
+
+export type GetCohortBaselineParams = {
+  /**
+ * Optional cached AVRI rubric family id (e.g. INJECTION,
+MEMORY_CORRUPTION) to restrict the cohort. Unknown values fall
+through to the platform-wide cohort.
+
+ */
+  cwe?: string;
 };
 
 export type GetTrendsParams = {

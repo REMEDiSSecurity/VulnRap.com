@@ -30,6 +30,7 @@ import type {
   CalibrationReport,
   CheckReportBody,
   CheckResult,
+  CohortBaseline,
   DeleteReportBody,
   DeleteReportResponse,
   ErrorResponse,
@@ -38,6 +39,7 @@ import type {
   FeedbackResponse,
   GetAvriDriftReportParams,
   GetCalibrationAuthBruteForceAlertsParams,
+  GetCohortBaselineParams,
   GetReportFeedParams,
   GetTrendsParams,
   HandwavyPhraseBatchRemoveBody,
@@ -3772,6 +3774,113 @@ export function useGetVisitorStats<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetVisitorStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns a 10-bucket histogram of VulnRap composite scores submitted in
+the last 7 days plus the median score for that cohort. The composite
+score is the same metric shown in the big number on the results page
+header, so the percentile derived from these bins is a valid
+percentile for that displayed score. When `cwe` is supplied, the
+histogram and median are restricted to reports whose cached AVRI rubric
+family matches the requested CWE family — otherwise the platform-wide
+cohort is returned. Reports with no cached composite (legacy rows from
+before the multi-engine consensus) are excluded from the cohort.
+
+ * @summary Get cohort baseline distribution
+ */
+export const getGetCohortBaselineUrl = (params?: GetCohortBaselineParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/cohort/baseline?${stringifiedParams}`
+    : `/api/cohort/baseline`;
+};
+
+export const getCohortBaseline = async (
+  params?: GetCohortBaselineParams,
+  options?: RequestInit,
+): Promise<CohortBaseline> => {
+  return customFetch<CohortBaseline>(getGetCohortBaselineUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCohortBaselineQueryKey = (
+  params?: GetCohortBaselineParams,
+) => {
+  return [`/api/cohort/baseline`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetCohortBaselineQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCohortBaseline>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetCohortBaselineParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCohortBaseline>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetCohortBaselineQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCohortBaseline>>
+  > = ({ signal }) => getCohortBaseline(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCohortBaseline>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCohortBaselineQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCohortBaseline>>
+>;
+export type GetCohortBaselineQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get cohort baseline distribution
+ */
+
+export function useGetCohortBaseline<
+  TData = Awaited<ReturnType<typeof getCohortBaseline>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetCohortBaselineParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCohortBaseline>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCohortBaselineQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

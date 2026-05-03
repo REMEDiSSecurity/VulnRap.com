@@ -11241,6 +11241,74 @@ export const GetVisitorStatsResponse = zod.object({
 });
 
 /**
+ * Returns a 10-bucket histogram of VulnRap composite scores submitted in
+the last 7 days plus the median score for that cohort. The composite
+score is the same metric shown in the big number on the results page
+header, so the percentile derived from these bins is a valid
+percentile for that displayed score. When `cwe` is supplied, the
+histogram and median are restricted to reports whose cached AVRI rubric
+family matches the requested CWE family — otherwise the platform-wide
+cohort is returned. Reports with no cached composite (legacy rows from
+before the multi-engine consensus) are excluded from the cohort.
+
+ * @summary Get cohort baseline distribution
+ */
+export const GetCohortBaselineQueryParams = zod.object({
+  cwe: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Optional cached AVRI rubric family id (e.g. INJECTION,\nMEMORY_CORRUPTION) to restrict the cohort. Unknown values fall\nthrough to the platform-wide cohort.\n",
+    ),
+});
+
+export const GetCohortBaselineResponse = zod
+  .object({
+    cwe: zod
+      .string()
+      .nullable()
+      .describe(
+        "Cohort scope. Null when the cohort is the full platform-wide\ndistribution; otherwise the AVRI rubric family id (e.g. INJECTION).\nWhen the caller passed an unknown value this is null and the\nplatform cohort is returned instead.\n",
+      ),
+    windowDays: zod
+      .number()
+      .describe(
+        "Width of the rolling window the baseline was computed over (always 7 for v1).",
+      ),
+    totalReports: zod
+      .number()
+      .describe("Number of reports in the cohort (sum of bucket counts)."),
+    median: zod
+      .number()
+      .nullable()
+      .describe(
+        "Median composite score for the cohort. Null when totalReports is 0.",
+      ),
+    bins: zod
+      .array(
+        zod.object({
+          min: zod
+            .number()
+            .describe("Inclusive lower bound of the bucket (0-100)."),
+          max: zod
+            .number()
+            .describe(
+              "Exclusive upper bound of the bucket (inclusive on the final bucket).",
+            ),
+          count: zod
+            .number()
+            .describe(
+              "Number of reports whose composite score falls in this bucket.",
+            ),
+        }),
+      )
+      .describe("10-bucket histogram of composite scores in the cohort."),
+  })
+  .describe(
+    "Last-7d VulnRap composite-score distribution + median for a cohort,\nplus the optional CWE family used to scope the cohort. The 10\nhistogram bins partition the score range 0-100 into equal-width\n[min, max) intervals (the last bucket is inclusive of 100). Composite\nscore is the metric shown in the big number on the results page\nheader, so the percentile rank derived from these bins applies to\nthat displayed score.\n",
+  );
+
+/**
  * Returns daily report volume, tier breakdown, average score, and feedback trends for the specified time window
  * @summary Get trend data over time
  */

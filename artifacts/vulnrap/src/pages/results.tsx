@@ -21,6 +21,7 @@ import { DiagnosticsPanel, STRUCTURAL_MARKER_LABELS, buildMarkdownSummary, loadD
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { TriageEngineCard, type VulnrapEngineResultPanel } from "@/components/triage-engine-card";
+import { CohortBaselineRibbon } from "@/components/cohort-baseline-ribbon";
 import { useQueryClient } from "@tanstack/react-query";
 
 function getQualityColor(score: number) {
@@ -1691,6 +1692,10 @@ export default function Results() {
               </div>
               <div className="text-xs text-muted-foreground mt-1 font-mono">/ 100</div>
             </div>
+            <CohortBaselineRibbon
+              score={vulnrap.compositeScore}
+              cwe={report.avriFamily ?? null}
+            />
             <div className="space-y-3">
               {vulnrap.engines.map((eng) => (
                 <TriageEngineCard key={eng.engine} engine={eng} />

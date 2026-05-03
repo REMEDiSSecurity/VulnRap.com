@@ -18,6 +18,8 @@ tags:
     description: Platform statistics
   - name: newsletter
     description: Community newsletter signup
+  - name: cohort
+    description: Cohort baseline distributions for contextualizing scores
 paths:
   /healthz:
     get:
@@ -1324,6 +1326,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/VisitorStats"
 
+  /cohort/baseline:
+    get:
+      operationId: getCohortBaseline
+      tags: [cohort]
+      summary: Get cohort baseline distribution
+      description: |
+        Returns a 10-bucket histogram of VulnRap composite scores submitted in
+        the last 7 days plus the median score for that cohort. The composite
+        score is the same metric shown in the big number on the results page
+        header, so the percentile derived from these bins is a valid
+        percentile for that displayed score. When `cwe` is supplied, the
+        histogram and median are restricted to reports whose cached AVRI rubric
+        family matches the requested CWE family — otherwise the platform-wide
+        cohort is returned. Reports with no cached composite (legacy rows from
+        before the multi-engine consensus) are excluded from the cohort.
+      parameters:
+        - name: cwe
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Optional cached AVRI rubric family id (e.g. INJECTION,
+            MEMORY_CORRUPTION) to restrict the cohort. Unknown values fall
+            through to the platform-wide cohort.
+      responses:
+        "200":
+          description: Cohort baseline distribution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CohortBaseline"
+
   /stats/trends:
     get:
       operationId: getTrends
@@ -2293,6 +2328,59 @@ components:
         - total
         - hasMore
         - summary
+
+    CohortBaseline:
+      type: object
+      description: |
+        Last-7d VulnRap composite-score distribution + median for a cohort,
+        plus the optional CWE family used to scope the cohort. The 10
+        histogram bins partition the score range 0-100 into equal-width
+        [min, max) intervals (the last bucket is inclusive of 100). Composite
+        score is the metric shown in the big number on the results page
+        header, so the percentile rank derived from these bins applies to
+        that displayed score.
+      properties:
+        cwe:
+          type: ["string", "null"]
+          description: |
+            Cohort scope. Null when the cohort is the full platform-wide
+            distribution; otherwise the AVRI rubric family id (e.g. INJECTION).
+            When the caller passed an unknown value this is null and the
+            platform cohort is returned instead.
+        windowDays:
+          type: integer
+          description: Width of the rolling window the baseline was computed over (always 7 for v1).
+        totalReports:
+          type: integer
+          description: Number of reports in the cohort (sum of bucket counts).
+        median:
+          type: ["integer", "null"]
+          description: Median composite score for the cohort. Null when totalReports is 0.
+        bins:
+          type: array
+          description: 10-bucket histogram of composite scores in the cohort.
+          items:
+            type: object
+            properties:
+              min:
+                type: integer
+                description: Inclusive lower bound of the bucket (0-100).
+              max:
+                type: integer
+                description: Exclusive upper bound of the bucket (inclusive on the final bucket).
+              count:
+                type: integer
+                description: Number of reports whose composite score falls in this bucket.
+            required:
+              - min
+              - max
+              - count
+      required:
+        - cwe
+        - windowDays
+        - totalReports
+        - median
+        - bins
 
     SlopDistribution:
       type: object
