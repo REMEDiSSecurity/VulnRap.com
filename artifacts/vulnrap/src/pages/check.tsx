@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { UploadCloud, Shield, Loader2, CheckCircle, XCircle, Search, AlertTriangle, ClipboardPaste, Hash, Layers, Lightbulb, ShieldCheck, HelpCircle, ExternalLink, Link2, BarChart3, Target, Brain, Cpu, FileText, Eye, Gauge, AlertCircle, ChevronDown, ChevronUp, Leaf, MessageSquareWarning, Copy, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, Zap } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { UploadCloud, Shield, Loader2, CheckCircle, XCircle, Search, AlertTriangle, ClipboardPaste, Hash, Layers, Lightbulb, ShieldCheck, HelpCircle, ExternalLink, Link2, BarChart3, Target, Brain, Cpu, FileText, Eye, Gauge, AlertCircle, ChevronDown, ChevronUp, Leaf, MessageSquareWarning, Copy, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, Zap, Sliders } from "lucide-react";
 import { useCheckReport, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type CheckReportBody, type TriageAssistant, type GapItem } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -16,6 +17,14 @@ import { AnalysisStepper } from "@/components/analysis-stepper";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { STRUCTURAL_MARKER_LABELS } from "@/components/diagnostics-panel";
+import {
+  SignalMuteBoostPanel,
+  parseSignalAdjustments,
+  serializeSignalAdjustments,
+  applySignalAdjustments,
+  SIGNAL_ADJUSTMENTS_URL_PARAM,
+  type SignalAdjustments,
+} from "@/components/signal-mute-boost-panel";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
@@ -128,16 +137,89 @@ function CheckVerificationPanel({ checks, summary }: { checks: VerificationCheck
   );
 }
 
-function CheckScoreContent({ result, sensitivity, onSensitivityChange }: {
+// Task #628 — "Advanced" disclosure that hosts the per-signal mute/boost
+// panel. The task description references a *continuous sensitivity slider*
+// living in the same disclosure (built by a sibling task); this scaffold
+// is the home for both — today only the mute/boost panel is rendered.
+function AdvancedSignalControl({
+  evidence,
+  adjustments,
+  onChange,
+  baselineScore,
+}: {
+  evidence: NonNullable<CheckResultData["evidence"]>;
+  adjustments: SignalAdjustments;
+  onChange: (next: SignalAdjustments) => void;
+  baselineScore: number;
+}) {
+  const hasOverrides = Object.keys(adjustments).length > 0;
+  const [open, setOpen] = useState(hasOverrides);
+  useEffect(() => {
+    if (hasOverrides) setOpen(true);
+  }, [hasOverrides]);
+  const adjustedScore = useMemo(
+    () => applySignalAdjustments(baselineScore, evidence, adjustments),
+    [baselineScore, evidence, adjustments],
+  );
+  return (
+    <Card className="glass-card rounded-xl" data-testid="check-advanced-disclosure">
+      <CardHeader
+        className="pb-2 cursor-pointer"
+        onClick={() => setOpen((v) => !v)}
+        role="button"
+        aria-expanded={open}
+        data-testid="check-advanced-disclosure-toggle"
+      >
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Sliders className="w-4 h-4 text-primary" />
+          Advanced
+          {hasOverrides && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+              {Object.keys(adjustments).length} override{Object.keys(adjustments).length === 1 ? "" : "s"}
+            </Badge>
+          )}
+          <span className="ml-auto">
+            {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+          </span>
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Per-signal mute / boost. State is encoded in the URL — copy the link to share.
+        </CardDescription>
+      </CardHeader>
+      {open && (
+        <CardContent>
+          <SignalMuteBoostPanel
+            evidence={evidence}
+            adjustments={adjustments}
+            onChange={onChange}
+            baselineScore={baselineScore}
+            adjustedScore={adjustedScore}
+            signalLabels={EVIDENCE_TYPE_LABELS}
+          />
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+function CheckScoreContent({ result, sensitivity, onSensitivityChange, signalAdjustments }: {
   result: CheckResultData;
   sensitivity: SensitivityPreset;
   onSensitivityChange: (preset: SensitivityPreset) => void;
+  signalAdjustments: SignalAdjustments;
 }) {
   const settings = getSettings();
   const isAdj = sensitivity !== "balanced";
   const adjScore = adjustScore(result.slopScore, sensitivity, result.breakdown, result.humanIndicators);
-  const dispScore = isAdj ? adjScore : result.slopScore;
-  const dispTier = isAdj ? adjustTier(adjScore, settings.slopThresholdLow, settings.slopThresholdHigh) : result.slopTier;
+  const baseDisp = isAdj ? adjScore : result.slopScore;
+  const hasSignalOverrides = Object.keys(signalAdjustments).length > 0;
+  const dispScore = hasSignalOverrides
+    ? applySignalAdjustments(baseDisp, result.evidence, signalAdjustments)
+    : baseDisp;
+  const dispTier = (isAdj || hasSignalOverrides)
+    ? adjustTier(dispScore, settings.slopThresholdLow, settings.slopThresholdHigh)
+    : result.slopTier;
+  const showCanonical = isAdj || hasSignalOverrides;
 
   return (
     <CardContent className="flex flex-col items-center py-4">
@@ -161,9 +243,9 @@ function CheckScoreContent({ result, sensitivity, onSensitivityChange }: {
       <div className="flex items-center gap-6">
         <div className="flex flex-col items-center">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Slop</div>
-          <div className={`text-4xl font-bold font-mono ${getSlopColor(dispScore)} glow-text`}>{dispScore}</div>
+          <div className={`text-4xl font-bold font-mono ${getSlopColor(dispScore)} glow-text`} data-testid="check-slop-score">{dispScore}</div>
           <div className="mt-1 text-xs font-medium uppercase">{dispTier}</div>
-          {isAdj && (
+          {showCanonical && (
             <div className="mt-0.5 text-[10px] text-muted-foreground">
               canonical: {result.slopScore} ({result.slopTier})
             </div>
@@ -321,6 +403,30 @@ export default function Check() {
   const handleSensitivityChange = (preset: SensitivityPreset) => {
     setSensitivity(preset);
     saveSettings({ sensitivityPreset: preset });
+  };
+
+  // Task #628 — Per-signal mute/boost adjustments live entirely in the URL
+  // query string (no localStorage, no server round-trip) so a session can be
+  // shared by copying the link.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const signalAdjustments = useMemo(
+    () => parseSignalAdjustments(searchParams.get(SIGNAL_ADJUSTMENTS_URL_PARAM)),
+    [searchParams],
+  );
+  const handleSignalAdjustmentsChange = (next: SignalAdjustments) => {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        const serialized = serializeSignalAdjustments(next);
+        if (serialized) {
+          params.set(SIGNAL_ADJUSTMENTS_URL_PARAM, serialized);
+        } else {
+          params.delete(SIGNAL_ADJUSTMENTS_URL_PARAM);
+        }
+        return params;
+      },
+      { replace: true },
+    );
   };
 
   const checkMutation = useCheckReport({
@@ -659,7 +765,7 @@ export default function Check() {
                   )}
                 </CardTitle>
               </CardHeader>
-              <CheckScoreContent result={result} sensitivity={sensitivity} onSensitivityChange={handleSensitivityChange} />
+              <CheckScoreContent result={result} sensitivity={sensitivity} onSensitivityChange={handleSensitivityChange} signalAdjustments={signalAdjustments} />
             </Card>
 
             <Card className="glass-card rounded-xl">
@@ -691,6 +797,15 @@ export default function Check() {
               </CardContent>
             </Card>
           </div>
+
+          {result.evidence && result.evidence.length > 0 && (
+            <AdvancedSignalControl
+              evidence={result.evidence}
+              adjustments={signalAdjustments}
+              onChange={handleSignalAdjustmentsChange}
+              baselineScore={result.slopScore}
+            />
+          )}
 
           {result.breakdown && (
             <Card className="glass-card rounded-xl">
