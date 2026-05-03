@@ -1,4 +1,4 @@
-import { Shield, Mail, AlertTriangle, Bug, GitBranch, CheckCircle, Clock, FileText, Heart } from "lucide-react";
+import { Shield, Mail, AlertTriangle, Bug, GitBranch, CheckCircle, Clock, FileText, Heart, ShieldAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "react-router-dom";
@@ -44,6 +44,23 @@ export default function Security() {
           </div>
           <p>
             Our full disclosure policy — including scope, safe-harbor language, and response SLAs — is published in <a href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">SECURITY.md</a> at the repository root, and the machine-readable version is at <a href="/.well-known/security.txt" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-mono text-xs">/.well-known/security.txt</a> per RFC 9116.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card/40 backdrop-blur border-primary/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-primary">
+            <ShieldAlert className="w-5 h-5" />
+            Threat Model
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+          <p>
+            We publish our STRIDE-flavored threat model so you can see how we reason about the platform's security posture before you report a finding. It covers prompt injection into VulnRap, fixture poisoning, scoring oracle abuse, reviewer-token leak, and side-channel inference of stored reports.
+          </p>
+          <p>
+            Read it here: <a href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/threat_model.md" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-mono text-xs">threat_model.md</a>
           </p>
         </CardContent>
       </Card>
