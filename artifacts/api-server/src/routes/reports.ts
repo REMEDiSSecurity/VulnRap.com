@@ -7,6 +7,8 @@ import { reportsTable, reportHashesTable, similarityResultsTable, reportStatsTab
 import {
   GetReportParams,
   GetReportResponse,
+  GetScoreHistoryParams,
+  GetScoreHistoryResponse,
   GetVerificationParams,
   GetVerificationResponse,
   CheckReportResponse,
@@ -2154,6 +2156,153 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
     // rows analyzed before the column shipped.
     engineVersions: report.engineVersions ?? null,
   });
+});
+
+// Task #621 — Score evolution timeline. Returns every recorded composite
+// score for this report (the original + each backfill rescore from the
+// row's rescoreHistory audit trail), enriched with per-engine sub-scores
+// from any matching analysis trace so the UI can show "this scored 62 then
+// 58 then 71" with hover details.
+router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
+  const params = GetScoreHistoryParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [report] = await db
+    .select()
+    .from(reportsTable)
+    .where(eq(reportsTable.id, params.data.id));
+
+  if (!report) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+
+  if (!report.showInFeed) {
+    res.status(404).json({ error: "Report not found." });
+    return;
+  }
+
+  type RescoreEntry = {
+    source: "backfill-rescore";
+    mode: "engine" | "reconstruction";
+    rescoredAt: string;
+    priorCompositeScore: number;
+    priorCompositeLabel: string | null;
+    priorCorrelationId: string | null;
+    newCompositeScore: number;
+    newCompositeLabel: string;
+    newCorrelationId: string;
+  };
+
+  const stored = (report.vulnrapEngineResults ?? {}) as {
+    engines?: Array<{ engine: string; score: number; verdict?: string; confidence?: string }>;
+    rescoreHistory?: RescoreEntry[];
+  };
+
+  const rescoreHistory: RescoreEntry[] = Array.isArray(stored.rescoreHistory)
+    ? stored.rescoreHistory
+    : [];
+
+  type RawEntry = {
+    compositeScore: number;
+    label: string | null;
+    recordedAt: string;
+    correlationId: string | null;
+    source: "original" | "backfill-rescore";
+    mode: "original" | "engine" | "reconstruction";
+  };
+
+  const raw: RawEntry[] = [];
+
+  if (report.vulnrapCompositeScore != null) {
+    if (rescoreHistory.length > 0) {
+      // Earliest known score: the priorCompositeScore from the first rescore entry,
+      // recorded at report creation time (best available timestamp for the original).
+      const first = rescoreHistory[0];
+      raw.push({
+        compositeScore: first.priorCompositeScore,
+        label: first.priorCompositeLabel ?? null,
+        recordedAt: report.createdAt.toISOString(),
+        correlationId: first.priorCorrelationId,
+        source: "original",
+        mode: "original",
+      });
+      for (const entry of rescoreHistory) {
+        raw.push({
+          compositeScore: entry.newCompositeScore,
+          label: entry.newCompositeLabel ?? null,
+          recordedAt: entry.rescoredAt,
+          correlationId: entry.newCorrelationId,
+          source: "backfill-rescore",
+          mode: entry.mode,
+        });
+      }
+    } else {
+      raw.push({
+        compositeScore: report.vulnrapCompositeScore,
+        label: report.vulnrapCompositeLabel ?? null,
+        recordedAt: report.createdAt.toISOString(),
+        correlationId: report.vulnrapCorrelationId ?? null,
+        source: "original",
+        mode: "original",
+      });
+    }
+  }
+
+  // NOTE: when the score-stability-monitor task lands a dedicated
+  // `report_rescore_log` table, this handler should switch to reading from
+  // it directly (see task description for #621). Today the canonical source
+  // for the per-row audit trail is the `rescoreHistory` array on the
+  // engines blob — there is no separate log table yet.
+
+  const currentEngines = Array.isArray(stored.engines) ? stored.engines : [];
+
+  const entries = raw.map((e, idx) => {
+    const isCurrent = idx === raw.length - 1;
+    let engines: Array<{ engine: string; score: number; verdict: string | null; confidence: string | null }> | null = null;
+
+    // Only the current entry has authentic per-engine numeric sub-scores
+    // (read from vulnrap_engine_results.engines on the row). Historical
+    // analysis_traces persist enginesUsed + composite but NOT each engine's
+    // numeric score — synthesizing one would mislead reviewers, so we
+    // explicitly leave engines = null for past entries until the trace
+    // schema gains a typed per-engine field (see follow-up task #950).
+    if (isCurrent && currentEngines.length > 0) {
+      engines = currentEngines.map((eng) => ({
+        engine: eng.engine,
+        score: eng.score,
+        verdict: eng.verdict ?? null,
+        confidence: eng.confidence ?? null,
+      }));
+    }
+
+    // Code version is intentionally null until a real scoring engine version
+    // is persisted on each trace / rescore entry (see follow-up task #949).
+    // Surfacing a heuristic flag-derived label here would create the false
+    // impression of version provenance.
+    const codeVersion: string | null = null;
+
+    return {
+      compositeScore: e.compositeScore,
+      label: e.label,
+      recordedAt: e.recordedAt,
+      correlationId: e.correlationId,
+      source: e.source,
+      mode: e.mode,
+      codeVersion,
+      engines,
+    };
+  });
+
+  const response = GetScoreHistoryResponse.parse({
+    reportId: report.id,
+    entries,
+  });
+
+  res.json(response);
 });
 
 router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {

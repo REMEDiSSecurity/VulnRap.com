@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type TriageMatrixInputs, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type TriageAssistant, type ReproGuidance, type GapItem, type DontMissItem, type ReporterFeedbackItem, type LLMTriageGuidance, type ReproRecipe, type HardwareComponent } from "@workspace/api-client-react";
+import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, useGetScoreHistory, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type TriageMatrixInputs, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type TriageAssistant, type ReproGuidance, type GapItem, type DontMissItem, type ReporterFeedbackItem, type LLMTriageGuidance, type ReproRecipe, type HardwareComponent, type ScoreHistoryEntry } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -202,6 +202,204 @@ function LlmDimensionBar({ label, score }: { label: string; score: number }) {
       </div>
       <Progress value={score} className="h-1" indicatorClassName={color} />
     </div>
+  );
+}
+
+function ScoreHistoryTimeline({ reportId }: { reportId: number }) {
+  // Task #621 — Score evolution timeline. Collapsed by default; hidden
+  // entirely if there's only one entry (no rescores have happened yet).
+  const [expanded, setExpanded] = useState(false);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const { data, isLoading } = useGetScoreHistory(reportId);
+
+  if (isLoading || !data) return null;
+  const entries: ScoreHistoryEntry[] = data.entries ?? [];
+  if (entries.length < 2) return null;
+
+  const W = 600;
+  const H = 110;
+  const padX = 28;
+  const padY = 24;
+  const minScore = 0;
+  const maxScore = 100;
+  const xFor = (i: number) =>
+    entries.length === 1 ? W / 2 : padX + (i * (W - 2 * padX)) / (entries.length - 1);
+  const yFor = (s: number) =>
+    H - padY - ((s - minScore) / (maxScore - minScore)) * (H - 2 * padY);
+
+  const path = entries
+    .map((e, i) => `${i === 0 ? "M" : "L"} ${xFor(i).toFixed(1)} ${yFor(e.compositeScore).toFixed(1)}`)
+    .join(" ");
+
+  function pointColor(score: number): string {
+    if (score <= 35) return "#f87171";
+    if (score <= 50) return "#fb923c";
+    if (score <= 65) return "#facc15";
+    if (score <= 80) return "#34d399";
+    return "#4ade80";
+  }
+
+  function fmtTs(ts: string): string {
+    try {
+      return new Date(ts).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+    } catch {
+      return ts;
+    }
+  }
+
+  const hovered = hoverIdx != null ? entries[hoverIdx] : null;
+
+  return (
+    <Card className="glass-card rounded-xl" data-testid="card-score-history">
+      <CardHeader
+        className="cursor-pointer"
+        onClick={() => setExpanded((v) => !v)}
+        data-testid="header-score-history"
+      >
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <BarChart3 className="w-4 h-4 text-primary" />
+          Score history
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+            {entries.length} scores
+          </Badge>
+          <Hint text="Every recorded composite score for this report — original analysis plus each backfill rescore. Hover a point to see per-engine sub-scores and the scoring code-version label." />
+          <span className="ml-auto">
+            {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+          </span>
+        </CardTitle>
+        <CardDescription>
+          Composite score over time across {entries.length} scoring events.
+        </CardDescription>
+      </CardHeader>
+      {expanded && (
+        <CardContent className="space-y-3">
+          <div className="relative">
+            <svg
+              viewBox={`0 0 ${W} ${H}`}
+              className="w-full h-auto"
+              role="img"
+              aria-label="Score evolution timeline"
+              data-testid="svg-score-history"
+            >
+              {[0, 25, 50, 75, 100].map((g) => (
+                <line
+                  key={g}
+                  x1={padX}
+                  x2={W - padX}
+                  y1={yFor(g)}
+                  y2={yFor(g)}
+                  stroke="rgba(148,163,184,0.12)"
+                  strokeDasharray={g === 50 ? "0" : "3 3"}
+                />
+              ))}
+              {[0, 50, 100].map((g) => (
+                <text
+                  key={g}
+                  x={4}
+                  y={yFor(g) + 3}
+                  fontSize="9"
+                  fill="rgba(148,163,184,0.55)"
+                  fontFamily="monospace"
+                >
+                  {g}
+                </text>
+              ))}
+              <path d={path} fill="none" stroke="rgba(34,211,238,0.55)" strokeWidth="1.5" />
+              {entries.map((e, i) => (
+                <g
+                  key={i}
+                  onMouseEnter={() => setHoverIdx(i)}
+                  onMouseLeave={() => setHoverIdx((cur) => (cur === i ? null : cur))}
+                  onFocus={() => setHoverIdx(i)}
+                  onBlur={() => setHoverIdx((cur) => (cur === i ? null : cur))}
+                  tabIndex={0}
+                  data-testid={`point-score-history-${i}`}
+                  style={{ cursor: "pointer" }}
+                >
+                  <circle
+                    cx={xFor(i)}
+                    cy={yFor(e.compositeScore)}
+                    r={hoverIdx === i ? 6 : 4}
+                    fill={pointColor(e.compositeScore)}
+                    stroke="rgba(15,23,42,0.9)"
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x={xFor(i)}
+                    y={yFor(e.compositeScore) - 9}
+                    fontSize="9"
+                    textAnchor="middle"
+                    fill="rgba(226,232,240,0.85)"
+                    fontFamily="monospace"
+                  >
+                    {e.compositeScore}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
+          {hovered ? (
+            <div
+              className="rounded-md border border-border/40 bg-muted/10 p-3 text-xs space-y-1.5"
+              data-testid="panel-score-history-hover"
+            >
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {hovered.codeVersion && (
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-mono uppercase tracking-wide">
+                      {hovered.codeVersion}
+                    </Badge>
+                  )}
+                  <Badge
+                    variant="outline"
+                    className={`text-[9px] px-1.5 py-0 h-4 font-mono uppercase tracking-wide ${
+                      hovered.source === "original"
+                        ? "border-cyan-500/40 text-cyan-300"
+                        : "border-amber-500/40 text-amber-300"
+                    }`}
+                  >
+                    {hovered.source}
+                  </Badge>
+                  {hovered.label && (
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-mono">
+                      {hovered.label}
+                    </Badge>
+                  )}
+                </div>
+                <span className="font-mono text-muted-foreground">{fmtTs(hovered.recordedAt)}</span>
+              </div>
+              <div className="font-mono text-muted-foreground/90">
+                composite <span className="text-foreground font-bold">{hovered.compositeScore}</span>
+                {hovered.correlationId && (
+                  <>
+                    {" · "}
+                    <span className="text-muted-foreground/70">{hovered.correlationId}</span>
+                  </>
+                )}
+              </div>
+              {hovered.engines && hovered.engines.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1">
+                  {hovered.engines.map((eng, i) => (
+                    <div
+                      key={`${eng.engine}-${i}`}
+                      className="rounded border border-border/30 bg-background/40 px-2 py-1 flex items-center justify-between"
+                      data-testid={`engine-score-history-${i}`}
+                    >
+                      <span className="text-muted-foreground truncate">{eng.engine}</span>
+                      <span className="font-mono font-bold">{eng.score}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-muted-foreground/60 italic">No per-engine data on file for this scoring event.</div>
+              )}
+            </div>
+          ) : (
+            <div className="text-[11px] text-muted-foreground italic">Hover a point to see engine sub-scores.</div>
+          )}
+        </CardContent>
+      )}
+    </Card>
   );
 }
 
@@ -1787,6 +1985,8 @@ export default function Results() {
           </CardContent>
         </Card>
       )}
+
+      {vulnrap && <ScoreHistoryTimeline reportId={report.id} />}
 
       {vulnrap && (
         <DiagnosticsPanel

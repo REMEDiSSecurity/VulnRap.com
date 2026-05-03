@@ -13,6 +13,68 @@ export interface ErrorResponse {
   error: string;
 }
 
+/**
+ * Where this entry came from. `original` = first analysis; `backfill-rescore` = a bulk rescore overwrote the row.
+ */
+export type ScoreHistoryEntrySource =
+  (typeof ScoreHistoryEntrySource)[keyof typeof ScoreHistoryEntrySource];
+
+export const ScoreHistoryEntrySource = {
+  original: "original",
+  "backfill-rescore": "backfill-rescore",
+} as const;
+
+/**
+ * For rescore entries, which branch produced the new score (live engine re-run vs. reconstruction from cached signals). Always `original` for the first entry.
+ */
+export type ScoreHistoryEntryMode =
+  (typeof ScoreHistoryEntryMode)[keyof typeof ScoreHistoryEntryMode];
+
+export const ScoreHistoryEntryMode = {
+  original: "original",
+  engine: "engine",
+  reconstruction: "reconstruction",
+} as const;
+
+export type ScoreHistoryEntryEnginesItem = {
+  engine: string;
+  score: number;
+  verdict?: string | null;
+  confidence?: string | null;
+};
+
+/**
+ * One scoring event in a report's evolution timeline. The first entry is
+the original analysis; subsequent entries each correspond to a
+backfill rescore that rewrote the composite (drawn from the row's
+rescoreHistory audit trail).
+
+ */
+export interface ScoreHistoryEntry {
+  /** Composite score 0-100 captured at this point in time. */
+  compositeScore: number;
+  /** Composite tier label captured at this point in time. Null for very old rows that pre-date the label column. */
+  label?: string | null;
+  /** ISO timestamp of when this score was recorded (report.createdAt for the original entry; rescoredAt for rescore entries). */
+  recordedAt: string;
+  /** Correlation id of the analysis trace that produced this score, if any. Reconstruction-mode rescores use a `recon-…` prefix. */
+  correlationId?: string | null;
+  /** Where this entry came from. `original` = first analysis; `backfill-rescore` = a bulk rescore overwrote the row. */
+  source: ScoreHistoryEntrySource;
+  /** For rescore entries, which branch produced the new score (live engine re-run vs. reconstruction from cached signals). Always `original` for the first entry. */
+  mode: ScoreHistoryEntryMode;
+  /** Best-effort scoring code-version label derived from the trace's feature flags (e.g. "AVRI", "Legacy"). Null when no matching trace is on file. */
+  codeVersion?: string | null;
+  /** Per-engine sub-scores captured at this point. Sourced from the engines blob for the current entry, or from the matching analysis trace for past entries. Null when no per-engine data is available for that scoring event. */
+  engines?: ScoreHistoryEntryEnginesItem[] | null;
+}
+
+export interface ScoreHistoryResponse {
+  reportId: number;
+  /** Chronological (oldest-first) list of every recorded composite score for this report. Empty when no vulnrap composite has been computed yet. */
+  entries: ScoreHistoryEntry[];
+}
+
 export type SimilarityMatchMatchType =
   (typeof SimilarityMatchMatchType)[keyof typeof SimilarityMatchMatchType];
 

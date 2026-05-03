@@ -227,6 +227,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /reports/{id}/score-history:
+    get:
+      operationId: getScoreHistory
+      tags: [reports]
+      summary: Get the chronological score evolution timeline for a report
+      description: |
+        Returns every recorded composite score for this report — the original
+        analysis plus each subsequent backfill rescore. Each entry carries the
+        composite score + tier + timestamp + correlation id. Per-engine
+        sub-scores are included only for the current scoring event (where
+        authentic engine numbers are persisted on the row); past entries
+        return `engines: null` because today's analysis_traces schema does
+        not persist per-engine numeric scores. `codeVersion` is reserved for
+        a future scorer-version field and is currently always null. When the
+        score-stability-monitor task lands a dedicated `report_rescore_log`
+        table this endpoint will switch to reading from it; today the
+        canonical per-row audit trail is the `rescoreHistory` array on the
+        engines blob. Hidden from the UI when only a single entry exists
+        (no rescores have happened) so fresh reports stay quiet.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Score history timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreHistoryResponse"
+        "404":
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /reports/{id}/triage-report:
     get:
       operationId: getTriageReport
@@ -1516,6 +1555,81 @@ components:
           type: string
       required:
         - error
+
+    ScoreHistoryEntry:
+      type: object
+      description: |
+        One scoring event in a report's evolution timeline. The first entry is
+        the original analysis; subsequent entries each correspond to a
+        backfill rescore that rewrote the composite (drawn from the row's
+        rescoreHistory audit trail).
+      properties:
+        compositeScore:
+          type: integer
+          description: Composite score 0-100 captured at this point in time.
+        label:
+          type: string
+          nullable: true
+          description: Composite tier label captured at this point in time. Null for very old rows that pre-date the label column.
+        recordedAt:
+          type: string
+          format: date-time
+          description: ISO timestamp of when this score was recorded (report.createdAt for the original entry; rescoredAt for rescore entries).
+        correlationId:
+          type: string
+          nullable: true
+          description: Correlation id of the analysis trace that produced this score, if any. Reconstruction-mode rescores use a `recon-…` prefix.
+        source:
+          type: string
+          enum: [original, backfill-rescore]
+          description: Where this entry came from. `original` = first analysis; `backfill-rescore` = a bulk rescore overwrote the row.
+        mode:
+          type: string
+          enum: [original, engine, reconstruction]
+          description: For rescore entries, which branch produced the new score (live engine re-run vs. reconstruction from cached signals). Always `original` for the first entry.
+        codeVersion:
+          type: string
+          nullable: true
+          description: Best-effort scoring code-version label derived from the trace's feature flags (e.g. "AVRI", "Legacy"). Null when no matching trace is on file.
+        engines:
+          type: array
+          nullable: true
+          description: Per-engine sub-scores captured at this point. Sourced from the engines blob for the current entry, or from the matching analysis trace for past entries. Null when no per-engine data is available for that scoring event.
+          items:
+            type: object
+            properties:
+              engine:
+                type: string
+              score:
+                type: integer
+              verdict:
+                type: string
+                nullable: true
+              confidence:
+                type: string
+                nullable: true
+            required:
+              - engine
+              - score
+      required:
+        - compositeScore
+        - recordedAt
+        - source
+        - mode
+
+    ScoreHistoryResponse:
+      type: object
+      properties:
+        reportId:
+          type: integer
+        entries:
+          type: array
+          description: Chronological (oldest-first) list of every recorded composite score for this report. Empty when no vulnrap composite has been computed yet.
+          items:
+            $ref: "#/components/schemas/ScoreHistoryEntry"
+      required:
+        - reportId
+        - entries
 
     SimilarityMatch:
       type: object

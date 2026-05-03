@@ -1255,6 +1255,92 @@ export const CompareReportsResponse = zod.object({
 });
 
 /**
+ * Returns every recorded composite score for this report — the original
+analysis plus each subsequent backfill rescore. Each entry carries the
+composite score + tier + timestamp + correlation id. Per-engine
+sub-scores are included only for the current scoring event (where
+authentic engine numbers are persisted on the row); past entries
+return `engines: null` because today's analysis_traces schema does
+not persist per-engine numeric scores. `codeVersion` is reserved for
+a future scorer-version field and is currently always null. When the
+score-stability-monitor task lands a dedicated `report_rescore_log`
+table this endpoint will switch to reading from it; today the
+canonical per-row audit trail is the `rescoreHistory` array on the
+engines blob. Hidden from the UI when only a single entry exists
+(no rescores have happened) so fresh reports stay quiet.
+
+ * @summary Get the chronological score evolution timeline for a report
+ */
+export const GetScoreHistoryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetScoreHistoryResponse = zod.object({
+  reportId: zod.number(),
+  entries: zod
+    .array(
+      zod
+        .object({
+          compositeScore: zod
+            .number()
+            .describe("Composite score 0-100 captured at this point in time."),
+          label: zod
+            .string()
+            .nullish()
+            .describe(
+              "Composite tier label captured at this point in time. Null for very old rows that pre-date the label column.",
+            ),
+          recordedAt: zod.coerce
+            .date()
+            .describe(
+              "ISO timestamp of when this score was recorded (report.createdAt for the original entry; rescoredAt for rescore entries).",
+            ),
+          correlationId: zod
+            .string()
+            .nullish()
+            .describe(
+              "Correlation id of the analysis trace that produced this score, if any. Reconstruction-mode rescores use a `recon-…` prefix.",
+            ),
+          source: zod
+            .enum(["original", "backfill-rescore"])
+            .describe(
+              "Where this entry came from. `original` = first analysis; `backfill-rescore` = a bulk rescore overwrote the row.",
+            ),
+          mode: zod
+            .enum(["original", "engine", "reconstruction"])
+            .describe(
+              "For rescore entries, which branch produced the new score (live engine re-run vs. reconstruction from cached signals). Always `original` for the first entry.",
+            ),
+          codeVersion: zod
+            .string()
+            .nullish()
+            .describe(
+              'Best-effort scoring code-version label derived from the trace\'s feature flags (e.g. \"AVRI\", \"Legacy\"). Null when no matching trace is on file.',
+            ),
+          engines: zod
+            .array(
+              zod.object({
+                engine: zod.string(),
+                score: zod.number(),
+                verdict: zod.string().nullish(),
+                confidence: zod.string().nullish(),
+              }),
+            )
+            .nullish()
+            .describe(
+              "Per-engine sub-scores captured at this point. Sourced from the engines blob for the current entry, or from the matching analysis trace for past entries. Null when no per-engine data is available for that scoring event.",
+            ),
+        })
+        .describe(
+          "One scoring event in a report's evolution timeline. The first entry is\nthe original analysis; subsequent entries each correspond to a\nbackfill rescore that rewrote the composite (drawn from the row's\nrescoreHistory audit trail).\n",
+        ),
+    )
+    .describe(
+      "Chronological (oldest-first) list of every recorded composite score for this report. Empty when no vulnrap composite has been computed yet.",
+    ),
+});
+
+/**
  * Returns a formatted markdown summary with score, verification results, evidence, recommendation, and challenge questions — ready to paste into Jira/ServiceNow
  * @summary Get exportable markdown triage report
  */

@@ -74,6 +74,7 @@ import type {
   ReportAnalysis,
   ReportComparison,
   ReportFeed,
+  ScoreHistoryResponse,
   ScoreStabilitySchedulerStatus,
   ScoreStabilitySummary,
   ScoringConfigResponse,
@@ -624,6 +625,107 @@ export function useCompareReports<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getCompareReportsQueryOptions(id, matchId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns every recorded composite score for this report — the original
+analysis plus each subsequent backfill rescore. Each entry carries the
+composite score + tier + timestamp + correlation id. Per-engine
+sub-scores are included only for the current scoring event (where
+authentic engine numbers are persisted on the row); past entries
+return `engines: null` because today's analysis_traces schema does
+not persist per-engine numeric scores. `codeVersion` is reserved for
+a future scorer-version field and is currently always null. When the
+score-stability-monitor task lands a dedicated `report_rescore_log`
+table this endpoint will switch to reading from it; today the
+canonical per-row audit trail is the `rescoreHistory` array on the
+engines blob. Hidden from the UI when only a single entry exists
+(no rescores have happened) so fresh reports stay quiet.
+
+ * @summary Get the chronological score evolution timeline for a report
+ */
+export const getGetScoreHistoryUrl = (id: number) => {
+  return `/api/reports/${id}/score-history`;
+};
+
+export const getScoreHistory = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ScoreHistoryResponse> => {
+  return customFetch<ScoreHistoryResponse>(getGetScoreHistoryUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetScoreHistoryQueryKey = (id: number) => {
+  return [`/api/reports/${id}/score-history`] as const;
+};
+
+export const getGetScoreHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScoreHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getScoreHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetScoreHistoryQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getScoreHistory>>> = ({
+    signal,
+  }) => getScoreHistory(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScoreHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScoreHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScoreHistory>>
+>;
+export type GetScoreHistoryQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get the chronological score evolution timeline for a report
+ */
+
+export function useGetScoreHistory<
+  TData = Awaited<ReturnType<typeof getScoreHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getScoreHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScoreHistoryQueryOptions(id, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
