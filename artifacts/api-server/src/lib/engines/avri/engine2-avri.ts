@@ -134,6 +134,7 @@ export type AvriEngine2Detail = AvriEngine2Block & {
   family: string;
   familyName: string;
   baseScore: number;
+  goldHitCount: number;
   goldHits: AvriEngine2GoldSignal[];
   absencePenalties: AvriEngine2AbsencePenalty[];
   contradictions: string[];
@@ -147,7 +148,6 @@ export type AvriEngine2Detail = AvriEngine2Block & {
 export interface AvriEngine2Result {
   engine: EngineResult;
   detail: AvriEngine2Detail;
-  goldHitCount: number;
 }
 
 /**
@@ -296,7 +296,6 @@ export function runEngine2Avri(
             ? `AVRI ${family.displayName}: ${flatNoteParts.join(", ")} applied to legacy substance ${legacy.score} → ${adjusted}.`
             : legacy.note,
       },
-      goldHitCount: 0,
       detail: flatAvriBreakdown,
     };
   }
@@ -985,7 +984,6 @@ export function runEngine2Avri(
   // differently-spelled fields to keep in sync.
   return {
     engine,
-    goldHitCount: goldHits.length,
     detail: avriBlock,
   };
 }

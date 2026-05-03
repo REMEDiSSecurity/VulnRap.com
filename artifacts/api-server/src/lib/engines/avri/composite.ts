@@ -106,7 +106,7 @@ export function runAvriComposite(
   // Family-no-gold + off-family overrides.
   if (
     family.id !== "FLAT" &&
-    e2.goldHitCount === 0 &&
+    e2.detail.goldHitCount === 0 &&
     e3.detail.goldHitCount === 0
   ) {
     newOverrides.push(
@@ -180,7 +180,7 @@ export function runAvriComposite(
         evidence: classification.evidence,
         technology: classification.technology,
       },
-      goldHitCount: e2.goldHitCount,
+      goldHitCount: e2.detail.goldHitCount,
       velocityPenalty,
       templatePenalty,
       rawCompositeBeforeBehavioralPenalties: baseComposite.overallScore,
