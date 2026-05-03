@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { addHistoryEntry } from "@/lib/history";
 import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCustom, adjustScore, adjustTier, SENSITIVITY_PRESETS, type SensitivityPreset } from "@/lib/settings";
 import { AnalysisStepper } from "@/components/analysis-stepper";
+import { CustomRedactionPanel } from "@/components/custom-redaction-panel";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { STRUCTURAL_MARKER_LABELS } from "@/components/diagnostics-panel";
@@ -691,6 +692,12 @@ export default function Check() {
                 </p>
               </div>
             )}
+          </div>
+          <div className="px-4 sm:px-6 pb-2">
+            <CustomRedactionPanel
+              text={inputMode === "text" ? rawText : ""}
+              redactionDisabled={skipRedaction}
+            />
           </div>
         </CardContent>
         <CardFooter>
