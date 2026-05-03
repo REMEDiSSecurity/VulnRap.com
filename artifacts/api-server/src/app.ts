@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 import router from "./routes";
 import blogRouter from "./routes/blog";
 import sitemapRouter from "./routes/sitemap";
+import changelogFeedRouter from "./routes/changelog-feed";
 import { logger } from "./lib/logger";
 import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
 
@@ -235,6 +236,11 @@ app.use(blogRouter);
 // frontend below so the dynamic handler wins over any stale on-disk
 // `sitemap.xml` shipped in the SPA's public/ directory.
 app.use(sitemapRouter);
+
+// Task #711 — Public Atom feed for the changelog. Mounted at the app root
+// (not under /api) so the public URL is /changelog/feed.xml, matching the
+// auto-discovery <link rel="alternate"> injected into the changelog page.
+app.use(changelogFeedRouter);
 
 app.use("/api", router);
 

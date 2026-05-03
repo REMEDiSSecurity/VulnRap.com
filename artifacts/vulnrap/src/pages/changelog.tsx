@@ -1188,6 +1188,22 @@ export default function Changelog() {
     }
   }, []);
 
+  // Task #711 — Inject an Atom auto-discovery <link> into <head> so RSS
+  // readers landing on /changelog can subscribe with one click. Cleaned up
+  // on unmount so navigating away doesn't leak the tag onto other pages.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const link = document.createElement("link");
+    link.rel = "alternate";
+    link.type = "application/atom+xml";
+    link.title = "VulnRap Changelog";
+    link.href = "/changelog/feed.xml";
+    document.head.appendChild(link);
+    return () => {
+      document.head.removeChild(link);
+    };
+  }, []);
+
   return (
     <div className="max-w-3xl mx-auto space-y-8 py-4">
       <div className="space-y-2">
