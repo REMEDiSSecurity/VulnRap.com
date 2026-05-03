@@ -182,10 +182,14 @@ export function AbPresetComparison({
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
-              <label className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1 block">
+              <label
+                htmlFor="ab-preset-a"
+                className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1 block"
+              >
                 Preset A
               </label>
               <select
+                id="ab-preset-a"
                 value={presetA}
                 onChange={(e) =>
                   setPresetA(e.target.value as SensitivityPreset)
@@ -201,10 +205,14 @@ export function AbPresetComparison({
               </select>
             </div>
             <div className="flex-1">
-              <label className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1 block">
+              <label
+                htmlFor="ab-preset-b"
+                className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1 block"
+              >
                 Preset B
               </label>
               <select
+                id="ab-preset-b"
                 value={presetB}
                 onChange={(e) =>
                   setPresetB(e.target.value as SensitivityPreset)

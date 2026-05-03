@@ -174,12 +174,15 @@ export default function FeedbackForm({ reportId }: { reportId?: number }) {
               <button
                 key={star}
                 type="button"
-                className="p-1 transition-transform hover:scale-110 focus:outline-none"
+                className="p-1 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                 onMouseEnter={() => setHoveredStar(star)}
                 onMouseLeave={() => setHoveredStar(0)}
                 onClick={() => setRating(star)}
+                aria-label={`Rate ${star} out of 5 stars`}
+                aria-pressed={rating === star}
               >
                 <Star
+                  aria-hidden="true"
                   className={`w-7 h-7 transition-colors ${
                     star <= (hoveredStar || rating)
                       ? "text-yellow-400 fill-yellow-400"

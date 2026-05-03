@@ -33,6 +33,8 @@ We chose to build VulnRap on [Replit](https://replit.com) because we already had
 
 **[vulnrap.com](https://vulnrap.com)** — free to use, no signup required.
 
+We target [WCAG 2.1 AA](docs/accessibility.md) on the public web frontend, with automated checks (jsx-a11y, vitest+axe, Playwright+axe) wired into CI. Contributors and end-users can read the full statement in [docs/accessibility.md](docs/accessibility.md).
+
 ## Stack
 
 | Layer         | Technology                                          |

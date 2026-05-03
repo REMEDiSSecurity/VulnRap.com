@@ -54,7 +54,7 @@ The same `tsc --build` step also runs as part of `postinstall` and inside `scrip
 - Improving the sloppiness detection heuristics (`artifacts/api-server/src/lib/sloppiness.ts`)
 - Adding new redaction patterns (`artifacts/api-server/src/lib/redactor.ts`)
 - Better section parsing for non-markdown report formats (`artifacts/api-server/src/lib/section-parser.ts`)
-- Accessibility improvements across the frontend
+- Accessibility improvements across the frontend (target: WCAG 2.1 AA — see [docs/accessibility.md](docs/accessibility.md) for the running coverage and known gaps)
 - Internationalization / localization
 - Additional test coverage
 

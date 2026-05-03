@@ -74,7 +74,7 @@ export function SettingsButton() {
       <div className="space-y-3">
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium">
+            <label htmlFor="settings-slop-low" className="text-xs font-medium">
               Slop Score — <span className="text-green-500">Clean</span>{" "}
               threshold
             </label>
@@ -83,6 +83,7 @@ export function SettingsButton() {
             </span>
           </div>
           <input
+            id="settings-slop-low"
             type="range"
             min={0}
             max={100}
@@ -101,7 +102,7 @@ export function SettingsButton() {
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium">
+            <label htmlFor="settings-slop-high" className="text-xs font-medium">
               Slop Score — <span className="text-destructive">Danger</span>{" "}
               threshold
             </label>
@@ -110,6 +111,7 @@ export function SettingsButton() {
             </span>
           </div>
           <input
+            id="settings-slop-high"
             type="range"
             min={0}
             max={100}
@@ -130,7 +132,7 @@ export function SettingsButton() {
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium">
+            <label htmlFor="settings-similarity" className="text-xs font-medium">
               Similarity — <span className="text-destructive">Duplicate</span>{" "}
               threshold
             </label>
@@ -139,6 +141,7 @@ export function SettingsButton() {
             </span>
           </div>
           <input
+            id="settings-similarity"
             type="range"
             min={0}
             max={100}

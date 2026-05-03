@@ -89,6 +89,7 @@ export function TriageEngineCard({ engine: eng }: TriageEngineCardProps) {
         value={eng.score}
         className="h-1.5"
         indicatorClassName={VULNRAP_VERDICT_COLOR[eng.verdict] || "bg-muted"}
+        aria-label={`${eng.engine} engine score: ${eng.score} out of 100, verdict ${eng.verdict}`}
       />
       {eng.note && (
         <p

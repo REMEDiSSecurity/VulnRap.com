@@ -237,6 +237,7 @@ export function QualityPreviewSidebar({ text, className, compact }: Props) {
               value={empty ? 0 : preview.estimatedScore}
               className="h-1.5 mt-1"
               indicatorClassName={scoreBar(preview.estimatedScore)}
+              aria-label="Estimated report quality score"
             />
             <div className="text-[10px] text-muted-foreground mt-1">
               {empty
