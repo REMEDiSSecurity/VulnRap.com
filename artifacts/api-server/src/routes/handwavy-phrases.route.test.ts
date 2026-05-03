@@ -2880,6 +2880,101 @@ describe("/feedback/calibration/handwavy-phrases", () => {
       expect(afterUndo.body.cacheHit).toBe(false);
     });
 
+    // Task #501 — sibling server-side cache for the BULK dry-run path.
+    // Mirrors the single-phrase cases above: a hit on identical input,
+    // and an invalidation when the active list changes via a real
+    // mutation. Uses phrases NOT on the active list so the production
+    // scan is skipped (no DB dependency); the cache hit/miss signal
+    // and the active-list-version key are still exercised end-to-end.
+    describe("bulk dry-run cache", () => {
+      interface BulkDryRunCacheBody {
+        dryRun: boolean;
+        batch: boolean;
+        cacheHit: boolean;
+        cachedAt?: string;
+        wouldRemove: number;
+        notFound: number;
+        duplicateInBatch: number;
+        results: Array<{ phrase: string; removed: boolean; reason?: string }>;
+        dryRunImpact: {
+          productionLimit: number;
+          productionError: string | null;
+          production: { total: number } | null;
+        };
+        phrases: Marker[];
+      }
+
+      it("first bulk request is a cache miss; an identical second request hits the cache", async () => {
+        const phrases = [
+          "never-registered-bulk-cache-a",
+          "never-registered-bulk-cache-b",
+        ];
+        const first = await request<BulkDryRunCacheBody>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrases, dryRun: true },
+        );
+        expect(first.status).toBe(200);
+        expect(first.body.batch).toBe(true);
+        expect(first.body.cacheHit).toBe(false);
+        expect(first.body.wouldRemove).toBe(0);
+        expect(first.body.notFound).toBe(2);
+        expect(first.body.dryRunImpact.productionLimit).toBe(2000);
+
+        // Same SET of phrases (different order) should also hit — the
+        // cache key is order-insensitive.
+        const second = await request<BulkDryRunCacheBody>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrases: [phrases[1], phrases[0]], dryRun: true },
+        );
+        expect(second.status).toBe(200);
+        expect(second.body.cacheHit).toBe(true);
+        expect(typeof second.body.cachedAt).toBe("string");
+        expect(second.body.wouldRemove).toBe(first.body.wouldRemove);
+        expect(second.body.notFound).toBe(first.body.notFound);
+        expect(second.body.duplicateInBatch).toBe(first.body.duplicateInBatch);
+        expect(second.body.dryRunImpact.productionLimit).toBe(
+          first.body.dryRunImpact.productionLimit,
+        );
+      });
+
+      it("a real POST add invalidates the cached bulk preview", async () => {
+        const phrases = [
+          "never-registered-bulk-cache-c",
+          "never-registered-bulk-cache-d",
+        ];
+        const seed = await request<BulkDryRunCacheBody>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrases, dryRun: true },
+        );
+        expect(seed.body.cacheHit).toBe(false);
+        const warm = await request<BulkDryRunCacheBody>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrases, dryRun: true },
+        );
+        expect(warm.body.cacheHit).toBe(true);
+
+        const post = await request<{ added: boolean }>(
+          "POST",
+          "/feedback/calibration/handwavy-phrases",
+          { phrase: "bulk-cache-invalidation-add" },
+        );
+        expect(post.status).toBe(201);
+
+        // The active list version changed, so the prior cached preview
+        // must be unreachable.
+        const afterAdd = await request<BulkDryRunCacheBody>(
+          "DELETE",
+          "/feedback/calibration/handwavy-phrases",
+          { phrases, dryRun: true },
+        );
+        expect(afterAdd.body.cacheHit).toBe(false);
+      });
+    });
+
     it("returns the same response on repeated cache hits — the cache is read-only", async () => {
       const phrase = "never-registered-cache-test-stable";
       const first = await request<DryRunCacheBody>(
