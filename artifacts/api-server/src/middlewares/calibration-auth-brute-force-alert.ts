@@ -183,10 +183,17 @@ interface PersistedIpRecord {
 interface PersistedState {
   _meta?: unknown;
   perIp: PersistedIpRecord[];
+  /**
+   * Bounded ring of dispatched alerts (oldest-first, matching the
+   * in-memory buffer layout) so the calibration UI's "Recent
+   * calibration auth alerts" panel survives an api-server restart.
+   * Capped at `RECENT_ALERTS_BUFFER_SIZE` entries — oldest drop first.
+   */
+  recentAlerts?: RecentBruteForceAlert[];
 }
 
 const PERSIST_META =
-  "Persisted per-IP cooldown state for the calibration-auth brute-force alerter. Each entry records the last time an alert was dispatched for this IP so a process restart inside the cooldown window does not re-page the on-call. Capped at 256 entries (oldest dropped first). Override the location via CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH; safe to delete or truncate to clear cooldown state.";
+  "Persisted state for the calibration-auth brute-force alerter. `perIp` records the last time an alert was dispatched for each IP so a process restart inside the cooldown window does not re-page the on-call (capped at 256 entries, oldest dropped first). `recentAlerts` mirrors the in-process ring buffer that backs the calibration UI's 'Recent calibration auth alerts' panel so reviewers keep recent forensic context across restarts (capped at 50 entries, oldest dropped first). Override the location via CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH; safe to delete or truncate to clear all state.";
 
 function isPersistedIpRecord(value: unknown): value is PersistedIpRecord {
   if (value === null || typeof value !== "object") return false;
@@ -199,26 +206,101 @@ function isPersistedIpRecord(value: unknown): value is PersistedIpRecord {
   );
 }
 
-function readPersistedState(filePath: string): PersistedIpRecord[] {
-  if (!existsSync(filePath)) return [];
+interface ReadPersistedResult {
+  perIp: PersistedIpRecord[];
+  recentAlerts: RecentBruteForceAlert[];
+}
+
+function isRecentBruteForceAlert(value: unknown): value is RecentBruteForceAlert {
+  if (value === null || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (
+    typeof v.detectedAt !== "string" ||
+    typeof v.ip !== "string" ||
+    v.ip.length === 0 ||
+    typeof v.windowMs !== "number" ||
+    !Number.isFinite(v.windowMs) ||
+    typeof v.threshold !== "number" ||
+    !Number.isFinite(v.threshold) ||
+    typeof v.wrongTokenCount !== "number" ||
+    !Number.isFinite(v.wrongTokenCount) ||
+    typeof v.firstSeenAt !== "string" ||
+    typeof v.lastSeenAt !== "string" ||
+    typeof v.lastRoute !== "string" ||
+    typeof v.lastMethod !== "string" ||
+    typeof v.runbookUrl !== "string"
+  ) {
+    return false;
+  }
+  const byStatus = v.rejectionsByStatus as
+    | { "401"?: unknown; "429"?: unknown }
+    | null
+    | undefined;
+  if (
+    byStatus === null ||
+    typeof byStatus !== "object" ||
+    typeof byStatus["401"] !== "number" ||
+    typeof byStatus["429"] !== "number"
+  ) {
+    return false;
+  }
+  const byGate = v.rejectionsByGate as
+    | { mutation?: unknown; "strict-read"?: unknown }
+    | null
+    | undefined;
+  if (
+    byGate === null ||
+    typeof byGate !== "object" ||
+    typeof byGate.mutation !== "number" ||
+    typeof byGate["strict-read"] !== "number"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function readPersistedState(filePath: string): ReadPersistedResult {
+  if (!existsSync(filePath)) return { perIp: [], recentAlerts: [] };
   try {
     const raw = readFileSync(filePath, "utf8");
-    if (raw.trim().length === 0) return [];
+    if (raw.trim().length === 0) return { perIp: [], recentAlerts: [] };
     const parsed = JSON.parse(raw) as Partial<PersistedState>;
-    const list = Array.isArray(parsed.perIp) ? parsed.perIp : [];
-    const cleaned: PersistedIpRecord[] = [];
-    for (const entry of list) {
+    const ipList = Array.isArray(parsed.perIp) ? parsed.perIp : [];
+    const cleanedIps: PersistedIpRecord[] = [];
+    for (const entry of ipList) {
       if (isPersistedIpRecord(entry)) {
-        cleaned.push({ ip: entry.ip, lastAlertedAt: entry.lastAlertedAt });
+        cleanedIps.push({ ip: entry.ip, lastAlertedAt: entry.lastAlertedAt });
       }
     }
-    return cleaned;
+    const alertList = Array.isArray(parsed.recentAlerts)
+      ? parsed.recentAlerts
+      : [];
+    const cleanedAlerts: RecentBruteForceAlert[] = [];
+    for (const entry of alertList) {
+      if (isRecentBruteForceAlert(entry)) {
+        cleanedAlerts.push({
+          detectedAt: entry.detectedAt,
+          ip: entry.ip,
+          windowMs: entry.windowMs,
+          threshold: entry.threshold,
+          wrongTokenCount: entry.wrongTokenCount,
+          rejectionsByStatus: { ...entry.rejectionsByStatus },
+          rejectionsByGate: { ...entry.rejectionsByGate },
+          firstSeenAt: entry.firstSeenAt,
+          lastSeenAt: entry.lastSeenAt,
+          lastRoute: entry.lastRoute,
+          lastMethod: entry.lastMethod,
+          runbookUrl: entry.runbookUrl,
+        });
+      }
+    }
+    return { perIp: cleanedIps, recentAlerts: cleanedAlerts };
   } catch (err) {
     logger.warn(
       { err, path: filePath },
-      "calibration auth: failed to read persisted brute-force cooldown state; starting from empty",
+      "calibration auth: failed to read persisted brute-force state; starting from empty",
     );
-    return [];
+    return { perIp: [], recentAlerts: [] };
   }
 }
 
@@ -226,6 +308,7 @@ function writePersistedState(
   filePath: string,
   records: PersistedIpRecord[],
   limit: number,
+  recentAlerts: RecentBruteForceAlert[],
 ): void {
   const dir = path.dirname(filePath);
   if (!existsSync(dir)) {
@@ -236,9 +319,17 @@ function writePersistedState(
   const trimmed = [...records]
     .sort((a, b) => b.lastAlertedAt - a.lastAlertedAt)
     .slice(0, limit);
+  // Bound the persisted alert ring to the in-memory buffer size; if the
+  // caller passes a longer list (it shouldn't, but be defensive), keep
+  // the freshest entries by dropping from the head (oldest end).
+  const trimmedAlerts =
+    recentAlerts.length > RECENT_ALERTS_BUFFER_SIZE
+      ? recentAlerts.slice(recentAlerts.length - RECENT_ALERTS_BUFFER_SIZE)
+      : recentAlerts;
   const payload: PersistedState = {
     _meta: PERSIST_META,
     perIp: trimmed,
+    recentAlerts: trimmedAlerts,
   };
   const serialized = JSON.stringify(payload, null, 2) + "\n";
 
@@ -479,17 +570,30 @@ export function createBruteForceAlerter(
     // recency: the most-recently alerted IP is the most-recently
     // touched, which keeps the LRU eviction in `evictOldestIfFull`
     // consistent with what we wrote out.
-    persisted.sort((a, b) => a.lastAlertedAt - b.lastAlertedAt);
-    for (const rec of persisted) {
+    persisted.perIp.sort((a, b) => a.lastAlertedAt - b.lastAlertedAt);
+    for (const rec of persisted.perIp) {
       if (perIp.size >= maxTrackedIps) {
         const oldestKey = perIp.keys().next().value;
         if (oldestKey !== undefined) perIp.delete(oldestKey);
       }
       perIp.set(rec.ip, { events: [], lastAlertedAt: rec.lastAlertedAt });
     }
+    // Hydrate the recent-alerts ring buffer so the calibration UI's
+    // panel survives an api-server restart. The persisted list is
+    // already oldest-first (matches the in-memory layout); cap it at
+    // the buffer size in case an older file overflows the current cap.
+    const hydratedAlerts =
+      persisted.recentAlerts.length > RECENT_ALERTS_BUFFER_SIZE
+        ? persisted.recentAlerts.slice(
+            persisted.recentAlerts.length - RECENT_ALERTS_BUFFER_SIZE,
+          )
+        : persisted.recentAlerts;
+    for (const entry of hydratedAlerts) {
+      recentAlertsBuffer.push(entry);
+    }
   }
 
-  function persistCooldownState(): void {
+  function persistState(): void {
     if (statePath === null) return;
     const records: PersistedIpRecord[] = [];
     for (const [ip, state] of perIp) {
@@ -498,15 +602,20 @@ export function createBruteForceAlerter(
       }
     }
     try {
-      writePersistedState(statePath, records, persistHistoryLimit);
+      writePersistedState(
+        statePath,
+        records,
+        persistHistoryLimit,
+        recentAlertsBuffer,
+      );
     } catch (err) {
       // A failure to persist must not crash the request that triggered
       // the alert — we still alerted in-memory and via the dispatcher,
-      // so degraded operation here just means the cooldown won't
-      // survive a restart this one time.
+      // so degraded operation here just means the cooldown / recent-
+      // alerts panel won't survive a restart this one time.
       logger.warn(
         { err, path: statePath },
-        "calibration auth: failed to persist brute-force cooldown state (cooldown will not survive a restart for this alert)",
+        "calibration auth: failed to persist brute-force state (cooldown and recent-alerts buffer will not survive a restart for this alert)",
       );
     }
   }
@@ -543,16 +652,21 @@ export function createBruteForceAlerter(
     const cfg = { windowMs, threshold, runbookUrl };
     const payload = buildPayload(ip, state, cfg, t);
     state.lastAlertedAt = t;
-    // Persist the bumped cooldown timestamp BEFORE we await the webhook
-    // dispatch so a crash mid-dispatch still leaves the cooldown intact
-    // and a fast restart doesn't immediately re-page the on-call.
-    persistCooldownState();
     // Always retain the alert in the in-process ring buffer, regardless
     // of whether a webhook is configured or whether dispatch later
     // succeeds. The point of the buffer is to give reviewers a "what
     // just tripped?" view from the calibration UI even on installs that
-    // never set CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL.
+    // never set CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL. Push BEFORE
+    // we persist so this alert lands in the on-disk recent-alerts ring
+    // alongside the bumped cooldown timestamp.
     pushRecentAlert(payload);
+    // Persist the bumped cooldown timestamp AND the freshly-pushed
+    // recent-alerts entry BEFORE we await the webhook dispatch so a
+    // crash mid-dispatch still leaves the cooldown intact (no
+    // immediate re-page on a fast restart) and the calibration UI's
+    // "Recent calibration auth alerts" panel survives the restart with
+    // forensic context for the just-fired alert.
+    persistState();
 
     const webhookUrl = webhookOverridden ? pinnedWebhook : readWebhookUrlEnv();
 

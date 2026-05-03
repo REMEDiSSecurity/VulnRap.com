@@ -980,6 +980,215 @@ describe("per-IP cooldown is persisted across process restarts (Task #400)", () 
   });
 });
 
+// Task #753 — the recent-alerts ring buffer is persisted to the same
+// state file as the per-IP cooldown so the calibration UI's "Recent
+// calibration auth alerts" panel survives an api-server restart (e.g.
+// the restart triggered by the brute-force probe itself).
+describe("recent-alerts ring buffer is persisted across process restarts (Task #753)", () => {
+  it("a fresh alerter rebuilt with the same state path replays the recent alerts in newest-first order", async () => {
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
+
+    let mockNow = 7_000_000;
+    const tick = (deltaMs: number) => {
+      mockNow += deltaMs;
+    };
+
+    const alerterA = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+    for (const ip of ["203.0.113.10", "203.0.113.11", "203.0.113.12"]) {
+      alerterA.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/feedback/calibration/handwavy-phrases",
+        method: "POST",
+        ip,
+      });
+      tick(1_000);
+    }
+    await alerterA.flushPending();
+
+    const beforeRestart = alerterA.recentAlerts();
+    expect(beforeRestart.map((a) => a.ip)).toEqual([
+      "203.0.113.12",
+      "203.0.113.11",
+      "203.0.113.10",
+    ]);
+
+    // The state file should now carry the persisted recent-alerts ring
+    // alongside the cooldown table.
+    const statePath = process.env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH!;
+    const onDisk = JSON.parse(readFileSync(statePath, "utf8")) as {
+      perIp: Array<{ ip: string }>;
+      recentAlerts: Array<{ ip: string }>;
+    };
+    expect(Array.isArray(onDisk.recentAlerts)).toBe(true);
+    // Persisted oldest-first (matches the in-memory buffer layout).
+    expect(onDisk.recentAlerts.map((a) => a.ip)).toEqual([
+      "203.0.113.10",
+      "203.0.113.11",
+      "203.0.113.12",
+    ]);
+
+    // -- Simulated restart: a brand-new alerter sharing the same state
+    // file should hydrate the ring and surface the same alerts that the
+    // calibration UI was showing before the restart.
+    const alerterB = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+    const afterRestart = alerterB.recentAlerts();
+    expect(afterRestart).toEqual(beforeRestart);
+  });
+
+  it("alerts fired after a restart land on top of the previously-persisted ring", async () => {
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
+
+    let mockNow = 8_000_000;
+    const tick = (deltaMs: number) => {
+      mockNow += deltaMs;
+    };
+
+    const alerterA = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 1_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+    alerterA.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "203.0.113.20",
+    });
+    await alerterA.flushPending();
+    expect(alerterA.recentAlerts().map((a) => a.ip)).toEqual(["203.0.113.20"]);
+
+    // Restart well after the cooldown window so the next event fires.
+    tick(60_000);
+
+    const alerterB = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 1_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      now: () => mockNow,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+    // Hydrated from disk before any new alerts fire.
+    expect(alerterB.recentAlerts().map((a) => a.ip)).toEqual(["203.0.113.20"]);
+
+    alerterB.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "203.0.113.21",
+    });
+    await alerterB.flushPending();
+    // Newest-first: the post-restart alert is on top, the pre-restart
+    // alert is preserved underneath.
+    expect(alerterB.recentAlerts().map((a) => a.ip)).toEqual([
+      "203.0.113.21",
+      "203.0.113.20",
+    ]);
+  });
+
+  it("a malformed recentAlerts entry on disk is dropped without poisoning the rest of the ring", async () => {
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
+
+    // Hand-craft a state file that mixes a valid recent-alert entry
+    // with a junk entry so we can prove the loader filters per-entry
+    // rather than discarding the whole ring on the first bad row.
+    const { writeFileSync, mkdirSync } = await import("node:fs");
+    const statePath = process.env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH!;
+    mkdirSync(path.dirname(statePath), { recursive: true });
+    writeFileSync(
+      statePath,
+      JSON.stringify({
+        perIp: [],
+        recentAlerts: [
+          { ip: "not-a-full-record" },
+          {
+            detectedAt: "2026-05-03T00:00:00.000Z",
+            ip: "203.0.113.30",
+            windowMs: 60_000,
+            threshold: 2,
+            wrongTokenCount: 2,
+            rejectionsByStatus: { "401": 2, "429": 0 },
+            rejectionsByGate: { mutation: 2, "strict-read": 0 },
+            firstSeenAt: "2026-05-03T00:00:00.000Z",
+            lastSeenAt: "2026-05-03T00:00:00.000Z",
+            lastRoute: "/x",
+            lastMethod: "POST",
+            runbookUrl: "https://example.test/runbook",
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const alerter = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+    const hydrated = alerter.recentAlerts();
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].ip).toBe("203.0.113.30");
+  });
+
+  it("statePath: null disables recent-alerts persistence (memory-only)", async () => {
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
+    const alerterA = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      statePath: null,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+    alerterA.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "192.0.2.40",
+    });
+    await alerterA.flushPending();
+    expect(alerterA.recentAlerts().length).toBe(1);
+
+    const alerterB = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      statePath: null,
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+    // Nothing was written, so a new memory-only alerter starts empty.
+    expect(alerterB.recentAlerts()).toEqual([]);
+  });
+});
+
 // Task #399 — the alerter exposes an in-memory ring buffer of
 // dispatched alerts so the calibration UI can show "what just
 // tripped" without scraping pino logs.
