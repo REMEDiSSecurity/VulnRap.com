@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <rect width="1600" height="1000" fill="#0D1117"/>
+  <rect x="0" y="0" width="1600" height="60" fill="#0a1419"/>
+  <text x="40" y="38" font-family="ui-monospace, monospace" font-size="20" fill="#00FFD1" font-weight="700">VULNRAP</text>
+  <text x="180" y="38" font-family="ui-monospace, monospace" font-size="14" fill="#7A8290">/ architecture</text>
+  <text x="40" y="120" font-family="sans-serif" font-size="32" fill="#E6E8EB" font-weight="700">Scoring Pipeline</text>
+  <text x="40" y="155" font-family="sans-serif" font-size="16" fill="#7A8290">Five engines run in parallel; a calibrated combiner emits the final score.</text>
+  <g font-family="sans-serif" font-size="14" fill="#E6E8EB">
+    <g transform="translate(60,220)">
+      <rect width="220" height="80" rx="12" fill="#101820" stroke="#00FFD1"/>
+      <text x="110" y="35" text-anchor="middle" fill="#00FFD1" font-weight="700">INTAKE</text>
+      <text x="110" y="58" text-anchor="middle" fill="#7A8290" font-size="11">redact + normalize</text>
+    </g>
+    <g transform="translate(360,140)">
+      <rect width="240" height="60" rx="10" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="36" fill="#E6E8EB">Engine 1 — Linguistic</text>
+    </g>
+    <g transform="translate(360,220)">
+      <rect width="240" height="60" rx="10" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="36" fill="#E6E8EB">Engine 2 — Substance</text>
+    </g>
+    <g transform="translate(360,300)">
+      <rect width="240" height="60" rx="10" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="36" fill="#E6E8EB">Engine 3 — CWE Coherence</text>
+    </g>
+    <g transform="translate(360,380)">
+      <rect width="240" height="60" rx="10" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="36" fill="#E6E8EB">Engine 4 — AVRI</text>
+    </g>
+    <g transform="translate(360,460)">
+      <rect width="240" height="60" rx="10" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="36" fill="#E6E8EB">Engine 5 — Reputation</text>
+    </g>
+    <g transform="translate(700,260)">
+      <rect width="220" height="100" rx="12" fill="#101820" stroke="#C832FF"/>
+      <text x="110" y="40" text-anchor="middle" fill="#C832FF" font-weight="700">COMBINER</text>
+      <text x="110" y="65" text-anchor="middle" fill="#7A8290" font-size="11">isotonic-calibrated</text>
+      <text x="110" y="82" text-anchor="middle" fill="#7A8290" font-size="11">per-CWE weights</text>
+    </g>
+    <g transform="translate(1000,220)">
+      <rect width="220" height="80" rx="12" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="36" fill="#E6E8EB">Score (0–100)</text>
+      <text x="20" y="60" fill="#7A8290" font-size="12">+ verdict + signals</text>
+    </g>
+    <g transform="translate(1000,320)">
+      <rect width="220" height="80" rx="12" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="36" fill="#E6E8EB">Per-engine breakdown</text>
+      <text x="20" y="60" fill="#7A8290" font-size="12">contributions + cites</text>
+    </g>
+    <g transform="translate(1300,270)">
+      <rect width="240" height="80" rx="12" fill="#101820" stroke="#00FFD1"/>
+      <text x="120" y="36" text-anchor="middle" fill="#00FFD1" font-weight="700">PUBLIC URL</text>
+      <text x="120" y="60" text-anchor="middle" fill="#7A8290" font-size="11">/results/&lt;id&gt;</text>
+    </g>
+    <g stroke="#00FFD1" stroke-opacity="0.5" fill="none">
+      <path d="M280 260 L 360 170"/><path d="M280 260 L 360 250"/><path d="M280 260 L 360 330"/>
+      <path d="M280 260 L 360 410"/><path d="M280 260 L 360 490"/>
+      <path d="M600 170 L 700 290"/><path d="M600 250 L 700 300"/><path d="M600 330 L 700 320"/>
+      <path d="M600 410 L 700 330"/><path d="M600 490 L 700 340"/>
+      <path d="M920 290 L 1000 260"/><path d="M920 320 L 1000 360"/>
+      <path d="M1220 260 L 1300 310"/>
+    </g>
+  </g>
+  <g transform="translate(60,600)">
+    <text font-family="sans-serif" font-size="20" fill="#E6E8EB" font-weight="700">Latency budget</text>
+    <text y="30" font-family="ui-monospace, monospace" font-size="14" fill="#7A8290">P50 142ms · P95 410ms · P99 720ms — fully synchronous, no queue</text>
+  </g>
+</svg>

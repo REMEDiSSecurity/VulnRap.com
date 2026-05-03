@@ -1,0 +1,68 @@
+VulnRap — Fact Sheet
+====================
+
+WHAT IT IS
+  VulnRap is a free, public scoring service for vulnerability reports. It
+  detects AI-generated "slop" submissions before they reach human triage,
+  using five independent engines whose outputs are combined into a single
+  0–100 score with a transparent verdict and per-signal breakdown.
+
+WHO IT IS FOR
+  · Bug-bounty platform triagers drowning in low-effort AI submissions.
+  · Open-source maintainers receiving security@ reports of varying quality.
+  · CSIRTs and PSIRTs that need a first-pass filter before assignment.
+  · Researchers studying the impact of generative AI on coordinated
+    vulnerability disclosure.
+
+HOW IT WORKS (one-pager methodology)
+  Intake. Reports are normalized and PII/secret-redacted on the way in.
+  Five engines run in parallel:
+    1. Linguistic   — surface features (token entropy, burstiness, template
+                      reuse, phrase-cluster matching against known LLM corpora).
+    2. Substance    — density of technical artefacts (paths, headers, methods,
+                      payloads, command lines, file/line refs) versus prose.
+    3. CWE Coherence— embeds the body and checks that its nearest CWE
+                      neighbours include the CWE that was claimed; flags
+                      mismatches.
+    4. AVRI         — Adversarial Vulnerability Report Index; tracks drift of
+                      a report against known AI-generated report templates with
+                      a re-arming cooldown.
+    5. Reputation   — corpus-level signals (hallucinated CVE refs, fabricated
+                      vendor names, severity-inflation patterns).
+  An isotonic-calibrated combiner with per-CWE weights produces the final
+  score. Every signal that fires is exposed with its weight and citation.
+  No engine is a black box: fingerprints, training data, and held-out
+  metrics are published.
+
+KEY METRICS (rolling, public)
+  · Engine accuracy on held-out set:  93.7%  (precision 0.91 / recall 0.94)
+  · P50 scoring latency:              142 ms
+  · P95 scoring latency:              410 ms
+  · Detectable signals:               63
+  · CWE families recognised:          full MITRE 4.14 catalogue
+  · Pricing:                          free, rate-limited public tier
+
+WHAT IT IS NOT
+  VulnRap does not decide whether a vulnerability is real. It scores
+  reports for likelihood of being AI-slop, then surfaces the evidence so a
+  human can make the call faster. False positives are possible and the
+  threshold is tunable per integration.
+
+ORG
+  Built and funded by the makers of COMPLiTT.com, with engineering support
+  from REMEDiS Security LLC. Open-source-friendly: signal definitions,
+  corpus stats, and benchmark fixtures are public. Source repo on GitHub
+  under REMEDiSSecurity/VulnRap.Com.
+
+CONTACT
+  Press / interviews:  remedisllc@gmail.com  (subject: "VulnRap Press")
+  General feedback:    remedisllc@gmail.com
+  Security disclosure: see /security on vulnrap.com
+
+LICENSING & USAGE
+  Logos, screenshots, and this fact sheet may be used in editorial coverage
+  and integration materials without prior written permission, provided the
+  marks are not modified and the colours are preserved. Do not use the
+  marks to imply partnership or endorsement.
+
+Last updated: May 2026

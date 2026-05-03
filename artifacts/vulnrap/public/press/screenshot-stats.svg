@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <rect width="1600" height="1000" fill="#0D1117"/>
+  <rect x="0" y="0" width="1600" height="60" fill="#0a1419"/>
+  <text x="40" y="38" font-family="ui-monospace, monospace" font-size="20" fill="#00FFD1" font-weight="700">VULNRAP</text>
+  <text x="180" y="38" font-family="ui-monospace, monospace" font-size="14" fill="#7A8290">/ stats</text>
+  <g font-family="sans-serif">
+    <g transform="translate(40,100)">
+      <rect width="360" height="160" rx="12" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="40" font-size="14" fill="#7A8290">REPORTS SCORED (90d)</text>
+      <text x="20" y="100" font-size="44" font-weight="800" fill="#00FFD1">42,318</text>
+      <text x="20" y="135" font-size="13" fill="#3FBF7F">▲ +12.4% week-over-week</text>
+    </g>
+    <g transform="translate(420,100)">
+      <rect width="360" height="160" rx="12" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="40" font-size="14" fill="#7A8290">% FLAGGED AI-SLOP</text>
+      <text x="20" y="100" font-size="44" font-weight="800" fill="#FF5C5C">38.1%</text>
+      <text x="20" y="135" font-size="13" fill="#7A8290">90-day trailing average</text>
+    </g>
+    <g transform="translate(800,100)">
+      <rect width="360" height="160" rx="12" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="40" font-size="14" fill="#7A8290">P50 SCORING LATENCY</text>
+      <text x="20" y="100" font-size="44" font-weight="800" fill="#E6E8EB">142ms</text>
+      <text x="20" y="135" font-size="13" fill="#7A8290">P95 410ms</text>
+    </g>
+    <g transform="translate(1180,100)">
+      <rect width="380" height="160" rx="12" fill="#101820" stroke="#1F2A33"/>
+      <text x="20" y="40" font-size="14" fill="#7A8290">ENGINE ACCURACY (held-out)</text>
+      <text x="20" y="100" font-size="44" font-weight="800" fill="#00FFD1">93.7%</text>
+      <text x="20" y="135" font-size="13" fill="#7A8290">precision 0.91 / recall 0.94</text>
+    </g>
+  </g>
+  <g transform="translate(40,300)">
+    <rect width="1520" height="380" rx="12" fill="#101820" stroke="#1F2A33"/>
+    <text x="20" y="35" font-family="sans-serif" font-size="16" fill="#E6E8EB" font-weight="700">DAILY VOLUME — 90 DAYS</text>
+    <g transform="translate(20,80)">
+      <line x1="0" y1="260" x2="1480" y2="260" stroke="#1F2A33"/>
+      <line x1="0" y1="180" x2="1480" y2="180" stroke="#1F2A33" stroke-dasharray="3 4"/>
+      <line x1="0" y1="100" x2="1480" y2="100" stroke="#1F2A33" stroke-dasharray="3 4"/>
+      <polyline fill="none" stroke="#00FFD1" stroke-width="2.5" points="0,210 30,200 60,180 90,170 120,160 150,165 180,150 210,140 240,150 270,135 300,130 330,120 360,110 390,125 420,118 450,100 480,95 510,108 540,90 570,82 600,95 630,72 660,85 690,68 720,55 750,70 780,60 810,48 840,52 870,40 900,55 930,42 960,30 990,38 1020,28 1050,42 1080,30 1110,22 1140,32 1170,18 1200,30 1230,15 1260,25 1290,12 1320,20 1350,8 1380,18 1410,10 1440,5 1470,15"/>
+      <polyline fill="#00FFD1" fill-opacity="0.08" stroke="none" points="0,210 30,200 60,180 90,170 120,160 150,165 180,150 210,140 240,150 270,135 300,130 330,120 360,110 390,125 420,118 450,100 480,95 510,108 540,90 570,82 600,95 630,72 660,85 690,68 720,55 750,70 780,60 810,48 840,52 870,40 900,55 930,42 960,30 990,38 1020,28 1050,42 1080,30 1110,22 1140,32 1170,18 1200,30 1230,15 1260,25 1290,12 1320,20 1350,8 1380,18 1410,10 1440,5 1470,15 1480,260 0,260"/>
+    </g>
+  </g>
+  <g transform="translate(40,720)">
+    <rect width="740" height="240" rx="12" fill="#101820" stroke="#1F2A33"/>
+    <text x="20" y="35" font-family="sans-serif" font-size="16" fill="#E6E8EB" font-weight="700">TOP CWE FAMILIES</text>
+    <g font-family="ui-monospace, monospace" font-size="14" fill="#C8CCD0">
+      <text x="20" y="80">CWE-79  XSS</text><rect x="280" y="65" width="320" height="18" fill="#00FFD1" fill-opacity="0.7"/><text x="610" y="80" fill="#7A8290">8,420</text>
+      <text x="20" y="115">CWE-89  SQLi</text><rect x="280" y="100" width="240" height="18" fill="#00FFD1" fill-opacity="0.6"/><text x="530" y="115" fill="#7A8290">6,140</text>
+      <text x="20" y="150">CWE-200 Info Disclosure</text><rect x="280" y="135" width="180" height="18" fill="#00FFD1" fill-opacity="0.5"/><text x="470" y="150" fill="#7A8290">4,810</text>
+      <text x="20" y="185">CWE-352 CSRF</text><rect x="280" y="170" width="120" height="18" fill="#00FFD1" fill-opacity="0.4"/><text x="410" y="185" fill="#7A8290">3,220</text>
+      <text x="20" y="220">CWE-22  Path Traversal</text><rect x="280" y="205" width="90" height="18" fill="#00FFD1" fill-opacity="0.35"/><text x="380" y="220" fill="#7A8290">2,108</text>
+    </g>
+  </g>
+  <g transform="translate(800,720)">
+    <rect width="760" height="240" rx="12" fill="#101820" stroke="#1F2A33"/>
+    <text x="20" y="35" font-family="sans-serif" font-size="16" fill="#E6E8EB" font-weight="700">SIGNAL FIRE-RATE (TOP 6)</text>
+    <g font-family="ui-monospace, monospace" font-size="13" fill="#C8CCD0">
+      <text x="20" y="75">low_substance_density</text><text x="700" y="75" text-anchor="end" fill="#00FFD1">42.1%</text>
+      <text x="20" y="105">generic_severity_inflation</text><text x="700" y="105" text-anchor="end" fill="#00FFD1">31.7%</text>
+      <text x="20" y="135">cwe_body_mismatch</text><text x="700" y="135" text-anchor="end" fill="#00FFD1">22.4%</text>
+      <text x="20" y="165">no_repro_steps</text><text x="700" y="165" text-anchor="end" fill="#00FFD1">19.0%</text>
+      <text x="20" y="195">avri_drift_template_phrasing</text><text x="700" y="195" text-anchor="end" fill="#00FFD1">14.6%</text>
+      <text x="20" y="225">hallucinated_cve_reference</text><text x="700" y="225" text-anchor="end" fill="#FF5C5C">8.2%</text>
+    </g>
+  </g>
+</svg>

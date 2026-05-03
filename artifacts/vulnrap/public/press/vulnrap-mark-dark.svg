@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="VulnRap mark">
+  <rect width="120" height="120" rx="22" fill="#0D1117"/>
+  <g transform="translate(20,20)">
+    <rect x="0" y="0" width="80" height="80" rx="14" fill="none" stroke="#00FFD1" stroke-width="3"/>
+    <path d="M16 24 L40 70 L64 24" fill="none" stroke="#00FFD1" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="40" cy="50" r="4" fill="#C832FF"/>
+  </g>
+</svg>

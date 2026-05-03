@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <rect width="1600" height="1000" fill="#0D1117"/>
+  <rect x="0" y="0" width="1600" height="60" fill="#0a1419"/>
+  <text x="40" y="38" font-family="ui-monospace, monospace" font-size="20" fill="#00FFD1" font-weight="700">VULNRAP</text>
+  <text x="180" y="38" font-family="ui-monospace, monospace" font-size="14" fill="#7A8290">/ signals</text>
+  <text x="40" y="120" font-family="sans-serif" font-size="32" fill="#E6E8EB" font-weight="700">Signal Reference</text>
+  <text x="40" y="155" font-family="sans-serif" font-size="16" fill="#7A8290">63 detectors. Each has a fingerprint, citation list, and live hit-rate.</text>
+  <g transform="translate(40,200)" font-family="ui-monospace, monospace">
+    <g>
+      <rect width="740" height="92" rx="10" fill="#101820" stroke="#FF5C5C" stroke-opacity="0.5"/>
+      <text x="20" y="36" font-size="16" fill="#FF5C5C" font-weight="700">hallucinated_cve_reference</text>
+      <text x="20" y="60" font-size="12" fill="#C8CCD0">References a CVE id that does not exist in NVD or MITRE.</text>
+      <text x="20" y="80" font-size="11" fill="#7A8290">severity: critical · weight: 22 · hits 90d: 8.2%</text>
+    </g>
+    <g transform="translate(0,108)">
+      <rect width="740" height="92" rx="10" fill="#101820" stroke="#FF9C40" stroke-opacity="0.5"/>
+      <text x="20" y="36" font-size="16" fill="#FF9C40" font-weight="700">cwe_body_mismatch</text>
+      <text x="20" y="60" font-size="12" fill="#C8CCD0">Body description matches a different CWE cluster than the one claimed.</text>
+      <text x="20" y="80" font-size="11" fill="#7A8290">severity: high · weight: 18 · hits 90d: 22.4%</text>
+    </g>
+    <g transform="translate(0,216)">
+      <rect width="740" height="92" rx="10" fill="#101820" stroke="#FF9C40" stroke-opacity="0.5"/>
+      <text x="20" y="36" font-size="16" fill="#FF9C40" font-weight="700">generic_severity_inflation</text>
+      <text x="20" y="60" font-size="12" fill="#C8CCD0">Self-rates Critical 9.0+ but lacks the impact evidence to support it.</text>
+      <text x="20" y="80" font-size="11" fill="#7A8290">severity: high · weight: 15 · hits 90d: 31.7%</text>
+    </g>
+    <g transform="translate(0,324)">
+      <rect width="740" height="92" rx="10" fill="#101820" stroke="#FFD24A" stroke-opacity="0.5"/>
+      <text x="20" y="36" font-size="16" fill="#FFD24A" font-weight="700">low_substance_density</text>
+      <text x="20" y="60" font-size="12" fill="#C8CCD0">Body has low ratio of technical tokens (paths, methods, headers) to prose.</text>
+      <text x="20" y="80" font-size="11" fill="#7A8290">severity: medium · weight: 11 · hits 90d: 42.1%</text>
+    </g>
+    <g transform="translate(0,432)">
+      <rect width="740" height="92" rx="10" fill="#101820" stroke="#FFD24A" stroke-opacity="0.5"/>
+      <text x="20" y="36" font-size="16" fill="#FFD24A" font-weight="700">avri_drift_template_phrasing</text>
+      <text x="20" y="60" font-size="12" fill="#C8CCD0">Phrasing matches known AI report-template clusters within drift threshold.</text>
+      <text x="20" y="80" font-size="11" fill="#7A8290">severity: medium · weight: 9 · hits 90d: 14.6%</text>
+    </g>
+  </g>
+  <g transform="translate(820,200)">
+    <rect width="740" height="540" rx="12" fill="#101820" stroke="#1F2A33"/>
+    <text x="20" y="40" font-family="sans-serif" font-size="18" fill="#E6E8EB" font-weight="700">FINGERPRINT — cwe_body_mismatch</text>
+    <g font-family="ui-monospace, monospace" font-size="13" fill="#C8CCD0">
+      <text x="20" y="80">def fire(report):</text>
+      <text x="20" y="104">    claimed = report.cwe</text>
+      <text x="20" y="128">    body_v = embed(report.body)</text>
+      <text x="20" y="152">    nearest = topk_cwe(body_v, k=3)</text>
+      <text x="20" y="176">    if claimed not in nearest:</text>
+      <text x="20" y="200">        return SignalHit(</text>
+      <text x="20" y="224">            confidence = 1 - cos(claimed, body_v),</text>
+      <text x="20" y="248">            cites = nearest,</text>
+      <text x="20" y="272">        )</text>
+      <text x="20" y="320" fill="#7A8290"># trained on 84,210 labeled MITRE samples</text>
+      <text x="20" y="344" fill="#7A8290"># held-out precision 0.93 / recall 0.88</text>
+      <text x="20" y="392" fill="#00FFD1">CITATIONS</text>
+      <text x="20" y="416">  · MITRE CWE 4.14 (2024)</text>
+      <text x="20" y="440">  · OWASP Top 10 (2021) §A05</text>
+      <text x="20" y="464">  · Akond et al. ESEC/FSE '23</text>
+    </g>
+  </g>
+</svg>

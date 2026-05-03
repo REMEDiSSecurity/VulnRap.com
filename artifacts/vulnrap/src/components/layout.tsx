@@ -417,6 +417,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link to="/status" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.status")}</Link>
               <Link to="/showcase" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Showcase</Link>
               <Link to="/community" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Community</Link>
+              <Link to="/press" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Press Kit</Link>
               <button
                 type="button"
                 onClick={handleRestartTour}

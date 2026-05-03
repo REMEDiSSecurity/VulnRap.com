@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <defs>
+    <radialGradient id="bg" cx="0.3" cy="0.4" r="0.8"><stop offset="0%" stop-color="#0a2a2a"/><stop offset="100%" stop-color="#0D1117"/></radialGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1600" height="60" fill="#0a1419"/>
+  <text x="40" y="38" font-family="ui-monospace, monospace" font-size="20" fill="#00FFD1" font-weight="700">VULNRAP</text>
+  <text x="180" y="38" font-family="ui-monospace, monospace" font-size="14" fill="#7A8290">/ home</text>
+  <text x="800" y="220" text-anchor="middle" font-family="sans-serif" font-size="64" font-weight="800" fill="#00FFD1">Score Vulnerability Reports</text>
+  <text x="800" y="290" text-anchor="middle" font-family="sans-serif" font-size="32" fill="#E6E8EB">Detect AI-generated slop before triage burns out your team.</text>
+  <rect x="200" y="380" width="1200" height="380" rx="14" fill="#101820" stroke="#00FFD1" stroke-opacity="0.3"/>
+  <text x="240" y="430" font-family="sans-serif" font-size="18" fill="#7A8290">PASTE A REPORT</text>
+  <g font-family="ui-monospace, monospace" font-size="15" fill="#C8CCD0">
+    <text x="240" y="470">Title: Reflected XSS in /search</text>
+    <text x="240" y="498">CWE: CWE-79</text>
+    <text x="240" y="526">Severity: Critical 10.0</text>
+    <text x="240" y="554">Body:</text>
+    <text x="240" y="582">An attacker can craft a URL that includes script</text>
+    <text x="240" y="610">payload reflected by the search endpoint without</text>
+    <text x="240" y="638">sanitisation. Repro:</text>
+    <text x="240" y="666">  curl 'https://target/search?q=&lt;script&gt;alert(1)&lt;/script&gt;'</text>
+    <text x="240" y="694" fill="#7A8290">▍</text>
+  </g>
+  <rect x="1200" y="700" width="160" height="48" rx="8" fill="#00FFD1"/>
+  <text x="1280" y="732" text-anchor="middle" font-family="sans-serif" font-weight="700" font-size="18" fill="#0D1117">SCORE →</text>
+</svg>

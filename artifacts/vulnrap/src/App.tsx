@@ -71,6 +71,7 @@ const Status = lazyRetry(() => import("@/pages/status"));
 const Incidents = lazyRetry(() => import("@/pages/incidents"));
 const Showcase = lazyRetry(() => import("@/pages/showcase"));
 const Glossary = lazyRetry(() => import("@/pages/glossary"));
+const Press = lazyRetry(() => import("@/pages/press"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -138,6 +139,7 @@ function AppRoutes() {
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/showcase" element={<Showcase />} />
             <Route path="/glossary" element={<Glossary />} />
+            <Route path="/press" element={<Press />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
