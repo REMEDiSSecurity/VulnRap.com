@@ -17498,7 +17498,7 @@ function EmergingArchetypesSection() {
                 sparkline so trend pops at a glance; the exact removed
                 counts stay reachable via the parent span's `title`
                 tooltip (same gating as the prior comma list). */}
-            {configData.lastCompaction &&
+            {configData.lastCompaction?.recentRuns &&
               configData.lastCompaction.recentRuns.length >= 2 && (
                 <span
                   className="basis-full text-muted-foreground/60 inline-flex items-center gap-2"
