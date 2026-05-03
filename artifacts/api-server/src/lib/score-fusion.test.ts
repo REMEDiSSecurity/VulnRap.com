@@ -11,6 +11,8 @@ function makeLinguistic(overrides: Partial<LinguisticResult> = {}): LinguisticRe
     statisticalScore: 10,
     templateScore: 5,
     evidence: [],
+    promptInjectionAttempted: false,
+    promptInjectionMatches: [],
     ...overrides,
   };
 }

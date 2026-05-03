@@ -357,7 +357,7 @@ async function performAnalysis(
       diagnostics.stages["llm_analysis"] = { status: "ok", durationMs: 0, error: userSkippedLlm ? "skipped_by_user" : "not_needed" };
     }
 
-    const safeLinguistic = linguistic ?? { score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0, evidence: [] };
+    const safeLinguistic = linguistic ?? { score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0, evidence: [], promptInjectionAttempted: false, promptInjectionMatches: [] };
     const safeFactual = factual ?? { score: 0, severityInflationScore: 0, placeholderScore: 0, fabricatedOutputScore: 0, evidence: [] };
     const safeQuality = heuristic?.qualityScore ?? 50;
 
