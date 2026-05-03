@@ -1,0 +1,73 @@
+{
+  "name": "vulnrap-vscode-extension",
+  "displayName": "VulnRap",
+  "description": "Score the active selection or file as a vulnerability report against VulnRap.com without leaving your editor.",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "vulnrap",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.80.0",
+    "node": ">=18.17.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onCommand:vulnrap.scoreSelection",
+    "onCommand:vulnrap.scoreFile"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vulnrap.scoreSelection",
+        "title": "VulnRap: Score selection",
+        "category": "VulnRap"
+      },
+      {
+        "command": "vulnrap.scoreFile",
+        "title": "VulnRap: Score current file",
+        "category": "VulnRap"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "vulnrap.scoreSelection",
+          "when": "editorHasSelection",
+          "group": "vulnrap@1"
+        },
+        {
+          "command": "vulnrap.scoreFile",
+          "group": "vulnrap@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "VulnRap",
+      "properties": {
+        "vulnrap.apiBaseUrl": {
+          "type": "string",
+          "default": "https://vulnrap.com/api",
+          "description": "Base URL of the VulnRap API. Override this if you self-host VulnRap or use a staging deployment."
+        },
+        "vulnrap.skipLlm": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, score using only local heuristic / statistical engines (no LLM call)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.4.5",
+    "@vscode/vsce": "^2.27.0"
+  }
+}
