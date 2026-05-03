@@ -11,6 +11,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import router from "./routes";
 import blogRouter from "./routes/blog";
+import sitemapRouter from "./routes/sitemap";
 import { logger } from "./lib/logger";
 import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
 
@@ -227,6 +228,13 @@ app.get("/security.txt", (req, res) => {
 // (not under /api) because feed readers and the auto-discovery <link>
 // in blog.tsx point at the unprefixed path.
 app.use(blogRouter);
+
+// Task #710 — Mount the dynamic sitemap at the app root so the canonical
+// `/sitemap.xml` URL referenced from `robots.txt` resolves directly
+// (i.e. not under the `/api` prefix). Mounted *before* the static
+// frontend below so the dynamic handler wins over any stale on-disk
+// `sitemap.xml` shipped in the SPA's public/ directory.
+app.use(sitemapRouter);
 
 app.use("/api", router);
 

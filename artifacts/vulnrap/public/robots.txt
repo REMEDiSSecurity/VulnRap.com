@@ -4,107 +4,170 @@
 
 User-agent: *
 Allow: /
+# Task #710 — Reviewer-only routes are gated behind the calibration
+# token and return 401 to anonymous visitors. Disallow them so search
+# engines and AI crawlers don't burn budget on pages they can't index.
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # --- Search engines (explicit allow for clarity) ---
 User-agent: Googlebot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: Googlebot-Image
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: Bingbot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: DuckDuckBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: Slurp
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: Baiduspider
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: YandexBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: Applebot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # --- AI / LLM crawlers (explicit allow) ---
 # OpenAI
 User-agent: GPTBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: OAI-SearchBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: ChatGPT-User
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Anthropic
 User-agent: ClaudeBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: Claude-Web
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: anthropic-ai
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Google AI / Gemini training
 User-agent: Google-Extended
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Perplexity
 User-agent: PerplexityBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: Perplexity-User
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Meta AI
 User-agent: Meta-ExternalAgent
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: Meta-ExternalFetcher
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: FacebookBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Common Crawl (used by many LLMs)
 User-agent: CCBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Apple Intelligence
 User-agent: Applebot-Extended
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Bytespider / TikTok
 User-agent: Bytespider
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Cohere
 User-agent: cohere-ai
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 User-agent: cohere-training-data-crawler
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # DeepSeek
 User-agent: DeepSeekBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Mistral
 User-agent: MistralAI-User
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # Diffbot
 User-agent: Diffbot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 # You.com
 User-agent: YouBot
 Allow: /
+Disallow: /feedback-analytics
+Disallow: /audit-log
 
 Sitemap: https://vulnrap.com/sitemap.xml
