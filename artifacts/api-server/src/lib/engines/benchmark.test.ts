@@ -1570,6 +1570,206 @@ keys from \`/etc/grafana/grafana.ini\`. CVSS 7.5
 a Pathname to a Restricted Directory).`,
     expectMinScore: 60,
   },
+  // Task #736 — companion legit fixtures for the Task #427 shell-escape
+  // detector. The benchmark already exercises the printf-unescape path
+  // via legit-03 (REQUEST_SMUGGLING / CWE-444), but real-world AUTHN_AUTHZ
+  // and INJECTION reports also paste their reproductions as
+  // `printf '...HTTP/1.1\r\n...' | nc target 80` shell one-liners. Without
+  // benchmark coverage for those families, a regression that quietly
+  // disables `unescapeShellHttpFragments` (or narrows the matchers) would
+  // continue to pass legit-03 (which still scores well from the
+  // TE/CL-conflict + named-proxy gold signals on the literal narrative)
+  // while silently dropping idor_object_id / authorization_header_swap /
+  // specific_endpoint (AUTHN_AUTHZ) and concrete_payload /
+  // specific_endpoint_param (INJECTION) when those signals only live
+  // inside the printf body. These two fixtures lock in the cross-family
+  // coverage so the regression surfaces in CI.
+  //
+  // Both fixtures keep the literal narrative deliberately thin on the
+  // family-specific gold patterns: the request-line, headers, IDOR id
+  // shape and SQLi UNION payload all live exclusively inside the
+  // backslash-r-backslash-n escaped printf body, so the only way the
+  // composite reaches the REASONABLE band (≥50) is through the
+  // unescape-and-rescan pipeline.
+  {
+    // CVE-2020-7741 (Strapi) shape: `/admin/users/:id` honoured the URL
+    // id without re-checking that the bearer token's owner matched the
+    // requested resource. Public PoCs are pasted as a printf one-liner
+    // captured from the reporter's terminal. The literal narrative
+    // names the two accounts (alice/bob) and the policy helper
+    // (`require_admin`); the bearer token, IDOR object id and request
+    // line live only inside the shell-escaped block.
+    // Shell-escape contribution measurement (v3.8.0): with the printf
+    // line in place the composite is 85 / STRONG; redacting the printf
+    // line drops it to 80 / PROMISING (delta = 5, the
+    // `authorization_header_swap` gold signal that only fires when the
+    // unescaped `Authorization: Bearer …` header reaches the detector).
+    // The threshold below is set to 81 — above the no-unescape score —
+    // so a regression that disables `unescapeShellHttpFragments` (or
+    // narrows the `printf '...HTTP/1.x\r\n...'` matchers so this
+    // particular shape stops matching) trips the assertion in CI.
+    name: "legit-13-idor-shell-escaped-printf-strapi-cve-2020-7741",
+    claimedCwes: ["CWE-639"],
+    text: `# IDOR on Strapi admin user endpoint (CVE-2020-7741-style)
+
+## Affected
+Strapi admin REST surface, route handler
+\`packages/strapi-admin/controllers/User.js\` — the \`findOne\` action
+honoured the \`:id\` URL parameter without re-checking that the
+caller's bearer token owned the requested user record. Two distinct
+authenticated sessions (alice as a low-privilege editor and bob as
+another editor in the same tenant) are enough to demonstrate the
+cross-account read; no admin role and no \`require_admin\` policy
+gate fires on the path.
+
+## Root cause
+The controller resolves the resource straight from the URL id and
+passes the bound \`ctx.state.user\` only to the audit logger, never
+to the lookup itself:
+
+\`\`\`js
+// packages/strapi-admin/controllers/User.js (pre-fix)
+async findOne(ctx) {
+  const { id } = ctx.params;                 // <- attacker-controlled
+  const user = await strapi.admin.services.user.findOne({ id });
+  ctx.body = user;                            // returns email, hashed pw, reset token
+}
+\`\`\`
+
+## Reproduction
+The public PoC is a single shell line: alice authenticates, captures
+her bearer token, then walks bob's user id by hand. The full request
+sent to the Strapi admin API is the shell-escaped printf body below.
+
+\`\`\`
+$ printf 'GET /admin/users/42 HTTP/1.1\\r\\nHost: cms.target.test\\r\\nAuthorization: Bearer eyJhbGciOiJIUzI1NiJ9.alice_editor_token\\r\\nAccept: application/json\\r\\n\\r\\n' | openssl s_client -quiet -connect cms.target.test:443
+\`\`\`
+
+The response returns bob's full admin record (email, blocked flag,
+\`resetPasswordToken\`) even though alice's bearer token only
+authorises her own \`/admin/users/17\` resource.
+
+## Patch
+Strapi's fix routes the lookup through the policy helper that
+already runs for the user-update path, so \`check_permission\` is
+invoked with the bound session before the row is returned:
+
+\`\`\`diff
+--- a/packages/strapi-admin/controllers/User.js
++++ b/packages/strapi-admin/controllers/User.js
+@@ async findOne(ctx) {
+-  const { id } = ctx.params;
+-  const user = await strapi.admin.services.user.findOne({ id });
++  const { id } = ctx.params;
++  if (!authorize(ctx.state.user, 'admin::users.read', { id })) {
++    return ctx.forbidden();
++  }
++  const user = await strapi.admin.services.user.findOne({ id });
+   ctx.body = user;
+\`\`\`
+
+## Impact
+Cross-account read of every administrator's email, blocked status
+and \`resetPasswordToken\` value. The reset token is single-use but
+not single-account, so an attacker who reads bob's token can
+immediately mint a new password for bob's session. CVSS 6.5
+(AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N). CWE-639 (Authorization
+Bypass Through User-Controlled Key).`,
+    expectMinScore: 81,
+  },
+  {
+    // Drupalgeddon (CVE-2014-3704) shape: pre-auth SQLi in the
+    // Expandable Login form via the \`name[]\` array key, with the
+    // public exploit pasted as a printf one-liner. The literal
+    // narrative names the file/line of the unsafe \`db_query\` call
+    // and the parameterized fix; the request line, target endpoint
+    // and \`UNION SELECT\` payload live only inside the shell-escaped
+    // block so the unescape-and-rescan pipeline is the only path to
+    // the INJECTION gold signals (concrete_payload,
+    // specific_endpoint_param, raw_http_request).
+    // Shell-escape contribution measurement (v3.8.0): with the printf
+    // line in place the composite is 82 / STRONG; redacting the printf
+    // line drops it to 78 / PROMISING (delta = 4, the
+    // `concrete_payload` UNION-SELECT and `specific_endpoint_param`
+    // request-line gold signals that only fire when the unescaped
+    // POST body / request line reach the detector). The threshold
+    // below is set to 79 — above the no-unescape score — so a
+    // regression that disables `unescapeShellHttpFragments` (or
+    // narrows the matchers so this particular shape stops matching)
+    // trips the assertion in CI.
+    name: "legit-14-sqli-shell-escaped-printf-drupalgeddon-cve-2014-3704",
+    claimedCwes: ["CWE-89"],
+    text: `# Pre-auth SQL injection in Drupal 7 expandable user_load_multiple (CVE-2014-3704)
+
+## Affected
+Drupal core 7.x < 7.32, file \`includes/database/database.inc\`
+function \`expandArguments\` (the \`db_query\` placeholder expander
+used by every dynamic-query caller in core, including the
+unauthenticated login form's \`user_load_multiple\` lookup).
+
+## Root cause
+\`expandArguments\` walks the placeholder array and rebuilds the
+SQL string by concatenating each *array key* directly into the
+prepared statement, instead of binding them as parameters. The
+key is reporter-controlled when the request body sends an array
+(\`name[0]=...&name[1]=...\`), and a non-numeric key like
+\`0;UPDATE users SET pass=...--\` ends up spliced verbatim into
+the query.
+
+\`\`\`php
+// includes/database/database.inc (pre-7.32)
+foreach ($data as $i => $value) {
+  $new_keys[$key . '_' . $i] = $value;          // BUG: $i is reporter-controlled
+}
+$query = preg_replace('#' . $key . '\\b#', implode(', ', array_keys($new_keys)), $query);
+\`\`\`
+
+## Reproduction
+The published PoC dumps the \`users\` table in a single
+unauthenticated POST to \`/?q=node\` (Drupal's default front
+controller route to the user login form). The exact request bytes
+sent on the wire are the shell-escaped printf body below.
+
+\`\`\`
+$ printf 'POST /?q=node&destination=node HTTP/1.1\\r\\nHost: cms.target.test\\r\\nContent-Type: application/x-www-form-urlencoded\\r\\nContent-Length: 220\\r\\n\\r\\nname%%5B0%%20%%3B%%20UNION%%20SELECT%%201%%2Cname%%2Cpass%%2C4%%2C5%%2C6%%2C7%%2C8%%2C9%%2C10%%20FROM%%20users%%20--%%20%%5D=admin&form_id=user_login_block&op=Log%%20in' | nc cms.target.test 80
+\`\`\`
+
+URL-decoded the body's \`name[]\` key carries
+\`0 ; UNION SELECT 1,name,pass,4,5,6,7,8,9,10 FROM users -- \`,
+which \`expandArguments\` splices into the prepared query so the
+response renders the admin row's bcrypt password hash inside the
+"unrecognised username" error message.
+
+## Patch
+Drupal 7.32 binds the placeholder keys with \`db_placeholder\`
+instead of regex-rewriting the SQL string, so the unsafe query
+construction (\`'" + key + "'\` style) is replaced with a
+parameterized prepare/execute round-trip:
+
+\`\`\`diff
+--- a/includes/database/database.inc
++++ b/includes/database/database.inc
+@@
+-foreach ($data as $i => $value) {
+-  $new_keys[$key . '_' . $i] = $value;
+-}
+-$query = preg_replace('#' . $key . '\\b#', implode(', ', array_keys($new_keys)), $query);
++foreach (array_values($data) as $i => $value) {
++  $new_keys[$key . '_db_placeholder_' . $i] = $value;   // numeric, bound below
++}
++$query = $stmt->prepare($query);                        // parameterized, ? placeholders
+\`\`\`
+
+## Impact
+Pre-authentication SQL injection on every Drupal 7 install on the
+public internet. Within seven hours of the SA-CORE-2014-005
+advisory, mass-exploitation traffic was hitting every Drupal 7
+endpoint — the public PoC dumps the admin password hash and the
+follow-on chain mints a new admin session by writing a row into
+\`menu_router\` whose \`access_callback\` is \`assert\`. CVSS 9.8
+(AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H). CWE-89 (SQL Injection).`,
+    expectMinScore: 79,
+  },
 ];
 
 describe("VulnRap engines benchmark", () => {
