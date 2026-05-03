@@ -32,6 +32,8 @@ tags:
     description: Reviewer audit log of mutation endpoints
   - name: gallery
     description: Curated sample-report gallery for new users
+  - name: embed
+    description: Embeddable public assets (badges, snippets) for third-party triage tools
 paths:
   /healthz:
     get:
@@ -179,6 +181,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /embed/badge.svg:
+    get:
+      operationId: getEmbedBadge
+      tags: [embed]
+      summary: Embeddable score badge SVG (Shields.io-style)
+      description: |
+        Returns a Shields.io-style SVG badge for the report identified by the
+        `id` query parameter (e.g. `VR-002A`). Designed to be dropped into
+        triage tickets, READMEs, and HackerOne / Bugcrowd comments via
+        `<img>` or Markdown. Always returns 200 OK with a well-formed SVG —
+        unknown / hidden / malformed ids render an "unknown" badge so a
+        broken image never appears on the embedder's page. Honours
+        `showInFeed`: hidden reports render as "unknown" so private scores
+        are not leaked. Sets ETag + `Cache-Control: max-age=300` so
+        embedders that re-render frequently get cheap 304s.
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^VR-[0-9A-Fa-f]{1,8}$"
+          description: Report code in the public `VR-XXXX` format (hex, case-insensitive).
+      responses:
+        "200":
+          description: SVG badge
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: Not modified (matches the `If-None-Match` header)
 
   /reports/{id}/verify:
     get:

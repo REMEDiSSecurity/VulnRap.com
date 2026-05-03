@@ -1165,6 +1165,30 @@ export const DeleteReportResponse = zod.object({
 });
 
 /**
+ * Returns a Shields.io-style SVG badge for the report identified by the
+`id` query parameter (e.g. `VR-002A`). Designed to be dropped into
+triage tickets, READMEs, and HackerOne / Bugcrowd comments via
+`<img>` or Markdown. Always returns 200 OK with a well-formed SVG —
+unknown / hidden / malformed ids render an "unknown" badge so a
+broken image never appears on the embedder's page. Honours
+`showInFeed`: hidden reports render as "unknown" so private scores
+are not leaked. Sets ETag + `Cache-Control: max-age=300` so
+embedders that re-render frequently get cheap 304s.
+
+ * @summary Embeddable score badge SVG (Shields.io-style)
+ */
+export const getEmbedBadgeQueryIdRegExp = new RegExp("^VR-[0-9A-Fa-f]{1,8}$");
+
+export const GetEmbedBadgeQueryParams = zod.object({
+  id: zod.coerce
+    .string()
+    .regex(getEmbedBadgeQueryIdRegExp)
+    .describe(
+      "Report code in the public `VR-XXXX` format (hex, case-insensitive).",
+    ),
+});
+
+/**
  * Returns a lightweight verification summary for embedding in bug reports
  * @summary Get verification badge data for a report
  */

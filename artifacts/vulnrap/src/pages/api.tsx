@@ -1,4 +1,4 @@
-import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp, Plug, Bot, Download } from "lucide-react";
+import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp, Plug, Bot, Download, Image as ImageIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -258,6 +258,61 @@ curl -X POST https://vulnrap.com/api/reports/check \\
             </Card>
           ))}
         </div>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
+          <ImageIcon className="w-5 h-5 text-primary" />
+          Embed Badge
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Drop a Shields.io-style score badge next to a report ID in your
+          triage tracker, README, or HackerOne / Bugcrowd comment. The
+          endpoint always returns 200 OK with a well-formed SVG —
+          unknown or hidden ids render a graceful "unknown" pill, so a
+          broken image never appears on your page. ETag + cache headers
+          let embedders re-render the page cheaply.
+        </p>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Badge variant="outline" className="border-blue-500 text-blue-500 text-[10px] font-mono uppercase">GET</Badge>
+              <code className="text-primary font-mono text-xs">/api/embed/badge.svg?id=VR-XXXX</code>
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Live preview (uses report <code className="font-mono text-xs text-foreground">VR-002A</code> if present, otherwise the "unknown" badge):
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <img
+                src="/api/embed/badge.svg?id=VR-002A"
+                alt="VulnRap badge for VR-002A"
+                className="h-5"
+                data-testid="embed-badge-preview"
+              />
+              <span className="text-[11px] text-muted-foreground/60 italic">
+                Replace <code className="font-mono">VR-002A</code> with your own report id.
+              </span>
+            </div>
+
+            <div>
+              <p className="text-[11px] text-muted-foreground/60 mb-1 uppercase tracking-wide">HTML</p>
+              <CopyBlock language="html" code={`<img src="https://vulnrap.com/api/embed/badge.svg?id=VR-002A" alt="VulnRap score" />`} />
+            </div>
+
+            <div>
+              <p className="text-[11px] text-muted-foreground/60 mb-1 uppercase tracking-wide">Markdown</p>
+              <CopyBlock language="markdown" code={`![VulnRap score](https://vulnrap.com/api/embed/badge.svg?id=VR-002A)`} />
+            </div>
+
+            <div>
+              <p className="text-[11px] text-muted-foreground/60 mb-1 uppercase tracking-wide">Linked Markdown (clicks through to the verify page)</p>
+              <CopyBlock language="markdown" code={`[![VulnRap score](https://vulnrap.com/api/embed/badge.svg?id=VR-002A)](https://vulnrap.com/verify/42)`} />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="space-y-4">

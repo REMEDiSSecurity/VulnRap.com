@@ -99,6 +99,7 @@ export * from "./getAuditLogParams";
 export * from "./getAvriDriftReportParams";
 export * from "./getCalibrationAuthBruteForceAlertsParams";
 export * from "./getCohortBaselineParams";
+export * from "./getEmbedBadgeParams";
 export * from "./getReportFeedAvriFamily";
 export * from "./getReportFeedFabricatedEvidence";
 export * from "./getReportFeedParams";

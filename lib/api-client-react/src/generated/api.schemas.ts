@@ -3940,6 +3940,14 @@ export type SubmitReportBody = {
   skipRedaction?: SubmitReportBodySkipRedaction;
 };
 
+export type GetEmbedBadgeParams = {
+  /**
+   * Report code in the public `VR-XXXX` format (hex, case-insensitive).
+   * @pattern ^VR-[0-9A-Fa-f]{1,8}$
+   */
+  id: string;
+};
+
 /**
  * Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true".
  */
