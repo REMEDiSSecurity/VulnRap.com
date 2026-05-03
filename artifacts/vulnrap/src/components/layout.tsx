@@ -409,6 +409,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link to="/security" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Security</Link>
               <Link to="/privacy" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Privacy</Link>
               <Link to="/terms" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Terms</Link>
+              <Link to="/accessibility" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Accessibility</Link>
               <a
                 href="https://github.com/REMEDiSSecurity/VulnRap.Com"
                 target="_blank"
