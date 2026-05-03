@@ -735,6 +735,319 @@ async function previewRemovalAgainstProduction(
   );
 }
 
+// Task #752 — preview a candidate AI self-disclosure phrase pattern (a regex
+// source string) against the same curated benchmark corpus AND production
+// archive that the curated hand-wavy phrase preview uses. The matching path
+// mirrors the engine in lib/engines/avri/ai-self-disclosure.ts: the haystack
+// has its whitespace collapsed (but is NOT lowercased — the regex's `i` flag
+// handles case folding) and the candidate compiled regex is tested against
+// it. Snippets are extracted from the row's ORIGINAL text using the same
+// regex so the reviewer reads the report's actual wording around each match.
+function buildSnippetForRegexMatch(
+  text: string,
+  re: RegExp,
+  maxLen: number = SNIPPET_MAX_LEN,
+): SampleMatchSnippet | null {
+  if (!text) return null;
+  // Re-compile against the original text without the global flag stripped so
+  // we always get the FIRST match position. The caller passes a fresh regex
+  // per row so we don't have to worry about lastIndex state.
+  const flags = re.flags.replace(/g/g, "");
+  const probe = new RegExp(re.source, flags);
+  const m = probe.exec(text);
+  if (!m || !m[0]) return null;
+  const start = m.index;
+  const end = start + m[0].length;
+  const matched = m[0].replace(/\s+/g, " ").trim();
+
+  const sideBudget = Math.max(0, maxLen - matched.length);
+  const beforeBudget = Math.floor(sideBudget / 2);
+  const afterBudget = sideBudget - beforeBudget;
+
+  let beforeStart = Math.max(0, start - beforeBudget);
+  let afterEnd = Math.min(text.length, end + afterBudget);
+
+  if (beforeStart > 0) {
+    const slice = text.slice(beforeStart, start);
+    const firstWs = slice.search(/\s/);
+    if (firstWs >= 0 && firstWs < slice.length - 1) {
+      beforeStart = beforeStart + firstWs + 1;
+    }
+  }
+  if (afterEnd < text.length) {
+    const slice = text.slice(end, afterEnd);
+    const lastWs = slice.search(/\s\S*$/);
+    if (lastWs > 0) afterEnd = end + lastWs;
+  }
+
+  let before = text.slice(beforeStart, start).replace(/\s+/g, " ");
+  let after = text.slice(end, afterEnd).replace(/\s+/g, " ");
+  if (beforeStart > 0) before = "…" + before;
+  if (afterEnd < text.length) after = after + "…";
+
+  return { before, match: matched, after };
+}
+
+function tallyRegexMatches(
+  re: RegExp,
+  rows: Iterable<{ id: string; tier: CorpusTier; text: string }>,
+): {
+  total: number;
+  byTier: DryRunMatches["byTier"];
+  sampleMatches: DryRunMatches["sampleMatches"];
+} {
+  const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
+  const sampleMatches: Array<{
+    id: string;
+    tier: CorpusTier;
+    snippet: SampleMatchSnippet | null;
+  }> = [];
+  let total = 0;
+  // Mirror the engine: collapse whitespace (but not case — the regex's `i`
+  // flag handles that) before applying the pattern.
+  for (const r of rows) {
+    const haystack = r.text.replace(/\s+/g, " ");
+    // Reset lastIndex so a stateful (`g`/`y`) flag chosen by the reviewer
+    // doesn't make `test()` skip rows it should have matched.
+    re.lastIndex = 0;
+    if (!re.test(haystack)) continue;
+    total += 1;
+    if (r.tier === "T1_LEGIT") byTier.t1Legit += 1;
+    else if (r.tier === "T2_BORDERLINE") byTier.t2Borderline += 1;
+    else if (r.tier === "T3_SLOP") byTier.t3Slop += 1;
+    else byTier.t4Hallucinated += 1;
+    if (sampleMatches.length < 12) {
+      const snippet = buildSnippetForRegexMatch(r.text, re);
+      sampleMatches.push({ id: r.id, tier: r.tier, snippet });
+    }
+  }
+  return { total, byTier, sampleMatches };
+}
+
+const AI_SD_PATTERN_MAX_LEN = 500;
+const AI_SD_FLAGS_PATTERN = /^[gimsuy]{0,7}$/;
+const AI_SD_ID_PATTERN = /^[a-z0-9_]{1,64}$/i;
+
+interface CandidateRegexParseOk {
+  ok: true;
+  re: RegExp;
+  effectiveFlags: string;
+  pattern: string;
+}
+interface CandidateRegexParseErr {
+  ok: false;
+  error: string;
+}
+
+// Apply the SAME validation rules as `addAiSelfDisclosurePhrase` so a
+// reviewer running `dryRun` sees identical "id …", "pattern …", "flags …"
+// errors before they commit. Returns the compiled regex on success so the
+// caller can hand it straight to the corpus / production scoring helpers.
+function parseCandidateAiSelfDisclosure(
+  rawId: unknown,
+  rawPattern: unknown,
+  rawFlags: unknown,
+): CandidateRegexParseOk | CandidateRegexParseErr {
+  if (typeof rawId !== "string" || rawId.trim().length === 0) {
+    return { ok: false, error: "id must be a non-empty string." };
+  }
+  const id = rawId.trim();
+  if (!AI_SD_ID_PATTERN.test(id)) {
+    return { ok: false, error: "id must be 1-64 characters of [A-Za-z0-9_]." };
+  }
+  if (typeof rawPattern !== "string" || rawPattern.length === 0) {
+    return { ok: false, error: "pattern must be a non-empty string." };
+  }
+  if (rawPattern.length > AI_SD_PATTERN_MAX_LEN) {
+    return {
+      ok: false,
+      error: `pattern must be at most ${AI_SD_PATTERN_MAX_LEN} characters.`,
+    };
+  }
+  let flags: string | undefined;
+  if (rawFlags !== undefined && rawFlags !== null) {
+    if (typeof rawFlags !== "string" || !AI_SD_FLAGS_PATTERN.test(rawFlags)) {
+      return {
+        ok: false,
+        error: "flags must contain only regex flag characters [gimsuy].",
+      };
+    }
+    if (rawFlags.length > 0) flags = rawFlags;
+  }
+  const effectiveFlags = flags ?? "i";
+  let re: RegExp;
+  try {
+    re = new RegExp(rawPattern, effectiveFlags);
+  } catch (e) {
+    return {
+      ok: false,
+      error: `pattern is not a valid regular expression: ${(e as Error).message}`,
+    };
+  }
+  return { ok: true, re, effectiveFlags, pattern: rawPattern };
+}
+
+function previewAiSelfDisclosurePhrase(re: RegExp): DryRunMatches {
+  const cohorts: Array<{
+    tier: CorpusTier;
+    fixtures: typeof TEST_FIXTURE_COHORTS.T1;
+  }> = [
+    { tier: "T1_LEGIT", fixtures: TEST_FIXTURE_COHORTS.T1 },
+    { tier: "T2_BORDERLINE", fixtures: TEST_FIXTURE_COHORTS.T2 },
+    { tier: "T3_SLOP", fixtures: TEST_FIXTURE_COHORTS.T3 },
+    { tier: "T4_HALLUCINATED", fixtures: TEST_FIXTURE_COHORTS.T4 },
+  ];
+  let corpusSize = 0;
+  const flat: Array<{ id: string; tier: CorpusTier; text: string }> = [];
+  for (const { tier, fixtures } of cohorts) {
+    corpusSize += fixtures.length;
+    for (const f of fixtures) flat.push({ id: f.id, tier, text: f.text });
+  }
+  const { total, byTier, sampleMatches } = tallyRegexMatches(re, flat);
+  const falsePositives = byTier.t1Legit + byTier.t2Borderline;
+  let warning: string | null = null;
+  if (falsePositives > 0) {
+    const noun =
+      falsePositives === 1 ? "legitimate report" : "legitimate reports";
+    warning = `This pattern would have flagged ${falsePositives} ${noun} (${byTier.t1Legit} GREEN, ${byTier.t2Borderline} YELLOW) in the curated benchmark corpus — consider tightening it.`;
+  }
+  return {
+    total,
+    byTier,
+    falsePositives,
+    corpusSize,
+    sampleMatches,
+    warning,
+    oldestCreatedAt: null,
+    newestCreatedAt: null,
+  };
+}
+
+function scoreAiSelfDisclosureProductionRows(
+  re: RegExp,
+  rows: Array<{
+    id: number | string;
+    label: string | null;
+    contentText: string | null;
+    createdAt?: Date | string | null;
+  }>,
+): DryRunMatches {
+  const tiered: Array<{ id: string; tier: CorpusTier; text: string }> = [];
+  let oldestMs: number | null = null;
+  let newestMs: number | null = null;
+  for (const r of rows) {
+    const tier = productionLabelToTier(r.label);
+    if (!tier || r.contentText == null) continue;
+    tiered.push({ id: String(r.id), tier, text: r.contentText });
+    if (r.createdAt != null) {
+      const t =
+        r.createdAt instanceof Date
+          ? r.createdAt.getTime()
+          : new Date(r.createdAt).getTime();
+      if (Number.isFinite(t)) {
+        if (oldestMs === null || t < oldestMs) oldestMs = t;
+        if (newestMs === null || t > newestMs) newestMs = t;
+      }
+    }
+  }
+  const { total, byTier, sampleMatches } = tallyRegexMatches(re, tiered);
+  const falsePositives = byTier.t1Legit + byTier.t2Borderline;
+  let warning: string | null = null;
+  if (falsePositives > 0) {
+    const noun =
+      falsePositives === 1 ? "legitimate report" : "legitimate reports";
+    warning = `This pattern would have flagged ${falsePositives} ${noun} (${byTier.t1Legit} GREEN, ${byTier.t2Borderline} YELLOW) in the most recent ${tiered.length} production reports — consider tightening it.`;
+  }
+  return {
+    total,
+    byTier,
+    falsePositives,
+    corpusSize: tiered.length,
+    sampleMatches,
+    warning,
+    oldestCreatedAt:
+      oldestMs === null ? null : new Date(oldestMs).toISOString(),
+    newestCreatedAt:
+      newestMs === null ? null : new Date(newestMs).toISOString(),
+  };
+}
+
+async function previewAiSelfDisclosurePhraseAgainstProduction(
+  re: RegExp,
+  limit: number = PRODUCTION_PREVIEW_LIMIT,
+): Promise<DryRunMatches> {
+  const rows = await db
+    .select({
+      id: reportsTable.id,
+      label: reportsTable.vulnrapCompositeLabel,
+      contentText: reportsTable.contentText,
+      createdAt: reportsTable.createdAt,
+    })
+    .from(reportsTable)
+    .where(
+      and(
+        isNotNull(reportsTable.vulnrapCompositeLabel),
+        isNotNull(reportsTable.contentText),
+      ),
+    )
+    .orderBy(sql`${reportsTable.createdAt} DESC`)
+    .limit(limit);
+  return scoreAiSelfDisclosureProductionRows(re, rows);
+}
+
+// Task #752 — overlap detection between a candidate AI self-disclosure
+// pattern and the existing curated list. Regex equivalence is undecidable in
+// general, so we surface the two practical reviewer signals: (1) an existing
+// entry already uses the same `id` (the active list would silently keep the
+// older pattern — `addAiSelfDisclosurePhrase` is idempotent on id); (2) an
+// existing entry has the same regex source + effective flags (a textual
+// duplicate that would not be added either if ids matched, but is worth
+// flagging when the ids differ so the reviewer can rename instead of adding
+// a clone).
+type AiSelfDisclosureOverlapRelation = "id-equal" | "pattern-equal";
+
+interface AiSelfDisclosureOverlap {
+  id: string;
+  pattern: string;
+  flags: string;
+  relation: AiSelfDisclosureOverlapRelation;
+}
+
+interface AiSelfDisclosureOverlaps {
+  total: number;
+  matches: AiSelfDisclosureOverlap[];
+}
+
+function detectAiSelfDisclosureOverlaps(
+  candidateId: string,
+  candidatePattern: string,
+  candidateFlags: string,
+  curated: Iterable<{ id: string; pattern: string; flags?: string }>,
+): AiSelfDisclosureOverlaps {
+  const matches: AiSelfDisclosureOverlap[] = [];
+  for (const m of curated) {
+    const existingFlags = m.flags ?? "i";
+    let relation: AiSelfDisclosureOverlapRelation | null = null;
+    if (m.id === candidateId) {
+      relation = "id-equal";
+    } else if (
+      m.pattern === candidatePattern &&
+      existingFlags === candidateFlags
+    ) {
+      relation = "pattern-equal";
+    }
+    if (relation) {
+      matches.push({
+        id: m.id,
+        pattern: m.pattern,
+        flags: existingFlags,
+        relation,
+      });
+    }
+  }
+  return { total: matches.length, matches };
+}
+
 // Exported for unit testing the pure scoring step without DB access.
 export const __testing = {
   productionLabelToTier,
@@ -747,6 +1060,13 @@ export const __testing = {
   PRODUCTION_PREVIEW_LIMIT,
   PRODUCTION_PREVIEW_LIMIT_MIN,
   PRODUCTION_PREVIEW_LIMIT_MAX,
+  // Task #752 — AI self-disclosure dry-run helpers.
+  parseCandidateAiSelfDisclosure,
+  previewAiSelfDisclosurePhrase,
+  scoreAiSelfDisclosureProductionRows,
+  detectAiSelfDisclosureOverlaps,
+  buildSnippetForRegexMatch,
+  tallyRegexMatches,
 };
 
 const router: IRouter = Router();
@@ -2725,14 +3045,24 @@ router.get(
 router.post(
   "/feedback/calibration/ai-self-disclosure-phrases",
   requireCalibrationAuth,
-  (req, res) => {
+  async (req, res) => {
     try {
-      const { id, pattern, flags, reviewer, rationale } = (req.body ?? {}) as {
+      const {
+        id,
+        pattern,
+        flags,
+        reviewer,
+        rationale,
+        dryRun,
+        productionScanLimit,
+      } = (req.body ?? {}) as {
         id?: unknown;
         pattern?: unknown;
         flags?: unknown;
         reviewer?: unknown;
         rationale?: unknown;
+        dryRun?: unknown;
+        productionScanLimit?: unknown;
       };
       if (reviewer !== undefined && typeof reviewer !== "string") {
         res
@@ -2744,6 +3074,86 @@ router.post(
         res
           .status(400)
           .json({ error: "rationale must be a string when provided." });
+        return;
+      }
+      if (dryRun !== undefined && typeof dryRun !== "boolean") {
+        res
+          .status(400)
+          .json({ error: "dryRun must be a boolean when provided." });
+        return;
+      }
+      // Task #752 — share the curated hand-wavy phrase preview's productionScanLimit
+      // contract (default 2000, bounds 100..10000) so reviewers see consistent
+      // behavior across the two phrase-list previews.
+      const productionLimitParse =
+        parseProductionScanLimit(productionScanLimit);
+      if (!productionLimitParse.ok) {
+        res.status(400).json({ error: productionLimitParse.error });
+        return;
+      }
+      const effectiveProductionLimit = productionLimitParse.limit;
+      // Task #752 — dry-run mode: validate the candidate exactly the same way
+      // a real add would, then score it against (a) the curated benchmark
+      // corpus and (b) the most recent N production reports without
+      // persisting anything. Mirrors the curated hand-wavy POST dryRun path
+      // so the reviewer UI can render an identical preview block before the
+      // pattern is committed to the active list.
+      if (dryRun === true) {
+        const parsed = parseCandidateAiSelfDisclosure(id, pattern, flags);
+        if (!parsed.ok) {
+          res.status(400).json({ error: parsed.error });
+          return;
+        }
+        // The rationale validation also runs on the real-add path; surface
+        // the same field-prefixed error here so reviewers can fix it before
+        // committing.
+        if (typeof rationale === "string" && rationale.trim().length > 0) {
+          const trimmed = rationale.trim();
+          if (trimmed.length < 3) {
+            res.status(400).json({
+              error: "rationale must be at least 3 characters when provided.",
+            });
+            return;
+          }
+        }
+        const corpusMatches = previewAiSelfDisclosurePhrase(parsed.re);
+        let productionMatches: DryRunMatches | null = null;
+        let productionError: string | null = null;
+        try {
+          productionMatches =
+            await previewAiSelfDisclosurePhraseAgainstProduction(
+              parsed.re,
+              effectiveProductionLimit,
+            );
+        } catch (err) {
+          req.log?.error(err, "Production AI self-disclosure dry-run failed");
+          productionError =
+            "Production archive scan failed; only curated-corpus signal is shown.";
+        }
+        const phrases = getAiSelfDisclosurePhrases();
+        const overlaps = detectAiSelfDisclosureOverlaps(
+          (id as string).trim(),
+          parsed.pattern,
+          parsed.effectiveFlags,
+          phrases,
+        );
+        res.status(200).json({
+          dryRun: true,
+          added: false,
+          phrase: {
+            id: (id as string).trim(),
+            pattern: parsed.pattern,
+            flags: parsed.effectiveFlags,
+          },
+          total: phrases.length,
+          penalty: AI_SELF_DISCLOSURE_PENALTY,
+          phrases,
+          dryRunMatches: corpusMatches,
+          dryRunMatchesProduction: productionMatches,
+          dryRunMatchesProductionError: productionError,
+          dryRunMatchesProductionLimit: effectiveProductionLimit,
+          dryRunOverlaps: overlaps,
+        });
         return;
       }
       const result = addAiSelfDisclosurePhrase(id, pattern, flags, {

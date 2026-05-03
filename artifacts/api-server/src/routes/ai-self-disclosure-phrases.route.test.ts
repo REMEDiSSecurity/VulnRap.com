@@ -459,6 +459,302 @@ first-extra-marker second-extra-marker third-extra-marker.`,
     ).toBeDefined();
   });
 
+
+  // Task #752 — dry-run preview. Reviewers can POST `dryRun: true` to score a
+  // candidate AI self-disclosure regex against (a) the curated benchmark
+  // corpus and (b) the most recent N production reports BEFORE persisting it,
+  // mirroring the long-standing curated hand-wavy phrase preview.
+  describe("Task #752 dry-run preview", () => {
+    interface DryRunBody {
+      dryRun: boolean;
+      added: boolean;
+      phrase: { id: string; pattern: string; flags: string };
+      total: number;
+      penalty: number;
+      phrases: PhraseRow[];
+      dryRunMatches: {
+        total: number;
+        byTier: {
+          t1Legit: number;
+          t2Borderline: number;
+          t3Slop: number;
+          t4Hallucinated: number;
+        };
+        falsePositives: number;
+        corpusSize: number;
+        sampleMatches: Array<{
+          id: string;
+          tier: string;
+          snippet: { before: string; match: string; after: string } | null;
+        }>;
+        warning: string | null;
+        oldestCreatedAt: string | null;
+        newestCreatedAt: string | null;
+      };
+      dryRunMatchesProduction: {
+        total: number;
+        byTier: {
+          t1Legit: number;
+          t2Borderline: number;
+          t3Slop: number;
+          t4Hallucinated: number;
+        };
+        falsePositives: number;
+        corpusSize: number;
+        sampleMatches: Array<{ id: string; tier: string }>;
+        warning: string | null;
+        oldestCreatedAt: string | null;
+        newestCreatedAt: string | null;
+      } | null;
+      dryRunMatchesProductionError: string | null;
+      dryRunMatchesProductionLimit: number;
+      dryRunOverlaps: {
+        total: number;
+        matches: Array<{
+          id: string;
+          pattern: string;
+          flags: string;
+          relation: "id-equal" | "pattern-equal";
+        }>;
+      };
+    }
+
+    it("dryRun=true returns a corpus + production preview and does NOT persist the pattern", async () => {
+      const r = await request<DryRunBody>(
+        "POST",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+        {
+          id: "novel_marker",
+          pattern: "\\bnovel-pattern-xyzzy-marker-7q\\b",
+          dryRun: true,
+        },
+      );
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.added).toBe(false);
+      expect(r.body.phrase.id).toBe("novel_marker");
+      expect(r.body.phrase.pattern).toBe("\\bnovel-pattern-xyzzy-marker-7q\\b");
+      expect(r.body.phrase.flags).toBe("i");
+      expect(r.body.penalty).toBe(15);
+      expect(r.body.dryRunMatches.total).toBe(0);
+      expect(r.body.dryRunMatches.falsePositives).toBe(0);
+      expect(r.body.dryRunMatches.warning).toBeNull();
+      expect(r.body.dryRunMatches.corpusSize).toBeGreaterThan(0);
+      expect(r.body.dryRunMatches.sampleMatches).toHaveLength(0);
+      // Production block must always be present (either populated or
+      // null+error so the UI can render a "scan unavailable" notice).
+      expect(r.body).toHaveProperty("dryRunMatchesProduction");
+      expect(r.body).toHaveProperty("dryRunMatchesProductionError");
+      expect(r.body.dryRunMatchesProductionLimit).toBe(2000);
+      // Overlap block must always be present.
+      expect(r.body.dryRunOverlaps.total).toBe(0);
+      // Confirm the dry-run did not slip the pattern into the active list.
+      const list = await request<ListBody>(
+        "GET",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+      );
+      expect(list.body.phrases.find((p) => p.id === "novel_marker")).toBe(
+        undefined,
+      );
+      // Detector also must not start firing on the dry-run pattern.
+      const det = detectFn("This contains novel-pattern-xyzzy-marker-7q here.");
+      expect(det.matches.find((m) => m.id === "novel_marker")).toBe(undefined);
+    });
+
+    it("dryRun=true surfaces a warning when the pattern flags curated GREEN/YELLOW fixtures", async () => {
+      // Match the literal word "the" — it is virtually guaranteed to appear
+      // in T1 LEGIT and T2 BORDERLINE fixtures, exercising the false-positive
+      // warning path without depending on any specific fixture wording.
+      const r = await request<DryRunBody>(
+        "POST",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+        {
+          id: "matches_the",
+          pattern: "\\bthe\\b",
+          dryRun: true,
+        },
+      );
+      expect(r.status).toBe(200);
+      expect(r.body.dryRun).toBe(true);
+      expect(r.body.dryRunMatches.total).toBeGreaterThan(0);
+      expect(r.body.dryRunMatches.falsePositives).toBeGreaterThan(0);
+      expect(r.body.dryRunMatches.warning).not.toBeNull();
+      expect(r.body.dryRunMatches.warning).toMatch(/legitimate/);
+      // Sample list capped at 12 entries (mirrors hand-wavy preview).
+      expect(r.body.dryRunMatches.sampleMatches.length).toBeLessThanOrEqual(12);
+      // Each surfaced sample must carry an in-place context snippet so the
+      // reviewer can judge the match without opening /verify/:id.
+      for (const sm of r.body.dryRunMatches.sampleMatches) {
+        if (sm.snippet) {
+          expect(typeof sm.snippet.match).toBe("string");
+          expect(sm.snippet.match.length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it("dryRun=true rejects malformed input with the same field-prefixed errors as the real add path", async () => {
+      const cases: Array<{ body: Record<string, unknown>; field: RegExp }> = [
+        { body: { id: "", pattern: "\\bfoo\\b", dryRun: true }, field: /^id / },
+        {
+          body: { id: "spaces in id", pattern: "\\bfoo\\b", dryRun: true },
+          field: /^id /,
+        },
+        {
+          body: { id: "ok_id", pattern: "", dryRun: true },
+          field: /^pattern /,
+        },
+        {
+          body: { id: "ok_id", pattern: "(unbalanced", dryRun: true },
+          field: /^pattern /,
+        },
+        {
+          body: { id: "ok_id", pattern: "\\bfoo\\b", flags: "Z", dryRun: true },
+          field: /^flags /,
+        },
+        {
+          body: {
+            id: "ok_id",
+            pattern: "\\bfoo\\b",
+            rationale: "ab",
+            dryRun: true,
+          },
+          field: /^rationale /,
+        },
+      ];
+      for (const c of cases) {
+        const r = await request<ErrBody>(
+          "POST",
+          "/feedback/calibration/ai-self-disclosure-phrases",
+          c.body,
+        );
+        expect(r.status, `case=${JSON.stringify(c.body)}`).toBe(400);
+        expect(r.body.error).toMatch(c.field);
+      }
+      // None of the invalid dry-runs may have persisted anything.
+      const list = await request<ListBody>(
+        "GET",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+      );
+      expect(list.body.phrases.find((p) => p.id === "ok_id")).toBe(undefined);
+    });
+
+    it("dryRun=true surfaces an id-equal overlap when the candidate id collides with a curated default", async () => {
+      const r = await request<DryRunBody>(
+        "POST",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+        {
+          id: "prepared_using_ai",
+          pattern: "\\bsomething-completely-different\\b",
+          dryRun: true,
+        },
+      );
+      expect(r.status).toBe(200);
+      expect(r.body.dryRunOverlaps.total).toBeGreaterThanOrEqual(1);
+      const idCollision = r.body.dryRunOverlaps.matches.find(
+        (m) => m.relation === "id-equal" && m.id === "prepared_using_ai",
+      );
+      expect(idCollision).toBeDefined();
+    });
+
+    it("dryRun=true surfaces a pattern-equal overlap when the candidate regex source matches an existing entry", async () => {
+      // The default phrase `prepared_using_ai` ships with the pattern below.
+      // Reusing the same source under a fresh id must surface a duplicate
+      // pattern overlap.
+      const dupPattern =
+        "\\bprepared\\s+(?:using|with)\\s+(?:an?\\s+)?(?:ai|artificial intelligence|llm)\\b";
+      const r = await request<DryRunBody>(
+        "POST",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+        {
+          id: "prepared_using_ai_clone",
+          pattern: dupPattern,
+          dryRun: true,
+        },
+      );
+      expect(r.status).toBe(200);
+      const dup = r.body.dryRunOverlaps.matches.find(
+        (m) => m.relation === "pattern-equal" && m.pattern === dupPattern,
+      );
+      expect(dup).toBeDefined();
+    });
+
+    it("dryRun=true echoes the reviewer-supplied productionScanLimit back, falls back to 2000 when omitted", async () => {
+      const tight = await request<DryRunBody>(
+        "POST",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+        {
+          id: "novel_marker_tight",
+          pattern: "\\bnovel-marker-tight-xyz\\b",
+          dryRun: true,
+          productionScanLimit: 500,
+        },
+      );
+      expect(tight.status).toBe(200);
+      expect(tight.body.dryRunMatchesProductionLimit).toBe(500);
+
+      const def = await request<DryRunBody>(
+        "POST",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+        {
+          id: "novel_marker_default",
+          pattern: "\\bnovel-marker-default-xyz\\b",
+          dryRun: true,
+        },
+      );
+      expect(def.status).toBe(200);
+      expect(def.body.dryRunMatchesProductionLimit).toBe(2000);
+    });
+
+    it("dryRun=true rejects a productionScanLimit outside the documented bounds with 400", async () => {
+      const r = await request<ErrBody>(
+        "POST",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+        {
+          id: "novel_marker_bad_limit",
+          pattern: "\\bnovel-marker-bad-limit\\b",
+          dryRun: true,
+          productionScanLimit: 50,
+        },
+      );
+      expect(r.status).toBe(400);
+      expect(r.body.error).toMatch(/productionScanLimit/);
+    });
+
+    it("dryRun=true requires the calibration token (mutation gate)", async () => {
+      const r = await request<ErrBody>(
+        "POST",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+        {
+          id: "should_not_be_added_dryrun",
+          pattern: "\\bnope\\b",
+          dryRun: true,
+        },
+        { "X-Calibration-Token": "wrong-token" },
+      );
+      expect([401, 403]).toContain(r.status);
+    });
+
+    it("dryRun=false (default) still persists the pattern as before", async () => {
+      const r = await request<AddBody>(
+        "POST",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+        {
+          id: "real_commit_marker",
+          pattern: "\\breal-commit-marker-xyz\\b",
+        },
+      );
+      expect(r.status).toBe(201);
+      expect(r.body.added).toBe(true);
+      const list = await request<ListBody>(
+        "GET",
+        "/feedback/calibration/ai-self-disclosure-phrases",
+      );
+      expect(
+        list.body.phrases.find((p) => p.id === "real_commit_marker"),
+      ).toBeDefined();
+    });
+  });
+
   it("POST requires the calibration token (mutation gate)", async () => {
     const r = await request<ErrBody>(
       "POST",
