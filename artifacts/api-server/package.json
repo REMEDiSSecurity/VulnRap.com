@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "seed": "node --enable-source-maps ./dist/seed.mjs",
-    "backfill:vulnrap": "node --enable-source-maps ./dist/backfill-vulnrap.mjs",
+    "backfill:vulnrap": "node --enable-source-maps ./dist/backfill-vulnrap-cli.mjs",
     "backfill:avri-family": "node --enable-source-maps ./dist/backfill-avri-family.mjs",
     "backfill:fabricated-evidence": "node --enable-source-maps ./dist/backfill-fabricated-evidence.mjs",
     "test": "vitest run",

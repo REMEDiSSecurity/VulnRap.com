@@ -17,7 +17,11 @@
 // text still get rescored when the cached signals warrant it.
 //
 // Usage (from artifacts/api-server):
-//   pnpm run build && node --enable-source-maps ./dist/backfill-vulnrap.mjs
+//   pnpm run build && node --enable-source-maps ./dist/backfill-vulnrap-cli.mjs
+//
+// The CLI entry point lives in `./backfill-vulnrap-cli.ts` (Task #760)
+// so this module stays a pure library — importing it from the
+// api-server bundle never auto-kicks off the backfill.
 // Flags:
 //   --dry-run        Report what would change without writing.
 //   --limit=N        Cap how many reports are processed in this run.
@@ -35,7 +39,6 @@
 //                    for clean ones.
 
 import crypto from "crypto";
-import { fileURLToPath } from "url";
 import {
   db,
   reportsTable,
@@ -54,12 +57,10 @@ import {
 } from "./lib/engines";
 import {
   reconstructHallucinationTriggerText,
-  parseArgs,
   chooseConcurrencyGuard,
   buildBackfillRescoreAuditEntry,
   appendRescoreHistory,
   buildRescoreCandidateFilters,
-  CliExit,
   type CliOpts,
   type BackfillStats,
   type ConcurrencyGuard,
@@ -602,53 +603,10 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
   };
 }
 
-// Auto-run guard (Task #388): the recurring rescore scheduler imports
-// `backfill` from this module, so the side-effecting CLI parse + DB
-// kickoff at the bottom must only fire when the file is invoked as the
-// process entry point (e.g. `node ./dist/backfill-vulnrap.mjs`).
-//
-// Task #404 also gates on the entry-point's basename: esbuild inlines
-// this module into the api-server's `dist/index.mjs`, where
-// `import.meta.url` resolves to the bundle's own path and matches
-// `process.argv[1]` at api-server startup — which previously triggered
-// the CLI and `process.exit(0)`'d before `app.listen` bound a port.
-function isInvokedAsScript(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  // Reject the bundled-into-index.mjs case by basename.
-  const entryBase = entry.split(/[\\/]/).pop() ?? "";
-  if (!/^backfill-vulnrap(?:\.|$)/.test(entryBase)) return false;
-  try {
-    const here = fileURLToPath(import.meta.url);
-    if (entry === here) return true;
-    // Tolerate the .mjs vs .ts difference between the bundled dist file
-    // and the source path so dev-time invocations through tsx still
-    // trigger the script entry.
-    const stripExt = (p: string) => p.replace(/\.(?:mjs|js|ts)$/, "");
-    return stripExt(entry) === stripExt(here);
-  } catch {
-    return false;
-  }
-}
-
-if (isInvokedAsScript()) {
-  // parseArgs throws CliExit so it stays unit-testable; translate to a
-  // real process.exit here at the script entry.
-  let parsed: CliOpts;
-  try {
-    parsed = parseArgs(process.argv);
-  } catch (err) {
-    if (err instanceof CliExit) {
-      if (err.code === 0) console.log(err.message);
-      else console.error(err.message);
-      process.exit(err.code);
-    }
-    throw err;
-  }
-  backfill(parsed)
-    .then(() => process.exit(0))
-    .catch((err) => {
-      console.error("[backfill] fatal:", err);
-      process.exit(1);
-    });
-}
+// Task #760 — the CLI entry point (argv parsing + `backfill(opts).then(
+// process.exit)` runner) lives in `./backfill-vulnrap-cli.ts`. Keeping
+// it out of this module guarantees that importing `backfill` from the
+// api-server bundle (via `lib/rescore-backfill-scheduler.ts`) never
+// triggers the backfill at module-init time, regardless of how
+// esbuild bundles the file or how `process.argv[1]` happens to align
+// with `import.meta.url`.

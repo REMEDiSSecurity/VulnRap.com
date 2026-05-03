@@ -5,11 +5,11 @@
 // middlewares/calibration-auth-brute-force-alert.test.ts which inject a
 // dispatcher into an in-process Express app.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { AddressInfo } from "node:net";
 
@@ -19,13 +19,13 @@ const DIST_DIR = path.resolve(ARTIFACT_DIR, "dist");
 const SERVER_ENTRY = path.resolve(DIST_DIR, "index.mjs");
 const BUILD_SCRIPT = path.resolve(ARTIFACT_DIR, "build.mjs");
 
-// The bundle's backfill-vulnrap.ts has a top-level "run as script" guard
-// that misfires when bundled into dist/index.mjs (import.meta.url and
-// process.argv[1] both resolve to the bundle path). We spawn a tiny
-// dynamic-import wrapper instead so those two values diverge and the
-// guard stays dormant.
-const SERVER_WRAPPER = path.resolve(DIST_DIR, "__e2e_server_wrapper.mjs");
-const SERVER_ENTRY_URL = pathToFileURL(SERVER_ENTRY).href;
+// Task #760 — the legacy report rescore backfill's CLI runner used to
+// live at the bottom of `backfill-vulnrap.ts` and got bundled into
+// `dist/index.mjs`, where its `isInvokedAsScript` guard was fragile
+// enough to misfire on plain `node dist/index.mjs` boots. The CLI now
+// lives in its own module (`backfill-vulnrap-cli.ts`) so the bundle no
+// longer contains an auto-run path and we can spawn the entry point
+// directly without a dynamic-import wrapper.
 
 const TOKEN = "e2e-brute-force-reviewer-token";
 const WRONG_TOKEN = "definitely-not-the-token";
@@ -139,7 +139,7 @@ async function startApiServer(
     env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH
       ? {}
       : { CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH: createScratchStatePath() };
-  const proc = spawn("node", ["--enable-source-maps", SERVER_WRAPPER], {
+  const proc = spawn("node", ["--enable-source-maps", SERVER_ENTRY], {
     // NODE_ENV cleared to skip productionOnly migrations against the dev DB.
     env: {
       ...inherited,
@@ -301,12 +301,6 @@ beforeAll(() => {
       `api-server build failed (exit ${r.status}):\n${r.stderr || r.stdout}`,
     );
   }
-  // Write the wrapper AFTER building (the build wipes dist/ first).
-  writeFileSync(
-    SERVER_WRAPPER,
-    `await import(${JSON.stringify(SERVER_ENTRY_URL)});\n`,
-    "utf8",
-  );
 }, 60_000);
 
 afterEach(async () => {
