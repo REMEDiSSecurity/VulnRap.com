@@ -62,9 +62,11 @@ function TrustHint({ text }: { text: string }) {
 export function VerificationTrustPanel({
   checks,
   summary,
+  onJumpToFailures,
 }: {
   checks: VerificationCheck[];
   summary?: VerificationSummary;
+  onJumpToFailures?: () => void;
 }) {
   const verifiable = checks.filter((c) => isVerifiable(c.result));
   if (verifiable.length === 0) return null;
@@ -101,10 +103,7 @@ export function VerificationTrustPanel({
         ? "bg-yellow-500"
         : "bg-orange-500";
 
-  const summaryText =
-    notFound === 0
-      ? `${verified} of ${total} referenced resources verified`
-      : `${verified} of ${total} referenced resources verified, ${notFound} not found`;
+  const canJump = notFound > 0 && !!onJumpToFailures;
 
   return (
     <Card
@@ -124,7 +123,28 @@ export function VerificationTrustPanel({
       <CardContent className="space-y-3 pt-0">
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">{summaryText}</span>
+            <span className="text-muted-foreground">
+              {notFound === 0 ? (
+                `${verified} of ${total} referenced resources verified`
+              ) : (
+                <>
+                  {`${verified} of ${total} referenced resources verified, `}
+                  {canJump ? (
+                    <button
+                      type="button"
+                      onClick={onJumpToFailures}
+                      className="text-orange-400 hover:text-orange-300 underline decoration-dotted underline-offset-2 font-medium"
+                      data-testid="verification-trust-not-found-link"
+                      aria-label={`Show ${notFound} not-found resource${notFound === 1 ? "" : "s"}`}
+                    >
+                      {notFound} not found
+                    </button>
+                  ) : (
+                    `${notFound} not found`
+                  )}
+                </>
+              )}
+            </span>
             <span className={`font-mono font-bold ${ratioTone}`}>{pct}%</span>
           </div>
           <Progress

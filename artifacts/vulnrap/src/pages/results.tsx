@@ -891,11 +891,21 @@ function ScoreHistoryTimeline({ reportId }: { reportId: number }) {
 function VerificationPanel({
   checks,
   summary,
+  flashKey,
 }: {
   checks: VerificationCheck[];
   summary?: VerificationSummary;
+  flashKey?: number;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [flashing, setFlashing] = useState(false);
+  useEffect(() => {
+    if (!flashKey) return;
+    setExpanded(true);
+    setFlashing(true);
+    const t = window.setTimeout(() => setFlashing(false), 2400);
+    return () => window.clearTimeout(t);
+  }, [flashKey]);
   // v3.6.0 §2: Surface the same referenced/search-fallback split that the
   // diagnostics panel shows reviewers, so submitters can see which checks
   // were against repos they explicitly cited vs. ones VulnRap guessed.
@@ -909,7 +919,10 @@ function VerificationPanel({
   const hasSourceBreakdown =
     referencedChecks.length + fallbackChecks.length > 0;
   return (
-    <Card className="glass-card rounded-xl">
+    <Card
+      id="active-verification"
+      className="glass-card rounded-xl scroll-mt-24"
+    >
       <CardHeader
         className="cursor-pointer"
         onClick={() => setExpanded(!expanded)}
@@ -986,16 +999,24 @@ function VerificationPanel({
               ) : (
                 <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
               );
+            const isNotFound = check.result === "not_found";
             const bg =
               check.result === "verified"
                 ? "bg-green-500/5 border-green-500/15"
-                : check.result === "not_found"
+                : isNotFound
                   ? "bg-destructive/5 border-destructive/15"
                   : "bg-yellow-500/5 border-yellow-500/15";
+            const flashClass =
+              flashing && isNotFound
+                ? "ring-2 ring-destructive/70 shadow-[0_0_12px_rgba(239,68,68,0.45)] animate-pulse"
+                : "";
             return (
               <div
                 key={i}
-                className={`rounded-lg border p-3 flex items-start gap-3 ${bg}`}
+                data-testid={
+                  isNotFound ? "verification-failed-entry" : undefined
+                }
+                className={`rounded-lg border p-3 flex items-start gap-3 transition-shadow ${bg} ${flashClass}`}
               >
                 <div className="mt-0.5">{icon}</div>
                 <div className="min-w-0 flex-1">
@@ -1008,7 +1029,7 @@ function VerificationPanel({
                       className={`text-[9px] px-1 py-0 h-4 ${
                         check.result === "verified"
                           ? "border-green-500/40 text-green-400"
-                          : check.result === "not_found"
+                          : isNotFound
                             ? "border-destructive/40 text-destructive"
                             : "border-yellow-500/40 text-yellow-500"
                       }`}
@@ -1017,6 +1038,12 @@ function VerificationPanel({
                     </Badge>
                   </div>
                   <p className="text-sm leading-relaxed">{check.detail}</p>
+                  {isNotFound && check.target && (
+                    <div className="mt-1 text-[11px] font-mono text-destructive/80 break-all">
+                      <span className="text-muted-foreground">why: </span>
+                      {check.target}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -2622,6 +2649,20 @@ export default function Results() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Task #935: clicking the trust panel's "not found" segment scrolls to
+  // the detailed Active Verification panel and flashes the failed entries.
+  // The nonce increments on every click so repeat clicks re-trigger the
+  // scroll+flash effect.
+  const [verificationFailureFlash, setVerificationFailureFlash] = useState(0);
+  const handleJumpToVerificationFailures = () => {
+    setVerificationFailureFlash((n) => n + 1);
+    if (typeof document !== "undefined") {
+      const el = document.getElementById("active-verification");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  };
   const [expandedCompare, setExpandedCompare] = useState<number | null>(null);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
   const [exporting, setExporting] = useState<
@@ -3514,6 +3555,7 @@ export default function Results() {
               <VerificationTrustPanel
                 checks={triageChecks}
                 summary={triageSummary}
+                onJumpToFailures={handleJumpToVerificationFailures}
               />
             )}
             <div className="space-y-3">
@@ -4308,7 +4350,11 @@ export default function Results() {
       )}
 
       {activeVerification && triageChecks.length > 0 && (
-        <VerificationPanel checks={triageChecks} summary={triageSummary} />
+        <VerificationPanel
+          checks={triageChecks}
+          summary={triageSummary}
+          flashKey={verificationFailureFlash}
+        />
       )}
 
       {triage && (
