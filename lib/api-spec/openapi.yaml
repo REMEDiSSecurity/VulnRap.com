@@ -26,6 +26,8 @@ tags:
     description: Curated public preset library (sensitivity + per-engine weights)
   - name: phrase-suggestions
     description: User-suggested handwavy / ai-self-disclosure phrases (Task #634)
+  - name: internal
+    description: Reviewer-only internal surfaces (gated by CALIBRATION_TOKEN)
 paths:
   /healthz:
     get:
@@ -691,6 +693,49 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/AvriDriftSchedulerStatus"
+
+  /internal/shadow-drift:
+    get:
+      operationId: getShadowDrift
+      tags: [internal]
+      summary: Shadow scoring drift report (reviewer-only, Task #639)
+      description: |
+        Reviewer-only listing of production reports whose shadow score
+        diverges from the live score by ≥1 tier or ≥10 score points
+        within the lookback window. Backs the "Shadow drift" tab on
+        `/feedback-analytics`. Strict-auth: shadow drift is a leading
+        signal of an in-flight scoring regression, same access policy
+        as the other reviewer-only drift surfaces.
+      parameters:
+        - name: lookbackDays
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 14
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Shadow drift report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShadowDriftReport"
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /feedback/calibration/score-stability:
     get:
@@ -4640,6 +4685,94 @@ components:
         minFeedbackThreshold:
           type: integer
       required: [currentConfig, totalFeedbackAnalyzed, bucketAnalysis, suggestions, overallHealth, minFeedbackThreshold]
+
+    ShadowDriftRow:
+      type: object
+      description: |
+        One persisted shadow-score row whose live vs. shadow result
+        diverges enough to surface on the reviewer drift dashboard
+        (Task #639). A row qualifies when the tier flipped OR the
+        score delta is at least 10 points in either direction.
+      properties:
+        id:
+          type: integer
+        reportId:
+          type: integer
+        liveScore:
+          type: integer
+        liveTier:
+          type: string
+        shadowScore:
+          type: integer
+        shadowTier:
+          type: string
+        scoreDiff:
+          type: integer
+          description: shadow_score − live_score (positive means shadow is harsher)
+        tierDiverged:
+          type: boolean
+        shadowVersion:
+          type: string
+        scoredAt:
+          type: string
+          format: date-time
+        fileName:
+          type: string
+          nullable: true
+      required:
+        - id
+        - reportId
+        - liveScore
+        - liveTier
+        - shadowScore
+        - shadowTier
+        - scoreDiff
+        - tierDiverged
+        - shadowVersion
+        - scoredAt
+
+    ShadowDriftTotals:
+      type: object
+      properties:
+        total:
+          type: integer
+        divergent:
+          type: integer
+        tierFlips:
+          type: integer
+        scoreFlips:
+          type: integer
+        legitToSlop:
+          type: integer
+        slopToLegit:
+          type: integer
+      required: [total, divergent, tierFlips, scoreFlips, legitToSlop, slopToLegit]
+
+    ShadowDriftReport:
+      type: object
+      description: |
+        Reviewer-only listing of shadow-score divergences in the
+        lookback window. `enabled` echoes whether
+        `SHADOW_SCORING_ENABLED=1` is set on the API server so the UI
+        can render an "OFF" hint when no fresh rows are landing.
+      properties:
+        enabled:
+          type: boolean
+        generatedAt:
+          type: string
+          format: date-time
+        lookbackDays:
+          type: integer
+        scoreDeltaThreshold:
+          type: integer
+          description: Score-delta threshold (in points) above which a row is considered divergent regardless of tier.
+        totals:
+          $ref: "#/components/schemas/ShadowDriftTotals"
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShadowDriftRow"
+      required: [enabled, generatedAt, lookbackDays, scoreDeltaThreshold, totals, rows]
 
     ScoreStabilityDailyBucket:
       type: object

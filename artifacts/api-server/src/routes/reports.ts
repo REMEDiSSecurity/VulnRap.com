@@ -55,6 +55,7 @@ import {
   type PipelineTrace,
 } from "../lib/engines";
 import { analysisTracesTable } from "@workspace/db";
+import { runShadowScore, isShadowScoringEnabled } from "../lib/scoring-shadow";
 import {
   generateTriageRecommendation,
   computeTemporalSignals,
@@ -1151,6 +1152,27 @@ router.post("/reports", async (req, res): Promise<void> => {
   });
 
   res.status(201).json(response);
+
+  // Task #639 — Shadow scoring mode. Fire-and-forget after the response so
+  // the user-facing submit path is never slowed down (or broken) by the
+  // shadow pipeline. Runs only when `SHADOW_SCORING_ENABLED=1`. Scoped to
+  // production submissions — POST /reports/check (instant-check) does NOT
+  // shadow-score per the v1 task scope.
+  if (isShadowScoringEnabled()) {
+    void runShadowScore({
+      reportId: report.id,
+      liveScore: report.slopScore,
+      liveTier: report.slopTier,
+      breakdown: {
+        linguistic: analysisResult.breakdown.linguistic,
+        factual: analysisResult.breakdown.factual,
+        template: analysisResult.breakdown.template,
+        verification: analysisResult.breakdown.verification ?? null,
+      },
+      evidence: analysisResult.evidence,
+      originalText: analysisText,
+    });
+  }
 
   // Task #197 — the AVRI drift notification check used to piggyback on this
   // hot path as a fire-and-forget side effect. It now runs on a deterministic

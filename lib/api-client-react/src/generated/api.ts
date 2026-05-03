@@ -42,6 +42,7 @@ import type {
   GetCalibrationAuthBruteForceAlertsParams,
   GetCohortBaselineParams,
   GetReportFeedParams,
+  GetShadowDriftParams,
   GetTrendsParams,
   HandwavyPhraseBatchRemoveBody,
   HandwavyPhraseBatchRemoveDryRunResponse,
@@ -86,6 +87,7 @@ import type {
   ScoreStabilitySchedulerStatus,
   ScoreStabilitySummary,
   ScoringConfigResponse,
+  ShadowDriftReport,
   SlopDistribution,
   SubmitFeedbackWithChallenge,
   SubmitReportBody,
@@ -1913,6 +1915,107 @@ export function useGetAvriDriftSchedulerStatus<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAvriDriftSchedulerStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Reviewer-only listing of production reports whose shadow score
+diverges from the live score by ≥1 tier or ≥10 score points
+within the lookback window. Backs the "Shadow drift" tab on
+`/feedback-analytics`. Strict-auth: shadow drift is a leading
+signal of an in-flight scoring regression, same access policy
+as the other reviewer-only drift surfaces.
+
+ * @summary Shadow scoring drift report (reviewer-only, Task
+ */
+export const getGetShadowDriftUrl = (params?: GetShadowDriftParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/internal/shadow-drift?${stringifiedParams}`
+    : `/api/internal/shadow-drift`;
+};
+
+export const getShadowDrift = async (
+  params?: GetShadowDriftParams,
+  options?: RequestInit,
+): Promise<ShadowDriftReport> => {
+  return customFetch<ShadowDriftReport>(getGetShadowDriftUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetShadowDriftQueryKey = (params?: GetShadowDriftParams) => {
+  return [`/api/internal/shadow-drift`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetShadowDriftQueryOptions = <
+  TData = Awaited<ReturnType<typeof getShadowDrift>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetShadowDriftParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getShadowDrift>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetShadowDriftQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getShadowDrift>>> = ({
+    signal,
+  }) => getShadowDrift(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getShadowDrift>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetShadowDriftQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getShadowDrift>>
+>;
+export type GetShadowDriftQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Shadow scoring drift report (reviewer-only, Task
+ */
+
+export function useGetShadowDrift<
+  TData = Awaited<ReturnType<typeof getShadowDrift>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetShadowDriftParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getShadowDrift>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetShadowDriftQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

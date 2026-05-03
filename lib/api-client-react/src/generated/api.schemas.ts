@@ -2207,6 +2207,54 @@ export interface CalibrationReport {
 }
 
 /**
+ * One persisted shadow-score row whose live vs. shadow result
+diverges enough to surface on the reviewer drift dashboard
+(Task #639). A row qualifies when the tier flipped OR the
+score delta is at least 10 points in either direction.
+
+ */
+export interface ShadowDriftRow {
+  id: number;
+  reportId: number;
+  liveScore: number;
+  liveTier: string;
+  shadowScore: number;
+  shadowTier: string;
+  /** shadow_score − live_score (positive means shadow is harsher) */
+  scoreDiff: number;
+  tierDiverged: boolean;
+  shadowVersion: string;
+  scoredAt: string;
+  fileName?: string | null;
+}
+
+export interface ShadowDriftTotals {
+  total: number;
+  divergent: number;
+  tierFlips: number;
+  scoreFlips: number;
+  legitToSlop: number;
+  slopToLegit: number;
+}
+
+/**
+ * Reviewer-only listing of shadow-score divergences in the
+lookback window. `enabled` echoes whether
+`SHADOW_SCORING_ENABLED=1` is set on the API server so the UI
+can render an "OFF" hint when no fresh rows are landing.
+
+ */
+export interface ShadowDriftReport {
+  enabled: boolean;
+  generatedAt: string;
+  lookbackDays: number;
+  /** Score-delta threshold (in points) above which a row is considered divergent regardless of tier. */
+  scoreDeltaThreshold: number;
+  totals: ShadowDriftTotals;
+  rows: ShadowDriftRow[];
+}
+
+/**
  * Per-day flip counts for the score-stability monitor. `total` is
 the number of `report_rescore_log` rows the scheduler wrote on
 that day (i.e. the day's re-score volume); `flips` is the
@@ -3801,6 +3849,19 @@ export type GetAvriDriftReportParams = {
    * @maximum 26
    */
   weeks?: number;
+};
+
+export type GetShadowDriftParams = {
+  /**
+   * @minimum 1
+   * @maximum 90
+   */
+  lookbackDays?: number;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  limit?: number;
 };
 
 export type GetCalibrationAuthBruteForceAlertsParams = {

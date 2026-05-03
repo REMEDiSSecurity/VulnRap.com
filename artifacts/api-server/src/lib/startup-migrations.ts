@@ -171,6 +171,35 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
          )`,
     ],
   },
+  {
+    // Task #639 — Shadow scoring side table.
+    //
+    // Append-only mirror of the live score for every production report
+    // submitted while `SHADOW_SCORING_ENABLED=1`. Lets reviewers spot
+    // tier-flip / score-delta regressions in the in-flight scoring
+    // change before promoting it to live. Created in dev too so the
+    // route + UI tests can exercise the surface against a real
+    // Postgres.
+    id: "2026-05-03-add-report-shadow-scores",
+    description: "Add report_shadow_scores table for shadow scoring mode (Task #639)",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS report_shadow_scores (
+         id serial PRIMARY KEY,
+         report_id integer NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+         live_score integer NOT NULL,
+         live_tier varchar(30) NOT NULL,
+         shadow_score integer NOT NULL,
+         shadow_tier varchar(30) NOT NULL,
+         score_diff integer NOT NULL,
+         tier_diverged boolean NOT NULL DEFAULT false,
+         shadow_version varchar(64) NOT NULL DEFAULT 'unknown',
+         scored_at timestamptz NOT NULL DEFAULT now()
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_report_shadow_scores_scored_at ON report_shadow_scores (scored_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_report_shadow_scores_report_id ON report_shadow_scores (report_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_report_shadow_scores_diverged ON report_shadow_scores (tier_diverged)`,
+    ],
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

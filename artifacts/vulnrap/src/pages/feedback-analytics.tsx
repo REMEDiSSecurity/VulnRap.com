@@ -10,6 +10,9 @@ import {
   useGetScoreStabilitySummary, getGetScoreStabilitySummaryQueryKey,
   type ScoreStabilitySummary,
   type ScoreStabilityDailyBucket,
+  useGetShadowDrift, getGetShadowDriftQueryKey,
+  type ShadowDriftReport,
+  type ShadowDriftRow,
   useGetCalibrationAuthBruteForceAlerts,
   getGetCalibrationAuthBruteForceAlertsQueryKey,
   rearmAvriDriftNotifications,
@@ -13740,6 +13743,234 @@ function ScoreStabilityDailyTable({
   );
 }
 
+// Task #639 — Reviewer-only "Shadow drift" tab on /feedback-analytics.
+//
+// Lists production reports whose shadow score diverges from the live
+// score by ≥1 tier or ≥10 score points within the lookback window. The
+// listing is sourced from `report_shadow_scores` via the strict-auth
+// `GET /api/internal/shadow-drift` endpoint, so the gating mirrors the
+// other reviewer-only drift surfaces above. When the API server is
+// running with SHADOW_SCORING_ENABLED unset, `report.enabled` is false
+// and the panel surfaces the "shadow mode is OFF" hint so reviewers
+// don't read an empty list as "no regressions".
+function ShadowDriftPanel({
+  authState,
+}: {
+  authState: CalibrationAuthState;
+}) {
+  const enabled = authState.kind === "valid";
+  const queryKey = getGetShadowDriftQueryKey();
+  const { data, isLoading, isError } = useGetShadowDrift(undefined, {
+    query: { queryKey, enabled, refetchInterval: 60_000, retry: 1 },
+  });
+
+  if (!enabled) {
+    return (
+      <div data-testid="shadow-drift-panel-locked">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+          <Layers className="w-3 h-3" />
+          <span>Shadow drift — live vs. shadow scoring</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground/70 italic px-3 py-2 rounded-md border border-dashed border-border/40">
+          Reviewer token required to load the shadow scoring drift listing.
+        </div>
+      </div>
+    );
+  }
+  if (isLoading) {
+    return <Skeleton className="h-32 rounded-md" />;
+  }
+  if (isError || !data) {
+    return (
+      <div
+        data-testid="shadow-drift-panel-error"
+        className="text-[11px] text-red-400/80 italic"
+      >
+        Could not load shadow drift listing.
+      </div>
+    );
+  }
+
+  const report: ShadowDriftReport = data;
+  const totals = report.totals;
+  const divergencePct =
+    totals.total > 0
+      ? ((totals.divergent / totals.total) * 100).toFixed(2)
+      : "0.00";
+
+  return (
+    <div data-testid="shadow-drift-panel">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2 flex-wrap">
+        <Layers className="w-3 h-3" />
+        <span>Shadow drift — live vs. shadow scoring</span>
+        <span className="normal-case font-normal italic text-muted-foreground/50">
+          {report.lookbackDays}-day window · ≥1 tier or ≥
+          {report.scoreDeltaThreshold} pts
+        </span>
+        {!report.enabled && (
+          <Badge
+            variant="outline"
+            className="text-[9px] uppercase tracking-wider text-muted-foreground/70"
+          >
+            shadow mode OFF
+          </Badge>
+        )}
+      </div>
+
+      {!report.enabled && totals.total === 0 ? (
+        <div className="text-[11px] text-muted-foreground/60 italic px-3 py-2 rounded-md border border-dashed border-border/40">
+          Shadow scoring is disabled. Set <code>SHADOW_SCORING_ENABLED=1</code>{" "}
+          on the API server to start mirroring production submissions through
+          the in-flight shadow pipeline.
+        </div>
+      ) : totals.total === 0 ? (
+        <div className="text-[11px] text-muted-foreground/60 italic px-3 py-2 rounded-md border border-dashed border-border/40">
+          No shadow-scored reports in the last {report.lookbackDays} days yet.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
+            <ShadowDriftStat label="Scored" value={totals.total} />
+            <ShadowDriftStat
+              label="Divergent"
+              value={`${totals.divergent} (${divergencePct}%)`}
+              tone={totals.divergent > 0 ? "warn" : "muted"}
+            />
+            <ShadowDriftStat
+              label="Tier flips"
+              value={totals.tierFlips}
+              tone={totals.tierFlips > 0 ? "warn" : "muted"}
+            />
+            <ShadowDriftStat
+              label="Score flips"
+              value={totals.scoreFlips}
+              tone={totals.scoreFlips > 0 ? "warn" : "muted"}
+            />
+            <ShadowDriftStat
+              label="Legit→Slop"
+              value={totals.legitToSlop}
+              tone={totals.legitToSlop > 0 ? "danger" : "muted"}
+            />
+            <ShadowDriftStat
+              label="Slop→Legit"
+              value={totals.slopToLegit}
+              tone={totals.slopToLegit > 0 ? "danger" : "muted"}
+            />
+          </div>
+          {report.rows.length === 0 ? (
+            <div className="text-[11px] text-muted-foreground/60 italic px-3 py-2 rounded-md border border-dashed border-border/40">
+              No divergent rows in this window — shadow scores match live
+              within ±{report.scoreDeltaThreshold} points and the same tier.
+            </div>
+          ) : (
+            <ShadowDriftTable rows={report.rows} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ShadowDriftStat({
+  label,
+  value,
+  tone = "muted",
+}: {
+  label: string;
+  value: string | number;
+  tone?: "muted" | "warn" | "danger";
+}) {
+  const toneCls =
+    tone === "danger"
+      ? "text-red-400"
+      : tone === "warn"
+        ? "text-yellow-400"
+        : "text-foreground/80";
+  return (
+    <div className="px-2 py-1.5 rounded-md border border-border/40">
+      <div className="text-[9px] uppercase tracking-wider text-muted-foreground/60">
+        {label}
+      </div>
+      <div className={cn("text-xs font-bold tabular-nums", toneCls)}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ShadowDriftTable({ rows }: { rows: ShadowDriftRow[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table
+        className="w-full text-[10px] border-collapse"
+        data-testid="shadow-drift-table"
+      >
+        <thead>
+          <tr className="text-muted-foreground/70 uppercase tracking-wider">
+            <th className="text-left font-normal py-1">Report</th>
+            <th className="text-right font-normal py-1">Live</th>
+            <th className="text-right font-normal py-1">Shadow</th>
+            <th className="text-right font-normal py-1">Δ</th>
+            <th className="text-left font-normal py-1 pl-2">Live tier</th>
+            <th className="text-left font-normal py-1 pl-2">Shadow tier</th>
+            <th className="text-left font-normal py-1 pl-2">Scored</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const tierFlipped = r.tierDiverged;
+            const harsher = r.scoreDiff > 0;
+            const deltaCls = tierFlipped
+              ? "text-red-400"
+              : harsher
+                ? "text-yellow-400"
+                : "text-cyan-400";
+            return (
+              <tr
+                key={r.id}
+                className="border-t border-border/20 text-foreground/80"
+                data-testid="shadow-drift-row"
+                data-tier-diverged={tierFlipped ? "true" : "false"}
+              >
+                <td className="py-1">
+                  <Link
+                    to={`/results/${r.reportId}`}
+                    className="text-primary hover:underline"
+                  >
+                    #{r.reportId}
+                  </Link>
+                </td>
+                <td className="text-right tabular-nums">{r.liveScore}</td>
+                <td className="text-right tabular-nums">{r.shadowScore}</td>
+                <td className={cn("text-right tabular-nums font-bold", deltaCls)}>
+                  {r.scoreDiff > 0 ? `+${r.scoreDiff}` : r.scoreDiff}
+                </td>
+                <td className="pl-2">{r.liveTier}</td>
+                <td
+                  className={cn(
+                    "pl-2",
+                    tierFlipped ? "text-red-400 font-medium" : "",
+                  )}
+                >
+                  {r.shadowTier}
+                </td>
+                <td className="pl-2 text-muted-foreground/70 whitespace-nowrap">
+                  {new Date(r.scoredAt).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // Operator-visible heartbeat for the AVRI drift scheduler. Reads the
 // unauthenticated status endpoint and renders one row per server
 // replica so reviewers can confirm every replica's timer is firing —
@@ -18099,6 +18330,15 @@ function AvriDriftSection() {
             since an elevated flip-rate is a leading signal of an
             active scoring regression. */}
         <ScoreStabilityPanel authState={authState} />
+
+        {/* Task #639 — Reviewer-only shadow scoring drift listing.
+            When SHADOW_SCORING_ENABLED=1 on the API server every
+            production submission is also scored through the in-flight
+            shadow pipeline; this panel surfaces the rows whose live
+            vs. shadow result diverges by ≥1 tier or ≥10 score points
+            so reviewers can spot regressions before promoting the
+            shadow rules to live. */}
+        <ShadowDriftPanel authState={authState} />
 
         {/* Task #399 — Recent calibration auth brute-force alerts.
             Same auth-gating model as the dedup-state and re-arm-history

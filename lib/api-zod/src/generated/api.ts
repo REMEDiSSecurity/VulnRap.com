@@ -2956,6 +2956,81 @@ export const GetAvriDriftSchedulerStatusResponse = zod.array(
 );
 
 /**
+ * Reviewer-only listing of production reports whose shadow score
+diverges from the live score by ≥1 tier or ≥10 score points
+within the lookback window. Backs the "Shadow drift" tab on
+`/feedback-analytics`. Strict-auth: shadow drift is a leading
+signal of an in-flight scoring regression, same access policy
+as the other reviewer-only drift surfaces.
+
+ * @summary Shadow scoring drift report (reviewer-only, Task
+ */
+export const getShadowDriftQueryLookbackDaysDefault = 14;
+export const getShadowDriftQueryLookbackDaysMax = 90;
+
+export const getShadowDriftQueryLimitDefault = 100;
+export const getShadowDriftQueryLimitMax = 500;
+
+export const GetShadowDriftQueryParams = zod.object({
+  lookbackDays: zod.coerce
+    .number()
+    .min(1)
+    .max(getShadowDriftQueryLookbackDaysMax)
+    .default(getShadowDriftQueryLookbackDaysDefault),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(getShadowDriftQueryLimitMax)
+    .default(getShadowDriftQueryLimitDefault),
+});
+
+export const GetShadowDriftResponse = zod
+  .object({
+    enabled: zod.boolean(),
+    generatedAt: zod.coerce.date(),
+    lookbackDays: zod.number(),
+    scoreDeltaThreshold: zod
+      .number()
+      .describe(
+        "Score-delta threshold (in points) above which a row is considered divergent regardless of tier.",
+      ),
+    totals: zod.object({
+      total: zod.number(),
+      divergent: zod.number(),
+      tierFlips: zod.number(),
+      scoreFlips: zod.number(),
+      legitToSlop: zod.number(),
+      slopToLegit: zod.number(),
+    }),
+    rows: zod.array(
+      zod
+        .object({
+          id: zod.number(),
+          reportId: zod.number(),
+          liveScore: zod.number(),
+          liveTier: zod.string(),
+          shadowScore: zod.number(),
+          shadowTier: zod.string(),
+          scoreDiff: zod
+            .number()
+            .describe(
+              "shadow_score − live_score (positive means shadow is harsher)",
+            ),
+          tierDiverged: zod.boolean(),
+          shadowVersion: zod.string(),
+          scoredAt: zod.coerce.date(),
+          fileName: zod.string().nullish(),
+        })
+        .describe(
+          "One persisted shadow-score row whose live vs. shadow result\ndiverges enough to surface on the reviewer drift dashboard\n(Task #639). A row qualifies when the tier flipped OR the\nscore delta is at least 10 points in either direction.\n",
+        ),
+    ),
+  })
+  .describe(
+    'Reviewer-only listing of shadow-score divergences in the\nlookback window. `enabled` echoes whether\n`SHADOW_SCORING_ENABLED=1` is set on the API server so the UI\ncan render an \"OFF\" hint when no fresh rows are landing.\n',
+  );
+
+/**
  * Reviewer-only summary of the nightly score-stability monitor.
 Aggregates `report_rescore_log` rows from the last 7 days into
 per-day flip counts broken down by direction (legit→slop,
