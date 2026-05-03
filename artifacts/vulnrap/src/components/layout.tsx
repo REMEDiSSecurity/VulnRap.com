@@ -80,6 +80,7 @@ const NAV: NavEntry[] = [
       { to: "/developers", label: "API", icon: <Code className="w-4 h-4" />, description: "REST endpoints, schemas, and examples." },
       { to: "/architecture", label: "Architecture", icon: <Network className="w-4 h-4" />, description: "Pipeline diagram and request flow for integrators." },
       { to: "/engines/substance", label: "Substance Engine", icon: <FlaskConical className="w-4 h-4" />, description: "Engine 2 deep-dive: technical substance density." },
+      { to: "/engines/cwe-coherence", label: "CWE Coherence Engine", icon: <Network className="w-4 h-4" />, description: "Engine 3 deep-dive: catches reports whose body describes a different CWE than the one claimed." },
       { to: "/presets", label: "Presets", icon: <Library className="w-4 h-4" />, description: "Curated sensitivity + per-engine weight profiles for common triage workflows." },
       { to: "/whitepaper", label: "Whitepaper", icon: <ScrollText className="w-4 h-4" />, description: "Long-form, citation-style methodology document — print-friendly." },
       { to: "/compare-detectors", label: "Compare Detectors", icon: <Scale className="w-4 h-4" />, description: "Capability matrix vs. generic LLM detectors, plagiarism checkers, and manual triage." },
