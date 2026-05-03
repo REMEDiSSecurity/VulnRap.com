@@ -1732,6 +1732,48 @@ export interface FeedbackAnalytics {
   recentFeedback: FeedbackAnalyticsRecentFeedbackItem[];
 }
 
+/**
+ * One partition (holdout or in-sample) of the binary-classifier
+evaluation. Counts are always present; ratio metrics are nullable
+when the relevant denominator is zero.
+
+ */
+export interface HoldoutEvalPartition {
+  totalFeedback: number;
+  /** Predicted slop AND actually slop. */
+  tp: number;
+  /** Predicted slop AND not actually slop. */
+  fp: number;
+  /** Not predicted slop AND actually slop. */
+  fn: number;
+  /** Not predicted slop AND not actually slop. */
+  tn: number;
+  /** tp / (tp + fp); null when no rows were predicted slop. */
+  precision: number | null;
+  /** tp / (tp + fn); null when no rows were actually slop. */
+  recall: number | null;
+  /** Harmonic mean of precision and recall; null when either is null. */
+  f1: number | null;
+  /** (tp + tn) / total; null when total is zero. */
+  accuracy: number | null;
+}
+
+export type HoldoutEvalResponseThresholds = {
+  /** slopScore at/above which the engine "predicts slop". */
+  scoreThreshold: number;
+  /** User rating at/below which the row is treated as "actually slop". */
+  ratingThreshold: number;
+  description: string;
+};
+
+export interface HoldoutEvalResponse {
+  thresholds: HoldoutEvalResponseThresholds;
+  holdout: HoldoutEvalPartition;
+  inSample: HoldoutEvalPartition;
+  /** Fraction of feedback rows assigned to the holdout split (0.2 in v1). */
+  holdoutFraction: number;
+}
+
 export type ScoringConfigItemAxisThresholds = { [key: string]: number };
 
 export type ScoringConfigItemTierThresholds = {

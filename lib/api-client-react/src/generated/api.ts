@@ -65,6 +65,7 @@ import type {
   HandwavyPhrasesList,
   HashLookupResult,
   HealthStatus,
+  HoldoutEvalResponse,
   LatencySnapshot,
   ListHandwavyPhraseRemovalBatchesParams,
   ListPhraseSuggestionsParams,
@@ -1441,6 +1442,91 @@ export function useGetFeedbackAnalytics<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetFeedbackAnalyticsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns binary-classifier precision/recall/F1/accuracy computed
+ONLY from the deterministic 20% feedback holdout that calibration
+suggestions never touch, alongside the same numbers computed from
+the in-sample 80%. Treats the engine as a binary "slop" classifier
+where `predicted slop = slopScore >= tierThresholds.high` and
+`actually slop = rating <= 2 OR helpful = false`. Each partition
+returns nullable precision/recall/F1/accuracy so the UI can render
+"insufficient data" instead of a misleading 0 when a partition is
+empty.
+
+ * @summary Honest precision/recall computed from the locked holdout split (Task
+ */
+export const getGetHoldoutEvalUrl = () => {
+  return `/api/feedback/holdout-eval`;
+};
+
+export const getHoldoutEval = async (
+  options?: RequestInit,
+): Promise<HoldoutEvalResponse> => {
+  return customFetch<HoldoutEvalResponse>(getGetHoldoutEvalUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHoldoutEvalQueryKey = () => {
+  return [`/api/feedback/holdout-eval`] as const;
+};
+
+export const getGetHoldoutEvalQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHoldoutEval>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHoldoutEval>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetHoldoutEvalQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHoldoutEval>>> = ({
+    signal,
+  }) => getHoldoutEval({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHoldoutEval>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHoldoutEvalQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHoldoutEval>>
+>;
+export type GetHoldoutEvalQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Honest precision/recall computed from the locked holdout split (Task
+ */
+
+export function useGetHoldoutEval<
+  TData = Awaited<ReturnType<typeof getHoldoutEval>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHoldoutEval>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHoldoutEvalQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

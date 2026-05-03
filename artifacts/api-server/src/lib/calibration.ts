@@ -1,6 +1,9 @@
 import { db } from "@workspace/db";
 import { userFeedbackTable, reportsTable } from "@workspace/db";
 import { sql, eq, gte, and, isNotNull } from "drizzle-orm";
+// Task #640 — calibration suggestions must NEVER see holdout rows so the
+// honest precision/recall numbers reported by /feedback/holdout-eval
+// reflect data the suggestion engine could not have over-fitted to.
 import { getCurrentConfig, type ScoringConfig } from "./scoring-config";
 import {
   computePerLanguageAgreement,
@@ -59,7 +62,11 @@ export async function generateCalibrationReport(): Promise<CalibrationReport> {
     })
     .from(userFeedbackTable)
     .innerJoin(reportsTable, eq(userFeedbackTable.reportId, reportsTable.id))
-    .where(isNotNull(reportsTable.slopScore));
+    .where(and(
+      isNotNull(reportsTable.slopScore),
+      // Task #640 — exclude the locked 20% holdout split.
+      eq(userFeedbackTable.isHoldout, false),
+    ));
 
   const totalFeedbackAnalyzed = bucketResults.length;
 

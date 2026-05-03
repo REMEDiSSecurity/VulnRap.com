@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey,
+  useGetHoldoutEval, getGetHoldoutEvalQueryKey,
+  type HoldoutEvalResponse,
+  type HoldoutEvalPartition,
   useGetCalibrationReport, getGetCalibrationReportQueryKey,
   useGetScoringConfig, getGetScoringConfigQueryKey,
   useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
@@ -18371,6 +18374,141 @@ function EmptyState() {
   );
 }
 
+// Task #640 — Holdout evaluation card. Shows honest precision/recall
+// computed from the locked 20% holdout split (data the calibration
+// suggestion engine never trains on) side-by-side with the in-sample 80%,
+// so reviewers can spot when the in-sample numbers were optimistic. Each
+// metric renders "—" when its denominator is empty rather than a
+// misleading 0.
+function HoldoutMetric({ label, value, suffix }: { label: string; value: number | null; suffix?: string }) {
+  return (
+    <div className="space-y-0.5">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-lg font-bold tabular-nums">
+        {value == null ? <span className="text-muted-foreground/50">—</span> : (
+          <>
+            {(value * 100).toFixed(1)}
+            <span className="text-xs text-muted-foreground/60">{suffix ?? "%"}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HoldoutPartitionCard({ title, subtitle, partition, accent }: {
+  title: string;
+  subtitle: string;
+  partition: HoldoutEvalPartition;
+  accent: string;
+}) {
+  const insufficient = partition.totalFeedback === 0;
+  return (
+    <div className={cn("p-4 rounded-lg glass-card border space-y-3", accent)}>
+      <div className="flex items-baseline justify-between gap-2">
+        <div>
+          <div className="text-sm font-bold text-foreground">{title}</div>
+          <div className="text-[11px] text-muted-foreground">{subtitle}</div>
+        </div>
+        <Badge variant="outline" className="text-[10px] tabular-nums">
+          n={partition.totalFeedback}
+        </Badge>
+      </div>
+      {insufficient ? (
+        <p className="text-xs text-muted-foreground/60 italic py-2">
+          No linked feedback in this partition yet.
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <HoldoutMetric label="Precision" value={partition.precision} />
+            <HoldoutMetric label="Recall" value={partition.recall} />
+            <HoldoutMetric label="F1" value={partition.f1} />
+            <HoldoutMetric label="Accuracy" value={partition.accuracy} />
+          </div>
+          <div className="grid grid-cols-4 gap-1 pt-2 border-t border-border/30">
+            <div className="text-center">
+              <div className="text-[10px] text-muted-foreground">TP</div>
+              <div className="text-xs font-mono tabular-nums text-green-400">{partition.tp}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[10px] text-muted-foreground">FP</div>
+              <div className="text-xs font-mono tabular-nums text-red-400">{partition.fp}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[10px] text-muted-foreground">FN</div>
+              <div className="text-xs font-mono tabular-nums text-orange-400">{partition.fn}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[10px] text-muted-foreground">TN</div>
+              <div className="text-xs font-mono tabular-nums text-muted-foreground">{partition.tn}</div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function HoldoutEvalSection() {
+  const { data, isLoading, isError } = useGetHoldoutEval({
+    query: {
+      queryKey: getGetHoldoutEvalQueryKey(),
+      refetchInterval: 120_000,
+    },
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-64 rounded-xl" data-testid="holdout-eval-loading" />;
+  }
+  if (isError || !data) {
+    return null;
+  }
+
+  const eval_ = data as HoldoutEvalResponse;
+  const totalRows = eval_.holdout.totalFeedback + eval_.inSample.totalFeedback;
+
+  return (
+    <Card className="glass-card rounded-xl border-blue-500/10" data-testid="holdout-eval-card">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Shield className="w-4 h-4 text-blue-400" />
+          Holdout Evaluation
+          <Badge variant="outline" className="ml-auto text-[10px] text-blue-400 border-blue-400/40">
+            {Math.round(eval_.holdoutFraction * 100)}% locked
+          </Badge>
+        </CardTitle>
+        <CardDescription>
+          Honest precision / recall measured ONLY on the deterministic{" "}
+          {Math.round(eval_.holdoutFraction * 100)}% feedback holdout that calibration
+          suggestions never see — compare against in-sample to spot over-fitting.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
+          <span className="font-mono">{eval_.thresholds.description}</span>
+          <span className="ml-2 text-muted-foreground/50">·</span>
+          <span className="ml-2">{totalRows} linked feedback rows total</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <HoldoutPartitionCard
+            title="Holdout (honest)"
+            subtitle="Never used for calibration suggestions"
+            partition={eval_.holdout}
+            accent="border-blue-500/30"
+          />
+          <HoldoutPartitionCard
+            title="In-sample"
+            subtitle="Same data calibration trains on — may be optimistic"
+            partition={eval_.inSample}
+            accent="border-border/50"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function FeedbackAnalytics() {
   const { data, isLoading, error } = useGetFeedbackAnalytics({
     query: {
@@ -18516,6 +18654,8 @@ export default function FeedbackAnalytics() {
           </CardContent>
         </Card>
       </div>
+
+      <HoldoutEvalSection />
 
       <CalibrationSection />
 

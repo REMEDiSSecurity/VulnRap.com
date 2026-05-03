@@ -200,6 +200,30 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
       `CREATE INDEX IF NOT EXISTS idx_report_shadow_scores_diverged ON report_shadow_scores (tier_diverged)`,
     ],
   },
+  {
+    // Task #640 — Locked 20% holdout split for honest precision/recall.
+    // Calibration today trains and evaluates on every feedback row, so the
+    // numbers it reports are optimistic. Stamp every feedback row with a
+    // deterministic `is_holdout` flag derived from `hashtext(id::text)`
+    // (Postgres-builtin, immutable, byte-stable) so the same id always
+    // resolves to the same bucket. Calibration suggestions exclude
+    // is_holdout=true; the new /feedback/holdout-eval endpoint computes
+    // precision/recall ONLY from the holdout rows for honest numbers
+    // reviewers can trust.
+    //
+    // Backfill is idempotent: every existing row is re-stamped from the
+    // hash, which is fine because the hash is deterministic. Newly
+    // inserted rows are stamped in the POST /feedback handler.
+    id: "2026-05-03-add-user-feedback-holdout",
+    description:
+      "Add deterministic is_holdout flag + index to user_feedback and backfill from hashtext(id) (Task #640)",
+    statements: [
+      `ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS is_holdout boolean NOT NULL DEFAULT false`,
+      `CREATE INDEX IF NOT EXISTS idx_user_feedback_is_holdout ON user_feedback (is_holdout)`,
+      `UPDATE user_feedback SET is_holdout = ((abs(hashtext(id::text)) % 5) = 0)
+         WHERE is_holdout <> ((abs(hashtext(id::text)) % 5) = 0)`,
+    ],
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

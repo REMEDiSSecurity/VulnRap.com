@@ -4,6 +4,7 @@ import { userFeedbackTable, reportsTable } from "@workspace/db";
 import { SubmitFeedbackBody } from "@workspace/api-zod";
 import { sql, eq, desc, gte, and, isNotNull } from "drizzle-orm";
 import { generateChallenge, verifyChallenge } from "../lib/challenge";
+import { getCurrentConfig } from "../lib/scoring-config";
 
 const router: IRouter = Router();
 
@@ -44,18 +45,33 @@ router.post("/feedback", async (req, res) => {
     const trimmedComment = typeof comment === "string" ? comment.trim().slice(0, 1000) || null : null;
     const validReportId = typeof reportId === "number" && Number.isInteger(reportId) ? reportId : null;
 
-    const [inserted] = await db
-      .insert(userFeedbackTable)
-      .values({
-        reportId: validReportId,
-        rating,
-        helpful,
-        comment: trimmedComment,
-      })
-      .returning({ id: userFeedbackTable.id });
+    // Task #640 — atomically insert the feedback row AND stamp the
+    // deterministic holdout flag in a single transaction so a partial
+    // failure can never leave a row with the default is_holdout=false
+    // (which would silently bias the holdout-eval metrics). The bucket
+    // expression `(abs(hashtext(id::text)) % 5) = 0` (~20%) is the same
+    // one the startup-migration backfill uses, so backfill and per-insert
+    // path agree on every id. We can't fold the stamping into the same
+    // statement because Postgres doesn't make a CTE's INSERT visible to a
+    // sibling UPDATE.
+    const insertedId = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(userFeedbackTable)
+        .values({
+          reportId: validReportId,
+          rating,
+          helpful,
+          comment: trimmedComment,
+        })
+        .returning({ id: userFeedbackTable.id });
+      await tx.execute(
+        sql`UPDATE user_feedback SET is_holdout = ((abs(hashtext(id::text)) % 5) = 0) WHERE id = ${row.id}`,
+      );
+      return row.id;
+    });
 
     res.status(201).json({
-      id: inserted.id,
+      id: insertedId,
       message: "Thank you for your feedback!",
     });
   } catch (err) {
@@ -212,6 +228,93 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
   } catch (err) {
     _req.log?.error(err, "Failed to fetch feedback analytics");
     res.status(500).json({ error: "Failed to fetch feedback analytics." });
+  }
+});
+
+// Task #640 — Honest precision/recall computed ONLY from holdout rows
+// that calibration suggestions never touch. Treat the engine as a binary
+// "slop" classifier:
+//   predicted slop  := slopScore >= config.tierThresholds.high
+//   actually slop   := rating <= 2 OR helpful = false
+// Returns side-by-side holdout vs. in-sample numbers so reviewers can spot
+// when the in-sample numbers were optimistic (the whole point of locking a
+// holdout). When a partition has zero rows, precision/recall are returned
+// as null so the UI can render "insufficient data" instead of a misleading 0.
+router.get("/feedback/holdout-eval", async (_req, res): Promise<void> => {
+  try {
+    const config = getCurrentConfig();
+    const scoreThreshold = config.tierThresholds.high;
+    const ratingThreshold = 2;
+
+    const rows = await db
+      .select({
+        slopScore: reportsTable.slopScore,
+        rating: userFeedbackTable.rating,
+        helpful: userFeedbackTable.helpful,
+        isHoldout: userFeedbackTable.isHoldout,
+      })
+      .from(userFeedbackTable)
+      .innerJoin(reportsTable, eq(userFeedbackTable.reportId, reportsTable.id))
+      .where(isNotNull(reportsTable.slopScore));
+
+    type Partition = {
+      totalFeedback: number;
+      tp: number;
+      fp: number;
+      fn: number;
+      tn: number;
+      precision: number | null;
+      recall: number | null;
+      f1: number | null;
+      accuracy: number | null;
+    };
+    const empty = (): Partition => ({
+      totalFeedback: 0, tp: 0, fp: 0, fn: 0, tn: 0,
+      precision: null, recall: null, f1: null, accuracy: null,
+    });
+    const holdout = empty();
+    const inSample = empty();
+
+    for (const row of rows) {
+      const score = row.slopScore ?? 0;
+      const predictedSlop = score >= scoreThreshold;
+      const actuallySlop = row.rating <= ratingThreshold || row.helpful === false;
+      const target = row.isHoldout ? holdout : inSample;
+      target.totalFeedback++;
+      if (predictedSlop && actuallySlop) target.tp++;
+      else if (predictedSlop && !actuallySlop) target.fp++;
+      else if (!predictedSlop && actuallySlop) target.fn++;
+      else target.tn++;
+    }
+
+    const finalize = (p: Partition): Partition => {
+      const round = (n: number) => Math.round(n * 1000) / 1000;
+      const precDen = p.tp + p.fp;
+      const recDen = p.tp + p.fn;
+      const total = p.totalFeedback;
+      const precision = precDen > 0 ? round(p.tp / precDen) : null;
+      const recall = recDen > 0 ? round(p.tp / recDen) : null;
+      const f1 = precision != null && recall != null && (precision + recall) > 0
+        ? round((2 * precision * recall) / (precision + recall))
+        : null;
+      const accuracy = total > 0 ? round((p.tp + p.tn) / total) : null;
+      return { ...p, precision, recall, f1, accuracy };
+    };
+
+    res.json({
+      thresholds: {
+        scoreThreshold,
+        ratingThreshold,
+        description:
+          `Predicted slop = slopScore >= ${scoreThreshold}; actually slop = user rating <= ${ratingThreshold} OR helpful = false`,
+      },
+      holdout: finalize(holdout),
+      inSample: finalize(inSample),
+      holdoutFraction: 0.2,
+    });
+  } catch (err) {
+    _req.log?.error(err, "Failed to compute holdout evaluation");
+    res.status(500).json({ error: "Failed to compute holdout evaluation." });
   }
 });
 

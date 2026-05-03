@@ -540,6 +540,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/FeedbackAnalytics"
 
+  /feedback/holdout-eval:
+    get:
+      operationId: getHoldoutEval
+      tags: [feedback]
+      summary: Honest precision/recall computed from the locked holdout split (Task #640)
+      description: |
+        Returns binary-classifier precision/recall/F1/accuracy computed
+        ONLY from the deterministic 20% feedback holdout that calibration
+        suggestions never touch, alongside the same numbers computed from
+        the in-sample 80%. Treats the engine as a binary "slop" classifier
+        where `predicted slop = slopScore >= tierThresholds.high` and
+        `actually slop = rating <= 2 OR helpful = false`. Each partition
+        returns nullable precision/recall/F1/accuracy so the UI can render
+        "insufficient data" instead of a misleading 0 when a partition is
+        empty.
+      responses:
+        "200":
+          description: Holdout evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HoldoutEvalResponse"
+
   /feedback/calibration:
     get:
       operationId: getCalibrationReport
@@ -4024,6 +4047,69 @@ components:
                 nullable: true
             required: [feedbackId, rating, helpful, createdAt]
       required: [summary, ratingDistribution, dailyTrend, scoreCorrelation, outliers, recentFeedback]
+
+    HoldoutEvalPartition:
+      type: object
+      description: |
+        One partition (holdout or in-sample) of the binary-classifier
+        evaluation. Counts are always present; ratio metrics are nullable
+        when the relevant denominator is zero.
+      properties:
+        totalFeedback:
+          type: integer
+        tp:
+          type: integer
+          description: Predicted slop AND actually slop.
+        fp:
+          type: integer
+          description: Predicted slop AND not actually slop.
+        fn:
+          type: integer
+          description: Not predicted slop AND actually slop.
+        tn:
+          type: integer
+          description: Not predicted slop AND not actually slop.
+        precision:
+          type: number
+          nullable: true
+          description: tp / (tp + fp); null when no rows were predicted slop.
+        recall:
+          type: number
+          nullable: true
+          description: tp / (tp + fn); null when no rows were actually slop.
+        f1:
+          type: number
+          nullable: true
+          description: Harmonic mean of precision and recall; null when either is null.
+        accuracy:
+          type: number
+          nullable: true
+          description: (tp + tn) / total; null when total is zero.
+      required: [totalFeedback, tp, fp, fn, tn, precision, recall, f1, accuracy]
+
+    HoldoutEvalResponse:
+      type: object
+      properties:
+        thresholds:
+          type: object
+          properties:
+            scoreThreshold:
+              type: number
+              description: slopScore at/above which the engine "predicts slop".
+            ratingThreshold:
+              type: integer
+              description: User rating at/below which the row is treated as "actually slop".
+            description:
+              type: string
+          required: [scoreThreshold, ratingThreshold, description]
+        holdout:
+          $ref: "#/components/schemas/HoldoutEvalPartition"
+        inSample:
+          $ref: "#/components/schemas/HoldoutEvalPartition"
+        holdoutFraction:
+          type: number
+          description: Fraction of feedback rows assigned to the holdout split (0.2 in v1).
+      required: [thresholds, holdout, inSample, holdoutFraction]
 
     ScoringConfigItem:
       type: object

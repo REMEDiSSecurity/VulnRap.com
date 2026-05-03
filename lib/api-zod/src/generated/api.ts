@@ -2463,6 +2463,96 @@ export const GetFeedbackAnalyticsResponse = zod.object({
 });
 
 /**
+ * Returns binary-classifier precision/recall/F1/accuracy computed
+ONLY from the deterministic 20% feedback holdout that calibration
+suggestions never touch, alongside the same numbers computed from
+the in-sample 80%. Treats the engine as a binary "slop" classifier
+where `predicted slop = slopScore >= tierThresholds.high` and
+`actually slop = rating <= 2 OR helpful = false`. Each partition
+returns nullable precision/recall/F1/accuracy so the UI can render
+"insufficient data" instead of a misleading 0 when a partition is
+empty.
+
+ * @summary Honest precision/recall computed from the locked holdout split (Task
+ */
+export const GetHoldoutEvalResponse = zod.object({
+  thresholds: zod.object({
+    scoreThreshold: zod
+      .number()
+      .describe('slopScore at\/above which the engine \"predicts slop\".'),
+    ratingThreshold: zod
+      .number()
+      .describe(
+        'User rating at\/below which the row is treated as \"actually slop\".',
+      ),
+    description: zod.string(),
+  }),
+  holdout: zod
+    .object({
+      totalFeedback: zod.number(),
+      tp: zod.number().describe("Predicted slop AND actually slop."),
+      fp: zod.number().describe("Predicted slop AND not actually slop."),
+      fn: zod.number().describe("Not predicted slop AND actually slop."),
+      tn: zod.number().describe("Not predicted slop AND not actually slop."),
+      precision: zod
+        .number()
+        .nullable()
+        .describe("tp \/ (tp + fp); null when no rows were predicted slop."),
+      recall: zod
+        .number()
+        .nullable()
+        .describe("tp \/ (tp + fn); null when no rows were actually slop."),
+      f1: zod
+        .number()
+        .nullable()
+        .describe(
+          "Harmonic mean of precision and recall; null when either is null.",
+        ),
+      accuracy: zod
+        .number()
+        .nullable()
+        .describe("(tp + tn) \/ total; null when total is zero."),
+    })
+    .describe(
+      "One partition (holdout or in-sample) of the binary-classifier\nevaluation. Counts are always present; ratio metrics are nullable\nwhen the relevant denominator is zero.\n",
+    ),
+  inSample: zod
+    .object({
+      totalFeedback: zod.number(),
+      tp: zod.number().describe("Predicted slop AND actually slop."),
+      fp: zod.number().describe("Predicted slop AND not actually slop."),
+      fn: zod.number().describe("Not predicted slop AND actually slop."),
+      tn: zod.number().describe("Not predicted slop AND not actually slop."),
+      precision: zod
+        .number()
+        .nullable()
+        .describe("tp \/ (tp + fp); null when no rows were predicted slop."),
+      recall: zod
+        .number()
+        .nullable()
+        .describe("tp \/ (tp + fn); null when no rows were actually slop."),
+      f1: zod
+        .number()
+        .nullable()
+        .describe(
+          "Harmonic mean of precision and recall; null when either is null.",
+        ),
+      accuracy: zod
+        .number()
+        .nullable()
+        .describe("(tp + tn) \/ total; null when total is zero."),
+    })
+    .describe(
+      "One partition (holdout or in-sample) of the binary-classifier\nevaluation. Counts are always present; ratio metrics are nullable\nwhen the relevant denominator is zero.\n",
+    ),
+  holdoutFraction: zod
+    .number()
+    .describe(
+      "Fraction of feedback rows assigned to the holdout split (0.2 in v1).",
+    ),
+});
+
+/**
  * Analyzes feedback data against scoring results to suggest weight and threshold adjustments. Uses volume gating to ensure suggestions are based on sufficient data.
  * @summary Get calibration report with tuning suggestions
  */
