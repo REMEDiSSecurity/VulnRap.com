@@ -96,6 +96,21 @@ export interface StructuralMarker {
     // sanitizer output never does (the same thread typically dominates,
     // and the IDs cluster in a small range).
     | "thread_id_mismatch"
+    // Task #741: complementary "no-overlap" check on the same role-tagged
+    // anchors as `thread_id_mismatch`. The Task #433 detector requires ≥3
+    // distinct thread IDs across role anchors before firing, so a fake
+    // UAF that picks only two distinct IDs (`READ ... thread T0` + `freed
+    // by thread T1`, no `allocated-by` line) slips through. This detector
+    // closes that gap by bucketing thread mentions by role category
+    // (read/write block, freed-by, allocated-by) and firing when ≥2 role
+    // buckets each name a single thread AND no thread ID appears in
+    // more than one bucket. To avoid penalising legitimate TSan races
+    // (where the Read and Write blocks legitimately name distinct
+    // threads), the rule additionally requires that at least one of the
+    // role buckets is `freed-by` or `allocated-by` — anchors a real
+    // sanitizer only emits for ASan-style heap bug classes where the
+    // freed thread and the allocated thread typically coincide.
+    | "thread_role_no_overlap"
     // Task #455: shape check against `/proc/self/status` excerpts (the
     // `VmPeak` / `VmSize` / `VmRSS` block). Real kernels emit
     // pseudo-random page-aligned kB counts (e.g. `VmRSS: 4232 kB`); LLM
@@ -1200,6 +1215,82 @@ function detectThreadIdMismatch(text: string): StructuralMarker | null {
   };
 }
 
+// Task #741 thread-role no-overlap detector ------------------------------
+//
+// `detectThreadIdMismatch` (Task #433) requires ≥3 distinct role-tagged
+// thread IDs before firing. That leaves a gap: a fake UAF that picks
+// only two distinct thread IDs across the role anchors (e.g.
+// `READ ... thread T0` + `freed by thread T1`, with no
+// `previously allocated by ...` line at all) currently slips past. This
+// detector buckets thread mentions by role category and fires when ≥2
+// role buckets each name a *single* thread, no two buckets share a
+// thread ID, and at least one of the buckets is `freed-by` /
+// `allocated-by` (so a TSan race with `Write by thread Tx` +
+// `Previous read by thread Ty` — both belonging to the same READ/WRITE
+// bucket and with no freed/allocated anchor — does not trip the rule).
+const THREAD_ROLE_BUCKET_RES: Array<{ role: string; re: RegExp }> = [
+  {
+    role: "read_write",
+    re: /\b(?:READ|WRITE|read|write)\s+of\s+size\s+\d+\s+at\s+0x[0-9a-fA-F]+\s+(?:by\s+)?thread\s+T(\d+)/gi,
+  },
+  { role: "freed", re: /\bfreed\s+by\s+thread\s+T(\d+)/gi },
+  {
+    role: "allocated",
+    re: /\b(?:previously\s+)?allocated\s+by\s+thread\s+T(\d+)/gi,
+  },
+];
+
+function detectThreadRoleNoOverlap(text: string): StructuralMarker | null {
+  const buckets = new Map<string, Set<number>>();
+  let firstHit: { index: number; length: number } | null = null;
+  for (const { role, re } of THREAD_ROLE_BUCKET_RES) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const n = Number(m[1]);
+      if (!Number.isFinite(n)) continue;
+      let bucket = buckets.get(role);
+      if (!bucket) {
+        bucket = new Set<number>();
+        buckets.set(role, bucket);
+      }
+      bucket.add(n);
+      if (firstHit === null || m.index < firstHit.index) {
+        firstHit = { index: m.index, length: m[0].length };
+      }
+    }
+  }
+  // Require ≥2 distinct role buckets so a TSan race with only the
+  // READ/WRITE bucket (its two `by thread T<n>` mentions collapse into a
+  // single bucket) cannot trip the rule.
+  if (buckets.size < 2 || firstHit === null) return null;
+  // At least one of the role buckets must be `freed-by` / `allocated-by`
+  // — anchors a real sanitizer only emits for ASan-style heap bug
+  // classes where the freed thread and the allocated thread typically
+  // coincide. A pure read/write race (TSan / Helgrind) is exempt.
+  if (!buckets.has("freed") && !buckets.has("allocated")) return null;
+  // Each bucket must name exactly one thread (multi-thread buckets are
+  // the territory of `thread_id_mismatch`, not the no-overlap tell), and
+  // no thread ID may appear in more than one bucket. The "every role
+  // points to a different thread" framing in the task title is exactly
+  // these two conditions.
+  const seen = new Set<number>();
+  const roles: string[] = [];
+  for (const [role, set] of buckets) {
+    if (set.size !== 1) return null;
+    const id = [...set][0];
+    if (seen.has(id)) return null;
+    seen.add(id);
+    roles.push(role);
+  }
+  const sortedIds = [...seen].sort((a, b) => a - b);
+  return {
+    id: "thread_role_no_overlap",
+    description: `Each role-tagged anchor names a different thread (T${sortedIds.join(", T")} across ${buckets.size} roles: ${roles.join(", ")}); real ASan freed-by / allocated-by anchors typically share a thread with each other and with the READ/WRITE block`,
+    range: rangeAt(text, firstHit.index, firstHit.length),
+  };
+}
+
 /** Build the list of frame lines tagged with their position in `text` so
  * the frame-based detectors can attach a `range` to the marker they emit.
  * `FRAME_LINES_RE` is a global multiline regex; `matchAll` gives us every
@@ -1263,6 +1354,13 @@ export function detectStructuralFabrication(text: string): StructuralMarker[] {
   // Task #433 thread-ID-mismatch detector.
   const j2 = detectThreadIdMismatch(text);
   if (j2) markers.push(j2);
+  // Task #741 thread-role no-overlap detector. Complementary to the
+  // Task #433 detector above: catches fake traces where every role-
+  // tagged anchor points to a *different* thread even when there are
+  // only 2 distinct IDs (so `thread_id_mismatch`'s ≥3 threshold leaves
+  // them untouched).
+  const j3 = detectThreadRoleNoOverlap(text);
+  if (j3) markers.push(j3);
   // Task #455 /proc/self/status detector. The companion ARM64/RISC-V
   // register-name extension is wired in via the shared REGISTER_DUMP_RE
   // and so is already exercised by `detectFabricatedRegisterState` above.

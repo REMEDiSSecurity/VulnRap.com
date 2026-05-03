@@ -903,6 +903,11 @@ export const STRUCTURAL_MARKER_LABELS: Record<string, string> = {
   // Task #316: register dump and /proc/self/maps shape detectors.
   fabricated_register_state: "Fabricated x86/x64 register dump",
   fabricated_memory_map: "Fabricated /proc/self/maps listing",
+  // Task #741: complementary "no-overlap" check on the role-tagged
+  // anchors handled by the Task #433 `thread_id_mismatch` detector. Only
+  // fires when ≥2 role buckets each name a single distinct thread (no
+  // overlap) and at least one of those buckets is freed-by / allocated-by.
+  thread_role_no_overlap: "Each role anchor names a different thread",
 };
 
 // Task #450: short, plain-English label for each FAKE_RAW_HTTP fabrication

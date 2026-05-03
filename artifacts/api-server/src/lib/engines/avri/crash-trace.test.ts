@@ -1026,6 +1026,131 @@ describe("detectStructuralFabrication — Task #433 named-legit-fixture regressi
   });
 });
 
+// --- Task #741: thread-role no-overlap detector ----------------------------
+
+describe("detectStructuralFabrication — Task #741 thread_role_no_overlap", () => {
+  it("flags a fake UAF with 2 role anchors naming distinct threads (READ T0 + freed T1)", () => {
+    // Only 2 distinct thread IDs, so the Task #433 `thread_id_mismatch`
+    // detector (≥3 distinct) leaves this trace untouched. The Task #741
+    // no-overlap check should still fire because every role anchor
+    // points to a different thread and one bucket is `freed-by`.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0xa1c0
+READ of size 8 at 0xa1c0 thread T0
+    #0 0x4001 in foo src/foo.c:1
+freed by thread T1 here:
+    #0 0x4abf in __interceptor_free`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("thread_role_no_overlap");
+    // The Task #433 detector must NOT also fire — only 2 distinct IDs.
+    expect(ids).not.toContain("thread_id_mismatch");
+  });
+
+  it("flags a fake UAF where freed-by and allocated-by name distinct threads (no READ/WRITE anchor)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0xa1c0
+freed by thread T0 here:
+    #0 0x4abf in __interceptor_free
+previously allocated by thread T1 here:
+    #0 0x4ad0 in __interceptor_malloc`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("thread_role_no_overlap");
+    expect(ids).not.toContain("thread_id_mismatch");
+  });
+
+  it("flags T0/T3/T5 (3 distinct, range 5) — also fires Task #433", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0xa1c0
+READ of size 8 at 0xa1c0 thread T0
+    #0 0x4001 in foo src/foo.c:1
+freed by thread T3 here:
+    #0 0x4abf in __interceptor_free
+previously allocated by thread T5 here:
+    #0 0x4ad0 in __interceptor_malloc`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).toContain("thread_role_no_overlap");
+    expect(ids).toContain("thread_id_mismatch");
+  });
+
+  it("does NOT flag a single-threaded ASan UAF (all roles share T0)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0xa1c0
+READ of size 8 at 0x60200000a1c0 thread T0
+    #0 0x55e9b8c2f3d1 in foo_finalize parser/parse.c:418
+freed by thread T0 here:
+    #0 0x7f0001 in __interceptor_free
+previously allocated by thread T0 here:
+    #0 0x7f0002 in __interceptor_malloc`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("thread_role_no_overlap");
+  });
+
+  it("does NOT flag a UAF where READ and freed share a thread but allocated differs (overlap present)", () => {
+    // T0 appears in two role buckets (read_write + freed) — overlap, so
+    // the no-overlap predicate is not satisfied even though there are 2
+    // distinct thread IDs across role anchors.
+    const trace = `==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0xa1c0
+READ of size 8 at 0xa1c0 thread T0
+    #0 0x4001 in foo src/foo.c:1
+freed by thread T0 here:
+    #0 0x4abf in __interceptor_free
+previously allocated by thread T1 here:
+    #0 0x4ad0 in __interceptor_malloc`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("thread_role_no_overlap");
+  });
+
+  it("does NOT flag a TSan race with two threads in the READ/WRITE bucket only (T1 + T3)", () => {
+    // Both `by thread T<n>` mentions go in the read_write bucket — only
+    // 1 role bucket present and no freed-by / allocated-by anchor, so
+    // the no-overlap check does not fire.
+    const trace = `WARNING: ThreadSanitizer: data race (pid=4711)
+  Write of size 8 at 0x7b0400000040 by thread T3:
+    #0 net::Pool::reap src/net/pool.cc:184
+  Previous read of size 8 at 0x7b0400000040 by thread T1:
+    #0 net::Pool::checkout src/net/pool.cc:97`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("thread_role_no_overlap");
+  });
+
+  it("does NOT flag a single-anchor trace (only WRITE, no freed/allocated)", () => {
+    const trace = `==12345==ERROR: AddressSanitizer: heap-buffer-overflow
+WRITE of size 4 at 0xa1c0 thread T0
+    #0 0x4001 in foo src/foo.c:1`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("thread_role_no_overlap");
+  });
+
+  it("ignores bare 'thread T<n>' mentions in prose (only role anchors count)", () => {
+    const trace = `The bug involves thread T0 racing with thread T7 while thread T2 frees the buffer.`;
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("thread_role_no_overlap");
+  });
+});
+
+describe("detectStructuralFabrication — Task #741 named-legit-fixture regression", () => {
+  const allFixtures = [
+    ...TEST_FIXTURE_COHORTS.T1,
+    ...TEST_FIXTURE_COHORTS.T2,
+    ...TEST_FIXTURE_COHORTS.T3,
+    ...TEST_FIXTURE_COHORTS.T4,
+  ];
+  it.each([
+    ["T1-01-uaf-libfoo"],
+    ["T1-AVRI-firefox-uaf"],
+    ["T1-AVRI-cve-2025-0725-curl"],
+    ["SYMBOL_RICH_TSAN_TRACE"],
+  ])("does NOT fire thread_role_no_overlap on %s", (fixtureId) => {
+    let trace: string;
+    if (fixtureId === "SYMBOL_RICH_TSAN_TRACE") {
+      trace = SYMBOL_RICH_TSAN_TRACE;
+    } else {
+      const fixture = allFixtures.find((f) => f.id === fixtureId);
+      expect(fixture, `missing fixture ${fixtureId}`).toBeDefined();
+      trace = fixture!.text;
+    }
+    expect(trace).toBeTruthy();
+    const ids = detectStructuralFabrication(trace).map((m) => m.id);
+    expect(ids).not.toContain("thread_role_no_overlap");
+  });
+});
+
 describe("evaluateCrashTrace — structural fabrication aggregation", () => {
   it("hasStructuralFabrication is true only when ≥2 markers fire", () => {
     // Only round_function_offsets should fire here.
