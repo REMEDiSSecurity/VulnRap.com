@@ -588,6 +588,13 @@ const PROSE_PAYLOAD_PLACEHOLDER_BARE_RE =
 // vocabulary mirrors the inline-code form (send/sent/run/exec join
 // payload/inject/command/etc).
 //
+// The separator class between the payload word and the opening
+// double-quote mirrors the inline-code form: whitespace, commas,
+// parentheses, en-dash (U+2013), and em-dash (U+2014). Slop authors
+// sidestep the plain-whitespace gate by writing 'the payload,
+// "<inject>", was sent' or 'exec ("<command here>") to confirm RCE' —
+// same gesture, just with a punctuation separator before the quote.
+//
 // Without the slop-vocab guard this would happily false-positive on
 // neutral prose like "the payload \"<unknown>\" was rejected" where a
 // server-supplied identifier is being quoted, so the bare-quote form
@@ -596,7 +603,7 @@ const PROSE_PAYLOAD_PLACEHOLDER_BARE_RE =
 // (BODY_PLACEHOLDER_KEYWORDS) qualify — same rule as the bare-angle
 // form.
 const PROSE_PAYLOAD_PLACEHOLDER_DQUOTE_RE =
-  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)\s+"(<[^>\n"]{1,80}>)"/gi;
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)[\s,(\u2013\u2014]+"(<[^>\n"]{1,80}>)"/gi;
 
 // Same gesture, but the slot is wrapped in bare square brackets:
 // "the payload [<inject>] was sent" / "run [<command here>] on the
@@ -604,8 +611,14 @@ const PROSE_PAYLOAD_PLACEHOLDER_DQUOTE_RE =
 // the brackets stand in for the markdown inline-code fence. Same
 // verb/noun vocabulary and same slop-vocab guard so neutral prose
 // like "the payload [<unknown>] was rejected" stays safe.
+//
+// The separator class between the payload word and the opening bracket
+// mirrors the inline-code and double-quote forms: whitespace, commas,
+// parentheses, en-dash (U+2013), and em-dash (U+2014). Slop authors
+// sidestep the plain-whitespace gate by writing "the payload,
+// [<inject>], was sent" or "exec — [<command here>] — to confirm RCE".
 const PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE =
-  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)\s+\[(<[^>\n\]]{1,80}>)\]/gi;
+  /\b(?:payloads?|inject(?:ion|ed|s)?|exec(?:ute|s)?|runs?|commands?|cmd|shells?|sqli?|nosql|ldap|xpath|template|send(?:s|ing|t)?)[\s,(\u2013\u2014]+\[(<[^>\n\]]{1,80}>)\]/gi;
 
 // Same gesture, but with the payload-context word AFTER the inline-code
 // `<...>` slot. Slop authors dodge both the colon-form and the

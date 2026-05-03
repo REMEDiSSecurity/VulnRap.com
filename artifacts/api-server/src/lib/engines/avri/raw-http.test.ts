@@ -1373,6 +1373,160 @@ describe("findProsePlaceholderPayloadRanges", () => {
     ).toBe(0);
   });
 
+  it("flags double-quote-fenced <slot> when a comma separates the payload word from the slot", () => {
+    // Slop dodge: wedge a comma between the payload-context word and
+    // the opening double-quote. Symmetric to the bare-angle and
+    // inline-code comma forms; the relaxed separator class must catch
+    // this regardless of the fence character used.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the payload, "<inject>", was sent against the endpoint',
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'we send,"<sql payload here>", to /search',
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags double-quote-fenced <slot> when the slot is wrapped in parentheses", () => {
+    // Slop dodge: wrap the quoted slot in parentheses so there is an
+    // opening paren immediately before the quote rather than whitespace.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the payload ("<inject>") was sent against the endpoint',
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'exec ("<command here>") to confirm the finding',
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags double-quote-fenced <slot> when an em-dash separates the payload word from the slot", () => {
+    // Slop dodge: em-dash (U+2014) between the payload word and the
+    // quoted slot — same gesture as the bare-angle em-dash form but
+    // with double-quote fences.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the payload \u2014 "<inject>" \u2014 was sent against the endpoint',
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'we send \u2014 "<sql payload here>" \u2014 to /search',
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags double-quote-fenced <slot> when an en-dash separates the payload word from the slot", () => {
+    // Same as the em-dash form, but with en-dash (U+2013).
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the payload \u2013 "<inject>" \u2013 was sent against the endpoint',
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag punctuation-separated double-quote-fenced prose with a neutral identifier", () => {
+    // The slop-vocab guard must still hold when the separator is a
+    // comma, paren, or dash rather than whitespace. A neutral
+    // server-supplied identifier in quotes stays safe.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the payload, "<unknown>", was rejected',
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the payload ("<unknown>") was rejected',
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        'the payload \u2014 "<unknown>" \u2014 was rejected',
+      ).length,
+    ).toBe(0);
+  });
+
+  it("flags square-bracket-fenced <slot> when a comma separates the payload word from the slot", () => {
+    // Slop dodge: wedge a comma between the payload-context word and
+    // the opening square bracket. Symmetric to the double-quote comma
+    // form; the relaxed separator class must catch this.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload, [<inject>], was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send,[<sql payload here>], to /search",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags square-bracket-fenced <slot> when the slot is wrapped in parentheses", () => {
+    // Slop dodge: open-paren immediately before the bracket rather
+    // than whitespace. Symmetric to the double-quote paren form.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload ([<inject>]) was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "exec ([<command here>]) to confirm the finding",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags square-bracket-fenced <slot> when an em-dash separates the payload word from the slot", () => {
+    // Slop dodge: em-dash (U+2014) between the payload word and the
+    // bracketed slot. Symmetric to the double-quote em-dash form.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload \u2014 [<inject>] \u2014 was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "we send \u2014 [<sql payload here>] \u2014 to /search",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("flags square-bracket-fenced <slot> when an en-dash separates the payload word from the slot", () => {
+    // Same as the em-dash form, but with en-dash (U+2013).
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload \u2013 [<inject>] \u2013 was sent against the endpoint",
+      ).length,
+    ).toBe(1);
+  });
+
+  it("does not flag punctuation-separated square-bracket-fenced prose with a neutral identifier", () => {
+    // The slop-vocab guard must still hold when the separator is a
+    // comma, paren, or dash rather than whitespace. A neutral
+    // server-supplied identifier in brackets stays safe.
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload, [<unknown>], was rejected",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload ([<unknown>]) was rejected",
+      ).length,
+    ).toBe(0);
+    expect(
+      findProsePlaceholderPayloadRanges(
+        "the payload \u2014 [<unknown>] \u2014 was rejected",
+      ).length,
+    ).toBe(0);
+  });
+
   it("does not flag fenced <slot> without a payload-context word", () => {
     // Same rule as the bare-angle form: the fence character (quote or
     // bracket) is not enough on its own — the slot must be preceded
