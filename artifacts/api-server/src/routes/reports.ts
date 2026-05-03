@@ -26,6 +26,11 @@ import {
   CompareReportsResponse,
 } from "@workspace/api-zod";
 import {
+  reportSubmittedTotal,
+  reportRedactedTotal,
+  similarityMatchTotal,
+} from "../lib/metrics";
+import {
   buildAvriRubricMarkdown,
   type AvriCompositeBlock as AvriRubricCompositeBlock,
   type AvriEngine2Block as AvriRubricEngine2Block,
@@ -1000,6 +1005,11 @@ router.post("/reports", async (req, res): Promise<void> => {
   const { redactedText, summary: redactionSummary } = skipRedaction
     ? { redactedText: text, summary: { totalRedactions: 0, categories: {} } }
     : redactReport(text);
+  // Task #724 — Domain counter: # of submissions that ran through the
+  // redactor. Skipped submissions (skipRedaction=true) are intentionally
+  // excluded so the metric tracks PII-redaction throughput, not raw
+  // submission volume.
+  if (redactionApplied) reportRedactedTotal.inc();
 
   const analysisText = redactedText;
 
@@ -1391,6 +1401,13 @@ router.post("/reports", async (req, res): Promise<void> => {
 
     return inserted;
   });
+
+  // Task #724 — Domain counters for the /metrics scrape. Recorded after the
+  // tx commits so a rolled-back submission does not bump the counter.
+  reportSubmittedTotal.inc({ outcome: "success" });
+  if (similarityMatches.length > 0) {
+    similarityMatchTotal.inc(similarityMatches.length);
+  }
 
   const response = GetReportResponse.parse({
     id: report.id,

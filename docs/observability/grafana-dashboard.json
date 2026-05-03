@@ -1,0 +1,89 @@
+{
+  "title": "VulnRap api-server",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["vulnrap"],
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP request rate (req/s)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (route) (rate(vulnrap_http_requests_total[5m]))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP error rate (5xx / s)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (route) (rate(vulnrap_http_requests_total{status_code=~\"5..\"}[5m]))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "HTTP p95 latency (s)",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(vulnrap_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "External API calls (req/s, by provider/outcome)",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (provider, outcome) (rate(vulnrap_external_api_call_total[5m]))",
+          "legendFormat": "{{provider}} / {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "pg pool depth",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "vulnrap_pg_pool_total", "legendFormat": "total" },
+        { "expr": "vulnrap_pg_pool_idle", "legendFormat": "idle" },
+        { "expr": "vulnrap_pg_pool_waiting", "legendFormat": "waiting" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Domain counters (per-minute rate)",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(vulnrap_report_submitted_total[5m])",
+          "legendFormat": "reports submitted"
+        },
+        {
+          "expr": "rate(vulnrap_report_redacted_total[5m])",
+          "legendFormat": "reports redacted"
+        },
+        {
+          "expr": "rate(vulnrap_similarity_match_total[5m])",
+          "legendFormat": "similarity matches"
+        }
+      ]
+    }
+  ]
+}

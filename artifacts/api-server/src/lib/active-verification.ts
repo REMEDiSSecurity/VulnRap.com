@@ -6,6 +6,8 @@ import {
   type TtlCategory,
 } from "./cache-service";
 import type { VerificationMode } from "./engines/avri/families";
+import { getCurrentRequestId } from "./request-context";
+import { instrumentExternalCall } from "./metrics";
 
 export interface ActiveVerificationOptions {
   // AVRI Step 6: route the active verification strategy from the family
@@ -392,12 +394,20 @@ async function githubFetch(
     "User-Agent": "VulnRap/2.1",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
+  // Task #724 — Forward the inbound request id so upstream APIs (and our own
+  // logs on the response side) can correlate a user-visible reference id with
+  // every external call it triggered.
+  const reqId = getCurrentRequestId();
+  if (reqId) headers["X-Request-Id"] = reqId;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    const resp = await fetch(url, { headers, signal: controller.signal });
-    clearTimeout(timeout);
+    const resp = await instrumentExternalCall(
+      "github",
+      () => fetch(url, { headers, signal: controller.signal }),
+      (r) => (r.ok || r.status === 404 ? "success" : "error"),
+    );
 
     const result: GhResult = {
       ok: resp.ok,
@@ -415,6 +425,10 @@ async function githubFetch(
   } catch {
     cacheTracker.fresh++;
     return { ok: false, status: 0, cacheSource: "fresh" };
+  } finally {
+    // Task #724 — always release the abort timer; previously a thrown
+    // fetch left the timer holding the event loop until it fired.
+    clearTimeout(timeout);
   }
 }
 
@@ -577,15 +591,20 @@ async function nvdFetch(cveId: string): Promise<NvdResult> {
     return { ...cached.value, cacheSource: cached.source };
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
     const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${cveId}`;
-    const resp = await fetch(url, {
-      headers: { "User-Agent": "VulnRap/2.1" },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    // Task #724 — Forward the inbound request id and instrument duration /
+    // outcome so the /metrics scrape sees per-provider success rates.
+    const reqId = getCurrentRequestId();
+    const headers: Record<string, string> = { "User-Agent": "VulnRap/2.1" };
+    if (reqId) headers["X-Request-Id"] = reqId;
+    const resp = await instrumentExternalCall(
+      "nvd",
+      () => fetch(url, { headers, signal: controller.signal }),
+      (r) => (r.ok || r.status === 404 ? "success" : "error"),
+    );
 
     if (!resp.ok) {
       if (resp.status === 404) {
@@ -619,6 +638,10 @@ async function nvdFetch(cveId: string): Promise<NvdResult> {
   } catch {
     cacheTracker.fresh++;
     return { found: false, error: true, cacheSource: "fresh" };
+  } finally {
+    // Task #724 — always release the abort timer; previously a thrown
+    // fetch left the timer holding the event loop until it fired.
+    clearTimeout(timeout);
   }
 }
 

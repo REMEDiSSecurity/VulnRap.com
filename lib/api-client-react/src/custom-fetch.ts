@@ -355,6 +355,15 @@ export class ApiError<T = unknown> extends Error {
   readonly response: Response;
   readonly method: string;
   readonly url: string;
+  /**
+   * Task #724 — Convenience accessor for the X-Request-Id header echoed by
+   * the api-server's request-id middleware. Lets the SPA quote a stable
+   * reference id in error toasts so support tickets correlate to a single
+   * line in the server log.
+   */
+  get requestId(): string | null {
+    return this.headers.get("x-request-id");
+  }
 
   constructor(
     response: Response,
@@ -371,6 +380,58 @@ export class ApiError<T = unknown> extends Error {
     this.response = response;
     this.method = requestInfo.method;
     this.url = response.url || requestInfo.url;
+  }
+}
+
+// Task #724 — Observer pattern for request-id surfacing.
+//
+// Every failed (non-2xx) API response publishes its X-Request-Id (when
+// present) to subscribers. The frontend's `last-request-id` store listens
+// here so any user-visible error UI (toast, error-boundary fallback, custom
+// pages) can show the same "Reference ID: …" without each call site
+// reaching into ApiError itself.
+export interface ErrorRequestIdNotice {
+  method: string;
+  url: string;
+  status: number;
+  requestId: string;
+  at: number;
+}
+
+type ErrorRequestIdObserver = (notice: ErrorRequestIdNotice) => void;
+
+const errorRequestIdObservers = new Set<ErrorRequestIdObserver>();
+
+export function addErrorRequestIdObserver(
+  observer: ErrorRequestIdObserver,
+): () => void {
+  errorRequestIdObservers.add(observer);
+  return () => {
+    errorRequestIdObservers.delete(observer);
+  };
+}
+
+function emitErrorRequestId(
+  response: Response,
+  requestInfo: { method: string; url: string },
+): void {
+  if (errorRequestIdObservers.size === 0) return;
+  const requestId = response.headers.get("x-request-id");
+  if (!requestId) return;
+  const notice: ErrorRequestIdNotice = {
+    method: requestInfo.method,
+    url: response.url || requestInfo.url,
+    status: response.status,
+    requestId,
+    at: Date.now(),
+  };
+  for (const observer of Array.from(errorRequestIdObservers)) {
+    try {
+      observer(notice);
+    } catch {
+      // Swallow observer failures — a misbehaving subscriber must not
+      // mask the underlying ApiError throw at the call site.
+    }
   }
 }
 
@@ -541,6 +602,11 @@ export async function customFetch<T = unknown>(
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+    // Task #724 — Surface the X-Request-Id from every failed call to the
+    // request-id observer (used by the error-boundary "Reference ID" UI).
+    // Runs BEFORE we throw so subscribers see the id in the same tick the
+    // ApiError surfaces as a toast / banner.
+    emitErrorRequestId(response, requestInfo);
     if (response.status === 429) {
       // Notify rate-limit subscribers BEFORE throwing so the calibration
       // UI can update its cooldown state in the same tick the ApiError is

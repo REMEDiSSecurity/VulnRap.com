@@ -15,11 +15,14 @@ import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yamljs";
 import router from "./routes";
+import metricsRouter from "./routes/metrics";
 import blogRouter from "./routes/blog";
 import sitemapRouter from "./routes/sitemap";
 import changelogFeedRouter from "./routes/changelog-feed";
 import { logger } from "./lib/logger";
 import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
+import { requestIdMiddleware } from "./middlewares/request-id";
+import { httpMetricsMiddleware } from "./middlewares/http-metrics";
 
 // Task #462 — Resolve __dirname from import.meta.url so this file works under
 // any pure-ESM loader (no esbuild banner) as well as the bundled output. The
@@ -75,9 +78,17 @@ app.use((req, res, next) => {
   return defaultHelmet(req, res, next);
 });
 
+// Task #724 — Resolve / generate request ID before pino-http so every log
+// line includes it via genReqId, and echo it as a response header.
+app.use(requestIdMiddleware);
+
 app.use(
   pinoHttp({
     logger,
+    // Honour the id resolved by requestIdMiddleware (inbound X-Request-Id or
+    // freshly-minted ULID). Stringly typed because Express's req.id type is
+    // augmented by pino-http itself.
+    genReqId: (req) => (req as unknown as { id: string }).id,
     serializers: {
       req(req) {
         return {
@@ -94,6 +105,9 @@ app.use(
     },
   }),
 );
+
+// Task #724 — Per-request Prometheus metrics (duration / count / in-flight).
+app.use(httpMetricsMiddleware);
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
@@ -254,6 +268,11 @@ app.use(sitemapRouter);
 // (not under /api) so the public URL is /changelog/feed.xml, matching the
 // auto-discovery <link rel="alternate"> injected into the changelog page.
 app.use(changelogFeedRouter);
+
+// Task #724 — Mount the Prometheus scrape endpoint under /api so it inherits
+// the same helmet / CORS / trust-proxy posture. The handler enforces its own
+// METRICS_ENABLED / METRICS_TOKEN gating.
+app.use("/api", metricsRouter);
 
 app.use("/api", router);
 

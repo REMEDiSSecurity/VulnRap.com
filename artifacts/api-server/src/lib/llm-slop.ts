@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import OpenAI from "openai";
 import { logger } from "./logger";
+import { getCurrentRequestId } from "./request-context";
+import { instrumentExternalCall } from "./metrics";
 
 export interface LLMTriageGuidance {
   reproSteps: string[];
@@ -568,20 +570,28 @@ async function analyzeSlopWithLLMOnce(
     const isNano = model.includes("nano");
     const activePrompt = getSystemPrompt(model);
     const tokenBudget = isNano ? 4000 : 8000;
-    const response = await client.chat.completions.create(
-      {
-        model,
-        ...(!isNano ? { temperature: 0.1 } : {}),
-        max_completion_tokens: tokenBudget,
-        messages: [
-          { role: "system", content: activePrompt },
-          {
-            role: "user",
-            content: `Analyze this vulnerability report for substance, coherence, and reproducibility:\n\n---BEGIN REPORT---\n${truncatedText}\n---END REPORT---`,
-          },
-        ],
-      },
-      { signal: controller.signal },
+    // Task #724 — Forward the inbound request id to OpenAI as a custom
+    // header (the SDK accepts arbitrary headers per-call) and instrument
+    // duration / outcome so the /metrics scrape sees per-provider stats.
+    const reqId = getCurrentRequestId();
+    const callHeaders: Record<string, string> = {};
+    if (reqId) callHeaders["X-Request-Id"] = reqId;
+    const response = await instrumentExternalCall("openai", () =>
+      client.chat.completions.create(
+        {
+          model,
+          ...(!isNano ? { temperature: 0.1 } : {}),
+          max_completion_tokens: tokenBudget,
+          messages: [
+            { role: "system", content: activePrompt },
+            {
+              role: "user",
+              content: `Analyze this vulnerability report for substance, coherence, and reproducibility:\n\n---BEGIN REPORT---\n${truncatedText}\n---END REPORT---`,
+            },
+          ],
+        },
+        { signal: controller.signal, headers: callHeaders },
+      ),
     );
 
     const elapsedMs = Date.now() - startMs;

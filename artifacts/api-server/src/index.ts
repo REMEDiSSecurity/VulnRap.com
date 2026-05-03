@@ -1,13 +1,33 @@
-import { pool } from "@workspace/db";
-import app from "./app";
-import { logger } from "./lib/logger";
-import { runStartupMigrations } from "./lib/startup-migrations";
-import {
+// Task #724 — Initialise OpenTelemetry FIRST, before any other application
+// import, so the auto-instrumentations can patch http / express / pg before
+// they are required. The init is a no-op when OTEL_EXPORTER_OTLP_ENDPOINT is
+// unset, so unconfigured environments pay zero cost.
+//
+// Every dependency that transitively pulls `http` / `express` / `pg` is
+// loaded via dynamic `import()` AFTER `initTracing()` resolves. Static ESM
+// imports are evaluated before the module body runs, so a static
+// `import { pool } from "@workspace/db"` would defeat instrumentation by
+// loading `pg` before the SDK has had a chance to patch it.
+import { initTracing } from "./lib/instrumentation";
+await initTracing();
+
+const { pool } = await import("@workspace/db");
+const { default: app } = await import("./app");
+const { logger } = await import("./lib/logger");
+const { runStartupMigrations } = await import("./lib/startup-migrations");
+const {
   startDriftNotificationScheduler,
   startStalledSchedulerWatchdog,
-} from "./lib/avri-drift-notifications";
-import { startRescoreBackfillScheduler } from "./lib/rescore-backfill-scheduler";
-import { startScoreStabilityScheduler } from "./lib/score-stability-scheduler";
+} = await import("./lib/avri-drift-notifications");
+const { startRescoreBackfillScheduler } = await import(
+  "./lib/rescore-backfill-scheduler"
+);
+const { startScoreStabilityScheduler } = await import(
+  "./lib/score-stability-scheduler"
+);
+const { startPgPoolCollector, stopPgPoolCollector } = await import(
+  "./lib/metrics"
+);
 
 const rawPort = process.env["PORT"];
 
@@ -25,6 +45,9 @@ if (Number.isNaN(port) || port <= 0) {
 
 await runStartupMigrations();
 
+// Task #724 — Begin sampling pg pool gauges (idle/total/waiting) every 5s.
+startPgPoolCollector();
+
 const server = app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
@@ -33,39 +56,9 @@ const server = app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 
-  // Task #197 — Kick off the AVRI drift-notification scheduler. It runs at a
-  // deterministic interval (default 6h, configurable via
-  // AVRI_DRIFT_NOTIFY_INTERVAL_MS) and short-circuits when
-  // AVRI_DRIFT_WEBHOOK_URL is unset, so unconfigured environments pay zero
-  // cost per tick. Replaces the throttled fire-and-forget side effect that
-  // POST /api/reports used to invoke. The handle is retained so signal
-  // handlers can stop the timer cleanly during a graceful shutdown.
   const driftScheduler = startDriftNotificationScheduler();
-
-  // Task #396 — Independent watchdog that periodically reads the drift
-  // scheduler status and dispatches a one-off "scheduler appears wedged"
-  // webhook when the next scheduled tick is significantly overdue
-  // (Date.now() > nextTickAt + 2 * intervalMs). Independent of the main
-  // scheduler timer so a wedged scheduler can't suppress its own alarm.
-  // Dedup state lives in the same JSON file as drift flags, so a process
-  // restart never re-pages reviewers for a stall window that was already
-  // announced.
   const stalledSchedulerWatchdog = startStalledSchedulerWatchdog();
-
-  // Task #388 — Kick off the recurring rescore backfill. The scheduler
-  // is opt-in via RESCORE_BACKFILL_SCHEDULER_ENABLED so dev / test
-  // environments don't accidentally rescore data; in production it
-  // runs weekly (default) with a per-tick row cap and wall-clock
-  // budget so a runaway scan can't saturate the DB. The handle is
-  // retained so signal handlers can stop the timer cleanly during a
-  // graceful shutdown.
   const rescoreScheduler = startRescoreBackfillScheduler();
-  // Task #620 — Nightly score-stability monitor. Re-scores the last 7
-  // days against the currently-running code, writes per-row results to
-  // `report_rescore_log`, and pages through the existing AVRI alerts
-  // channel when a day's tier-flip count exceeds 2 % of its volume.
-  // Opt-in via SCORE_STABILITY_SCHEDULER_ENABLED so dev / test environments
-  // don't accidentally write rescore log rows.
   const stabilityScheduler = startScoreStabilityScheduler();
   // Task #462 — Graceful shutdown that actually exits.
   //
@@ -102,16 +95,12 @@ const server = app.listen(port, (err) => {
     stalledSchedulerWatchdog.stop();
     rescoreScheduler.stop();
     stabilityScheduler.stop();
+    stopPgPoolCollector();
     server.close();
     server.closeAllConnections?.();
-    // Fire-and-forget the pool drain — process.exit below will tear down
-    // any remaining sockets if the drain doesn't complete first.
     pool.end().catch((err: unknown) => {
       logger.warn({ err }, "Error draining pg pool during shutdown");
     });
-    // Hard deadline for exiting. We do NOT unref this timer: if some
-    // module (e.g. pino-pretty's worker thread) keeps the event loop
-    // alive past the natural drain, this still fires and force-exits.
     setTimeout(() => {
       process.exit(0);
     }, SHUTDOWN_TIMEOUT_MS);

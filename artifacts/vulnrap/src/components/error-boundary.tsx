@@ -1,7 +1,8 @@
 import { Component } from "react";
+import type { ReactNode, ErrorInfo } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { ReactNode, ErrorInfo } from "react";
+import { getLastErrorRequestId } from "@/lib/last-request-id";
 
 interface Props {
   children: ReactNode;
@@ -10,16 +11,25 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  // Task #724 — Captured at render time of the fallback UI so the same id
+  // shown in a toast (via useLastErrorRequestId) is also visible if the
+  // error caused a hard component-tree crash.
+  requestId: string | null;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, requestId: null };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    const last = getLastErrorRequestId();
+    return {
+      hasError: true,
+      error,
+      requestId: last?.requestId ?? null,
+    };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -43,10 +53,18 @@ export class ErrorBoundary extends Component<Props, State> {
                 {this.state.error.message}
               </p>
             )}
+            {this.state.requestId && (
+              <p
+                className="text-xs font-mono text-muted-foreground"
+                data-testid="error-boundary-request-id"
+              >
+                Reference ID: <span className="select-all">{this.state.requestId}</span>
+              </p>
+            )}
             <Button
               variant="outline"
               onClick={() => {
-                this.setState({ hasError: false, error: null });
+                this.setState({ hasError: false, error: null, requestId: null });
                 window.location.href = "/";
               }}
             >
