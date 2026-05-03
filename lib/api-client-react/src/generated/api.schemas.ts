@@ -64,24 +64,24 @@ export interface ErrorResponse {
 /**
  * Where this entry came from. `original` = first analysis; `backfill-rescore` = a bulk rescore overwrote the row.
  */
-export type ScoreHistoryEntrySource = typeof ScoreHistoryEntrySource[keyof typeof ScoreHistoryEntrySource];
-
+export type ScoreHistoryEntrySource =
+  (typeof ScoreHistoryEntrySource)[keyof typeof ScoreHistoryEntrySource];
 
 export const ScoreHistoryEntrySource = {
-  original: 'original',
-  'backfill-rescore': 'backfill-rescore',
+  original: "original",
+  "backfill-rescore": "backfill-rescore",
 } as const;
 
 /**
  * For rescore entries, which branch produced the new score (live engine re-run vs. reconstruction from cached signals). Always `original` for the first entry.
  */
-export type ScoreHistoryEntryMode = typeof ScoreHistoryEntryMode[keyof typeof ScoreHistoryEntryMode];
-
+export type ScoreHistoryEntryMode =
+  (typeof ScoreHistoryEntryMode)[keyof typeof ScoreHistoryEntryMode];
 
 export const ScoreHistoryEntryMode = {
-  original: 'original',
-  engine: 'engine',
-  reconstruction: 'reconstruction',
+  original: "original",
+  engine: "engine",
+  reconstruction: "reconstruction",
 } as const;
 
 export type ScoreHistoryEntryEnginesItem = {
@@ -123,14 +123,14 @@ export interface ScoreHistoryResponse {
   entries: ScoreHistoryEntry[];
 }
 
-export type SimilarityMatchMatchType = typeof SimilarityMatchMatchType[keyof typeof SimilarityMatchMatchType];
-
+export type SimilarityMatchMatchType =
+  (typeof SimilarityMatchMatchType)[keyof typeof SimilarityMatchMatchType];
 
 export const SimilarityMatchMatchType = {
-  'near-duplicate': 'near-duplicate',
-  'high-similarity': 'high-similarity',
-  structural: 'structural',
-  semantic: 'semantic',
+  "near-duplicate": "near-duplicate",
+  "high-similarity": "high-similarity",
+  structural: "structural",
+  semantic: "semantic",
 } as const;
 
 export interface SimilarityMatch {
@@ -147,7 +147,7 @@ export interface SectionMatchItem {
   similarity: number;
 }
 
-export type RedactionSummaryCategories = {[key: string]: number};
+export type RedactionSummaryCategories = { [key: string]: number };
 
 export interface RedactionSummary {
   totalRedactions: number;
@@ -163,18 +163,18 @@ export interface DeleteReportResponse {
   message: string;
 }
 
-export type ReportAnalysisContentMode = typeof ReportAnalysisContentMode[keyof typeof ReportAnalysisContentMode];
-
+export type ReportAnalysisContentMode =
+  (typeof ReportAnalysisContentMode)[keyof typeof ReportAnalysisContentMode];
 
 export const ReportAnalysisContentMode = {
-  full: 'full',
-  similarity_only: 'similarity_only',
+  full: "full",
+  similarity_only: "similarity_only",
 } as const;
 
 /**
  * SHA-256 hashes of each report section for granular similarity
  */
-export type ReportAnalysisSectionHashes = {[key: string]: string};
+export type ReportAnalysisSectionHashes = { [key: string]: string };
 
 /**
  * Per-criterion LLM validity scores. Null when LLM analysis is unavailable. May contain legacy V1 fields for older records.
@@ -210,50 +210,50 @@ export type ReportAnalysisLlmBreakdown = {
 /**
  * Two-axis classification quadrant. AI_SLOP=high auth/low valid, AI_ASSISTED=high auth/high valid, WEAK_HUMAN=low auth/low valid, STRONG_HUMAN=low auth/high valid.
  */
-export type ReportAnalysisQuadrant = typeof ReportAnalysisQuadrant[keyof typeof ReportAnalysisQuadrant];
-
+export type ReportAnalysisQuadrant =
+  (typeof ReportAnalysisQuadrant)[keyof typeof ReportAnalysisQuadrant];
 
 export const ReportAnalysisQuadrant = {
-  AI_SLOP: 'AI_SLOP',
-  AI_ASSISTED: 'AI_ASSISTED',
-  WEAK_HUMAN: 'WEAK_HUMAN',
-  STRONG_HUMAN: 'STRONG_HUMAN',
+  AI_SLOP: "AI_SLOP",
+  AI_ASSISTED: "AI_ASSISTED",
+  WEAK_HUMAN: "WEAK_HUMAN",
+  STRONG_HUMAN: "STRONG_HUMAN",
 } as const;
 
 /**
  * Recommended triage action derived from quadrant classification.
  */
-export type ReportAnalysisArchetype = typeof ReportAnalysisArchetype[keyof typeof ReportAnalysisArchetype];
-
+export type ReportAnalysisArchetype =
+  (typeof ReportAnalysisArchetype)[keyof typeof ReportAnalysisArchetype];
 
 export const ReportAnalysisArchetype = {
-  AUTO_CLOSE: 'AUTO_CLOSE',
-  PRIORITIZE_REVIEW: 'PRIORITIZE_REVIEW',
-  REQUEST_DETAILS: 'REQUEST_DETAILS',
-  ACCEPT: 'ACCEPT',
+  AUTO_CLOSE: "AUTO_CLOSE",
+  PRIORITIZE_REVIEW: "PRIORITIZE_REVIEW",
+  REQUEST_DETAILS: "REQUEST_DETAILS",
+  ACCEPT: "ACCEPT",
 } as const;
 
 /**
  * Whether the analysis ran in heuristic-only mode or with LLM enhancement.
  */
-export type ReportAnalysisAnalysisMode = typeof ReportAnalysisAnalysisMode[keyof typeof ReportAnalysisAnalysisMode];
-
+export type ReportAnalysisAnalysisMode =
+  (typeof ReportAnalysisAnalysisMode)[keyof typeof ReportAnalysisAnalysisMode];
 
 export const ReportAnalysisAnalysisMode = {
-  heuristic_only: 'heuristic_only',
-  llm_enhanced: 'llm_enhanced',
+  heuristic_only: "heuristic_only",
+  llm_enhanced: "llm_enhanced",
 } as const;
 
-export type ReportAnalysisConfigNoticesItemSeverity = typeof ReportAnalysisConfigNoticesItemSeverity[keyof typeof ReportAnalysisConfigNoticesItemSeverity];
-
+export type ReportAnalysisConfigNoticesItemSeverity =
+  (typeof ReportAnalysisConfigNoticesItemSeverity)[keyof typeof ReportAnalysisConfigNoticesItemSeverity];
 
 export const ReportAnalysisConfigNoticesItemSeverity = {
-  info: 'info',
-  warning: 'warning',
-  critical: 'critical',
+  info: "info",
+  warning: "warning",
+  critical: "critical",
 } as const;
 
-export type ReportAnalysisConfigNoticesItemImpact = {[key: string]: string};
+export type ReportAnalysisConfigNoticesItemImpact = { [key: string]: string };
 
 export type ReportAnalysisConfigNoticesItem = {
   setting?: string;
@@ -270,41 +270,44 @@ export type ReportAnalysisConfigNoticesItem = {
  */
 export type ReportAnalysisDiagnostics = {
   inputStats?: {
-  charCount?: number;
-  lineCount?: number;
-  wordCount?: number;
-  maxLineLength?: number;
-  containsPlaceholders?: boolean;
-};
-  stages?: {[key: string]: {
-  status?: string;
-  durationMs?: number;
-  error?: string;
-}};
+    charCount?: number;
+    lineCount?: number;
+    wordCount?: number;
+    maxLineLength?: number;
+    containsPlaceholders?: boolean;
+  };
+  stages?: {
+    [key: string]: {
+      status?: string;
+      durationMs?: number;
+      error?: string;
+    };
+  };
   parseWarnings?: {
-  type?: string;
-  detail?: string;
-}[];
+    type?: string;
+    detail?: string;
+  }[];
   totalDurationMs?: number;
   /** @nullable */
   crashInfo?: {
-  message?: string;
-  stage?: string;
-  inputLength?: number;
-} | null;
+    message?: string;
+    stage?: string;
+    inputLength?: number;
+  } | null;
 } | null;
 
 /**
  * Active sensitivity preset used for score adjustment. Null when default (balanced).
  * @nullable
  */
-export type ReportAnalysisSensitivityProfile = typeof ReportAnalysisSensitivityProfile[keyof typeof ReportAnalysisSensitivityProfile] | null;
-
+export type ReportAnalysisSensitivityProfile =
+  | (typeof ReportAnalysisSensitivityProfile)[keyof typeof ReportAnalysisSensitivityProfile]
+  | null;
 
 export const ReportAnalysisSensitivityProfile = {
-  lenient: 'lenient',
-  balanced: 'balanced',
-  strict: 'strict',
+  lenient: "lenient",
+  balanced: "balanced",
+  strict: "strict",
 } as const;
 
 export interface ScoreBreakdown {
@@ -408,27 +411,27 @@ export interface HumanIndicator {
   matched?: string | null;
 }
 
-export type VerificationCheckResult = typeof VerificationCheckResult[keyof typeof VerificationCheckResult];
-
+export type VerificationCheckResult =
+  (typeof VerificationCheckResult)[keyof typeof VerificationCheckResult];
 
 export const VerificationCheckResult = {
-  verified: 'verified',
-  not_found: 'not_found',
-  warning: 'warning',
-  error: 'error',
-  skipped: 'skipped',
-  info: 'info',
+  verified: "verified",
+  not_found: "not_found",
+  warning: "warning",
+  error: "error",
+  skipped: "skipped",
+  info: "info",
 } as const;
 
 /**
  * Whether the check was performed against a repo/resource explicitly cited in the report (referenced_in_report) or one we guessed via keyword fallback (search_fallback). Absent when not applicable (e.g. CVE/PoC checks).
  */
-export type VerificationCheckSource = typeof VerificationCheckSource[keyof typeof VerificationCheckSource];
-
+export type VerificationCheckSource =
+  (typeof VerificationCheckSource)[keyof typeof VerificationCheckSource];
 
 export const VerificationCheckSource = {
-  referenced_in_report: 'referenced_in_report',
-  search_fallback: 'search_fallback',
+  referenced_in_report: "referenced_in_report",
+  search_fallback: "search_fallback",
 } as const;
 
 export interface VerificationCheck {
@@ -467,14 +470,14 @@ plausibility checks; MANUAL_ONLY short-circuits automated probes
 existence; GENERIC runs both source-code and endpoint probes.
 
  */
-export type VerificationMode = typeof VerificationMode[keyof typeof VerificationMode];
-
+export type VerificationMode =
+  (typeof VerificationMode)[keyof typeof VerificationMode];
 
 export const VerificationMode = {
-  SOURCE_CODE: 'SOURCE_CODE',
-  ENDPOINT: 'ENDPOINT',
-  MANUAL_ONLY: 'MANUAL_ONLY',
-  GENERIC: 'GENERIC',
+  SOURCE_CODE: "SOURCE_CODE",
+  ENDPOINT: "ENDPOINT",
+  MANUAL_ONLY: "MANUAL_ONLY",
+  GENERIC: "GENERIC",
 } as const;
 
 export interface Verification {
@@ -499,15 +502,15 @@ existence; GENERIC runs both source-code and endpoint probes.
 /**
  * Recommended triage action based on score, confidence, and verification results
  */
-export type TriageRecommendationAction = typeof TriageRecommendationAction[keyof typeof TriageRecommendationAction];
-
+export type TriageRecommendationAction =
+  (typeof TriageRecommendationAction)[keyof typeof TriageRecommendationAction];
 
 export const TriageRecommendationAction = {
-  AUTO_CLOSE: 'AUTO_CLOSE',
-  MANUAL_REVIEW: 'MANUAL_REVIEW',
-  CHALLENGE_REPORTER: 'CHALLENGE_REPORTER',
-  PRIORITIZE: 'PRIORITIZE',
-  STANDARD_TRIAGE: 'STANDARD_TRIAGE',
+  AUTO_CLOSE: "AUTO_CLOSE",
+  MANUAL_REVIEW: "MANUAL_REVIEW",
+  CHALLENGE_REPORTER: "CHALLENGE_REPORTER",
+  PRIORITIZE: "PRIORITIZE",
+  STANDARD_TRIAGE: "STANDARD_TRIAGE",
 } as const;
 
 export interface ChallengeQuestion {
@@ -519,13 +522,13 @@ export interface ChallengeQuestion {
   context: string;
 }
 
-export type TemporalSignalSignal = typeof TemporalSignalSignal[keyof typeof TemporalSignalSignal];
-
+export type TemporalSignalSignal =
+  (typeof TemporalSignalSignal)[keyof typeof TemporalSignalSignal];
 
 export const TemporalSignalSignal = {
-  suspiciously_fast: 'suspiciously_fast',
-  fast_turnaround: 'fast_turnaround',
-  normal: 'normal',
+  suspiciously_fast: "suspiciously_fast",
+  fast_turnaround: "fast_turnaround",
+  normal: "normal",
 } as const;
 
 export interface TemporalSignal {
@@ -556,13 +559,13 @@ export interface TriageMatrixInputs {
   strongEvidenceCount: number;
 }
 
-export type RevisionResultDirection = typeof RevisionResultDirection[keyof typeof RevisionResultDirection];
-
+export type RevisionResultDirection =
+  (typeof RevisionResultDirection)[keyof typeof RevisionResultDirection];
 
 export const RevisionResultDirection = {
-  improved: 'improved',
-  worsened: 'worsened',
-  unchanged: 'unchanged',
+  improved: "improved",
+  worsened: "worsened",
+  unchanged: "unchanged",
 } as const;
 
 export interface RevisionResult {
@@ -598,12 +601,13 @@ export interface TriageRecommendation {
 /**
  * @nullable
  */
-export type ReproStepSource = typeof ReproStepSource[keyof typeof ReproStepSource] | null;
-
+export type ReproStepSource =
+  | (typeof ReproStepSource)[keyof typeof ReproStepSource]
+  | null;
 
 export const ReproStepSource = {
-  heuristic: 'heuristic',
-  llm: 'llm',
+  heuristic: "heuristic",
+  llm: "llm",
 } as const;
 
 export interface ReproStep {
@@ -623,25 +627,26 @@ export interface ReproGuidance {
   tools: string[];
 }
 
-export type GapItemSeverity = typeof GapItemSeverity[keyof typeof GapItemSeverity];
-
+export type GapItemSeverity =
+  (typeof GapItemSeverity)[keyof typeof GapItemSeverity];
 
 export const GapItemSeverity = {
-  critical: 'critical',
-  important: 'important',
-  minor: 'minor',
+  critical: "critical",
+  important: "important",
+  minor: "minor",
 } as const;
 
 /**
  * @nullable
  */
-export type GapItemAudience = typeof GapItemAudience[keyof typeof GapItemAudience] | null;
-
+export type GapItemAudience =
+  | (typeof GapItemAudience)[keyof typeof GapItemAudience]
+  | null;
 
 export const GapItemAudience = {
-  triager: 'triager',
-  reporter: 'reporter',
-  both: 'both',
+  triager: "triager",
+  reporter: "reporter",
+  both: "both",
 } as const;
 
 export interface GapItem {
@@ -661,13 +666,13 @@ export interface DontMissItem {
   reason: string;
 }
 
-export type ReporterFeedbackItemTone = typeof ReporterFeedbackItemTone[keyof typeof ReporterFeedbackItemTone];
-
+export type ReporterFeedbackItemTone =
+  (typeof ReporterFeedbackItemTone)[keyof typeof ReporterFeedbackItemTone];
 
 export const ReporterFeedbackItemTone = {
-  positive: 'positive',
-  neutral: 'neutral',
-  concern: 'concern',
+  positive: "positive",
+  neutral: "neutral",
+  concern: "concern",
 } as const;
 
 export interface ReporterFeedbackItem {
@@ -677,13 +682,13 @@ export interface ReporterFeedbackItem {
   priority?: number | null;
 }
 
-export type ReporterFeedbackSummaryActionability = typeof ReporterFeedbackSummaryActionability[keyof typeof ReporterFeedbackSummaryActionability];
-
+export type ReporterFeedbackSummaryActionability =
+  (typeof ReporterFeedbackSummaryActionability)[keyof typeof ReporterFeedbackSummaryActionability];
 
 export const ReporterFeedbackSummaryActionability = {
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
+  high: "high",
+  medium: "medium",
+  low: "low",
 } as const;
 
 export interface ReporterFeedbackSummary {
@@ -714,18 +719,18 @@ export interface ReproRecipeTarget {
   packageManager?: string | null;
 }
 
-export type HardwareComponentType = typeof HardwareComponentType[keyof typeof HardwareComponentType];
-
+export type HardwareComponentType =
+  (typeof HardwareComponentType)[keyof typeof HardwareComponentType];
 
 export const HardwareComponentType = {
-  cpu: 'cpu',
-  server: 'server',
-  network: 'network',
-  iot: 'iot',
-  storage: 'storage',
-  peripheral: 'peripheral',
-  embedded: 'embedded',
-  gpu: 'gpu',
+  cpu: "cpu",
+  server: "server",
+  network: "network",
+  iot: "iot",
+  storage: "storage",
+  peripheral: "peripheral",
+  embedded: "embedded",
+  gpu: "gpu",
 } as const;
 
 /**
@@ -778,14 +783,14 @@ export interface TriageAssistant {
 /**
  * Whether the cited compliance frameworks are relevant to the project type.
  */
-export type LLMClaimsComplianceRelevance = typeof LLMClaimsComplianceRelevance[keyof typeof LLMClaimsComplianceRelevance];
-
+export type LLMClaimsComplianceRelevance =
+  (typeof LLMClaimsComplianceRelevance)[keyof typeof LLMClaimsComplianceRelevance];
 
 export const LLMClaimsComplianceRelevance = {
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
-  none: 'none',
+  high: "high",
+  medium: "medium",
+  low: "low",
+  none: "none",
 } as const;
 
 /**
@@ -872,44 +877,44 @@ export interface LLMSubstanceScores {
   coherenceScore: number;
 }
 
-export type VulnrapCompositeLabel = typeof VulnrapCompositeLabel[keyof typeof VulnrapCompositeLabel];
-
+export type VulnrapCompositeLabel =
+  (typeof VulnrapCompositeLabel)[keyof typeof VulnrapCompositeLabel];
 
 export const VulnrapCompositeLabel = {
-  LIKELY_INVALID: 'LIKELY INVALID',
-  HIGH_RISK: 'HIGH RISK',
-  NEEDS_REVIEW: 'NEEDS REVIEW',
-  REASONABLE: 'REASONABLE',
-  PROMISING: 'PROMISING',
-  STRONG: 'STRONG',
+  LIKELY_INVALID: "LIKELY INVALID",
+  HIGH_RISK: "HIGH RISK",
+  NEEDS_REVIEW: "NEEDS REVIEW",
+  REASONABLE: "REASONABLE",
+  PROMISING: "PROMISING",
+  STRONG: "STRONG",
 } as const;
 
-export type VulnrapEngineResultVerdict = typeof VulnrapEngineResultVerdict[keyof typeof VulnrapEngineResultVerdict];
-
+export type VulnrapEngineResultVerdict =
+  (typeof VulnrapEngineResultVerdict)[keyof typeof VulnrapEngineResultVerdict];
 
 export const VulnrapEngineResultVerdict = {
-  GREEN: 'GREEN',
-  YELLOW: 'YELLOW',
-  RED: 'RED',
-  GREY: 'GREY',
+  GREEN: "GREEN",
+  YELLOW: "YELLOW",
+  RED: "RED",
+  GREY: "GREY",
 } as const;
 
-export type VulnrapEngineResultConfidence = typeof VulnrapEngineResultConfidence[keyof typeof VulnrapEngineResultConfidence];
-
+export type VulnrapEngineResultConfidence =
+  (typeof VulnrapEngineResultConfidence)[keyof typeof VulnrapEngineResultConfidence];
 
 export const VulnrapEngineResultConfidence = {
-  HIGH: 'HIGH',
-  MEDIUM: 'MEDIUM',
-  LOW: 'LOW',
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
 } as const;
 
-export type VulnrapEngineResultTriggeredIndicatorsItemStrength = typeof VulnrapEngineResultTriggeredIndicatorsItemStrength[keyof typeof VulnrapEngineResultTriggeredIndicatorsItemStrength];
-
+export type VulnrapEngineResultTriggeredIndicatorsItemStrength =
+  (typeof VulnrapEngineResultTriggeredIndicatorsItemStrength)[keyof typeof VulnrapEngineResultTriggeredIndicatorsItemStrength];
 
 export const VulnrapEngineResultTriggeredIndicatorsItemStrength = {
-  HIGH: 'HIGH',
-  MEDIUM: 'MEDIUM',
-  LOW: 'LOW',
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
 } as const;
 
 export type VulnrapEngineResultTriggeredIndicatorsItem = {
@@ -937,22 +942,22 @@ export interface VulnrapEngineResult {
 /**
  * Always `backfill-rescore` for now; reserved for future audit sources (e.g. manual reviewer overrides).
  */
-export type VulnrapCompositeRescoreHistoryItemSource = typeof VulnrapCompositeRescoreHistoryItemSource[keyof typeof VulnrapCompositeRescoreHistoryItemSource];
-
+export type VulnrapCompositeRescoreHistoryItemSource =
+  (typeof VulnrapCompositeRescoreHistoryItemSource)[keyof typeof VulnrapCompositeRescoreHistoryItemSource];
 
 export const VulnrapCompositeRescoreHistoryItemSource = {
-  'backfill-rescore': 'backfill-rescore',
+  "backfill-rescore": "backfill-rescore",
 } as const;
 
 /**
  * Which rescore branch produced this entry. `engine` means the live pipeline re-ran on stored text; `reconstruction` means the composite was rebuilt from cached v3.5.0 signals.
  */
-export type VulnrapCompositeRescoreHistoryItemMode = typeof VulnrapCompositeRescoreHistoryItemMode[keyof typeof VulnrapCompositeRescoreHistoryItemMode];
-
+export type VulnrapCompositeRescoreHistoryItemMode =
+  (typeof VulnrapCompositeRescoreHistoryItemMode)[keyof typeof VulnrapCompositeRescoreHistoryItemMode];
 
 export const VulnrapCompositeRescoreHistoryItemMode = {
-  engine: 'engine',
-  reconstruction: 'reconstruction',
+  engine: "engine",
+  reconstruction: "reconstruction",
 } as const;
 
 export type VulnrapCompositeCompositeBreakdown = {
@@ -1144,7 +1149,7 @@ export interface VerificationBadge {
   createdAt: string;
 }
 
-export type CheckResultSectionHashes = {[key: string]: string};
+export type CheckResultSectionHashes = { [key: string]: string };
 
 /**
  * @nullable
@@ -1168,50 +1173,50 @@ export type CheckResultLlmBreakdown = {
 /**
  * Two-axis classification quadrant.
  */
-export type CheckResultQuadrant = typeof CheckResultQuadrant[keyof typeof CheckResultQuadrant];
-
+export type CheckResultQuadrant =
+  (typeof CheckResultQuadrant)[keyof typeof CheckResultQuadrant];
 
 export const CheckResultQuadrant = {
-  AI_SLOP: 'AI_SLOP',
-  AI_ASSISTED: 'AI_ASSISTED',
-  WEAK_HUMAN: 'WEAK_HUMAN',
-  STRONG_HUMAN: 'STRONG_HUMAN',
+  AI_SLOP: "AI_SLOP",
+  AI_ASSISTED: "AI_ASSISTED",
+  WEAK_HUMAN: "WEAK_HUMAN",
+  STRONG_HUMAN: "STRONG_HUMAN",
 } as const;
 
 /**
  * Recommended triage action derived from quadrant.
  */
-export type CheckResultArchetype = typeof CheckResultArchetype[keyof typeof CheckResultArchetype];
-
+export type CheckResultArchetype =
+  (typeof CheckResultArchetype)[keyof typeof CheckResultArchetype];
 
 export const CheckResultArchetype = {
-  AUTO_CLOSE: 'AUTO_CLOSE',
-  PRIORITIZE_REVIEW: 'PRIORITIZE_REVIEW',
-  REQUEST_DETAILS: 'REQUEST_DETAILS',
-  ACCEPT: 'ACCEPT',
+  AUTO_CLOSE: "AUTO_CLOSE",
+  PRIORITIZE_REVIEW: "PRIORITIZE_REVIEW",
+  REQUEST_DETAILS: "REQUEST_DETAILS",
+  ACCEPT: "ACCEPT",
 } as const;
 
 /**
  * Whether the analysis ran in heuristic-only mode or with LLM enhancement.
  */
-export type CheckResultAnalysisMode = typeof CheckResultAnalysisMode[keyof typeof CheckResultAnalysisMode];
-
+export type CheckResultAnalysisMode =
+  (typeof CheckResultAnalysisMode)[keyof typeof CheckResultAnalysisMode];
 
 export const CheckResultAnalysisMode = {
-  heuristic_only: 'heuristic_only',
-  llm_enhanced: 'llm_enhanced',
+  heuristic_only: "heuristic_only",
+  llm_enhanced: "llm_enhanced",
 } as const;
 
-export type CheckResultConfigNoticesItemSeverity = typeof CheckResultConfigNoticesItemSeverity[keyof typeof CheckResultConfigNoticesItemSeverity];
-
+export type CheckResultConfigNoticesItemSeverity =
+  (typeof CheckResultConfigNoticesItemSeverity)[keyof typeof CheckResultConfigNoticesItemSeverity];
 
 export const CheckResultConfigNoticesItemSeverity = {
-  info: 'info',
-  warning: 'warning',
-  critical: 'critical',
+  info: "info",
+  warning: "warning",
+  critical: "critical",
 } as const;
 
-export type CheckResultConfigNoticesItemImpact = {[key: string]: string};
+export type CheckResultConfigNoticesItemImpact = { [key: string]: string };
 
 export type CheckResultConfigNoticesItem = {
   setting?: string;
@@ -1228,41 +1233,44 @@ export type CheckResultConfigNoticesItem = {
  */
 export type CheckResultDiagnostics = {
   inputStats?: {
-  charCount?: number;
-  lineCount?: number;
-  wordCount?: number;
-  maxLineLength?: number;
-  containsPlaceholders?: boolean;
-};
-  stages?: {[key: string]: {
-  status?: string;
-  durationMs?: number;
-  error?: string;
-}};
+    charCount?: number;
+    lineCount?: number;
+    wordCount?: number;
+    maxLineLength?: number;
+    containsPlaceholders?: boolean;
+  };
+  stages?: {
+    [key: string]: {
+      status?: string;
+      durationMs?: number;
+      error?: string;
+    };
+  };
   parseWarnings?: {
-  type?: string;
-  detail?: string;
-}[];
+    type?: string;
+    detail?: string;
+  }[];
   totalDurationMs?: number;
   /** @nullable */
   crashInfo?: {
-  message?: string;
-  stage?: string;
-  inputLength?: number;
-} | null;
+    message?: string;
+    stage?: string;
+    inputLength?: number;
+  } | null;
 } | null;
 
 /**
  * Active sensitivity preset used for score adjustment. Null when default.
  * @nullable
  */
-export type CheckResultSensitivityProfile = typeof CheckResultSensitivityProfile[keyof typeof CheckResultSensitivityProfile] | null;
-
+export type CheckResultSensitivityProfile =
+  | (typeof CheckResultSensitivityProfile)[keyof typeof CheckResultSensitivityProfile]
+  | null;
 
 export const CheckResultSensitivityProfile = {
-  lenient: 'lenient',
-  balanced: 'balanced',
-  strict: 'strict',
+  lenient: "lenient",
+  balanced: "balanced",
+  strict: "strict",
 } as const;
 
 export interface CheckResult {
@@ -1386,12 +1394,12 @@ export interface RecentActivity {
   recentReports: RecentActivityRecentReportsItem[];
 }
 
-export type ReportFeedReportsItemContentMode = typeof ReportFeedReportsItemContentMode[keyof typeof ReportFeedReportsItemContentMode];
-
+export type ReportFeedReportsItemContentMode =
+  (typeof ReportFeedReportsItemContentMode)[keyof typeof ReportFeedReportsItemContentMode];
 
 export const ReportFeedReportsItemContentMode = {
-  full: 'full',
-  similarity_only: 'similarity_only',
+  full: "full",
+  similarity_only: "similarity_only",
 } as const;
 
 export type ReportFeedReportsItem = {
@@ -1440,12 +1448,12 @@ the diagnostics panel.
   inferredCweName?: string | null;
 };
 
-export type ReportFeedSummaryTierCounts = {[key: string]: number};
+export type ReportFeedSummaryTierCounts = { [key: string]: number };
 
 /**
  * Per-AVRI-family counts of public reports (mirrors tierCounts). Keys are AVRI family ids (e.g. INJECTION, MEMORY_CORRUPTION); rows with null avri_family are bucketed under "FLAT".
  */
-export type ReportFeedSummaryFamilyCounts = {[key: string]: number};
+export type ReportFeedSummaryFamilyCounts = { [key: string]: number };
 
 export type ReportFeedSummary = {
   totalPublic: number;
@@ -1639,15 +1647,15 @@ export interface SlopDistribution {
   totalReports: number;
 }
 
-export type ComparisonReportDetailContentMode = typeof ComparisonReportDetailContentMode[keyof typeof ComparisonReportDetailContentMode];
-
+export type ComparisonReportDetailContentMode =
+  (typeof ComparisonReportDetailContentMode)[keyof typeof ComparisonReportDetailContentMode];
 
 export const ComparisonReportDetailContentMode = {
-  full: 'full',
-  similarity_only: 'similarity_only',
+  full: "full",
+  similarity_only: "similarity_only",
 } as const;
 
-export type ComparisonReportDetailSectionHashes = {[key: string]: string};
+export type ComparisonReportDetailSectionHashes = { [key: string]: string };
 
 export interface ComparisonReportDetail {
   id: number;
@@ -1667,13 +1675,13 @@ export interface ComparisonReportDetail {
 /**
  * Whether this section is identical, different, or only in one report
  */
-export type SectionComparisonItemStatus = typeof SectionComparisonItemStatus[keyof typeof SectionComparisonItemStatus];
-
+export type SectionComparisonItemStatus =
+  (typeof SectionComparisonItemStatus)[keyof typeof SectionComparisonItemStatus];
 
 export const SectionComparisonItemStatus = {
-  identical: 'identical',
-  different: 'different',
-  unique: 'unique',
+  identical: "identical",
+  different: "different",
+  unique: "unique",
 } as const;
 
 export interface SectionComparisonItem {
@@ -1778,7 +1786,7 @@ export type FeedbackAnalyticsSummary = {
   linkedToReport: number;
 };
 
-export type FeedbackAnalyticsRatingDistribution = {[key: string]: number};
+export type FeedbackAnalyticsRatingDistribution = { [key: string]: number };
 
 export type FeedbackAnalyticsDailyTrendItem = {
   date: string;
@@ -1866,7 +1874,7 @@ export interface HoldoutEvalResponse {
   holdoutFraction: number;
 }
 
-export type ScoringConfigItemAxisThresholds = {[key: string]: number};
+export type ScoringConfigItemAxisThresholds = { [key: string]: number };
 
 export type ScoringConfigItemTierThresholds = {
   low: number;
@@ -1919,14 +1927,14 @@ rejected with 401.
   mutationsAllowed: boolean;
 }
 
-export type BucketAnalysisSignal = typeof BucketAnalysisSignal[keyof typeof BucketAnalysisSignal];
-
+export type BucketAnalysisSignal =
+  (typeof BucketAnalysisSignal)[keyof typeof BucketAnalysisSignal];
 
 export const BucketAnalysisSignal = {
-  accurate: 'accurate',
-  'over-scoring': 'over-scoring',
-  'under-scoring': 'under-scoring',
-  'insufficient-data': 'insufficient-data',
+  accurate: "accurate",
+  "over-scoring": "over-scoring",
+  "under-scoring": "under-scoring",
+  "insufficient-data": "insufficient-data",
 } as const;
 
 export interface BucketAnalysis {
@@ -1940,13 +1948,13 @@ export interface BucketAnalysis {
   ratingDeviation: number;
 }
 
-export type CalibrationSuggestionConfidence = typeof CalibrationSuggestionConfidence[keyof typeof CalibrationSuggestionConfidence];
-
+export type CalibrationSuggestionConfidence =
+  (typeof CalibrationSuggestionConfidence)[keyof typeof CalibrationSuggestionConfidence];
 
 export const CalibrationSuggestionConfidence = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
+  low: "low",
+  medium: "medium",
+  high: "high",
 } as const;
 
 export interface CalibrationSuggestion {
@@ -2039,12 +2047,12 @@ export interface AvriDriftWeekBucket {
   gapEligible: boolean;
 }
 
-export type AvriDriftFlagKind = typeof AvriDriftFlagKind[keyof typeof AvriDriftFlagKind];
-
+export type AvriDriftFlagKind =
+  (typeof AvriDriftFlagKind)[keyof typeof AvriDriftFlagKind];
 
 export const AvriDriftFlagKind = {
-  GAP_BELOW_45: 'GAP_BELOW_45',
-  FAMILY_MEAN_SHIFT: 'FAMILY_MEAN_SHIFT',
+  GAP_BELOW_45: "GAP_BELOW_45",
+  FAMILY_MEAN_SHIFT: "FAMILY_MEAN_SHIFT",
 } as const;
 
 export interface AvriDriftFlag {
@@ -2059,11 +2067,11 @@ export interface AvriDriftThresholds {
   minBucketSize: number;
 }
 
-export type AvriDriftReportCohort = typeof AvriDriftReportCohort[keyof typeof AvriDriftReportCohort];
-
+export type AvriDriftReportCohort =
+  (typeof AvriDriftReportCohort)[keyof typeof AvriDriftReportCohort];
 
 export const AvriDriftReportCohort = {
-  avri_on_only: 'avri_on_only',
+  avri_on_only: "avri_on_only",
 } as const;
 
 export interface AvriDriftReport {
@@ -2078,12 +2086,12 @@ export interface AvriDriftReport {
   runbookPath: string;
 }
 
-export type AvriDriftNotificationRecordKind = typeof AvriDriftNotificationRecordKind[keyof typeof AvriDriftNotificationRecordKind];
-
+export type AvriDriftNotificationRecordKind =
+  (typeof AvriDriftNotificationRecordKind)[keyof typeof AvriDriftNotificationRecordKind];
 
 export const AvriDriftNotificationRecordKind = {
-  GAP_BELOW_45: 'GAP_BELOW_45',
-  FAMILY_MEAN_SHIFT: 'FAMILY_MEAN_SHIFT',
+  GAP_BELOW_45: "GAP_BELOW_45",
+  FAMILY_MEAN_SHIFT: "FAMILY_MEAN_SHIFT",
 } as const;
 
 /**
@@ -2134,12 +2142,12 @@ Empty/whitespace-only values are treated as absent.
   rationale?: string;
 }
 
-export type AvriDriftRearmAuditEntryKind = typeof AvriDriftRearmAuditEntryKind[keyof typeof AvriDriftRearmAuditEntryKind];
-
+export type AvriDriftRearmAuditEntryKind =
+  (typeof AvriDriftRearmAuditEntryKind)[keyof typeof AvriDriftRearmAuditEntryKind];
 
 export const AvriDriftRearmAuditEntryKind = {
-  GAP_BELOW_45: 'GAP_BELOW_45',
-  FAMILY_MEAN_SHIFT: 'FAMILY_MEAN_SHIFT',
+  GAP_BELOW_45: "GAP_BELOW_45",
+  FAMILY_MEAN_SHIFT: "FAMILY_MEAN_SHIFT",
 } as const;
 
 /**
@@ -2205,8 +2213,8 @@ GET. Capped at 200 entries.
  * Tally of in-window rejections split by HTTP status code.
  */
 export type CalibrationAuthBruteForceAlertEntryRejectionsByStatus = {
-  '401': number;
-  '429': number;
+  "401": number;
+  "429": number;
 };
 
 /**
@@ -2214,7 +2222,7 @@ export type CalibrationAuthBruteForceAlertEntryRejectionsByStatus = {
  */
 export type CalibrationAuthBruteForceAlertEntryRejectionsByGate = {
   mutation: number;
-  'strict-read': number;
+  "strict-read": number;
 };
 
 /**
@@ -2322,13 +2330,13 @@ persisted heartbeat.
   ticksCompleted: number;
 }
 
-export type CalibrationReportOverallHealth = typeof CalibrationReportOverallHealth[keyof typeof CalibrationReportOverallHealth];
-
+export type CalibrationReportOverallHealth =
+  (typeof CalibrationReportOverallHealth)[keyof typeof CalibrationReportOverallHealth];
 
 export const CalibrationReportOverallHealth = {
-  good: 'good',
-  'needs-attention': 'needs-attention',
-  'needs-tuning': 'needs-tuning',
+  good: "good",
+  "needs-attention": "needs-attention",
+  "needs-tuning": "needs-tuning",
 } as const;
 
 export interface CalibrationReport {
@@ -2498,13 +2506,13 @@ export interface ApplyCalibrationResponse {
 /**
  * Theme bucket used by the diagnostics panel to group matched phrases.
  */
-export type HandwavyCategory = typeof HandwavyCategory[keyof typeof HandwavyCategory];
-
+export type HandwavyCategory =
+  (typeof HandwavyCategory)[keyof typeof HandwavyCategory];
 
 export const HandwavyCategory = {
-  absence: 'absence',
-  hedging: 'hedging',
-  buzzword: 'buzzword',
+  absence: "absence",
+  hedging: "hedging",
+  buzzword: "buzzword",
 } as const;
 
 export type HandwavyEditEntryCategory = {
@@ -2711,12 +2719,12 @@ export interface HandwavyPhraseRemovalBatchDetail {
   phrases: HandwavyBatchHistoryPhrase[];
 }
 
-export type HandwavyPhraseRemovalBatchDetailErrorReason = typeof HandwavyPhraseRemovalBatchDetailErrorReason[keyof typeof HandwavyPhraseRemovalBatchDetailErrorReason];
-
+export type HandwavyPhraseRemovalBatchDetailErrorReason =
+  (typeof HandwavyPhraseRemovalBatchDetailErrorReason)[keyof typeof HandwavyPhraseRemovalBatchDetailErrorReason];
 
 export const HandwavyPhraseRemovalBatchDetailErrorReason = {
-  'history-not-found': 'history-not-found',
-  'not-a-batch': 'not-a-batch',
+  "history-not-found": "history-not-found",
+  "not-a-batch": "not-a-batch",
 } as const;
 
 /**
@@ -2862,14 +2870,14 @@ export interface HandwavyPhraseUndoBatchBody {
 /**
  * Present only when `undone` is false.
  */
-export type HandwavyPhraseUndoBatchEntryResultReason = typeof HandwavyPhraseUndoBatchEntryResultReason[keyof typeof HandwavyPhraseUndoBatchEntryResultReason];
-
+export type HandwavyPhraseUndoBatchEntryResultReason =
+  (typeof HandwavyPhraseUndoBatchEntryResultReason)[keyof typeof HandwavyPhraseUndoBatchEntryResultReason];
 
 export const HandwavyPhraseUndoBatchEntryResultReason = {
-  'not-found': 'not-found',
-  'addedAt-mismatch': 'addedAt-mismatch',
-  'no-addedAt': 'no-addedAt',
-  'window-expired': 'window-expired',
+  "not-found": "not-found",
+  "addedAt-mismatch": "addedAt-mismatch",
+  "no-addedAt": "no-addedAt",
+  "window-expired": "window-expired",
 } as const;
 
 /**
@@ -2974,14 +2982,14 @@ export type HandwavyPhraseBatchRemoveDryRunImpactByTier = {
   t4Hallucinated: number;
 };
 
-export type HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier = typeof HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier[keyof typeof HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier];
-
+export type HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier =
+  (typeof HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier)[keyof typeof HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier];
 
 export const HandwavyPhraseBatchRemoveDryRunImpactSampleMatchesItemTier = {
-  T1_LEGIT: 'T1_LEGIT',
-  T2_BORDERLINE: 'T2_BORDERLINE',
-  T3_SLOP: 'T3_SLOP',
-  T4_HALLUCINATED: 'T4_HALLUCINATED',
+  T1_LEGIT: "T1_LEGIT",
+  T2_BORDERLINE: "T2_BORDERLINE",
+  T3_SLOP: "T3_SLOP",
+  T4_HALLUCINATED: "T4_HALLUCINATED",
 } as const;
 
 /**
@@ -3078,12 +3086,12 @@ export type HandwavyPhraseBatchRemoveDryRunResponseDryRunImpact = {
   productionLimit: number;
 };
 
-export type HandwavyPhraseBatchRemoveResultEntryReason = typeof HandwavyPhraseBatchRemoveResultEntryReason[keyof typeof HandwavyPhraseBatchRemoveResultEntryReason];
-
+export type HandwavyPhraseBatchRemoveResultEntryReason =
+  (typeof HandwavyPhraseBatchRemoveResultEntryReason)[keyof typeof HandwavyPhraseBatchRemoveResultEntryReason];
 
 export const HandwavyPhraseBatchRemoveResultEntryReason = {
-  'not-found': 'not-found',
-  'duplicate-in-batch': 'duplicate-in-batch',
+  "not-found": "not-found",
+  "duplicate-in-batch": "duplicate-in-batch",
 } as const;
 
 /**
@@ -3154,7 +3162,7 @@ export interface HandwavyPhraseSingleRemoveDryRunResponse {
   raw: string;
   /** Whether the phrase WOULD be removed if the call were not a dry run. */
   removed: boolean;
-  reason?: 'not-found' | 'duplicate-in-batch' | null;
+  reason?: "not-found" | "duplicate-in-batch" | null;
   /** Active list size BEFORE the removal (no mutation occurred). */
   total: number;
   /** Projected active list size AFTER the removal would be applied. */
@@ -3253,13 +3261,13 @@ returned by Task #360 allow-list calls when a caller-supplied
 phrase is not part of the matched batch.
 
  */
-export type HandwavyPhraseReinstateBatchEntryResultReason = typeof HandwavyPhraseReinstateBatchEntryResultReason[keyof typeof HandwavyPhraseReinstateBatchEntryResultReason];
-
+export type HandwavyPhraseReinstateBatchEntryResultReason =
+  (typeof HandwavyPhraseReinstateBatchEntryResultReason)[keyof typeof HandwavyPhraseReinstateBatchEntryResultReason];
 
 export const HandwavyPhraseReinstateBatchEntryResultReason = {
-  'already-reinstated': 'already-reinstated',
-  'already-active': 'already-active',
-  'not-in-batch': 'not-in-batch',
+  "already-reinstated": "already-reinstated",
+  "already-active": "already-active",
+  "not-in-batch": "not-in-batch",
 } as const;
 
 /**
@@ -3339,14 +3347,14 @@ export type HandwavyPhraseDryRunMatchesByTier = {
   t4Hallucinated: number;
 };
 
-export type HandwavyPhraseDryRunMatchesSampleMatchesItemTier = typeof HandwavyPhraseDryRunMatchesSampleMatchesItemTier[keyof typeof HandwavyPhraseDryRunMatchesSampleMatchesItemTier];
-
+export type HandwavyPhraseDryRunMatchesSampleMatchesItemTier =
+  (typeof HandwavyPhraseDryRunMatchesSampleMatchesItemTier)[keyof typeof HandwavyPhraseDryRunMatchesSampleMatchesItemTier];
 
 export const HandwavyPhraseDryRunMatchesSampleMatchesItemTier = {
-  T1_LEGIT: 'T1_LEGIT',
-  T2_BORDERLINE: 'T2_BORDERLINE',
-  T3_SLOP: 'T3_SLOP',
-  T4_HALLUCINATED: 'T4_HALLUCINATED',
+  T1_LEGIT: "T1_LEGIT",
+  T2_BORDERLINE: "T2_BORDERLINE",
+  T3_SLOP: "T3_SLOP",
+  T4_HALLUCINATED: "T4_HALLUCINATED",
 } as const;
 
 /**
@@ -3441,13 +3449,13 @@ details. Null on the curated benchmark block and when the scan was empty.
   existing phrase already covers everything the candidate would.
 
  */
-export type HandwavyPhraseDryRunOverlapsMatchesItemRelation = typeof HandwavyPhraseDryRunOverlapsMatchesItemRelation[keyof typeof HandwavyPhraseDryRunOverlapsMatchesItemRelation];
-
+export type HandwavyPhraseDryRunOverlapsMatchesItemRelation =
+  (typeof HandwavyPhraseDryRunOverlapsMatchesItemRelation)[keyof typeof HandwavyPhraseDryRunOverlapsMatchesItemRelation];
 
 export const HandwavyPhraseDryRunOverlapsMatchesItemRelation = {
-  equal: 'equal',
-  'candidate-contains-existing': 'candidate-contains-existing',
-  'existing-contains-candidate': 'existing-contains-candidate',
+  equal: "equal",
+  "candidate-contains-existing": "candidate-contains-existing",
+  "existing-contains-candidate": "existing-contains-candidate",
 } as const;
 
 export type HandwavyPhraseDryRunOverlapsMatchesItem = {
@@ -3619,14 +3627,14 @@ export interface LatencySnapshot {
   worstEngine: LatencyWorstEngine | null;
 }
 
-export type PublicStatusEngineStatus = typeof PublicStatusEngineStatus[keyof typeof PublicStatusEngineStatus];
-
+export type PublicStatusEngineStatus =
+  (typeof PublicStatusEngineStatus)[keyof typeof PublicStatusEngineStatus];
 
 export const PublicStatusEngineStatus = {
-  operational: 'operational',
-  degraded: 'degraded',
-  down: 'down',
-  unknown: 'unknown',
+  operational: "operational",
+  degraded: "degraded",
+  down: "down",
+  unknown: "unknown",
 } as const;
 
 /**
@@ -3662,13 +3670,13 @@ export interface PublicStatusLatency {
   p95Ms: number;
 }
 
-export type PublicStatusSnapshotOverallStatus = typeof PublicStatusSnapshotOverallStatus[keyof typeof PublicStatusSnapshotOverallStatus];
-
+export type PublicStatusSnapshotOverallStatus =
+  (typeof PublicStatusSnapshotOverallStatus)[keyof typeof PublicStatusSnapshotOverallStatus];
 
 export const PublicStatusSnapshotOverallStatus = {
-  operational: 'operational',
-  degraded: 'degraded',
-  down: 'down',
+  operational: "operational",
+  degraded: "degraded",
+  down: "down",
 } as const;
 
 export interface PublicStatusSnapshot {
@@ -3718,13 +3726,13 @@ export interface PresetEngineWeights {
   llm: number;
 }
 
-export type PresetEntrySensitivity = typeof PresetEntrySensitivity[keyof typeof PresetEntrySensitivity];
-
+export type PresetEntrySensitivity =
+  (typeof PresetEntrySensitivity)[keyof typeof PresetEntrySensitivity];
 
 export const PresetEntrySensitivity = {
-  lenient: 'lenient',
-  balanced: 'balanced',
-  strict: 'strict',
+  lenient: "lenient",
+  balanced: "balanced",
+  strict: "strict",
 } as const;
 
 /**
@@ -3754,26 +3762,26 @@ export interface PresetEntry {
 /**
  * Which roadmap column the card renders in.
  */
-export type RoadmapItemColumn = typeof RoadmapItemColumn[keyof typeof RoadmapItemColumn];
-
+export type RoadmapItemColumn =
+  (typeof RoadmapItemColumn)[keyof typeof RoadmapItemColumn];
 
 export const RoadmapItemColumn = {
-  now: 'now',
-  next: 'next',
-  later: 'later',
+  now: "now",
+  next: "next",
+  later: "later",
 } as const;
 
 /**
  * Status badge shown on the card.
  */
-export type RoadmapItemStatus = typeof RoadmapItemStatus[keyof typeof RoadmapItemStatus];
-
+export type RoadmapItemStatus =
+  (typeof RoadmapItemStatus)[keyof typeof RoadmapItemStatus];
 
 export const RoadmapItemStatus = {
-  in_progress: 'in_progress',
-  shipping_soon: 'shipping_soon',
-  planned: 'planned',
-  research: 'research',
+  in_progress: "in_progress",
+  shipping_soon: "shipping_soon",
+  planned: "planned",
+  research: "research",
 } as const;
 
 /**
@@ -3810,14 +3818,14 @@ export interface RoadmapResponse {
 /**
  * Curator-assigned bucket the sample illustrates.
  */
-export type GallerySampleLabel = typeof GallerySampleLabel[keyof typeof GallerySampleLabel];
-
+export type GallerySampleLabel =
+  (typeof GallerySampleLabel)[keyof typeof GallerySampleLabel];
 
 export const GallerySampleLabel = {
-  obvious_slop: 'obvious_slop',
-  subtle_slop: 'subtle_slop',
-  borderline: 'borderline',
-  clean: 'clean',
+  obvious_slop: "obvious_slop",
+  subtle_slop: "subtle_slop",
+  borderline: "borderline",
+  clean: "clean",
 } as const;
 
 /**
@@ -3854,14 +3862,14 @@ export interface GallerySample {
 /**
  * Curator-assigned severity tier.
  */
-export type IncidentEntrySeverity = typeof IncidentEntrySeverity[keyof typeof IncidentEntrySeverity];
-
+export type IncidentEntrySeverity =
+  (typeof IncidentEntrySeverity)[keyof typeof IncidentEntrySeverity];
 
 export const IncidentEntrySeverity = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  critical: 'critical',
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
 } as const;
 
 /**
@@ -3916,26 +3924,26 @@ export interface GalleryResponse {
 /**
  * Curator-assigned bucket the entry illustrates.
  */
-export type ShowcaseEntryCategory = typeof ShowcaseEntryCategory[keyof typeof ShowcaseEntryCategory];
-
+export type ShowcaseEntryCategory =
+  (typeof ShowcaseEntryCategory)[keyof typeof ShowcaseEntryCategory];
 
 export const ShowcaseEntryCategory = {
-  high_confidence: 'high_confidence',
-  edge_case: 'edge_case',
-  surprising_agreement: 'surprising_agreement',
+  high_confidence: "high_confidence",
+  edge_case: "edge_case",
+  surprising_agreement: "surprising_agreement",
 } as const;
 
 /**
  * Slop tier label that goes with the score.
  */
-export type ShowcaseEntryTier = typeof ShowcaseEntryTier[keyof typeof ShowcaseEntryTier];
-
+export type ShowcaseEntryTier =
+  (typeof ShowcaseEntryTier)[keyof typeof ShowcaseEntryTier];
 
 export const ShowcaseEntryTier = {
-  clean: 'clean',
-  borderline: 'borderline',
-  subtle_slop: 'subtle_slop',
-  obvious_slop: 'obvious_slop',
+  clean: "clean",
+  borderline: "borderline",
+  subtle_slop: "subtle_slop",
+  obvious_slop: "obvious_slop",
 } as const;
 
 /**
@@ -3992,12 +4000,12 @@ export interface PresetLibrary {
 /**
  * Which curated list the suggestion targets.
  */
-export type PhraseSuggestionSubmitBodyCategory = typeof PhraseSuggestionSubmitBodyCategory[keyof typeof PhraseSuggestionSubmitBodyCategory];
-
+export type PhraseSuggestionSubmitBodyCategory =
+  (typeof PhraseSuggestionSubmitBodyCategory)[keyof typeof PhraseSuggestionSubmitBodyCategory];
 
 export const PhraseSuggestionSubmitBodyCategory = {
-  handwavy: 'handwavy',
-  'ai-self-disclosure': 'ai-self-disclosure',
+  handwavy: "handwavy",
+  "ai-self-disclosure": "ai-self-disclosure",
 } as const;
 
 /**
@@ -4036,21 +4044,21 @@ export interface PhraseSuggestionRateLimited {
   retryAfterHours?: number;
 }
 
-export type PhraseSuggestionCategory = typeof PhraseSuggestionCategory[keyof typeof PhraseSuggestionCategory];
-
+export type PhraseSuggestionCategory =
+  (typeof PhraseSuggestionCategory)[keyof typeof PhraseSuggestionCategory];
 
 export const PhraseSuggestionCategory = {
-  handwavy: 'handwavy',
-  'ai-self-disclosure': 'ai-self-disclosure',
+  handwavy: "handwavy",
+  "ai-self-disclosure": "ai-self-disclosure",
 } as const;
 
-export type PhraseSuggestionStatus = typeof PhraseSuggestionStatus[keyof typeof PhraseSuggestionStatus];
-
+export type PhraseSuggestionStatus =
+  (typeof PhraseSuggestionStatus)[keyof typeof PhraseSuggestionStatus];
 
 export const PhraseSuggestionStatus = {
-  pending: 'pending',
-  approved: 'approved',
-  rejected: 'rejected',
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
 } as const;
 
 export interface PhraseSuggestion {
@@ -4062,13 +4070,13 @@ export interface PhraseSuggestion {
   createdAt: string;
 }
 
-export type PhraseSuggestionListStatus = typeof PhraseSuggestionListStatus[keyof typeof PhraseSuggestionListStatus];
-
+export type PhraseSuggestionListStatus =
+  (typeof PhraseSuggestionListStatus)[keyof typeof PhraseSuggestionListStatus];
 
 export const PhraseSuggestionListStatus = {
-  pending: 'pending',
-  approved: 'approved',
-  rejected: 'rejected',
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
 } as const;
 
 export interface PhraseSuggestionList {
@@ -4077,24 +4085,24 @@ export interface PhraseSuggestionList {
   status: PhraseSuggestionListStatus;
 }
 
-export type PhraseSuggestionPatchBodyStatus = typeof PhraseSuggestionPatchBodyStatus[keyof typeof PhraseSuggestionPatchBodyStatus];
-
+export type PhraseSuggestionPatchBodyStatus =
+  (typeof PhraseSuggestionPatchBodyStatus)[keyof typeof PhraseSuggestionPatchBodyStatus];
 
 export const PhraseSuggestionPatchBodyStatus = {
-  approved: 'approved',
-  rejected: 'rejected',
+  approved: "approved",
+  rejected: "rejected",
 } as const;
 
 export interface PhraseSuggestionPatchBody {
   status: PhraseSuggestionPatchBodyStatus;
 }
 
-export type PhraseSuggestionPatchResponseStatus = typeof PhraseSuggestionPatchResponseStatus[keyof typeof PhraseSuggestionPatchResponseStatus];
-
+export type PhraseSuggestionPatchResponseStatus =
+  (typeof PhraseSuggestionPatchResponseStatus)[keyof typeof PhraseSuggestionPatchResponseStatus];
 
 export const PhraseSuggestionPatchResponseStatus = {
-  approved: 'approved',
-  rejected: 'rejected',
+  approved: "approved",
+  rejected: "rejected",
 } as const;
 
 export interface PhraseSuggestionPatchResponse {
@@ -4103,11 +4111,11 @@ export interface PhraseSuggestionPatchResponse {
   status: PhraseSuggestionPatchResponseStatus;
 }
 
-export type WebhookEventTypesItem = typeof WebhookEventTypesItem[keyof typeof WebhookEventTypesItem];
-
+export type WebhookEventTypesItem =
+  (typeof WebhookEventTypesItem)[keyof typeof WebhookEventTypesItem];
 
 export const WebhookEventTypesItem = {
-  reportscored: 'report.scored',
+  reportscored: "report.scored",
 } as const;
 
 /**
@@ -4129,11 +4137,11 @@ export interface WebhookList {
   webhooks: Webhook[];
 }
 
-export type WebhookCreateBodyEventTypesItem = typeof WebhookCreateBodyEventTypesItem[keyof typeof WebhookCreateBodyEventTypesItem];
-
+export type WebhookCreateBodyEventTypesItem =
+  (typeof WebhookCreateBodyEventTypesItem)[keyof typeof WebhookCreateBodyEventTypesItem];
 
 export const WebhookCreateBodyEventTypesItem = {
-  reportscored: 'report.scored',
+  reportscored: "report.scored",
 } as const;
 
 export interface WebhookCreateBody {
@@ -4167,12 +4175,12 @@ means slop, fabrication, paraphrased CVE, or otherwise noise.
 The `valid` class is the positive class for precision / recall.
 
  */
-export type TestYourselfLabel = typeof TestYourselfLabel[keyof typeof TestYourselfLabel];
-
+export type TestYourselfLabel =
+  (typeof TestYourselfLabel)[keyof typeof TestYourselfLabel];
 
 export const TestYourselfLabel = {
-  valid: 'valid',
-  invalid: 'invalid',
+  valid: "valid",
+  invalid: "invalid",
 } as const;
 
 export interface TestYourselfRow {
@@ -4248,45 +4256,45 @@ export interface TestYourselfRunResponse {
 /**
  * Privacy mode — full shares content, similarity_only stores only hashes
  */
-export type SubmitReportBodyContentMode = typeof SubmitReportBodyContentMode[keyof typeof SubmitReportBodyContentMode];
-
+export type SubmitReportBodyContentMode =
+  (typeof SubmitReportBodyContentMode)[keyof typeof SubmitReportBodyContentMode];
 
 export const SubmitReportBodyContentMode = {
-  full: 'full',
-  similarity_only: 'similarity_only',
+  full: "full",
+  similarity_only: "similarity_only",
 } as const;
 
 /**
  * Whether to show this report in the public recent reports feed
  */
-export type SubmitReportBodyShowInFeed = typeof SubmitReportBodyShowInFeed[keyof typeof SubmitReportBodyShowInFeed];
-
+export type SubmitReportBodyShowInFeed =
+  (typeof SubmitReportBodyShowInFeed)[keyof typeof SubmitReportBodyShowInFeed];
 
 export const SubmitReportBodyShowInFeed = {
-  true: 'true',
-  false: 'false',
+  true: "true",
+  false: "false",
 } as const;
 
 /**
  * Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true".
  */
-export type SubmitReportBodySkipLlm = typeof SubmitReportBodySkipLlm[keyof typeof SubmitReportBodySkipLlm];
-
+export type SubmitReportBodySkipLlm =
+  (typeof SubmitReportBodySkipLlm)[keyof typeof SubmitReportBodySkipLlm];
 
 export const SubmitReportBodySkipLlm = {
-  true: 'true',
-  false: 'false',
+  true: "true",
+  false: "false",
 } as const;
 
 /**
  * Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data.
  */
-export type SubmitReportBodySkipRedaction = typeof SubmitReportBodySkipRedaction[keyof typeof SubmitReportBodySkipRedaction];
-
+export type SubmitReportBodySkipRedaction =
+  (typeof SubmitReportBodySkipRedaction)[keyof typeof SubmitReportBodySkipRedaction];
 
 export const SubmitReportBodySkipRedaction = {
-  true: 'true',
-  false: 'false',
+  true: "true",
+  false: "false",
 } as const;
 
 export type SubmitReportBody = {
@@ -4307,44 +4315,44 @@ export type SubmitReportBody = {
 };
 
 export type GetEmbedBadgeSvgParams = {
-/**
- * Numeric report id, or public `VR-XXXX` hex code.
- */
-id: string;
-style?: GetEmbedBadgeSvgStyle;
+  /**
+   * Numeric report id, or public `VR-XXXX` hex code.
+   */
+  id: string;
+  style?: GetEmbedBadgeSvgStyle;
 };
 
-export type GetEmbedBadgeSvgStyle = typeof GetEmbedBadgeSvgStyle[keyof typeof GetEmbedBadgeSvgStyle];
-
+export type GetEmbedBadgeSvgStyle =
+  (typeof GetEmbedBadgeSvgStyle)[keyof typeof GetEmbedBadgeSvgStyle];
 
 export const GetEmbedBadgeSvgStyle = {
-  default: 'default',
-  flat: 'flat',
-  plastic: 'plastic',
-  social: 'social',
-  square: 'square',
+  default: "default",
+  flat: "flat",
+  plastic: "plastic",
+  social: "social",
+  square: "square",
 } as const;
 
 /**
  * Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true".
  */
-export type CheckReportBodySkipLlm = typeof CheckReportBodySkipLlm[keyof typeof CheckReportBodySkipLlm];
-
+export type CheckReportBodySkipLlm =
+  (typeof CheckReportBodySkipLlm)[keyof typeof CheckReportBodySkipLlm];
 
 export const CheckReportBodySkipLlm = {
-  true: 'true',
-  false: 'false',
+  true: "true",
+  false: "false",
 } as const;
 
 /**
  * Skip PII auto-redaction. When enabled, LLM analysis is automatically disabled to prevent unredacted data from reaching external services. Sent as string in multipart form data.
  */
-export type CheckReportBodySkipRedaction = typeof CheckReportBodySkipRedaction[keyof typeof CheckReportBodySkipRedaction];
-
+export type CheckReportBodySkipRedaction =
+  (typeof CheckReportBodySkipRedaction)[keyof typeof CheckReportBodySkipRedaction];
 
 export const CheckReportBodySkipRedaction = {
-  true: 'true',
-  false: 'false',
+  true: "true",
+  false: "false",
 } as const;
 
 export type CheckReportBody = {
@@ -4361,24 +4369,24 @@ export type CheckReportBody = {
 };
 
 export type GetReportFeedParams = {
-/**
- * @minimum 1
- * @maximum 50
- */
-limit?: number;
-/**
- * @minimum 0
- */
-offset?: number;
-/**
- * Filter by slop tier name (exact match)
- */
-tier?: string;
-/**
- * Filter by cached AVRI rubric family id (exact match against reports.avri_family).
- */
-avriFamily?: GetReportFeedAvriFamily;
-/**
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
+  /**
+   * Filter by slop tier name (exact match)
+   */
+  tier?: string;
+  /**
+   * Filter by cached AVRI rubric family id (exact match against reports.avri_family).
+   */
+  avriFamily?: GetReportFeedAvriFamily;
+  /**
  * Filter the feed to AVRI Engine 2 fabricated-evidence cohorts. `fake_raw_http`
 keeps only rows where signalBreakdown.avri.rawHttp.isFake is true,
 `stripped_trace` keeps only rows where signalBreakdown.avri.crashTrace.isStripped
@@ -4386,110 +4394,110 @@ is true, and `either` keeps rows that match either flag. Mirrors the
 fakeRawHttp / strippedCrashTrace booleans surfaced on each feed row.
 
  */
-fabricatedEvidence?: GetReportFeedFabricatedEvidence;
-sort?: GetReportFeedSort;
+  fabricatedEvidence?: GetReportFeedFabricatedEvidence;
+  sort?: GetReportFeedSort;
 };
 
-export type GetReportFeedAvriFamily = typeof GetReportFeedAvriFamily[keyof typeof GetReportFeedAvriFamily];
-
+export type GetReportFeedAvriFamily =
+  (typeof GetReportFeedAvriFamily)[keyof typeof GetReportFeedAvriFamily];
 
 export const GetReportFeedAvriFamily = {
-  MEMORY_CORRUPTION: 'MEMORY_CORRUPTION',
-  INJECTION: 'INJECTION',
-  WEB_CLIENT: 'WEB_CLIENT',
-  AUTHN_AUTHZ: 'AUTHN_AUTHZ',
-  CRYPTO: 'CRYPTO',
-  DESERIALIZATION: 'DESERIALIZATION',
-  RACE_CONCURRENCY: 'RACE_CONCURRENCY',
-  REQUEST_SMUGGLING: 'REQUEST_SMUGGLING',
-  FLAT: 'FLAT',
+  MEMORY_CORRUPTION: "MEMORY_CORRUPTION",
+  INJECTION: "INJECTION",
+  WEB_CLIENT: "WEB_CLIENT",
+  AUTHN_AUTHZ: "AUTHN_AUTHZ",
+  CRYPTO: "CRYPTO",
+  DESERIALIZATION: "DESERIALIZATION",
+  RACE_CONCURRENCY: "RACE_CONCURRENCY",
+  REQUEST_SMUGGLING: "REQUEST_SMUGGLING",
+  FLAT: "FLAT",
 } as const;
 
-export type GetReportFeedFabricatedEvidence = typeof GetReportFeedFabricatedEvidence[keyof typeof GetReportFeedFabricatedEvidence];
-
+export type GetReportFeedFabricatedEvidence =
+  (typeof GetReportFeedFabricatedEvidence)[keyof typeof GetReportFeedFabricatedEvidence];
 
 export const GetReportFeedFabricatedEvidence = {
-  fake_raw_http: 'fake_raw_http',
-  stripped_trace: 'stripped_trace',
-  either: 'either',
+  fake_raw_http: "fake_raw_http",
+  stripped_trace: "stripped_trace",
+  either: "either",
 } as const;
 
-export type GetReportFeedSort = typeof GetReportFeedSort[keyof typeof GetReportFeedSort];
-
+export type GetReportFeedSort =
+  (typeof GetReportFeedSort)[keyof typeof GetReportFeedSort];
 
 export const GetReportFeedSort = {
-  newest: 'newest',
-  oldest: 'oldest',
-  score_asc: 'score_asc',
-  score_desc: 'score_desc',
+  newest: "newest",
+  oldest: "oldest",
+  score_asc: "score_asc",
+  score_desc: "score_desc",
 } as const;
 
 export type GetAuditLogParams = {
-/**
- * @minimum 1
- * @maximum 200
- */
-limit?: number;
-/**
- * @minimum 0
- */
-offset?: number;
-/**
- * Exact-match filter on the `actor` column.
- */
-actor?: string;
-/**
- * Exact-match HTTP method filter (case-insensitive).
- */
-method?: GetAuditLogMethod;
-/**
- * Substring filter (case-insensitive) on the endpoint URL.
- */
-endpoint?: string;
-/**
- * Inclusive lower bound on `createdAt` (ISO 8601).
- */
-from?: string;
-/**
- * Inclusive upper bound on `createdAt` (ISO 8601).
- */
-to?: string;
+  /**
+   * @minimum 1
+   * @maximum 200
+   */
+  limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
+  /**
+   * Exact-match filter on the `actor` column.
+   */
+  actor?: string;
+  /**
+   * Exact-match HTTP method filter (case-insensitive).
+   */
+  method?: GetAuditLogMethod;
+  /**
+   * Substring filter (case-insensitive) on the endpoint URL.
+   */
+  endpoint?: string;
+  /**
+   * Inclusive lower bound on `createdAt` (ISO 8601).
+   */
+  from?: string;
+  /**
+   * Inclusive upper bound on `createdAt` (ISO 8601).
+   */
+  to?: string;
 };
 
-export type GetAuditLogMethod = typeof GetAuditLogMethod[keyof typeof GetAuditLogMethod];
-
+export type GetAuditLogMethod =
+  (typeof GetAuditLogMethod)[keyof typeof GetAuditLogMethod];
 
 export const GetAuditLogMethod = {
-  POST: 'POST',
-  PUT: 'PUT',
-  PATCH: 'PATCH',
-  DELETE: 'DELETE',
+  POST: "POST",
+  PUT: "PUT",
+  PATCH: "PATCH",
+  DELETE: "DELETE",
 } as const;
 
 export type GetAvriDriftReportParams = {
-/**
- * How many weeks of history to scan (default 8, capped at 26).
- * @minimum 1
- * @maximum 26
- */
-weeks?: number;
+  /**
+   * How many weeks of history to scan (default 8, capped at 26).
+   * @minimum 1
+   * @maximum 26
+   */
+  weeks?: number;
 };
 
 export type GetShadowDriftParams = {
-/**
- * @minimum 1
- * @maximum 90
- */
-lookbackDays?: number;
-/**
- * @minimum 1
- * @maximum 500
- */
-limit?: number;
+  /**
+   * @minimum 1
+   * @maximum 90
+   */
+  lookbackDays?: number;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  limit?: number;
 };
 
 export type GetCalibrationAuthBruteForceAlertsParams = {
-/**
+  /**
  * Maximum number of recent alerts to return (newest first).
 Defaults to 10 and is clamped server-side to the buffer
 size (50). Values that fail to parse as a positive integer
@@ -4497,52 +4505,51 @@ return 400.
 
  * @minimum 1
  */
-limit?: number;
+  limit?: number;
 };
 
 export type ListHandwavyPhraseRemovalBatchesParams = {
-/**
- * Maximum number of batch entries to return (newest first). Defaults to 10, capped at 50.
- * @minimum 1
- * @maximum 50
- */
-limit?: number;
+  /**
+   * Maximum number of batch entries to return (newest first). Defaults to 10, capped at 50.
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: number;
 };
 
 export type GetCohortBaselineParams = {
-/**
+  /**
  * Optional cached AVRI rubric family id (e.g. INJECTION,
 MEMORY_CORRUPTION) to restrict the cohort. Unknown values fall
 through to the platform-wide cohort.
 
  */
-cwe?: string;
+  cwe?: string;
 };
 
 export type GetTrendsParams = {
-/**
- * Number of days to look back
- * @minimum 7
- * @maximum 365
- */
-days?: number;
+  /**
+   * Number of days to look back
+   * @minimum 7
+   * @maximum 365
+   */
+  days?: number;
 };
 
 export type ListPhraseSuggestionsParams = {
-status?: ListPhraseSuggestionsStatus;
-/**
- * @minimum 1
- * @maximum 500
- */
-limit?: number;
+  status?: ListPhraseSuggestionsStatus;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  limit?: number;
 };
 
-export type ListPhraseSuggestionsStatus = typeof ListPhraseSuggestionsStatus[keyof typeof ListPhraseSuggestionsStatus];
-
+export type ListPhraseSuggestionsStatus =
+  (typeof ListPhraseSuggestionsStatus)[keyof typeof ListPhraseSuggestionsStatus];
 
 export const ListPhraseSuggestionsStatus = {
-  pending: 'pending',
-  approved: 'approved',
-  rejected: 'rejected',
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
 } as const;
-
