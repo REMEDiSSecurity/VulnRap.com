@@ -464,6 +464,68 @@ non-existent adminRoot field, with attack-outcome extension codes
 that no real GraphQL server emits. Please award maximum bounty.`,
     expectMaxScore: 35,
   },
+  // Task #744: foreign-language slop coverage. Task #424 added per-language
+  // soft-citation regexes (ES/PT/FR/RU/JA), but every fixture in this
+  // benchmark battery was English, so a regression that pushed a
+  // foreign-language slop report INTO legit range (because the new translated
+  // pattern stopped suppressing slop indicators, or because slop indicators
+  // never run on non-ASCII bodies) would not surface here. The five fixtures
+  // below mirror existing English slop archetypes — vague-RCE, AI/template
+  // boilerplate, no-evidence with claimed CWE, CWE-mismatch, marketing fluff —
+  // one per added language, so a regression in any single language's regex
+  // surfaces directly in the benchmark numbers we cite when re-tuning the
+  // engines, not just in the focused soft-citation file. Observed v3.8.0
+  // composites: 16, 16, 8, 6, 19 → all sit comfortably under the standard
+  // ≤35 slop bar shared with the English fixtures above.
+  {
+    name: "slop-foreign-es-vague-rce",
+    text: `Equipo de seguridad: encontré una vulnerabilidad de ejecución remota de código en su API. Un atacante podría ejecutar comandos arbitrarios en el servidor y comprometer todo el sistema. Esta es una vulnerabilidad crítica (CVSS 10.0) que afecta a todos los usuarios y debe corregirse de inmediato. Por favor consideren otorgar la recompensa máxima por este hallazgo.`,
+    expectMaxScore: 35,
+  },
+  {
+    name: "slop-foreign-pt-template-xss",
+    text: `## Resumo
+Foi identificada uma vulnerabilidade crítica de scripts entre sites na sua aplicação.
+
+## Impacto
+Atacantes podem potencialmente explorar essa falha para roubar cookies de sessão, sequestrar contas e acessar informações sensíveis dos usuários, levando a vazamentos de dados e danos à reputação.
+
+## Recomendação
+É altamente recomendável que vocês corrijam essa vulnerabilidade o mais rápido possível para proteger seus usuários e a organização contra ameaças potenciais.`,
+    expectMaxScore: 35,
+  },
+  {
+    name: "slop-foreign-fr-csrf-no-evidence",
+    text: `Bonjour équipe sécurité,
+
+J'ai découvert une vulnérabilité de falsification de requête inter-sites dans les paramètres de compte. Un attaquant pourrait piéger un utilisateur en visitant une page malveillante pour modifier son adresse e-mail ou son mot de passe à son insu. Il s'agit d'un problème grave qui viole les bonnes pratiques OWASP.
+
+Veuillez corriger ce problème et m'attribuer une prime.
+
+Cordialement,
+Chercheur`,
+    expectMaxScore: 35,
+    claimedCwes: ["CWE-352"],
+  },
+  {
+    // Russian companion to slop-06-cwe-mismatch: claimed CWE-79 (XSS) but the
+    // narrative describes a buffer overflow on a login page. The Russian
+    // "переполнение буфера" must still resolve through the Buffer Overflow
+    // family for the CWE-mismatch detector to fire.
+    name: "slop-foreign-ru-cwe-mismatch",
+    text: `Я обнаружил переполнение буфера (CWE-79) на странице входа. Когда я ввожу длинное имя пользователя, страница иногда загружается медленно. Это может позволить злоумышленникам удалённо выполнить код. Пожалуйста, рассмотрите этот отчёт для вашей программы вознаграждений.`,
+    expectMaxScore: 35,
+    claimedCwes: ["CWE-79"],
+  },
+  {
+    name: "slop-foreign-ja-marketing-fluff",
+    text: `セキュリティチーム各位
+
+絶えず進化するサイバーセキュリティの状況において、新たな脅威に先手を打つことは極めて重要です。私は最先端の手法を活用し、貴社プラットフォームにおけるセキュリティ強化の有望な機会を特定いたしました。本脆弱性は、放置された場合、ステークホルダーの信頼に重大な影響を及ぼし、相当な事業リスクを生じさせる可能性があります。
+
+ご検討のほど、よろしくお願いいたします。`,
+    expectMaxScore: 35,
+  },
 ];
 
 // Sprint 13B Task 204: real-world curl HackerOne slop corpus.
@@ -1769,6 +1831,119 @@ follow-on chain mints a new admin session by writing a row into
 \`menu_router\` whose \`access_callback\` is \`assert\`. CVSS 9.8
 (AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H). CWE-89 (SQL Injection).`,
     expectMinScore: 79,
+  },
+  // Task #744: foreign-language legit coverage. The slop-side companions
+  // above lock in suppression for non-English templates; these five lock in
+  // the lift side. Each fixture is a terse foreign-language report (one per
+  // language added in Task #424) that names the vulnerability class in the
+  // researcher's own language without an explicit `CWE-XX` token, then
+  // provides a single-step PoC + a one-line root-cause + fix. The
+  // soft-citation lookup for the foreign-language regex is what lets these
+  // clear ~50 instead of dropping into the underspecified-CWE bucket near
+  // 38, so a regression in any single language's regex flips the assertion
+  // here, not just in soft-citation.test.ts. Observed v3.8.0 composites:
+  // ES=71, PT=68, FR=51, RU=74, JA=61. Thresholds are set well above the
+  // ~38 no-soft-citation baseline so the regression alarm fires before the
+  // score drops out of the legit band, but with ≥6 points of headroom for
+  // routine engine drift.
+  {
+    name: "legit-foreign-es-xss-terse",
+    text: `# XSS reflejado en /buscar
+
+El parámetro \`q\` de GET /buscar se refleja sin codificar:
+
+\`\`\`html
+<input value="<script>alert(1)</script>" />
+\`\`\`
+
+Reproducción:
+1. curl 'https://app.example.com/buscar?q=<script>alert(1)</script>'
+2. Inspeccione la respuesta: la carga útil se imprime dentro del input.
+
+Corrección sugerida: codificar el parámetro vía \`escapeHtml()\` en src/views/search.tsx:42.`,
+    expectMinScore: 60,
+  },
+  {
+    name: "legit-foreign-pt-sqli-terse",
+    text: `# Injeção de SQL em /api/login
+
+O parâmetro \`username\` no POST /api/login é concatenado diretamente na consulta SQL.
+
+Reprodução:
+\`\`\`
+curl -X POST https://app.example.com/api/login \\
+  -d "username=admin' OR 1=1 -- &password=x"
+\`\`\`
+
+Resposta: a aplicação retorna 200 OK e estabelece um cookie de sessão para o usuário admin.
+
+Causa: src/db/users.ts:88 monta a query como
+\`db.query("SELECT * FROM users WHERE username='" + username + "'")\`
+em vez de usar parâmetros vinculados.
+
+Correção: usar prepared statements (\`db.query("... WHERE username = ?", [username])\`).`,
+    expectMinScore: 55,
+  },
+  {
+    name: "legit-foreign-fr-path-traversal-terse",
+    text: `# Traversée de répertoire dans /download
+
+Le paramètre \`file\` de GET /download est concaténé directement dans le chemin du système de fichiers.
+
+Reproduction :
+\`\`\`
+curl 'https://app.example.com/download?file=../../../../etc/passwd'
+\`\`\`
+
+Réponse : le serveur renvoie le contenu de /etc/passwd avec le bon Content-Type.
+
+Cause : src/routes/download.ts:34 fait
+\`fs.readFileSync(path.join("/var/uploads", req.query.file))\`
+sans normaliser ni vérifier que le chemin résolu reste sous /var/uploads.
+
+Correctif : appeler \`path.resolve()\` puis vérifier \`resolved.startsWith(BASE_DIR + path.sep)\`.`,
+    expectMinScore: 45,
+  },
+  {
+    name: "legit-foreign-ru-cmd-injection-terse",
+    text: `# Внедрение команд в /api/ping
+
+Параметр \`host\` POST /api/ping подставляется в шелл напрямую.
+
+Воспроизведение:
+\`\`\`
+curl -X POST https://app.example.com/api/ping \\
+  -d 'host=127.0.0.1; id'
+\`\`\`
+
+Ответ содержит вывод \`id\` (uid=33(www-data)), что доказывает выполнение произвольной команды на сервере.
+
+Причина: src/routes/ping.ts:21 вызывает
+\`child_process.exec("ping -c1 " + req.body.host)\` без экранирования.
+
+Исправление: использовать \`execFile("ping", ["-c1", req.body.host])\` вместо \`exec\`.`,
+    expectMinScore: 60,
+  },
+  {
+    name: "legit-foreign-ja-ssrf-terse",
+    text: `# /api/fetch におけるサーバーサイドリクエストフォージェリ
+
+POST /api/fetch の \`url\` パラメータは検証なしに HTTP クライアントへ渡されます。
+
+再現手順:
+\`\`\`
+curl -X POST https://app.example.com/api/fetch \\
+  -d 'url=http://169.254.169.254/latest/meta-data/iam/security-credentials/'
+\`\`\`
+
+レスポンス本体には EC2 メタデータサービスから返された IAM ロール認証情報の JSON がそのまま含まれます。
+
+原因: src/routes/fetch.ts:17 が
+\`const r = await fetch(req.body.url)\`
+を呼び出しており、宛先ホストの allow-list 検証もリンクローカルアドレスのブロックも行っていません。
+
+修正: 169.254.0.0/16, 127.0.0.0/8, 10.0.0.0/8 などのプライベート / リンクローカル範囲を拒否し、明示的な allow-list で照合する。`,
+    expectMinScore: 50,
   },
 ];
 
