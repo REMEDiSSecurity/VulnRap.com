@@ -2548,6 +2548,43 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(familyIdx).toBeGreaterThan(pointerIdx);
   });
 
+  it("surfaces VERIFICATION_UNAVAILABLE in the markdown export when an upstream provider is down", () => {
+    // Task #725: when GitHub or NVD was unreachable during active
+    // verification, routes/reports.ts attaches verificationUnavailable +
+    // upstreamUnavailable onto Engine 2's signalBreakdown.activeVerification.
+    // The markdown export must surface this so triage threads make it
+    // explicit that gaps are inconclusive, not evidence of fabrication.
+    const withUnavailableUpstream: DiagnosticsResponse = {
+      ...SAMPLE_DIAGNOSTICS,
+      engines: {
+        ...SAMPLE_DIAGNOSTICS.engines,
+        engines: [
+          {
+            engine: "Technical Substance Analyzer",
+            score: 50,
+            verdict: "YELLOW" as const,
+            confidence: "MEDIUM" as const,
+            signalBreakdown: {
+              activeVerification: {
+                mode: "SOURCE_CODE",
+                familyName: "Memory corruption / unsafe C",
+                skipReason: null,
+                verificationUnavailable: true,
+                upstreamUnavailable: { github: true, nvd: false },
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const md = buildMarkdownSummary(withUnavailableUpstream);
+    expect(md).toContain("## Active Verification");
+    expect(md).toMatch(/VERIFICATION_UNAVAILABLE/);
+    expect(md).toMatch(/GitHub did not respond/);
+    expect(md).toMatch(/Treat verification gaps as inconclusive/);
+  });
+
   it("keeps non-FLAT absence penalties as a flat list in the printable markdown export", () => {
     // Task 110: only FLAT entries carry a flatHandwavyCategory. Family-rubric
     // absence penalties (no category) keep the existing flat rendering.

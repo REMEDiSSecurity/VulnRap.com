@@ -6,8 +6,10 @@ import {
   type TtlCategory,
 } from "./cache-service";
 import type { VerificationMode } from "./engines/avri/families";
-import { getCurrentRequestId } from "./request-context";
-import { instrumentExternalCall } from "./metrics";
+// Task #725 — outbound calls flow through the shared resilient client. The
+// X-Request-Id forwarding and Prometheus instrumentation that Task #724
+// added are now wrapped inside httpFetch itself, so call sites stay slim.
+import { httpFetch } from "./http-client";
 
 export interface ActiveVerificationOptions {
   // AVRI Step 6: route the active verification strategy from the family
@@ -56,6 +58,12 @@ export interface VerificationResult {
   // were skipped) without having to reclassify the report frontend-side.
   mode?: VerificationMode;
   familyName?: string;
+  // Task #725: when an upstream provider (GitHub or NVD) is unreachable
+  // — circuit breaker open, repeated timeouts, or network errors — we
+  // surface the per-provider state here so the composite scoring engine
+  // can flag VERIFICATION_UNAVAILABLE and the diagnostics UI can render
+  // it explicitly instead of silently scoring as if verification ran.
+  upstreamUnavailable?: { github: boolean; nvd: boolean };
 }
 
 interface DetectedProject {
@@ -368,7 +376,17 @@ function extractCodeReferences(text: string): {
   };
 }
 
-type GhResult = { ok: boolean; status: number; data?: unknown };
+type GhResult = { ok: boolean; status: number; data?: unknown; unavailable?: boolean };
+
+// Task #725: per-call providers' unavailable flag. The active-verification
+// run sets these when a `httpFetch` call returns `unavailable` (breaker
+// open, repeated timeouts, network errors) so the run can surface the
+// VERIFICATION_UNAVAILABLE flag without scoring as if verification ran.
+const upstreamState = { github: false, nvd: false };
+function resetUpstreamState(): void {
+  upstreamState.github = false;
+  upstreamState.nvd = false;
+}
 
 function classifyGithubTtl(url: string): TtlCategory {
   if (/\/tags\b/.test(url) || /\/releases\b/.test(url)) return "immutable";
@@ -394,42 +412,35 @@ async function githubFetch(
     "User-Agent": "VulnRap/2.1",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
-  // Task #724 — Forward the inbound request id so upstream APIs (and our own
-  // logs on the response side) can correlate a user-visible reference id with
-  // every external call it triggered.
-  const reqId = getCurrentRequestId();
-  if (reqId) headers["X-Request-Id"] = reqId;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  try {
-    const resp = await instrumentExternalCall(
-      "github",
-      () => fetch(url, { headers, signal: controller.signal }),
-      (r) => (r.ok || r.status === 404 ? "success" : "error"),
-    );
+  // Task #725: route through the shared resilient client (timeout + retry +
+  // breaker). `unavailable` results set the per-provider unavailable flag so
+  // the diagnostics layer can flag VERIFICATION_UNAVAILABLE rather than
+  // silently scoring as if verification ran. X-Request-Id forwarding and
+  // Prometheus instrumentation that Task #724 added are now done inside
+  // httpFetch itself, so we no longer build the AbortController/timeout or
+  // the X-Request-Id header here.
+  const r = await httpFetch({ provider: "github", url, init: { headers } });
+  cacheTracker.fresh++;
 
-    const result: GhResult = {
-      ok: resp.ok,
-      status: resp.status,
-      data: resp.ok ? await resp.json() : undefined,
-    };
-
-    if (resp.ok || resp.status === 404) {
-      const ttlCategory = classifyGithubTtl(url);
-      await persistentCacheSet(cacheKey, result, ttlCategory);
-    }
-
-    cacheTracker.fresh++;
-    return { ...result, cacheSource: "fresh" };
-  } catch {
-    cacheTracker.fresh++;
-    return { ok: false, status: 0, cacheSource: "fresh" };
-  } finally {
-    // Task #724 — always release the abort timer; previously a thrown
-    // fetch left the timer holding the event loop until it fired.
-    clearTimeout(timeout);
+  if (r.kind === "unavailable") {
+    upstreamState.github = true;
+    return { ok: false, status: 0, unavailable: true, cacheSource: "fresh" };
   }
+  if (r.kind === "error") {
+    return { ok: false, status: r.status, cacheSource: "fresh" };
+  }
+  const resp = r.value;
+  const result: GhResult = {
+    ok: resp.ok,
+    status: resp.status,
+    data: resp.ok ? await resp.json().catch(() => undefined) : undefined,
+  };
+  if (resp.ok || resp.status === 404) {
+    const ttlCategory = classifyGithubTtl(url);
+    await persistentCacheSet(cacheKey, result, ttlCategory);
+  }
+  return { ...result, cacheSource: "fresh" };
 }
 
 async function verifyGitHubReferences(
@@ -591,52 +602,44 @@ async function nvdFetch(cveId: string): Promise<NvdResult> {
     return { ...cached.value, cacheSource: cached.source };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  try {
-    const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${cveId}`;
-    // Task #724 — Forward the inbound request id and instrument duration /
-    // outcome so the /metrics scrape sees per-provider success rates.
-    const reqId = getCurrentRequestId();
-    const headers: Record<string, string> = { "User-Agent": "VulnRap/2.1" };
-    if (reqId) headers["X-Request-Id"] = reqId;
-    const resp = await instrumentExternalCall(
-      "nvd",
-      () => fetch(url, { headers, signal: controller.signal }),
-      (r) => (r.ok || r.status === 404 ? "success" : "error"),
-    );
+  const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${cveId}`;
+  // Task #725: route through the shared resilient client. The X-Request-Id
+  // forwarding + Prometheus instrumentation that Task #724 added are now
+  // performed inside httpFetch itself.
+  const r = await httpFetch({
+    provider: "nvd",
+    url,
+    init: { headers: { "User-Agent": "VulnRap/2.1" } },
+  });
+  cacheTracker.fresh++;
 
-    if (!resp.ok) {
-      if (resp.status === 404) {
-        const result = { found: false };
-        await persistentCacheSet(cacheKey, result, "nvd");
-        cacheTracker.fresh++;
-        return { ...result, cacheSource: "fresh" };
-      }
-      cacheTracker.fresh++;
-      return { found: false, error: true, cacheSource: "fresh" };
+  if (r.kind === "unavailable") {
+    upstreamState.nvd = true;
+    return { found: false, error: true, cacheSource: "fresh" };
+  }
+  if (r.kind === "error") {
+    if (r.status === 404) {
+      const result = { found: false };
+      await persistentCacheSet(cacheKey, result, "nvd");
+      return { ...result, cacheSource: "fresh" };
     }
-
-    const data = (await resp.json()) as {
-      vulnerabilities?: NvdVulnerability[];
-    };
+    return { found: false, error: true, cacheSource: "fresh" };
+  }
+  const resp = r.value;
+  try {
+    const data = (await resp.json()) as { vulnerabilities?: NvdVulnerability[] };
     const vulns = data.vulnerabilities ?? [];
     if (vulns.length === 0) {
       const result = { found: false };
       await persistentCacheSet(cacheKey, result, "nvd");
-      cacheTracker.fresh++;
       return { ...result, cacheSource: "fresh" };
     }
-
-    const desc =
-      vulns[0]?.cve?.descriptions?.find((d) => d.lang === "en")?.value ?? "";
+    const desc = vulns[0]?.cve?.descriptions?.find((d) => d.lang === "en")?.value ?? "";
     const published = vulns[0]?.cve?.published ?? undefined;
     const result = { found: true, description: desc, published };
     await persistentCacheSet(cacheKey, result, "nvd");
-    cacheTracker.fresh++;
     return { ...result, cacheSource: "fresh" };
   } catch {
-    cacheTracker.fresh++;
     return { found: false, error: true, cacheSource: "fresh" };
   } finally {
     // Task #724 — always release the abort timer; previously a thrown
@@ -986,6 +989,7 @@ export async function performActiveVerification(
   }
 
   resetCacheTracker();
+  resetUpstreamState();
 
   const detectedProjects = detectProjects(text);
   const codeRefs = extractCodeReferences(text);
@@ -1031,6 +1035,7 @@ export async function performActiveVerification(
       cacheMetadata: { hits: { ...cacheTracker } },
       mode,
       familyName: opts.familyName,
+      upstreamUnavailable: { ...upstreamState },
     };
     await persistentCacheSet(cacheKey, result, "mutable");
     return result;
@@ -1141,9 +1146,30 @@ export async function performActiveVerification(
   // tag at all — e.g. CVE refs, PoC plausibility). Search-fallback checks
   // remain in `allChecks` for the diagnostics panel breakdown but never pull
   // the score down or generate "could not be verified" reviewer pressure.
-  const inScopeChecks = allChecks.filter((c) => c.source !== "search_fallback");
+  // Task #725: when an upstream provider was unavailable (breaker open or
+  // exhausted retries), record a non-scoring evidence row + triage note so
+  // the diagnostics panel + report surface VERIFICATION_UNAVAILABLE rather
+  // than silently treating "no check" as "not verified".
+  const upstreamFlags: string[] = [];
+  if (upstreamState.github) upstreamFlags.push("GitHub");
+  if (upstreamState.nvd) upstreamFlags.push("NVD");
+  if (upstreamFlags.length > 0) {
+    const upstreamCheck: VerificationCheck = {
+      type: "upstream_unavailable",
+      target: upstreamFlags.join("+").toLowerCase(),
+      detail: `Upstream verification provider(s) unavailable: ${upstreamFlags.join(", ")} — checks skipped without scoring impact`,
+      result: "skipped",
+      weight: 0,
+    };
+    allChecks.push(upstreamCheck);
+  }
+
+  const inScopeChecks = allChecks.filter((c) => c.source !== "search_fallback" && c.type !== "upstream_unavailable");
   const score = computeVerificationScore(inScopeChecks);
   const triageNotes = buildTriageNotes(inScopeChecks, detectedProjects);
+  if (upstreamFlags.length > 0) {
+    triageNotes.unshift(`VERIFICATION_UNAVAILABLE: ${upstreamFlags.join(" + ")} did not respond — treat verification gaps as inconclusive, not as fabrication.`);
+  }
 
   const summary: VerificationSummary = {
     verified: inScopeChecks.filter((c) => c.result === "verified").length,
@@ -1165,6 +1191,7 @@ export async function performActiveVerification(
     cacheMetadata,
     mode,
     familyName: opts.familyName,
+    upstreamUnavailable: { ...upstreamState },
   };
 
   await persistentCacheSet(cacheKey, result, "mutable");

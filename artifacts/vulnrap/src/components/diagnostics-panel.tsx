@@ -2025,6 +2025,13 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
         mode?: VerificationModeUI;
         familyName?: string | null;
         skipReason?: string | null;
+        // Task #725 — set by routes/reports.ts when an upstream verification
+        // provider (GitHub / NVD) was unreachable during this run. Lets the
+        // panel render an explicit "inconclusive — provider down" banner
+        // instead of letting reviewers misread missing checks as evidence
+        // of fabrication.
+        verificationUnavailable?: boolean;
+        upstreamUnavailable?: { github?: boolean; nvd?: boolean };
       }
     | undefined;
   if (!ev && !verifyBreakdown && !activeVerif) return null;
@@ -2060,6 +2067,23 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
               <p className="text-[11px] font-mono text-yellow-400/90 leading-relaxed">
                 {activeVerif.skipReason}
               </p>
+            )}
+            {activeVerif.verificationUnavailable && (
+              <div
+                data-testid="verification-unavailable-banner"
+                className="rounded border border-yellow-500/40 bg-yellow-500/10 px-2 py-1.5 text-[11px] font-mono text-yellow-300 leading-relaxed"
+              >
+                <span className="font-bold">VERIFICATION_UNAVAILABLE</span>
+                {" — "}
+                {(() => {
+                  const ua = activeVerif.upstreamUnavailable ?? {};
+                  const down: string[] = [];
+                  if (ua.github) down.push("GitHub");
+                  if (ua.nvd) down.push("NVD");
+                  const who = down.length > 0 ? down.join(" + ") : "an upstream provider";
+                  return `${who} did not respond. Treat verification gaps as inconclusive, not as evidence of fabrication.`;
+                })()}
+              </div>
             )}
           </div>
         )}
@@ -2340,6 +2364,10 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
       mode?: VerificationModeUI;
       familyName?: string | null;
       skipReason?: string | null;
+      // Task #725 — propagated to the markdown export so triage threads
+      // record that an upstream verification provider was unreachable.
+      verificationUnavailable?: boolean;
+      upstreamUnavailable?: { github?: boolean; nvd?: boolean };
     };
   };
 
@@ -2379,6 +2407,14 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
       lines.push(`- ${VERIFICATION_MODE_DESCRIPTION[activeVerif.mode]}`);
       if (activeVerif.mode === "MANUAL_ONLY" && activeVerif.skipReason) {
         lines.push(`- ${activeVerif.skipReason}`);
+      }
+      if (activeVerif.verificationUnavailable) {
+        const ua = activeVerif.upstreamUnavailable ?? {};
+        const down: string[] = [];
+        if (ua.github) down.push("GitHub");
+        if (ua.nvd) down.push("NVD");
+        const who = down.length > 0 ? down.join(" + ") : "an upstream provider";
+        lines.push(`- ⚠️ **VERIFICATION_UNAVAILABLE** — ${who} did not respond. Treat verification gaps as inconclusive, not as evidence of fabrication.`);
       }
     }
     if (verifySources) {

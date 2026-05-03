@@ -1202,14 +1202,21 @@ router.post("/reports", async (req, res): Promise<void> => {
       // reports, "manual review only" for race conditions).
       const v = analysisResult.verification;
       if (v.mode) {
+        const ua = v.upstreamUnavailable ?? { github: false, nvd: false };
+        const verificationUnavailable = ua.github || ua.nvd;
         (e2.signalBreakdown as Record<string, unknown>).activeVerification = {
           mode: v.mode,
           familyName: v.familyName ?? null,
           // For MANUAL_ONLY families, the lib already pushed the "skipped, route
           // to a human reviewer" hint as the first triage note — pass it through
           // so the panel can render it verbatim.
-          skipReason:
-            v.mode === "MANUAL_ONLY" ? (v.triageNotes[0] ?? null) : null,
+          skipReason: v.mode === "MANUAL_ONLY" ? (v.triageNotes[0] ?? null) : null,
+          // Task #725: VERIFICATION_UNAVAILABLE flag — surfaced when an
+          // upstream provider (GitHub / NVD) was unreachable during this
+          // run. Diagnostics UI uses it to render an inconclusive banner
+          // instead of treating missing checks as evidence of fabrication.
+          verificationUnavailable,
+          upstreamUnavailable: ua,
         };
       }
     }

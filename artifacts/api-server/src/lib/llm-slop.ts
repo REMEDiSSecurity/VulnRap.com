@@ -1,8 +1,13 @@
 import { createHash } from "crypto";
 import OpenAI from "openai";
 import { logger } from "./logger";
+// Task #725 — outbound OpenAI calls go through the shared resilience
+// wrapper. Prometheus instrumentation that Task #724 added is now done
+// inside withResilience itself. Request-id forwarding is still handled
+// at the call site because the OpenAI SDK uses a per-call `headers`
+// escape hatch rather than init-level headers.
+import { withResilience } from "./http-client";
 import { getCurrentRequestId } from "./request-context";
-import { instrumentExternalCall } from "./metrics";
 
 export interface LLMTriageGuidance {
   reproSteps: string[];
@@ -71,7 +76,6 @@ export interface LLMBreakdown {
   verdict: string;
 }
 
-const LLM_TIMEOUT_MS = 30_000;
 
 // Task #209 — exported so the audit instrumentation in /api/test/run and the
 // per-report diagnostics panel can render the *exact* gate the production
@@ -556,9 +560,12 @@ async function analyzeSlopWithLLMOnce(
   client: OpenAI,
   truncatedText: string,
 ): Promise<AnalyzeOnceOutcome> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
-
+  // Task #725 — the per-attempt timeout, transient retries, and the
+  // per-(provider, host) circuit breaker are now owned by withResilience
+  // so OpenAI 5xx / 429 / network spikes don't surface here as a series
+  // of one-shot failures the outer retry loop has to chase. The outer
+  // loop in analyzeSlopWithLLMDetailed is kept for JSON-parse retries
+  // (which the resilience layer cannot classify as transient).
   try {
     const model = process.env.OPENAI_MODEL || "gpt-5-nano";
     const startMs = Date.now();
@@ -571,28 +578,53 @@ async function analyzeSlopWithLLMOnce(
     const activePrompt = getSystemPrompt(model);
     const tokenBudget = isNano ? 4000 : 8000;
     // Task #724 — Forward the inbound request id to OpenAI as a custom
-    // header (the SDK accepts arbitrary headers per-call) and instrument
-    // duration / outcome so the /metrics scrape sees per-provider stats.
+    // header (the SDK accepts arbitrary headers per-call). The httpFetch /
+    // withResilience wrapper from Task #725 now provides timeout, retry,
+    // and circuit-breaking; Prometheus instrumentation is also done inside
+    // withResilience, so we drop the bespoke instrumentExternalCall.
     const reqId = getCurrentRequestId();
     const callHeaders: Record<string, string> = {};
     if (reqId) callHeaders["X-Request-Id"] = reqId;
-    const response = await instrumentExternalCall("openai", () =>
-      client.chat.completions.create(
-        {
-          model,
-          ...(!isNano ? { temperature: 0.1 } : {}),
-          max_completion_tokens: tokenBudget,
-          messages: [
-            { role: "system", content: activePrompt },
-            {
-              role: "user",
-              content: `Analyze this vulnerability report for substance, coherence, and reproducibility:\n\n---BEGIN REPORT---\n${truncatedText}\n---END REPORT---`,
-            },
-          ],
-        },
-        { signal: controller.signal, headers: callHeaders },
-      ),
-    );
+    const baseHost = (() => {
+      const u = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com";
+      try { return new URL(u).host; } catch { return "api.openai.com"; }
+    })();
+    const r = await withResilience({
+      provider: "openai",
+      host: baseHost,
+      invoke: (signal) =>
+        client.chat.completions.create(
+          {
+            model,
+            ...(!isNano ? { temperature: 0.1 } : {}),
+            max_completion_tokens: tokenBudget,
+            messages: [
+              { role: "system", content: activePrompt },
+              {
+                role: "user",
+                content: `Analyze this vulnerability report for substance, coherence, and reproducibility:\n\n---BEGIN REPORT---\n${truncatedText}\n---END REPORT---`,
+              },
+            ],
+          },
+          { signal, headers: callHeaders },
+        ),
+      // OpenAI SDK errors carry a numeric `.status` for HTTP responses; treat
+      // 5xx and 429 as transient (worth retrying), everything else as terminal.
+      classifyError: (err) => {
+        const status = (err as { status?: number })?.status;
+        if (typeof status === "number" && (status === 429 || (status >= 500 && status < 600))) return "transient";
+        if (typeof status === "number") return "terminal";
+        // Network/timeout errors have no .status — let the wrapper retry them.
+        return "transient";
+      },
+    });
+    if (r.kind === "unavailable") {
+      return { kind: "failed", error: `unavailable:${r.reason}` };
+    }
+    if (r.kind === "error") {
+      return { kind: "failed", error: r.detail.slice(0, 200) };
+    }
+    const response = r.value;
 
     const elapsedMs = Date.now() - startMs;
     const choice = response.choices[0];
@@ -1066,15 +1098,9 @@ async function analyzeSlopWithLLMOnce(
 
     return { kind: "ok", result };
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === "AbortError") {
-      logger.warn("LLM slop: timed out");
-      return { kind: "failed", error: "timeout" };
-    }
     const errMsg = err instanceof Error ? err.message : String(err);
     logger.warn({ err }, "LLM slop: analysis failed");
     return { kind: "failed", error: errMsg.slice(0, 200) };
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
