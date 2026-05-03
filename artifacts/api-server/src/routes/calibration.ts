@@ -44,6 +44,8 @@ import {
   AI_SELF_DISCLOSURE_PENALTY,
   getAiSelfDisclosurePhrases,
   addAiSelfDisclosurePhrase,
+  editAiSelfDisclosurePhrase,
+  removeAiSelfDisclosurePhrase,
 } from "../lib/engines/avri/ai-self-disclosure";
 import { TEST_FIXTURE_COHORTS } from "./test-fixtures";
 import {
@@ -2690,10 +2692,14 @@ router.delete(
 // Task #429 — Reviewer-curated AI self-disclosure phrase patterns. The list
 // lives in data/ai-self-disclosure-phrases.json and is loaded by the AVRI
 // Engine 2 detector at startup. GET surfaces the active list (auth-strict);
-// POST appends a new pattern (auth, append-only — there is no remove path
-// because the bounded-penalty contract means a stale pattern that no longer
-// fires costs nothing). Mirrors the calibration token gate and JSON shape of
-// the curated hand-wavy phrase list.
+// POST appends a new pattern (auth). Mirrors the calibration token gate and
+// JSON shape of the curated hand-wavy phrase list.
+//
+// Task #751 — Add PUT (edit) and DELETE (remove) so a reviewer who
+// fat-fingers a regex (missing word boundary, mistyped LLM brand name) can
+// correct the entry without minting a brand-new id. POST stays idempotent
+// on `id`, so without these paths a typo'd pattern would just sit in the
+// list matching nothing forever.
 router.get(
   "/feedback/calibration/ai-self-disclosure-phrases",
   requireCalibrationAuthStrict,
@@ -2766,6 +2772,110 @@ router.post(
       res
         .status(500)
         .json({ error: "Failed to add AI self-disclosure phrase." });
+    }
+  },
+);
+
+// Task #751 — Edit an existing phrase by id. Pattern, flags, and rationale
+// are all replaceable; addedBy / addedAt are preserved as the original
+// audit trail and editedBy / editedAt are stamped from the supplied
+// reviewer.
+router.put(
+  "/feedback/calibration/ai-self-disclosure-phrases/:id",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { pattern, flags, reviewer, rationale } = (req.body ?? {}) as {
+        pattern?: unknown;
+        flags?: unknown;
+        reviewer?: unknown;
+        rationale?: unknown;
+      };
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      if (rationale !== undefined && typeof rationale !== "string") {
+        res
+          .status(400)
+          .json({ error: "rationale must be a string when provided." });
+        return;
+      }
+      const result = editAiSelfDisclosurePhrase(
+        req.params.id,
+        pattern,
+        flags,
+        {
+          reviewer: typeof reviewer === "string" ? reviewer : undefined,
+          rationale: typeof rationale === "string" ? rationale : undefined,
+        },
+      );
+      if (!result.edited) {
+        res.status(404).json({
+          error: "Phrase not found.",
+          edited: false,
+          id: req.params.id,
+        });
+        return;
+      }
+      res.status(200).json({
+        edited: result.edited,
+        phrase: result.phrase,
+        total: result.total,
+        penalty: AI_SELF_DISCLOSURE_PENALTY,
+        phrases: getAiSelfDisclosurePhrases(),
+      });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        /^(?:id|pattern|flags|rationale) /.test(err.message)
+      ) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      req.log?.error(err, "Failed to edit AI self-disclosure phrase");
+      res
+        .status(500)
+        .json({ error: "Failed to edit AI self-disclosure phrase." });
+    }
+  },
+);
+
+// Task #751 — Remove a phrase by id. Removing the last entry is allowed:
+// the loader falls back to the in-memory DEFAULT_PHRASES on the next read
+// so the detector never silently goes dark.
+router.delete(
+  "/feedback/calibration/ai-self-disclosure-phrases/:id",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const result = removeAiSelfDisclosurePhrase(req.params.id);
+      if (!result.removed) {
+        res.status(404).json({
+          error: "Phrase not found.",
+          removed: false,
+          id: req.params.id,
+        });
+        return;
+      }
+      res.status(200).json({
+        removed: result.removed,
+        phrase: result.phrase,
+        total: result.total,
+        penalty: AI_SELF_DISCLOSURE_PENALTY,
+        phrases: getAiSelfDisclosurePhrases(),
+      });
+    } catch (err) {
+      if (err instanceof Error && /^id /.test(err.message)) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      req.log?.error(err, "Failed to remove AI self-disclosure phrase");
+      res
+        .status(500)
+        .json({ error: "Failed to remove AI self-disclosure phrase." });
     }
   },
 );

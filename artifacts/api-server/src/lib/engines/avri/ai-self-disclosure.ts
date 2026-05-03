@@ -61,6 +61,10 @@ export interface AiSelfDisclosurePhrase {
   addedAt?: string;
   /** Free-text justification supplied by the reviewer at add time. */
   rationale?: string;
+  /** Reviewer name or email that most recently edited this phrase (Task #751). */
+  editedBy?: string;
+  /** ISO 8601 timestamp of the most recent edit (Task #751). */
+  editedAt?: string;
 }
 
 interface PhrasesFile {
@@ -222,6 +226,9 @@ function coercePhrase(entry: unknown): AiSelfDisclosurePhrase | null {
   if (isIsoTimestamp(obj.addedAt)) out.addedAt = obj.addedAt;
   const rationale = trimOrUndefined(obj.rationale, 500);
   if (rationale) out.rationale = rationale;
+  const editedBy = trimOrUndefined(obj.editedBy, 200);
+  if (editedBy) out.editedBy = editedBy;
+  if (isIsoTimestamp(obj.editedAt)) out.editedAt = obj.editedAt;
   return out;
 }
 
@@ -419,6 +426,158 @@ export function detectAiSelfDisclosure(
     matches,
     penalty: AI_SELF_DISCLOSURE_PENALTY,
   };
+}
+
+export interface EditAiSelfDisclosurePhraseOptions {
+  reviewer?: string;
+  rationale?: string;
+  /** Override the timestamp (tests). Defaults to `new Date().toISOString()`. */
+  now?: string;
+}
+
+export interface EditAiSelfDisclosurePhraseResult {
+  edited: boolean;
+  phrase: AiSelfDisclosurePhrase;
+  total: number;
+}
+
+/**
+ * Task #751 — Update an existing phrase by id so a reviewer can correct a
+ * fat-fingered regex (missing word boundary, mistyped LLM brand name, etc.)
+ * without having to mint a new id.
+ *
+ * Pattern and flags are validated and recompiled; `addedBy` / `addedAt` are
+ * preserved (the original add provenance is part of the audit trail), and
+ * `editedBy` / `editedAt` are stamped from the supplied reviewer + clock.
+ * If `rationale` is provided, it overwrites the prior rationale; passing
+ * an empty string clears it.
+ *
+ * Validation errors throw with the same field-prefixed format as
+ * `addAiSelfDisclosurePhrase` so the route surfaces them as 400s.
+ *
+ * Returns `edited: false` (and the active marker) when no entry with
+ * `id` exists; the route maps that to a 404.
+ */
+export function editAiSelfDisclosurePhrase(
+  rawId: unknown,
+  rawPattern: unknown,
+  rawFlags: unknown,
+  options: EditAiSelfDisclosurePhraseOptions = {},
+): EditAiSelfDisclosurePhraseResult {
+  if (typeof rawId !== "string" || rawId.trim().length === 0) {
+    throw new Error("id must be a non-empty string.");
+  }
+  const id = rawId.trim();
+  if (!ID_PATTERN.test(id)) {
+    throw new Error("id must be 1-64 characters of [A-Za-z0-9_].");
+  }
+  if (typeof rawPattern !== "string" || rawPattern.length === 0) {
+    throw new Error("pattern must be a non-empty string.");
+  }
+  if (rawPattern.length > PATTERN_MAX_LEN) {
+    throw new Error(`pattern must be at most ${PATTERN_MAX_LEN} characters.`);
+  }
+  let flags: string | undefined;
+  if (rawFlags !== undefined && rawFlags !== null) {
+    if (typeof rawFlags !== "string" || !FLAGS_PATTERN.test(rawFlags)) {
+      throw new Error(
+        "flags must contain only regex flag characters [gimsuy].",
+      );
+    }
+    if (rawFlags.length > 0) flags = rawFlags;
+  }
+  try {
+    new RegExp(rawPattern, flags ?? "i");
+  } catch (e) {
+    throw new Error(
+      `pattern is not a valid regular expression: ${(e as Error).message}`,
+    );
+  }
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  // For edits, allow rationale="" to clear; only validate length when
+  // a non-empty value is provided.
+  let rationaleUpdate: string | null | undefined;
+  if (options.rationale === undefined) {
+    rationaleUpdate = undefined; // leave unchanged
+  } else if (typeof options.rationale !== "string") {
+    throw new Error("rationale must be a string when provided.");
+  } else {
+    const r = options.rationale.trim();
+    if (r.length === 0) {
+      rationaleUpdate = null; // explicit clear
+    } else if (r.length < 3) {
+      throw new Error("rationale must be at least 3 characters when provided.");
+    } else {
+      rationaleUpdate = r.length > 500 ? r.slice(0, 500) : r;
+    }
+  }
+  const { phrases: current } = load();
+  const idx = current.findIndex((p) => p.id === id);
+  if (idx === -1) {
+    return {
+      edited: false,
+      phrase: { id, pattern: rawPattern, ...(flags ? { flags } : {}) },
+      total: current.length,
+    };
+  }
+  const prior = current[idx];
+  const editedAt = isIsoTimestamp(options.now)
+    ? options.now
+    : new Date().toISOString();
+  const updated: AiSelfDisclosurePhrase = {
+    id,
+    pattern: rawPattern,
+  };
+  if (flags !== undefined) updated.flags = flags;
+  if (prior.addedBy) updated.addedBy = prior.addedBy;
+  if (prior.addedAt) updated.addedAt = prior.addedAt;
+  if (rationaleUpdate === undefined) {
+    if (prior.rationale) updated.rationale = prior.rationale;
+  } else if (rationaleUpdate !== null) {
+    updated.rationale = rationaleUpdate;
+  }
+  if (reviewer) updated.editedBy = reviewer;
+  updated.editedAt = editedAt;
+  const next = [...current];
+  next[idx] = updated;
+  persist(next);
+  CACHED = null;
+  return { edited: true, phrase: { ...updated }, total: next.length };
+}
+
+export interface RemoveAiSelfDisclosurePhraseResult {
+  removed: boolean;
+  phrase?: AiSelfDisclosurePhrase;
+  total: number;
+}
+
+/**
+ * Task #751 — Remove a phrase by id. Returns `removed: false` (route maps
+ * to 404) when no entry exists. Removing the last entry is allowed: the
+ * loader falls back to the in-memory `DEFAULT_PHRASES` on the next read,
+ * so the detector never silently goes dark even if a reviewer empties
+ * the on-disk file.
+ */
+export function removeAiSelfDisclosurePhrase(
+  rawId: unknown,
+): RemoveAiSelfDisclosurePhraseResult {
+  if (typeof rawId !== "string" || rawId.trim().length === 0) {
+    throw new Error("id must be a non-empty string.");
+  }
+  const id = rawId.trim();
+  if (!ID_PATTERN.test(id)) {
+    throw new Error("id must be 1-64 characters of [A-Za-z0-9_].");
+  }
+  const { phrases: current } = load();
+  const idx = current.findIndex((p) => p.id === id);
+  if (idx === -1) {
+    return { removed: false, total: current.length };
+  }
+  const removed = current[idx];
+  const next = current.filter((_, i) => i !== idx);
+  persist(next);
+  CACHED = null;
+  return { removed: true, phrase: { ...removed }, total: next.length };
 }
 
 /** Test helper: drop the in-memory cache so the next read re-parses the file. */
