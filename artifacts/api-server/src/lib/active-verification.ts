@@ -641,10 +641,6 @@ async function nvdFetch(cveId: string): Promise<NvdResult> {
     return { ...result, cacheSource: "fresh" };
   } catch {
     return { found: false, error: true, cacheSource: "fresh" };
-  } finally {
-    // Task #724 — always release the abort timer; previously a thrown
-    // fetch left the timer holding the event loop until it fired.
-    clearTimeout(timeout);
   }
 }
 
