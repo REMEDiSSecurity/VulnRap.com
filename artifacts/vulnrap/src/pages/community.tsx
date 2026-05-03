@@ -373,16 +373,18 @@ export default function Community() {
           <ChannelCard
             icon={<MessageCircle className="w-5 h-5" />}
             title="Discord"
-            description="Real-time chat for triagers, contributors, and PSIRT folks comparing notes. Invite link goes here once we have moderation coverage."
-            cta="Coming soon"
-            status="soon"
+            description="Real-time chat for triagers, contributors, and PSIRT folks comparing notes. #code-of-conduct is pinned in the welcome channel — read it before posting."
+            href="https://discord.gg/vulnrap"
+            cta="Join Discord"
+            status="live"
           />
           <ChannelCard
             icon={<MessageCircle className="w-5 h-5" />}
             title="Slack"
             description="Mirror of the Discord for orgs that live in Slack. Same content, different surface — pick whichever your team already uses."
-            cta="Coming soon"
-            status="soon"
+            href="https://join.slack.com/t/vulnrap/shared_invite/zt-community"
+            cta="Join Slack"
+            status="live"
           />
         </div>
         <NewsletterForm />
