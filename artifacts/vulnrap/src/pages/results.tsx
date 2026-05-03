@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, useGetScoreHistory, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type TriageMatrixInputs, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type TriageAssistant, type ReproGuidance, type GapItem, type DontMissItem, type ReporterFeedbackItem, type LLMTriageGuidance, type ReproRecipe, type HardwareComponent, type ScoreHistoryEntry } from "@workspace/api-client-react";
+import { useGetReport, getGetReportQueryKey, useGetVerification, getGetVerificationQueryKey, useDeleteReport, useCompareReports, getCompareReportsQueryKey, useGetScoreHistory, useGetCohortBaseline, getGetCohortBaselineQueryKey, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type TriageMatrixInputs, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type TriageAssistant, type ReproGuidance, type GapItem, type DontMissItem, type ReporterFeedbackItem, type LLMTriageGuidance, type ReproRecipe, type HardwareComponent, type ScoreHistoryEntry } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -166,6 +166,198 @@ function AxisBar({ label, score, icon, color }: { label: string; score: number; 
       </div>
       <Progress value={score} className="h-1.5" indicatorClassName={color} />
     </div>
+  );
+}
+
+// Engine name → axis label / per-engine deep-dive route. Engine 1 (AI
+// Authorship) score semantics are inverted ("higher = more AI-like") so for
+// the radar — where we want every axis to mean the same thing ("higher =
+// stronger / more legitimate") — we plot 100 - score and label the axis
+// "Authorship".
+const ENGINE_AXIS_META: Record<string, { axis: string; href: string; description: string; invert?: boolean }> = {
+  "AI Authorship Detector": {
+    axis: "Engine 1",
+    href: "/changelog#ai-authorship-detector",
+    description: "Engine 1 — AI Authorship Detector. Plotted as 100 − raw score so higher = more human-written.",
+    invert: true,
+  },
+  "Technical Substance Analyzer": {
+    axis: "Engine 2",
+    href: "/changelog#technical-substance-analyzer",
+    description: "Engine 2 — Technical Substance Analyzer. Higher = more concrete evidence, code, and reproduction detail.",
+  },
+  "CWE Coherence Checker": {
+    axis: "Engine 3",
+    href: "/changelog#cwe-coherence-checker",
+    description: "Engine 3 — CWE Coherence Checker. Higher = the claimed CWE matches the described behavior.",
+  },
+};
+
+interface EngineRadarSectionProps {
+  vulnrap: VulnrapPanelData;
+  qualityScore: number | undefined;
+  cwe?: string | null;
+}
+
+function EngineRadarSection({ vulnrap, qualityScore, cwe }: EngineRadarSectionProps) {
+  const [showCohort, setShowCohort] = useState(false);
+
+  // Real cohort overlay data — same endpoint that powers the
+  // cohort-baseline-ribbon. We fetch eagerly (lightweight, 1h server cache)
+  // so flipping the toggle is instant; the toggle itself is gated on the
+  // cohort actually returning per-axis medians.
+  const cohortQuery = useGetCohortBaseline(undefined, {
+    query: {
+      queryKey: getGetCohortBaselineQueryKey(),
+      staleTime: 5 * 60 * 1000,
+      retry: false,
+    },
+  });
+  const familyParams = cwe ? { cwe } : undefined;
+  const familyQuery = useGetCohortBaseline(familyParams, {
+    query: {
+      queryKey: getGetCohortBaselineQueryKey(familyParams),
+      enabled: Boolean(cwe),
+      staleTime: 5 * 60 * 1000,
+      retry: false,
+    },
+  });
+  // Prefer the CWE-family cohort when available (apples-to-apples), fall
+  // back to the platform-wide cohort otherwise.
+  const cohort = familyQuery.data ?? cohortQuery.data;
+  const cohortMedians = cohort?.engineMedians ?? null;
+  const cohortScope: "family" | "platform" | null = cohort
+    ? (familyQuery.data ? "family" : "platform")
+    : null;
+  const cohortLoading = cohortQuery.isLoading || (Boolean(cwe) && familyQuery.isLoading);
+  const overlayAvailable = !!cohortMedians
+    && cohortMedians.engine1 != null
+    && cohortMedians.engine2 != null
+    && cohortMedians.engine3 != null
+    && cohortMedians.avri != null
+    && cohortMedians.quality != null;
+
+  const findEngine = (name: string) => vulnrap.engines.find((e) => e.engine === name);
+  const e1 = findEngine("AI Authorship Detector");
+  const e2 = findEngine("Technical Substance Analyzer");
+  const e3 = findEngine("CWE Coherence Checker");
+
+  // AVRI sub-score lives on Engine 2's signalBreakdown.avri.rawAvriScore
+  // (see api-server/src/lib/engines/avri/engine2-avri.ts). Fall back to E2's
+  // overall score when the AVRI block is absent (legacy reports).
+  const avriBlock = (e2?.signalBreakdown as { avri?: { rawAvriScore?: number } } | undefined)?.avri;
+  const avriScore = typeof avriBlock?.rawAvriScore === "number"
+    ? Math.round(avriBlock.rawAvriScore)
+    : (e2 ? Math.round(e2.score) : 0);
+
+  const e1Plot = e1 ? Math.round(100 - e1.score) : 0;
+  const e2Plot = e2 ? Math.round(e2.score) : 0;
+  const e3Plot = e3 ? Math.round(e3.score) : 0;
+  const qPlot = typeof qualityScore === "number" ? qualityScore : 0;
+
+  const data = [
+    { label: "Engine 1", value: e1Plot, max: 100 },
+    { label: "Engine 2", value: e2Plot, max: 100 },
+    { label: "Engine 3", value: e3Plot, max: 100 },
+    { label: "AVRI", value: avriScore, max: 100 },
+    { label: "Quality", value: qPlot, max: 100 },
+  ];
+
+  // Engine 1 raw score is "more AI-like = higher", but we plot all axes as
+  // higher = better, so we invert the cohort engine1 median the same way we
+  // invert the report's own engine1 score above.
+  const overlay = showCohort && overlayAvailable && cohortMedians
+    ? [
+        { label: "Engine 1", value: 100 - (cohortMedians.engine1 as number), max: 100 },
+        { label: "Engine 2", value: cohortMedians.engine2 as number, max: 100 },
+        { label: "Engine 3", value: cohortMedians.engine3 as number, max: 100 },
+        { label: "AVRI", value: cohortMedians.avri as number, max: 100 },
+        { label: "Quality", value: cohortMedians.quality as number, max: 100 },
+      ]
+    : null;
+
+  const legend: Array<{ axis: string; meaning: string; href?: string; value: number }> = [
+    { axis: "Engine 1", meaning: "Authorship — higher = more human-written.", href: ENGINE_AXIS_META["AI Authorship Detector"].href, value: e1Plot },
+    { axis: "Engine 2", meaning: "Technical Substance — higher = stronger evidence.", href: ENGINE_AXIS_META["Technical Substance Analyzer"].href, value: e2Plot },
+    { axis: "Engine 3", meaning: "CWE Coherence — higher = claim matches behavior.", href: ENGINE_AXIS_META["CWE Coherence Checker"].href, value: e3Plot },
+    { axis: "AVRI", meaning: "Adversarial Validity Rubric (Engine 2 sub-signal).", href: "/changelog#avri-family-rubric", value: avriScore },
+    { axis: "Quality", meaning: "Report completeness — sections, structure, detail.", value: qPlot },
+  ];
+
+  return (
+    <Card className="glass-card rounded-xl border-primary/30" data-testid="engine-radar-section">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 flex-wrap">
+          <Gauge className="w-5 h-5 text-primary" />
+          Per-Engine Radar
+          <Hint text="Five-axis snapshot of how the report scored across the three independent engines, the AVRI sub-rubric, and the report's structural Quality. All axes are normalized so higher = better — Engine 1 is plotted as 100 − raw score because the raw AI-authorship score is lower-is-better." />
+        </CardTitle>
+        <CardDescription>Engine balance at a glance — every axis: higher = stronger</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-end mb-3" data-testid="cohort-overlay-controls">
+          {cohortLoading ? (
+            <span className="text-xs text-muted-foreground/60 italic">Loading cohort baseline…</span>
+          ) : !overlayAvailable ? (
+            <span className="text-xs text-muted-foreground/60 italic" data-testid="cohort-overlay-unavailable">
+              No cohort baseline yet
+            </span>
+          ) : (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none" data-testid="toggle-cohort-overlay">
+              <input
+                type="checkbox"
+                className="accent-primary"
+                checked={showCohort}
+                onChange={(e) => setShowCohort(e.target.checked)}
+              />
+              <span>
+                Overlay cohort median
+                {cohortScope === "family" && cwe ? ` · ${cwe}` : ""}
+              </span>
+              <Hint text="Dashed grey polygon = real median across the last 7 days of reports on the same five plotted axes (Engine 1, Engine 2, Engine 3, AVRI, Quality). When this report has a CWE family the family-scoped cohort is used; otherwise the platform-wide cohort." />
+            </label>
+          )}
+        </div>
+        <div className="flex flex-col md:flex-row items-center gap-6">
+          <PolishedRadarFrame>
+            <RadarChart
+              data={data}
+              overlayData={overlay}
+              overlayLabel={cohortScope === "family" && cwe ? `Cohort median (${cwe})` : "Cohort median (platform)"}
+              size={260}
+              ariaLabel={`Per-engine radar: Engine 1 ${e1Plot}, Engine 2 ${e2Plot}, Engine 3 ${e3Plot}, AVRI ${avriScore}, Quality ${qPlot} (out of 100).`}
+            />
+          </PolishedRadarFrame>
+          <ul className="flex-1 w-full space-y-2 text-xs">
+            {legend.map((row) => (
+              <li key={row.axis} className="flex items-start gap-2">
+                <span className="font-mono font-bold text-primary w-16 flex-shrink-0">{row.axis}</span>
+                <span className="font-mono text-muted-foreground w-10 text-right flex-shrink-0">{row.value}</span>
+                <span className="flex-1 text-muted-foreground leading-snug">
+                  {row.meaning}
+                  {row.href && (
+                    <>
+                      {" "}
+                      <Link to={row.href} className="text-primary/80 hover:text-primary hover:underline">
+                        deep-dive →
+                      </Link>
+                    </>
+                  )}
+                </span>
+              </li>
+            ))}
+            {showCohort && overlay && (
+              <li className="flex items-start gap-2 pt-1 border-t border-border/30" data-testid="cohort-overlay-legend">
+                <span className="inline-block w-4 h-0 border-t-2 border-dashed border-slate-400 mt-2 flex-shrink-0" />
+                <span className="text-muted-foreground/80">
+                  Cohort median ({cohortScope === "family" && cwe ? `${cwe} family` : "platform-wide"}, last {cohort?.windowDays ?? 7}d, n={cohort?.totalReports ?? 0}).
+                </span>
+              </li>
+            )}
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1993,6 +2185,10 @@ export default function Results() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {vulnrap && vulnrap.engines && vulnrap.engines.length > 0 && (
+        <EngineRadarSection vulnrap={vulnrap} qualityScore={qualityScore} cwe={report.avriFamily ?? null} />
       )}
 
       {vulnrap && <ScoreHistoryTimeline reportId={report.id} />}

@@ -2636,12 +2636,49 @@ components:
               - min
               - max
               - count
+        engineMedians:
+          type: object
+          nullable: true
+          description: |
+            Median per-axis sub-scores across the same cohort, used by the
+            per-engine radar overlay on the results page. Each value is
+            0..100 and uses the same orientation as the on-page radar
+            (engine1 = AI Authorship raw score; the UI inverts it to plot
+            "humanness"). Null when totalReports is 0.
+          properties:
+            engine1:
+              type: integer
+              nullable: true
+              description: Median raw score for Engine 1 (AI Authorship Detector). Null if no rows in the cohort had this engine.
+            engine2:
+              type: integer
+              nullable: true
+              description: Median score for Engine 2 (Technical Substance Analyzer).
+            engine3:
+              type: integer
+              nullable: true
+              description: Median score for Engine 3 (CWE Coherence Checker).
+            avri:
+              type: integer
+              nullable: true
+              description: Median raw AVRI sub-score (from Engine 2's signalBreakdown.avri.rawAvriScore).
+            quality:
+              type: integer
+              nullable: true
+              description: Median structural quality_score for the cohort.
+          required:
+            - engine1
+            - engine2
+            - engine3
+            - avri
+            - quality
       required:
         - cwe
         - windowDays
         - totalReports
         - median
         - bins
+        - engineMedians
 
     CorpusStats:
       type: object

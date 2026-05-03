@@ -11624,6 +11624,39 @@ export const GetCohortBaselineResponse = zod
         }),
       )
       .describe("10-bucket histogram of composite scores in the cohort."),
+    engineMedians: zod
+      .object({
+        engine1: zod
+          .number()
+          .nullable()
+          .describe(
+            "Median raw score for Engine 1 (AI Authorship Detector). Null if no rows in the cohort had this engine.",
+          ),
+        engine2: zod
+          .number()
+          .nullable()
+          .describe(
+            "Median score for Engine 2 (Technical Substance Analyzer).",
+          ),
+        engine3: zod
+          .number()
+          .nullable()
+          .describe("Median score for Engine 3 (CWE Coherence Checker)."),
+        avri: zod
+          .number()
+          .nullable()
+          .describe(
+            "Median raw AVRI sub-score (from Engine 2's signalBreakdown.avri.rawAvriScore).",
+          ),
+        quality: zod
+          .number()
+          .nullable()
+          .describe("Median structural quality_score for the cohort."),
+      })
+      .nullable()
+      .describe(
+        'Median per-axis sub-scores across the same cohort, used by the\nper-engine radar overlay on the results page. Each value is\n0..100 and uses the same orientation as the on-page radar\n(engine1 = AI Authorship raw score; the UI inverts it to plot\n\"humanness\"). Null when totalReports is 0.\n',
+      ),
   })
   .describe(
     "Last-7d VulnRap composite-score distribution + median for a cohort,\nplus the optional CWE family used to scope the cohort. The 10\nhistogram bins partition the score range 0-100 into equal-width\n[min, max) intervals (the last bucket is inclusive of 100). Composite\nscore is the metric shown in the big number on the results page\nheader, so the percentile rank derived from these bins applies to\nthat displayed score.\n",

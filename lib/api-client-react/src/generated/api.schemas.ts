@@ -1432,6 +1432,27 @@ export type CohortBaselineBinsItem = {
 };
 
 /**
+ * Median per-axis sub-scores across the same cohort, used by the
+per-engine radar overlay on the results page. Each value is
+0..100 and uses the same orientation as the on-page radar
+(engine1 = AI Authorship raw score; the UI inverts it to plot
+"humanness"). Null when totalReports is 0.
+
+ */
+export type CohortBaselineEngineMedians = {
+  /** Median raw score for Engine 1 (AI Authorship Detector). Null if no rows in the cohort had this engine. */
+  engine1: number | null;
+  /** Median score for Engine 2 (Technical Substance Analyzer). */
+  engine2: number | null;
+  /** Median score for Engine 3 (CWE Coherence Checker). */
+  engine3: number | null;
+  /** Median raw AVRI sub-score (from Engine 2's signalBreakdown.avri.rawAvriScore). */
+  avri: number | null;
+  /** Median structural quality_score for the cohort. */
+  quality: number | null;
+} | null;
+
+/**
  * Last-7d VulnRap composite-score distribution + median for a cohort,
 plus the optional CWE family used to scope the cohort. The 10
 histogram bins partition the score range 0-100 into equal-width
@@ -1462,6 +1483,13 @@ platform cohort is returned instead.
   median: number | null;
   /** 10-bucket histogram of composite scores in the cohort. */
   bins: CohortBaselineBinsItem[];
+  /** Median per-axis sub-scores across the same cohort, used by the
+per-engine radar overlay on the results page. Each value is
+0..100 and uses the same orientation as the on-page radar
+(engine1 = AI Authorship raw score; the UI inverts it to plot
+"humanness"). Null when totalReports is 0.
+ */
+  engineMedians: CohortBaselineEngineMedians;
 }
 
 export type CorpusStatsTierBreakdownItem = {

@@ -55,6 +55,7 @@ export * from "./checkResultSectionHashes";
 export * from "./checkResultSensitivityProfile";
 export * from "./cohortBaseline";
 export * from "./cohortBaselineBinsItem";
+export * from "./cohortBaselineEngineMedians";
 export * from "./comparisonReportDetail";
 export * from "./comparisonReportDetailContentMode";
 export * from "./comparisonReportDetailSectionHashes";

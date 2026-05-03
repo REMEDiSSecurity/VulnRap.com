@@ -6,6 +6,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { CohortBaselineBinsItem } from "./cohortBaselineBinsItem";
+import type { CohortBaselineEngineMedians } from "./cohortBaselineEngineMedians";
 
 /**
  * Last-7d VulnRap composite-score distribution + median for a cohort,
@@ -38,4 +39,11 @@ platform cohort is returned instead.
   median: number | null;
   /** 10-bucket histogram of composite scores in the cohort. */
   bins: CohortBaselineBinsItem[];
+  /** Median per-axis sub-scores across the same cohort, used by the
+per-engine radar overlay on the results page. Each value is
+0..100 and uses the same orientation as the on-page radar
+(engine1 = AI Authorship raw score; the UI inverts it to plot
+"humanness"). Null when totalReports is 0.
+ */
+  engineMedians: CohortBaselineEngineMedians;
 }

@@ -154,12 +154,76 @@ router.get("/cohort/baseline", async (req, res): Promise<void> => {
   const totalReports = bins.reduce((acc, b) => acc + b.count, 0);
   const median = medianFromBins(bins);
 
+  // Per-axis medians for the per-engine radar overlay (task #623). Pulled
+  // from the cached `vulnrap_engine_results` JSONB array (which holds the
+  // exact { engine, score, signalBreakdown } payload the results page
+  // renders) plus the `quality_score` column. We do this in JS instead of
+  // SQL because the engines list is heterogeneous JSON and the AVRI
+  // sub-score is nested two levels deep — fine for a 7-day cohort which
+  // typically has well under 10k rows.
+  let engineMedians: {
+    engine1: number | null;
+    engine2: number | null;
+    engine3: number | null;
+    avri: number | null;
+    quality: number | null;
+  } | null = null;
+  if (totalReports > 0) {
+    const engineRows = await db
+      .select({
+        engineResults: reportsTable.vulnrapEngineResults,
+        qualityScore: reportsTable.qualityScore,
+      })
+      .from(reportsTable)
+      .where(and(...conditions));
+
+    const e1: number[] = [];
+    const e2: number[] = [];
+    const e3: number[] = [];
+    const avri: number[] = [];
+    const quality: number[] = [];
+    for (const row of engineRows) {
+      if (typeof row.qualityScore === "number") quality.push(row.qualityScore);
+      const engines = Array.isArray(row.engineResults)
+        ? (row.engineResults as Array<{
+            engine?: string;
+            score?: number;
+            signalBreakdown?: { avri?: { rawAvriScore?: number } };
+          }>)
+        : [];
+      for (const eng of engines) {
+        if (typeof eng?.score !== "number") continue;
+        if (eng.engine === "AI Authorship Detector") e1.push(eng.score);
+        else if (eng.engine === "Technical Substance Analyzer") {
+          e2.push(eng.score);
+          const raw = eng.signalBreakdown?.avri?.rawAvriScore;
+          if (typeof raw === "number") avri.push(raw);
+        } else if (eng.engine === "CWE Coherence Checker") e3.push(eng.score);
+      }
+    }
+    const median50 = (xs: number[]): number | null => {
+      if (xs.length === 0) return null;
+      const sorted = [...xs].sort((a, b) => a - b);
+      const mid = sorted.length >> 1;
+      const m = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+      return Math.round(m);
+    };
+    engineMedians = {
+      engine1: median50(e1),
+      engine2: median50(e2),
+      engine3: median50(e3),
+      avri: median50(avri),
+      quality: median50(quality),
+    };
+  }
+
   const response = GetCohortBaselineResponse.parse({
     cwe: cweFilter,
     windowDays: WINDOW_DAYS,
     totalReports,
     median,
     bins,
+    engineMedians,
   });
 
   // 1h cache per the task scope ("Live re-renders as new reports come in

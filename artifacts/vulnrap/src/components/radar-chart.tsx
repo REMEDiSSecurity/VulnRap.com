@@ -17,6 +17,12 @@ interface RadarChartProps {
   gradientStops?: string[];
   /** Accessible label for the chart. Defaults to a generic description. */
   ariaLabel?: string;
+  /** Optional overlay polygon (e.g. cohort median) drawn underneath the
+   *  primary polygon as a dashed muted ring. Must have the same number of
+   *  axes (in the same order) as `data`. */
+  overlayData?: RadarDataPoint[] | null;
+  /** Accessible label for the overlay polygon. */
+  overlayLabel?: string;
 }
 
 const DEFAULT_STOPS = ["#fbbf24", "#22d3ee", "#a78bfa"];
@@ -27,6 +33,8 @@ export function RadarChart({
   variant = "polished",
   gradientStops = DEFAULT_STOPS,
   ariaLabel,
+  overlayData = null,
+  overlayLabel,
 }: RadarChartProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const center = size / 2;
@@ -91,6 +99,16 @@ export function RadarChart({
   }, [n, center, radius, levels]);
 
   const dataPolygon = animatedPoints.map((p) => `${p.ax},${p.ay}`).join(" ");
+
+  const overlayPoints = useMemo(() => {
+    if (!overlayData || overlayData.length !== n) return null;
+    return overlayData.map((d, i) => {
+      const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+      const r = (d.value / d.max) * radius * progress;
+      return { x: center + r * Math.cos(angle), y: center + r * Math.sin(angle), ...d };
+    });
+  }, [overlayData, n, center, radius, progress]);
+  const overlayPolygon = overlayPoints ? overlayPoints.map((p) => `${p.x},${p.y}`).join(" ") : null;
 
   const valueColor = (val: number, max: number) => {
     const pct = val / max;
@@ -187,6 +205,20 @@ export function RadarChart({
           style={{ opacity: Math.min(1, progress * 2) }}
         />
       ))}
+
+      {overlayPolygon && (
+        <polygon
+          points={overlayPolygon}
+          fill="rgba(148, 163, 184, 0.08)"
+          stroke="rgba(148, 163, 184, 0.55)"
+          strokeWidth={1.25}
+          strokeDasharray="4 3"
+          strokeLinejoin="round"
+          style={{ opacity: progress }}
+        >
+          <title>{overlayLabel ?? "Overlay"}</title>
+        </polygon>
+      )}
 
       <polygon
         points={dataPolygon}
