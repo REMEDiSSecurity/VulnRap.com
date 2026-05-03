@@ -158,6 +158,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /version:
+    get:
+      operationId: getVersion
+      tags: [health]
+      summary: Build / version info
+      description: |
+        Returns the running build's project version, git SHA, OpenAPI
+        spec version, and build timestamp. Self-hosters and hosted-instance
+        users can use this to confirm exactly which build they are talking
+        to. Stable, public, no authentication required.
+      responses:
+        "200":
+          description: Version info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionInfo"
+
   /reports:
     post:
       operationId: submitReport
@@ -2299,6 +2317,36 @@ components:
           type: string
       required:
         - status
+
+    VersionInfo:
+      type: object
+      description: |
+        Version metadata for the running build. `project` is the human
+        product name, `projectVersion` is the SemVer of the running
+        build (matches the root `package.json#version`), `gitSha` is
+        the git commit the build was cut from (or `"dev"` for an
+        un-tagged local build), `specVersion` is the SemVer of the
+        OpenAPI contract this server is serving (matches
+        `lib/api-spec/openapi.yaml#info.version`), and `builtAt` is
+        an ISO-8601 timestamp of when the build was produced.
+      properties:
+        project:
+          type: string
+        projectVersion:
+          type: string
+        gitSha:
+          type: string
+        specVersion:
+          type: string
+        builtAt:
+          type: string
+          format: date-time
+      required:
+        - project
+        - projectVersion
+        - gitSha
+        - specVersion
+        - builtAt
 
     ErrorResponse:
       type: object

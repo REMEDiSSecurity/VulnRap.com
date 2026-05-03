@@ -64,6 +64,41 @@ If you find a security vulnerability in VulnRap itself, please report it respons
 
 For bugs and feature requests, open a GitHub issue with steps to reproduce.
 
+## Changelog entries
+
+Every PR that ships a user-visible change (new feature, bug fix,
+deprecation, removal, security fix) MUST add an entry to the
+`## [Unreleased]` section at the top of [`CHANGELOG.md`](CHANGELOG.md)
+under one of the standard
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) headings:
+**Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
+**Security**. Internal-only refactors and test-only changes don't
+need an entry.
+
+The release script (`scripts/release.mjs`) promotes the
+`## [Unreleased]` section into a dated `## [<version>] - <date>`
+heading on every cut, so the unreleased buffer becomes the
+historical record. See [`docs/versioning.md`](docs/versioning.md)
+for the full release process and the SemVer scheme used for the
+project and the OpenAPI spec.
+
+## Releasing
+
+Maintainers cut releases via:
+
+```bash
+node scripts/release.mjs <next-version>
+```
+
+The script enforces a clean tree, runs typecheck + tests + build,
+diffs the OpenAPI spec against the previous release tag for
+breaking changes, promotes the changelog, and bumps
+`package.json#version`. It then prints the manual `git tag` /
+`git push` commands. Pushing the `v<version>` tag triggers
+`.github/workflows/release.yml` (Docker image + release notes from
+the changelog slice) and `.github/workflows/release-sbom.yml`
+(CycloneDX SBOM attached to the release).
+
 ## Code Style
 
 - TypeScript throughout

@@ -12,7 +12,9 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/yamljs": "^0.2.34",
     "openapi-to-postmanv2": "^6.0.1",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "yamljs": "^0.3.0"
   }
 }

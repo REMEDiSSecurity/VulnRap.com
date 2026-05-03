@@ -1,8 +1,8 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
-import { rm, copyFile } from "node:fs/promises";
+import { spawn, spawnSync } from "node:child_process";
+import { readFile, rm, copyFile } from "node:fs/promises";
 import { build as esbuild, context as esbuildContext } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
 
@@ -95,9 +95,51 @@ function makeRestartPlugin() {
   };
 }
 
+async function readBuildInfo() {
+  const rootPkgPath = path.resolve(artifactDir, "..", "..", "package.json");
+  const specPath = path.resolve(artifactDir, "..", "..", "lib", "api-spec", "openapi.yaml");
+
+  let projectVersion = "0.0.0-dev";
+  try {
+    const pkg = JSON.parse(await readFile(rootPkgPath, "utf8"));
+    if (typeof pkg.version === "string" && pkg.version.length > 0) {
+      projectVersion = pkg.version;
+    }
+  } catch {}
+
+  let specVersion = "0.0.0-dev";
+  try {
+    const yaml = await readFile(specPath, "utf8");
+    const m = yaml.match(/^\s*version:\s*([^\s#]+)/m);
+    if (m) specVersion = m[1].replace(/^['"]|['"]$/g, "");
+  } catch {}
+
+  // Allow CI / release script to pass a precomputed sha; otherwise derive
+  // from the working tree. Falls back to "dev" so an installable tarball
+  // outside a git checkout still builds.
+  let gitSha = process.env.VULNRAP_GIT_SHA ?? "";
+  if (!gitSha) {
+    try {
+      const r = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], {
+        encoding: "utf8",
+      });
+      if (r.status === 0) gitSha = r.stdout.trim();
+    } catch {}
+  }
+  if (!gitSha) gitSha = "dev";
+
+  const builtAt = process.env.VULNRAP_BUILT_AT ?? new Date().toISOString();
+  return { projectVersion, specVersion, gitSha, builtAt };
+}
+
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
+
+  const buildInfo = await readBuildInfo();
+  console.log(
+    `[build-info] projectVersion=${buildInfo.projectVersion} specVersion=${buildInfo.specVersion} gitSha=${buildInfo.gitSha} builtAt=${buildInfo.builtAt}`,
+  );
 
   const entryPoints = watchMode
     ? [path.resolve(artifactDir, "src/index.ts")]
@@ -204,6 +246,12 @@ async function buildAll() {
       "electron",
     ],
     sourcemap: "linked",
+    define: {
+      "process.env.VULNRAP_PROJECT_VERSION": JSON.stringify(buildInfo.projectVersion),
+      "process.env.VULNRAP_SPEC_VERSION": JSON.stringify(buildInfo.specVersion),
+      "process.env.VULNRAP_GIT_SHA": JSON.stringify(buildInfo.gitSha),
+      "process.env.VULNRAP_BUILT_AT": JSON.stringify(buildInfo.builtAt),
+    },
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
       esbuildPluginPino({ transports: ["pino-pretty"] }),

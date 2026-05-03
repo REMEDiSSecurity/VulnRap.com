@@ -78,6 +78,26 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * Returns the running build's project version, git SHA, OpenAPI
+spec version, and build timestamp. Self-hosters and hosted-instance
+users can use this to confirm exactly which build they are talking
+to. Stable, public, no authentication required.
+
+ * @summary Build / version info
+ */
+export const GetVersionResponse = zod
+  .object({
+    project: zod.string(),
+    projectVersion: zod.string(),
+    gitSha: zod.string(),
+    specVersion: zod.string(),
+    builtAt: zod.coerce.date(),
+  })
+  .describe(
+    'Version metadata for the running build. `project` is the human\nproduct name, `projectVersion` is the SemVer of the running\nbuild (matches the root `package.json#version`), `gitSha` is\nthe git commit the build was cut from (or `\"dev\"` for an\nun-tagged local build), `specVersion` is the SemVer of the\nOpenAPI contract this server is serving (matches\n`lib\/api-spec\/openapi.yaml#info.version`), and `builtAt` is\nan ISO-8601 timestamp of when the build was produced.\n',
+  );
+
+/**
  * Upload a vulnerability report file for similarity checking and sloppiness scoring
  * @summary Submit a vulnerability report for analysis
  */

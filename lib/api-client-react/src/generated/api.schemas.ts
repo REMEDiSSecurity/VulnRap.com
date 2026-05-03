@@ -57,6 +57,25 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * Version metadata for the running build. `project` is the human
+product name, `projectVersion` is the SemVer of the running
+build (matches the root `package.json#version`), `gitSha` is
+the git commit the build was cut from (or `"dev"` for an
+un-tagged local build), `specVersion` is the SemVer of the
+OpenAPI contract this server is serving (matches
+`lib/api-spec/openapi.yaml#info.version`), and `builtAt` is
+an ISO-8601 timestamp of when the build was produced.
+
+ */
+export interface VersionInfo {
+  project: string;
+  projectVersion: string;
+  gitSha: string;
+  specVersion: string;
+  builtAt: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }

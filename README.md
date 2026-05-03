@@ -196,6 +196,19 @@ Full interactive API docs: [vulnrap.com/api/docs](https://vulnrap.com/api/docs) 
 | `GET`    | `/api/stats`                        | Platform-wide statistics                |
 | `POST`   | `/api/feedback`                     | Submit user feedback                    |
 | `GET`    | `/api/healthz`                      | Health check                            |
+| `GET`    | `/api/version`                      | Build info: project version, git SHA, OpenAPI spec version, build timestamp |
+
+### Public API stability
+
+All `/api/...` endpoints listed above are **stable**: breaking
+changes require a major bump of the OpenAPI spec's `info.version`
+(`lib/api-spec/openapi.yaml`). Reviewer-only routes
+(`/api/internal/*`, `/api/calibration/*`, `/api/audit-log/*`,
+`/api/webhooks/*`, `/api/test/*`) and a small number of
+experimental routes are explicitly NOT covered by the stability
+contract — see [`docs/versioning.md`](docs/versioning.md) for the
+full list, the deprecation policy (n - 1 minor versions of
+overlap on any stable endpoint), and the release process.
 
 ## Pages
 

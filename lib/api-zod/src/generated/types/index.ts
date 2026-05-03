@@ -310,6 +310,7 @@ export * from "./verificationCheckResult";
 export * from "./verificationCheckSource";
 export * from "./verificationMode";
 export * from "./verificationSummary";
+export * from "./versionInfo";
 export * from "./visitorStats";
 export * from "./visitRecorded";
 export * from "./vulnrapComposite";

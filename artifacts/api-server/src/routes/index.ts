@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import versionRouter from "./version";
 import reportsRouter from "./reports";
 import feedbackRouter from "./feedback";
 import calibrationRouter from "./calibration";
@@ -26,6 +27,7 @@ import testYourselfRouter from "./test-yourself";
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(versionRouter);
 router.use(reportsRouter);
 router.use(feedbackRouter);
 router.use(calibrationRouter);

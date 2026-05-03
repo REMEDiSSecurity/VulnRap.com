@@ -1,0 +1,211 @@
+name: Release
+
+# Triggered by `v*` tag pushes (the release script
+# `scripts/release.mjs` prints the matching `git tag` / `git push`
+# commands at the end of a release run; see docs/versioning.md).
+#
+# Responsibilities (Task #728):
+#   1. Reconfirm typecheck + tests + build on the tagged commit.
+#   2. Run the OpenAPI breaking-change diff against the previous
+#      release tag using oasdiff (the JS detector under
+#      scripts/openapi-breaking-diff.mjs is the local fallback).
+#   3. Build the Docker image (handed off to the Dockerization task)
+#      and push it to the registry. The image tag mirrors the git tag.
+#   4. Draft / update the GitHub Release for this tag, with the
+#      matching CHANGELOG.md slice rendered as the release body.
+#
+# The companion `.github/workflows/release-sbom.yml` runs on the same
+# `v*` trigger and attaches the CycloneDX SBOM as a release asset.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build the release for, e.g. v3.9.0"
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  validate:
+    name: typecheck / tests / build / openapi-diff
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vulnrap
+          POSTGRES_PASSWORD: vulnrap
+          POSTGRES_DB: vulnrap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vulnrap"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://vulnrap:vulnrap@localhost:5432/vulnrap_test
+    steps:
+      - name: Checkout (full history for tag diffs)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Tests
+        run: pnpm run test
+
+      - name: Build
+        run: pnpm run build
+
+      # oasdiff is the canonical OpenAPI breaking-change detector. We
+      # diff the spec at this tag against the previous v* tag's spec.
+      # First release on a fresh repo (no previous v* tag) skips this
+      # step. The local JS fallback (scripts/openapi-breaking-diff.mjs)
+      # is also invoked as a belt-and-braces check.
+      - name: Resolve previous release tag
+        id: prev
+        run: |
+          set -euo pipefail
+          CUR_TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          PREV_TAG="$(git tag --list 'v*' --sort=-v:refname | grep -v "^${CUR_TAG}$" | head -n1 || true)"
+          echo "prev_tag=${PREV_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Previous release tag: ${PREV_TAG:-<none>}"
+
+      - name: Install oasdiff
+        if: steps.prev.outputs.prev_tag != ''
+        run: |
+          set -euo pipefail
+          curl -sSL https://raw.githubusercontent.com/Tufin/oasdiff/main/install.sh | sh
+
+      - name: OpenAPI breaking-change diff (oasdiff)
+        if: steps.prev.outputs.prev_tag != ''
+        run: |
+          set -euo pipefail
+          PREV_TAG='${{ steps.prev.outputs.prev_tag }}'
+          git show "${PREV_TAG}:lib/api-spec/openapi.yaml" > /tmp/openapi.previous.yaml
+          oasdiff breaking /tmp/openapi.previous.yaml lib/api-spec/openapi.yaml --fail-on ERR
+
+      - name: OpenAPI breaking-change diff (JS fallback)
+        if: steps.prev.outputs.prev_tag != ''
+        run: |
+          set -euo pipefail
+          PREV_TAG='${{ steps.prev.outputs.prev_tag }}'
+          git show "${PREV_TAG}:lib/api-spec/openapi.yaml" > /tmp/openapi.previous.yaml
+          node scripts/openapi-breaking-diff.mjs /tmp/openapi.previous.yaml lib/api-spec/openapi.yaml
+
+  docker:
+    name: Build and push Docker image
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # The Dockerization task owns the image definition (Dockerfile at
+      # repo root). We build + tag it here using the release tag so the
+      # release artefacts are pinned together. The image is also
+      # available locally via `docker compose up` per
+      # docs/self-hosting.md.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tags
+        id: tags
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          REPO_LC="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${REPO_LC}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "git_sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Pinning multiple tags so consumers can target either the
+          # exact tag or the floating major / minor.
+          tags: |
+            ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version }}
+            ${{ steps.tags.outputs.image }}:latest
+          build-args: |
+            VULNRAP_PROJECT_VERSION=${{ steps.tags.outputs.version }}
+            VULNRAP_GIT_SHA=${{ steps.tags.outputs.git_sha }}
+            VULNRAP_BUILT_AT=${{ github.event.repository.updated_at }}
+
+  release-notes:
+    name: Draft GitHub Release with CHANGELOG slice
+    needs: [validate, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Extract CHANGELOG slice for this tag
+        id: slice
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          # Pull lines between `## [<version>]` and the next `## [` heading.
+          awk -v v="${VERSION}" '
+            $0 ~ "^## \\[" v "\\]" { capture=1; print; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' CHANGELOG.md > /tmp/release-body.md
+          if [ ! -s /tmp/release-body.md ]; then
+            echo "No CHANGELOG entry found for ${VERSION}; falling back to a stub." >&2
+            printf '## %s\n\nSee [CHANGELOG.md](CHANGELOG.md) for details.\n' "${VERSION}" > /tmp/release-body.md
+          fi
+          echo "body_path=/tmp/release-body.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          body_path: ${{ steps.slice.outputs.body_path }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
