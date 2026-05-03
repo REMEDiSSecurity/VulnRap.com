@@ -1,0 +1,19 @@
+{
+  "name": "vulnrap-slack-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reference Slack bot for VulnRap.com — exposes /vulnrap <report-id> in your workspace.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.21.4",
+    "dotenv": "^16.4.5"
+  },
+  "license": "Apache-2.0"
+}

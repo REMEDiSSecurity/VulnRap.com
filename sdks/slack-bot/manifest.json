@@ -1,0 +1,43 @@
+{
+  "_metadata": {
+    "major_version": 1,
+    "minor_version": 1
+  },
+  "display_information": {
+    "name": "VulnRap",
+    "description": "Look up VulnRap scores for vulnerability reports without leaving Slack.",
+    "background_color": "#0b1020",
+    "long_description": "VulnRap is a free, open service that scores vulnerability reports for AI-generated 'slop', similarity duplication, and overall technical substance. This bot exposes a single slash command — /vulnrap <report-id> — that pulls the score for a report (e.g. 1234 from vulnrap.com/results/1234) and posts an in-channel card with the composite score, tier, top fired evidence signals, and a link to the full results page. The bot uses Socket Mode, so it does not need a public HTTPS endpoint."
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "VulnRap",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/vulnrap",
+        "description": "Look up a VulnRap score for a vulnerability report ID.",
+        "usage_hint": "<report-id>",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "commands",
+        "chat:write",
+        "chat:write.public"
+      ]
+    }
+  },
+  "settings": {
+    "interactivity": {
+      "is_enabled": true
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}
