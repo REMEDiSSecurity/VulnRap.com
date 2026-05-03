@@ -6,6 +6,7 @@ import {
   EmbedBuilder,
   MessageFlags,
 } from "discord.js";
+import { parseReportId } from "./parse-report-id.js";
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const API_BASE = (
@@ -36,18 +37,6 @@ function colorForTier(tier) {
     .toUpperCase()
     .replace(/[^A-Z_]/g, "_");
   return TIER_COLORS[key] ?? 0x6366f1;
-}
-
-function parseReportId(raw) {
-  const value = String(raw ?? "").trim();
-  if (!value) return null;
-  // Accept numeric id, "VR-000B", "#1234", "1234"
-  const stripped = value.replace(/^#/, "").replace(/^VR[-_]?/i, "");
-  // If it's all digits, treat as numeric id; otherwise pass through (server resolves codes via lookup endpoints).
-  if (/^\d+$/.test(stripped)) return stripped;
-  // For codes like "000B" or "VR-000B" we still pass the original to API; but verify endpoint expects integer id.
-  // Return null for non-numeric so caller can show a friendly error.
-  return null;
 }
 
 async function fetchJson(url) {
@@ -206,8 +195,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!reportId) {
     await interaction.reply({
       content:
-        `\`${raw}\` does not look like a numeric report id. ` +
-        `Try the number from the URL, e.g. \`/vulnrap-score 1234\`.`,
+        `\`${raw}\` does not look like a VulnRap report reference. ` +
+        `Try the numeric id from the URL (\`/vulnrap-score 1234\`) ` +
+        `or the human-readable code (\`/vulnrap-score VR-000B\`).`,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -221,7 +211,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   } catch (err) {
     const msg =
       err.status === 404
-        ? `No report found for id \`${reportId}\`.`
+        ? `No report found for \`${raw}\`.`
         : `Could not reach VulnRap API: ${err.message}`;
     await interaction.editReply({ content: msg });
   }

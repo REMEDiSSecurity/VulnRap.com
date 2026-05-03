@@ -7,7 +7,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "register": "node deploy-commands.js"
+    "register": "node deploy-commands.js",
+    "test": "node parse-report-id.test.js"
   },
   "engines": {
     "node": ">=18.17.0"

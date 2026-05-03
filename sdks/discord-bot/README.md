@@ -6,7 +6,9 @@ This is a **recipe**, not a hosted service — you create the Discord applicatio
 
 ## What you get
 
-- `/vulnrap-score <id>` — looks the report up via `GET /api/reports/:id` and replies with an embed showing the slop score, tier, similarity match count, section-reuse count, the **top fired signals** (up to 3, ranked by weight), and a link to open the full report on vulnrap.com. If the full-report fetch fails, the bot falls back to the lighter `GET /api/reports/:id/verify` badge so the command still produces a useful embed (without the top-signals field).
+- `/vulnrap-score <id>` — looks the report up via `GET /api/reports/:id` and replies with an embed showing the slop score, tier, similarity match count, section-reuse count, the **top fired signals** (up to 3, ranked by weight), and a link to open the full report on vulnrap.com. If the full-report fetch fails, the bot falls back to the lighter `GET /api/reports/:id/verify` badge so the command still produces a useful embed (without the top-signals field). Accepts either the numeric id from the URL (`1234`) or the human-readable report code (`VR-000B`, or the bare hex `000B` / `0010`) — the bot decodes the hex code locally to the underlying id before calling the API, so no extra round-trip is needed.
+
+  Bare inputs are interpreted as a report code when they contain a hex letter (`abcd`) or a leading zero (`0010`), and otherwise as a decimal id. A bare 4-digit input with no leading zero (e.g. `1234`) is therefore always treated as a decimal URL id; if you specifically need that range as a report code, prefix it with `VR-` (`VR-1234`).
 
 The embed color shifts from green (clean / likely human) through amber to red (slop), so you can eyeball severity at a glance. The "Top signals" field surfaces the highest-weight evidence items the engine fired (e.g. `ai_phrase`, `placeholder_url`, `severity_inflation`) so reviewers can triage in-channel without clicking through.
 
@@ -59,7 +61,7 @@ npm run register   # publishes /vulnrap-score to Discord
 npm start          # logs the bot in and starts handling interactions
 ```
 
-You should see `Logged in as VulnRap#1234` in the console. In your server, type `/vulnrap-score 1234` (or whatever report id you want to look up) and you'll get an embed back.
+You should see `Logged in as VulnRap#1234` in the console. In your server, type `/vulnrap-score 1234` (the numeric id from the report URL) or `/vulnrap-score VR-000B` (the human-readable code shown on the report page) and you'll get an embed back.
 
 ## 5. (Optional) Deploy
 
@@ -75,11 +77,23 @@ Whatever you pick, set the env vars on the host and make sure the process can st
 
 - **"Missing Access" or no command appears.** Re-invite the bot with the `applications.commands` scope, or set `DISCORD_GUILD_ID` and re-run `npm run register` — global registration can take up to an hour.
 - **Embed shows "Could not reach VulnRap API".** Confirm `VULNRAP_API_BASE` is reachable from the host (`curl $VULNRAP_API_BASE/healthz`).
-- **"does not look like a numeric report id".** The `/verify` endpoint takes the integer id from the URL (the `1234` in `vulnrap.com/results/1234`), not the human-readable `VR-000B` code.
+- **"does not look like a VulnRap report reference".** The argument must be either the numeric id from the URL (`1234` in `vulnrap.com/results/1234`) or the report code shown on the page (`VR-000B`, or the bare hex `000B` / `0010`). Anything else — search terms, full URLs, prose — is rejected. If your bare input is all decimal digits with no leading zero, the bot reads it as a decimal id; prefix it with `VR-` to force the report-code interpretation.
+
+## Tests
+
+```bash
+npm test   # runs sdks/discord-bot/parse-report-id.test.js
+```
+
+The test suite covers the input parser (decimal ids, prefixed `VR-XXXX`
+codes, bare hex codes including the numeric-only `0010` form, and the
+junk-input rejection paths).
 
 ## Files
 
 - `index.js` — bot runtime: logs in, handles `/vulnrap-score` interactions, builds the embed.
+- `parse-report-id.js` — input parser that resolves `1234`, `VR-000B`, and bare hex codes (`000B`, `0010`) to the underlying numeric report id.
+- `parse-report-id.test.js` — node-only assertions for the parser.
 - `commands.js` — slash command schema (shared by the runtime and the registration script).
 - `deploy-commands.js` — one-shot script that publishes the slash command to Discord.
 - `package.json` — `discord.js` + `dotenv`, plus `start` / `register` scripts.
