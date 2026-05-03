@@ -1703,6 +1703,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/CohortBaseline"
 
+  /public/cwe-catalog:
+    get:
+      operationId: getCweCatalog
+      tags: [public]
+      summary: Public CWE family catalog the engine recognizes
+      description: |
+        Task #663 — Returns every CWE the scoring engine has a fingerprint
+        for, grouped by AVRI rubric family (INJECTION, MEMORY_CORRUPTION,
+        ...). Each entry carries the CWE id, friendly name, family, alias
+        list, expected vocabulary the engine looks for, MITRE link, a short
+        "what a high-quality report for this class looks like" summary
+        derived from the family rubric, the historical rejection-rate
+        multiplier, per-CWE usage stats (count + average composite score
+        across the corpus, computed from the soft-citation `inferredCwe`
+        on `vulnrap_engine_results`), and a deep link into the reports
+        feed filtered to that family.
+      responses:
+        "200":
+          description: CWE catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CweCatalogResponse"
+
   /public/corpus-stats:
     get:
       operationId: getCorpusStats
@@ -3183,6 +3207,108 @@ components:
         - topSignals
         - topCweFamilies
         - volumeTimeSeries
+
+    CweCatalogEntry:
+      type: object
+      description: Single CWE entry in the public catalog (Task #663).
+      properties:
+        cweId:
+          type: string
+          description: Canonical CWE identifier (e.g. "CWE-79").
+        name:
+          type: string
+          description: Friendly name (e.g. "Cross-Site Scripting (XSS)").
+        family:
+          type: string
+          description: AVRI rubric family id this CWE belongs to (INJECTION, MEMORY_CORRUPTION, ...). FLAT for unclassified.
+        familyName:
+          type: string
+          description: Human-readable family name (matches the AVRI rubric displayName).
+        aliases:
+          type: array
+          description: Alternate phrasings the engine recognizes for this CWE.
+          items:
+            type: string
+        expectedTerms:
+          type: array
+          description: Vocabulary the engine expects to see in a high-quality report for this CWE.
+          items:
+            type: string
+        mitreUrl:
+          type: string
+          description: Link to the canonical MITRE CWE definition page.
+        highQualityReport:
+          type: string
+          description: Short narrative — what makes a report for this CWE score well, derived from the family rubric.
+        reproductionExpectation:
+          type: string
+          description: Reproduction expectation inherited from the AVRI family rubric.
+        rejectionRate:
+          type: number
+          description: Historical rejection-rate multiplier from the fingerprint library (HIGH_REJECTION_CWES override when present).
+        reportCount:
+          type: integer
+          description: Number of corpus reports where the engine inferred this CWE via soft-citation.
+        avgCompositeScore:
+          type: number
+          nullable: true
+          description: Average vulnrap_composite_score across reports where this CWE was inferred. Null when there are no such reports.
+        reportsLink:
+          type: string
+          description: Deep link into the public reports feed pre-filtered to this CWE's family.
+      required:
+        - cweId
+        - name
+        - family
+        - familyName
+        - aliases
+        - expectedTerms
+        - mitreUrl
+        - highQualityReport
+        - reproductionExpectation
+        - rejectionRate
+        - reportCount
+        - avgCompositeScore
+        - reportsLink
+
+    CweCatalogFamily:
+      type: object
+      description: Group of CWEs that belong to a single AVRI rubric family.
+      properties:
+        family:
+          type: string
+        familyName:
+          type: string
+        reproductionExpectation:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CweCatalogEntry"
+      required:
+        - family
+        - familyName
+        - reproductionExpectation
+        - entries
+
+    CweCatalogResponse:
+      type: object
+      description: Public CWE catalog response (Task #663).
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        totalCwes:
+          type: integer
+          description: Total number of CWE fingerprints the engine has shipped.
+        families:
+          type: array
+          items:
+            $ref: "#/components/schemas/CweCatalogFamily"
+      required:
+        - generatedAt
+        - totalCwes
+        - families
 
     SlopDistribution:
       type: object

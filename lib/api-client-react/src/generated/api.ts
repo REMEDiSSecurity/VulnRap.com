@@ -33,6 +33,7 @@ import type {
   CheckResult,
   CohortBaseline,
   CorpusStats,
+  CweCatalogResponse,
   DeleteReportBody,
   DeleteReportResponse,
   ErrorResponse,
@@ -4807,6 +4808,92 @@ export function useGetCohortBaseline<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetCohortBaselineQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #663 — Returns every CWE the scoring engine has a fingerprint
+for, grouped by AVRI rubric family (INJECTION, MEMORY_CORRUPTION,
+...). Each entry carries the CWE id, friendly name, family, alias
+list, expected vocabulary the engine looks for, MITRE link, a short
+"what a high-quality report for this class looks like" summary
+derived from the family rubric, the historical rejection-rate
+multiplier, per-CWE usage stats (count + average composite score
+across the corpus, computed from the soft-citation `inferredCwe`
+on `vulnrap_engine_results`), and a deep link into the reports
+feed filtered to that family.
+
+ * @summary Public CWE family catalog the engine recognizes
+ */
+export const getGetCweCatalogUrl = () => {
+  return `/api/public/cwe-catalog`;
+};
+
+export const getCweCatalog = async (
+  options?: RequestInit,
+): Promise<CweCatalogResponse> => {
+  return customFetch<CweCatalogResponse>(getGetCweCatalogUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCweCatalogQueryKey = () => {
+  return [`/api/public/cwe-catalog`] as const;
+};
+
+export const getGetCweCatalogQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCweCatalog>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCweCatalog>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCweCatalogQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCweCatalog>>> = ({
+    signal,
+  }) => getCweCatalog({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCweCatalog>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCweCatalogQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCweCatalog>>
+>;
+export type GetCweCatalogQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Public CWE family catalog the engine recognizes
+ */
+
+export function useGetCweCatalog<
+  TData = Awaited<ReturnType<typeof getCweCatalog>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCweCatalog>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCweCatalogQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

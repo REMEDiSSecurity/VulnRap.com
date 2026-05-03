@@ -12077,6 +12077,106 @@ export const GetCohortBaselineResponse = zod
   );
 
 /**
+ * Task #663 — Returns every CWE the scoring engine has a fingerprint
+for, grouped by AVRI rubric family (INJECTION, MEMORY_CORRUPTION,
+...). Each entry carries the CWE id, friendly name, family, alias
+list, expected vocabulary the engine looks for, MITRE link, a short
+"what a high-quality report for this class looks like" summary
+derived from the family rubric, the historical rejection-rate
+multiplier, per-CWE usage stats (count + average composite score
+across the corpus, computed from the soft-citation `inferredCwe`
+on `vulnrap_engine_results`), and a deep link into the reports
+feed filtered to that family.
+
+ * @summary Public CWE family catalog the engine recognizes
+ */
+export const GetCweCatalogResponse = zod
+  .object({
+    generatedAt: zod.coerce.date(),
+    totalCwes: zod
+      .number()
+      .describe("Total number of CWE fingerprints the engine has shipped."),
+    families: zod.array(
+      zod
+        .object({
+          family: zod.string(),
+          familyName: zod.string(),
+          reproductionExpectation: zod.string(),
+          entries: zod.array(
+            zod
+              .object({
+                cweId: zod
+                  .string()
+                  .describe('Canonical CWE identifier (e.g. \"CWE-79\").'),
+                name: zod
+                  .string()
+                  .describe(
+                    'Friendly name (e.g. \"Cross-Site Scripting (XSS)\").',
+                  ),
+                family: zod
+                  .string()
+                  .describe(
+                    "AVRI rubric family id this CWE belongs to (INJECTION, MEMORY_CORRUPTION, ...). FLAT for unclassified.",
+                  ),
+                familyName: zod
+                  .string()
+                  .describe(
+                    "Human-readable family name (matches the AVRI rubric displayName).",
+                  ),
+                aliases: zod
+                  .array(zod.string())
+                  .describe(
+                    "Alternate phrasings the engine recognizes for this CWE.",
+                  ),
+                expectedTerms: zod
+                  .array(zod.string())
+                  .describe(
+                    "Vocabulary the engine expects to see in a high-quality report for this CWE.",
+                  ),
+                mitreUrl: zod
+                  .string()
+                  .describe("Link to the canonical MITRE CWE definition page."),
+                highQualityReport: zod
+                  .string()
+                  .describe(
+                    "Short narrative — what makes a report for this CWE score well, derived from the family rubric.",
+                  ),
+                reproductionExpectation: zod
+                  .string()
+                  .describe(
+                    "Reproduction expectation inherited from the AVRI family rubric.",
+                  ),
+                rejectionRate: zod
+                  .number()
+                  .describe(
+                    "Historical rejection-rate multiplier from the fingerprint library (HIGH_REJECTION_CWES override when present).",
+                  ),
+                reportCount: zod
+                  .number()
+                  .describe(
+                    "Number of corpus reports where the engine inferred this CWE via soft-citation.",
+                  ),
+                avgCompositeScore: zod
+                  .number()
+                  .nullable()
+                  .describe(
+                    "Average vulnrap_composite_score across reports where this CWE was inferred. Null when there are no such reports.",
+                  ),
+                reportsLink: zod
+                  .string()
+                  .describe(
+                    "Deep link into the public reports feed pre-filtered to this CWE's family.",
+                  ),
+              })
+              .describe("Single CWE entry in the public catalog (Task"),
+          ),
+        })
+        .describe("Group of CWEs that belong to a single AVRI rubric family."),
+    ),
+  })
+  .describe("Public CWE catalog response (Task");
+
+/**
  * Returns at-a-glance aggregates over the platform's full scoring corpus —
 total reports, breakdown by tier, top 10 most-fired evidence signals,
 top 10 CWE families, and a daily volume time series. All values are

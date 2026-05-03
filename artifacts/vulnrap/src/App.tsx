@@ -54,6 +54,7 @@ const RedactionExamples = lazyRetry(() => import("@/pages/redaction-examples"));
 const GoodReport = lazyRetry(() => import("@/pages/good-report"));
 const Whitepaper = lazyRetry(() => import("@/pages/whitepaper"));
 const HowItWorks = lazyRetry(() => import("@/pages/how-it-works"));
+const CwePage = lazyRetry(() => import("@/pages/cwe"));
 const AccessibilityPage = lazyRetry(() => import("@/pages/accessibility"));
 const Quickstart = lazyRetry(() => import("@/pages/quickstart"));
 const Playground = lazyRetry(() => import("@/pages/playground"));
@@ -110,6 +111,7 @@ function AppRoutes() {
             <Route path="/docs/good-report" element={<GoodReport />} />
             <Route path="/whitepaper" element={<Whitepaper />} />
             <Route path="/how-it-works" element={<HowItWorks />} />
+            <Route path="/cwe" element={<CwePage />} />
             <Route path="/accessibility" element={<AccessibilityPage />} />
             <Route path="/quickstart" element={<Quickstart />} />
             <Route path="/playground" element={<Playground />} />
