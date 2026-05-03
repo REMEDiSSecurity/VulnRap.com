@@ -1455,6 +1455,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/CorpusStats"
 
+  /public/latency-snapshot:
+    get:
+      operationId: getLatencySnapshot
+      tags: [stats]
+      summary: Get 24h scoring latency snapshot
+      description: |
+        Public p50/p95/p99 latency for the end-to-end scoring pipeline plus a
+        per-engine breakdown, computed from the last 24h of analysis_traces.
+        Returns the histogram bins for the full pipeline and each engine, the
+        percentile values, and an optional worst-engine call-out when one
+        engine is dragging the tail (its p95 is more than 1.5x the median
+        engine p95 and contributes >25% of pipeline p95).
+      responses:
+        "200":
+          description: Latency snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LatencySnapshot"
+
   /stats/trends:
     get:
       operationId: getTrends
@@ -5791,6 +5811,86 @@ components:
         agreementRate:
           type: integer
       required: [date, count, avgRating, agreementRate]
+
+    LatencyHistogramBin:
+      type: object
+      properties:
+        ltMs:
+          type: integer
+          description: Upper bound (exclusive) of this bin in milliseconds. The last bin is open-ended (count of samples >= the previous bin's ltMs); ltMs is set to its lower bound for charting.
+        count:
+          type: integer
+      required: [ltMs, count]
+
+    LatencyPercentiles:
+      type: object
+      properties:
+        p50:
+          type: number
+        p95:
+          type: number
+        p99:
+          type: number
+        sampleCount:
+          type: integer
+      required: [p50, p95, p99, sampleCount]
+
+    LatencyEngineEntry:
+      type: object
+      properties:
+        engine:
+          type: string
+        percentiles:
+          $ref: "#/components/schemas/LatencyPercentiles"
+        bins:
+          type: array
+          items:
+            $ref: "#/components/schemas/LatencyHistogramBin"
+      required: [engine, percentiles, bins]
+
+    LatencyWorstEngine:
+      type: object
+      properties:
+        engine:
+          type: string
+        p95:
+          type: number
+        pipelineP95:
+          type: number
+        ratio:
+          type: number
+          description: engine p95 divided by the median engine p95
+      required: [engine, p95, pipelineP95, ratio]
+
+    LatencySnapshot:
+      type: object
+      properties:
+        windowHours:
+          type: integer
+        generatedAt:
+          type: string
+          format: date-time
+        sampleCount:
+          type: integer
+        pipeline:
+          type: object
+          properties:
+            percentiles:
+              $ref: "#/components/schemas/LatencyPercentiles"
+            bins:
+              type: array
+              items:
+                $ref: "#/components/schemas/LatencyHistogramBin"
+          required: [percentiles, bins]
+        engines:
+          type: array
+          items:
+            $ref: "#/components/schemas/LatencyEngineEntry"
+        worstEngine:
+          oneOf:
+            - $ref: "#/components/schemas/LatencyWorstEngine"
+            - type: "null"
+      required: [windowHours, generatedAt, sampleCount, pipeline, engines, worstEngine]
 
     TrendsData:
       type: object

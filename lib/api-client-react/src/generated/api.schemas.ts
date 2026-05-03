@@ -3306,6 +3306,47 @@ export interface TrendsFeedbackItem {
   agreementRate: number;
 }
 
+export interface LatencyHistogramBin {
+  /** Upper bound (exclusive) of this bin in milliseconds. The last bin is open-ended (count of samples >= the previous bin's ltMs); ltMs is set to its lower bound for charting. */
+  ltMs: number;
+  count: number;
+}
+
+export interface LatencyPercentiles {
+  p50: number;
+  p95: number;
+  p99: number;
+  sampleCount: number;
+}
+
+export interface LatencyEngineEntry {
+  engine: string;
+  percentiles: LatencyPercentiles;
+  bins: LatencyHistogramBin[];
+}
+
+export interface LatencyWorstEngine {
+  engine: string;
+  p95: number;
+  pipelineP95: number;
+  /** engine p95 divided by the median engine p95 */
+  ratio: number;
+}
+
+export type LatencySnapshotPipeline = {
+  percentiles: LatencyPercentiles;
+  bins: LatencyHistogramBin[];
+};
+
+export interface LatencySnapshot {
+  windowHours: number;
+  generatedAt: string;
+  sampleCount: number;
+  pipeline: LatencySnapshotPipeline;
+  engines: LatencyEngineEntry[];
+  worstEngine: LatencyWorstEngine | null;
+}
+
 export interface TrendsData {
   days: number;
   totalReports: number;

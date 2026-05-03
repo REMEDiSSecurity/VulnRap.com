@@ -11599,6 +11599,72 @@ export const GetCorpusStatsResponse = zod
   );
 
 /**
+ * Public p50/p95/p99 latency for the end-to-end scoring pipeline plus a
+per-engine breakdown, computed from the last 24h of analysis_traces.
+Returns the histogram bins for the full pipeline and each engine, the
+percentile values, and an optional worst-engine call-out when one
+engine is dragging the tail (its p95 is more than 1.5x the median
+engine p95 and contributes >25% of pipeline p95).
+
+ * @summary Get 24h scoring latency snapshot
+ */
+export const GetLatencySnapshotResponse = zod.object({
+  windowHours: zod.number(),
+  generatedAt: zod.coerce.date(),
+  sampleCount: zod.number(),
+  pipeline: zod.object({
+    percentiles: zod.object({
+      p50: zod.number(),
+      p95: zod.number(),
+      p99: zod.number(),
+      sampleCount: zod.number(),
+    }),
+    bins: zod.array(
+      zod.object({
+        ltMs: zod
+          .number()
+          .describe(
+            "Upper bound (exclusive) of this bin in milliseconds. The last bin is open-ended (count of samples >= the previous bin's ltMs); ltMs is set to its lower bound for charting.",
+          ),
+        count: zod.number(),
+      }),
+    ),
+  }),
+  engines: zod.array(
+    zod.object({
+      engine: zod.string(),
+      percentiles: zod.object({
+        p50: zod.number(),
+        p95: zod.number(),
+        p99: zod.number(),
+        sampleCount: zod.number(),
+      }),
+      bins: zod.array(
+        zod.object({
+          ltMs: zod
+            .number()
+            .describe(
+              "Upper bound (exclusive) of this bin in milliseconds. The last bin is open-ended (count of samples >= the previous bin's ltMs); ltMs is set to its lower bound for charting.",
+            ),
+          count: zod.number(),
+        }),
+      ),
+    }),
+  ),
+  worstEngine: zod.union([
+    zod.object({
+      engine: zod.string(),
+      p95: zod.number(),
+      pipelineP95: zod.number(),
+      ratio: zod
+        .number()
+        .describe("engine p95 divided by the median engine p95"),
+    }),
+    zod.null(),
+  ]),
+});
+
+/**
  * Returns daily report volume, tier breakdown, average score, and feedback trends for the specified time window
  * @summary Get trend data over time
  */

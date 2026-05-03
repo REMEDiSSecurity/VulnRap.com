@@ -64,6 +64,7 @@ import type {
   HandwavyPhrasesList,
   HashLookupResult,
   HealthStatus,
+  LatencySnapshot,
   ListHandwavyPhraseRemovalBatchesParams,
   NewsletterSubscribeBody,
   NewsletterSubscribeResponse,
@@ -4229,6 +4230,88 @@ export function useGetCorpusStats<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetCorpusStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Public p50/p95/p99 latency for the end-to-end scoring pipeline plus a
+per-engine breakdown, computed from the last 24h of analysis_traces.
+Returns the histogram bins for the full pipeline and each engine, the
+percentile values, and an optional worst-engine call-out when one
+engine is dragging the tail (its p95 is more than 1.5x the median
+engine p95 and contributes >25% of pipeline p95).
+
+ * @summary Get 24h scoring latency snapshot
+ */
+export const getGetLatencySnapshotUrl = () => {
+  return `/api/public/latency-snapshot`;
+};
+
+export const getLatencySnapshot = async (
+  options?: RequestInit,
+): Promise<LatencySnapshot> => {
+  return customFetch<LatencySnapshot>(getGetLatencySnapshotUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLatencySnapshotQueryKey = () => {
+  return [`/api/public/latency-snapshot`] as const;
+};
+
+export const getGetLatencySnapshotQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLatencySnapshot>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLatencySnapshot>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLatencySnapshotQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLatencySnapshot>>
+  > = ({ signal }) => getLatencySnapshot({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLatencySnapshot>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLatencySnapshotQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLatencySnapshot>>
+>;
+export type GetLatencySnapshotQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get 24h scoring latency snapshot
+ */
+
+export function useGetLatencySnapshot<
+  TData = Awaited<ReturnType<typeof getLatencySnapshot>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLatencySnapshot>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLatencySnapshotQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
