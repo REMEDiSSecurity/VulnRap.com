@@ -152,4 +152,73 @@ test.describe("Calibration token-rejected banner (Task #420)", () => {
       await apiCtx.dispose();
     }
   });
+
+  // Task #750 — reviewers who fix VITE_CALIBRATION_TOKEN (or paste in a
+  // runtime override) but don't want to re-trigger the failed mutation
+  // need an in-product way to silence the sticky banner without reloading
+  // the page. The Task #421 auto-clear only fires on the next 2xx
+  // calibration mutation, so we expose a dismiss button that resets the
+  // rejection store directly.
+  test("can be dismissed manually without reloading or retrying", async ({
+    page,
+  }) => {
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase();
+
+    // Single 401 — no follow-up mutations. The dismiss path must work
+    // without depending on a successful mutation landing first.
+    await page.route(
+      "**/api/feedback/calibration/handwavy-phrases",
+      async (route) => {
+        const req = route.request();
+        if (req.method() !== "POST") {
+          await route.continue();
+          return;
+        }
+        await route.fulfill({
+          status: 401,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            error: "Unauthorized: reviewer token rejected by api-server.",
+          }),
+        });
+      },
+    );
+
+    try {
+      await page.goto("/feedback-analytics");
+
+      const adminCard = page.getByTestId("handwavy-admin");
+      await expect(adminCard).toBeVisible();
+
+      await page.getByTestId("handwavy-input").fill(phrase);
+      await page.getByTestId("handwavy-add").click();
+
+      const rejectionBanners = page.getByTestId(
+        "calibration-token-rejected-banner",
+      );
+      await expect(rejectionBanners).toHaveCount(2);
+
+      // Click the dismiss button on the first banner — the rejection store
+      // is global, so dismissing one location must clear every render.
+      await page
+        .getByTestId("calibration-token-rejected-dismiss")
+        .first()
+        .click();
+
+      await expect(rejectionBanners).toHaveCount(0);
+      // Cooldown banner is unaffected by the dismiss — it owns its own state.
+      await expect(page.getByTestId("calibration-cooldown-banner")).toHaveCount(
+        0,
+      );
+    } finally {
+      await page.unroute("**/api/feedback/calibration/handwavy-phrases");
+      await apiCtx
+        .delete("/api/feedback/calibration/handwavy-phrases", {
+          data: { phrases: [phrase], reviewer: "e2e-task750-cleanup" },
+        })
+        .catch(() => undefined);
+      await apiCtx.dispose();
+    }
+  });
 });

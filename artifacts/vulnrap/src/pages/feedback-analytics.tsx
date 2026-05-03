@@ -183,6 +183,7 @@ import {
 } from "@/components/handwavy-rename-badge";
 import { HandwavyRemovalBatchConflictChip } from "@/components/handwavy-removal-batch-conflict-chip";
 import {
+  resetCalibrationTokenRejection,
   useCalibrationTokenRejection,
   type CalibrationTokenRejectionState,
 } from "@/lib/calibration-token-rejection";
@@ -1068,7 +1069,7 @@ function CalibrationTokenRejectedBanner({
     >
       <CardContent className="p-4 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-        <div className="space-y-1">
+        <div className="space-y-1 flex-1 min-w-0">
           <div
             className="text-sm font-semibold text-red-300"
             data-testid="calibration-token-rejected-headline"
@@ -1092,6 +1093,26 @@ function CalibrationTokenRejectedBanner({
             Triggered by {subject}.
           </p>
         </div>
+        {/* Task #750 — manual dismiss for reviewers who already fixed
+          VITE_CALIBRATION_TOKEN (or pasted a runtime override) and just
+          want to silence the banner without reattempting the failed
+          action. The Task #421 auto-clear only fires on the next 2xx
+          calibration mutation, so without this button a reviewer who
+          doesn't want to retry has to reload the page. We call the
+          store's reset helper directly — the next 401 will re-flip the
+          banner with the fresh server message, so nothing is lost. */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Dismiss reviewer-token rejection banner"
+          title="Dismiss"
+          data-testid="calibration-token-rejected-dismiss"
+          className="shrink-0 -mt-1 -mr-1 h-7 w-7 text-red-300/70 hover:text-red-200 hover:bg-red-500/10"
+          onClick={() => resetCalibrationTokenRejection()}
+        >
+          <XIcon className="w-4 h-4" />
+        </Button>
       </CardContent>
     </Card>
   );
