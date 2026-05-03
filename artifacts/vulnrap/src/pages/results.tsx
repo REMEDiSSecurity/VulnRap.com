@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu, GitCompare, ChevronDown, ChevronUp, Download, BarChart3, Target, Eye, Gauge, Leaf, Shield, MessageSquareWarning, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, FlaskConical, Terminal, Loader2, Printer } from "lucide-react";
+import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu, GitCompare, ChevronDown, ChevronUp, Download, BarChart3, Target, Eye, Gauge, Leaf, Shield, MessageSquareWarning, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, FlaskConical, Terminal, Loader2, Printer, Flame } from "lucide-react";
 import qrcodegen from "qrcode-generator";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,7 @@ import { getSettings, saveSettings, getSlopColorCustom, getSlopProgressColorCust
 import { RadarChart } from "@/components/radar-chart";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { HighlightedReport, type ReportScrollTarget } from "@/components/evidence-highlighter";
+import { SignalHeatmapRenderer } from "@/components/signal-heatmap-renderer";
 import { DiagnosticsPanel, STRUCTURAL_MARKER_LABELS, buildMarkdownSummary, loadDiagnosticsForExport as loadCachedDiagnosticsForExport, type DiagnosticsResponse, type AvriMarkerScrollTarget } from "@/components/diagnostics-panel";
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
@@ -1749,6 +1750,9 @@ export default function Results() {
   // identity wouldn't fire if we kept passing the same `{line}` value).
   const [reportScrollTarget, setReportScrollTarget] =
     useState<ReportScrollTarget | null>(null);
+  // Task #717: toggle between the existing inline highlighter view and a
+  // true heatmap renderer that tints text spans by which signals fired.
+  const [reportView, setReportView] = useState<"highlight" | "heatmap">("highlight");
   const handleStructuralMarkerClick = (line: number) => {
     setReportScrollTarget((prev) => ({
       line,
@@ -3211,13 +3215,65 @@ export default function Results() {
       )}
 
       {report.redactedText && (
-        <HighlightedReport
-          text={report.redactedText}
-          evidence={evidence ?? []}
-          humanIndicators={humanIndicators}
-          typeLabels={EVIDENCE_TYPE_LABELS}
-          scrollTarget={reportScrollTarget}
-        />
+        <div className="space-y-2" data-testid="report-view-container">
+          <div className="flex items-center justify-end gap-1 px-1" role="tablist" aria-label="Report view">
+            <Button
+              type="button"
+              size="sm"
+              variant={reportView === "highlight" ? "default" : "outline"}
+              onClick={() => setReportView("highlight")}
+              className="gap-1.5 h-7 text-[11px]"
+              role="tab"
+              aria-selected={reportView === "highlight"}
+              data-testid="report-view-toggle-highlight"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Highlighter view
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={reportView === "heatmap" ? "default" : "outline"}
+              onClick={() => setReportView("heatmap")}
+              className="gap-1.5 h-7 text-[11px]"
+              role="tab"
+              aria-selected={reportView === "heatmap"}
+              data-testid="report-view-toggle-heatmap"
+            >
+              <Flame className="w-3.5 h-3.5" />
+              Heatmap view
+            </Button>
+          </div>
+          {reportView === "highlight" ? (
+            <HighlightedReport
+              text={report.redactedText}
+              evidence={evidence ?? []}
+              humanIndicators={humanIndicators}
+              typeLabels={EVIDENCE_TYPE_LABELS}
+              scrollTarget={reportScrollTarget}
+            />
+          ) : (
+            <Card className="glass-card rounded-xl" data-testid="report-heatmap-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Flame className="w-5 h-5 text-orange-400" />
+                  Report Text — Signal Heatmap
+                </CardTitle>
+                <CardDescription>
+                  Each character is tinted by which signals fired in that range. Overlapping signals stack as horizontal bands.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SignalHeatmapRenderer
+                  text={report.redactedText}
+                  evidence={evidence ?? []}
+                  humanIndicators={humanIndicators}
+                  typeLabels={EVIDENCE_TYPE_LABELS}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       <PrintQrFooter url={liveResultsUrl} reportId={report.id} />
