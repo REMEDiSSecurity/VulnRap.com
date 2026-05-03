@@ -40,6 +40,7 @@ import {
 } from "../lib/dataset-history-config";
 import { readCompactionStats } from "../lib/archetype-history-stats";
 import { requireCalibrationAuth } from "../middlewares/require-calibration-auth";
+import { auditLogMutationMiddleware } from "../middlewares/audit-log-middleware";
 import {
   discover as discoverDatasets,
   iterateCuratedV2,
@@ -47,6 +48,10 @@ import {
 } from "../lib/engines/dataset-loader";
 
 const router: IRouter = Router();
+
+// Task #645 — Capture mutation entries (PUT/DELETE on dataset-history /
+// archetype-history config) into the audit_log table.
+router.use(auditLogMutationMiddleware);
 
 type Tier = "T1_LEGIT" | "T2_BORDERLINE" | "T3_SLOP" | "T4_HALLUCINATED";
 type TriageAction =

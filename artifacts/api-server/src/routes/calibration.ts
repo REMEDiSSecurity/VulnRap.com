@@ -44,6 +44,7 @@ import {
   requireCalibrationAuthStrict,
   getCalibrationAuthStatus,
 } from "../middlewares/require-calibration-auth";
+import { auditLogMutationMiddleware } from "../middlewares/audit-log-middleware";
 import {
   getRecentCalibrationAuthBruteForceAlerts,
   __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS,
@@ -681,6 +682,11 @@ export const __testing = {
 };
 
 const router: IRouter = Router();
+
+// Task #645 — Record every reviewer mutation under /feedback/calibration/* in
+// the audit_log table. The middleware skips GET/HEAD internally so reads
+// (config snapshot, auth status, handwavy phrase list, ...) stay quiet.
+router.use(auditLogMutationMiddleware);
 
 // v3.6.0 §8: Surface a non-applied "suggestedAdjustments" block alongside the
 // existing calibration report. These are diagnostic suggestions only — the

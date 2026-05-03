@@ -5,6 +5,54 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+/**
+ * Task #645 — Static "revert this mutation" hint stitched onto each
+audit-log entry by the read endpoint. Null when the entry's
+endpoint has no known reverse operation.
+
+ */
+export interface AuditRevertHint {
+  method: string;
+  endpoint: string;
+  description: string;
+}
+
+/**
+ * Task #645 — One reviewer mutation captured by the audit-log
+middleware. `requestPayload` is the JSON body that hit the
+server with secret-shaped keys (token/secret/password/...)
+replaced by `[REDACTED]`. `responseStatus` is the final HTTP
+status the reviewer's request received.
+
+ */
+export interface AuditLogEntry {
+  id: number;
+  /** Reviewer name (from body.reviewer or X-Reviewer-Name) or "anonymous". */
+  actor: string;
+  method: string;
+  endpoint: string;
+  /** Redacted JSON body. Null for empty / multipart bodies. */
+  requestPayload?: unknown | null;
+  /** Redacted query-string parameters. Null when none were sent. */
+  queryParams?: unknown | null;
+  responseStatus: number;
+  ip?: string | null;
+  createdAt: string;
+  revertHint: AuditRevertHint | null;
+}
+
+/**
+ * Task #645 — Paginated reviewer audit log response. `entries` is
+ordered newest-first.
+
+ */
+export interface AuditLogResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  entries: AuditLogEntry[];
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -3882,6 +3930,48 @@ export const GetReportFeedSort = {
   oldest: "oldest",
   score_asc: "score_asc",
   score_desc: "score_desc",
+} as const;
+
+export type GetAuditLogParams = {
+  /**
+   * @minimum 1
+   * @maximum 200
+   */
+  limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
+  /**
+   * Exact-match filter on the `actor` column.
+   */
+  actor?: string;
+  /**
+   * Exact-match HTTP method filter (case-insensitive).
+   */
+  method?: GetAuditLogMethod;
+  /**
+   * Substring filter (case-insensitive) on the endpoint URL.
+   */
+  endpoint?: string;
+  /**
+   * Inclusive lower bound on `createdAt` (ISO 8601).
+   */
+  from?: string;
+  /**
+   * Inclusive upper bound on `createdAt` (ISO 8601).
+   */
+  to?: string;
+};
+
+export type GetAuditLogMethod =
+  (typeof GetAuditLogMethod)[keyof typeof GetAuditLogMethod];
+
+export const GetAuditLogMethod = {
+  POST: "POST",
+  PUT: "PUT",
+  PATCH: "PATCH",
+  DELETE: "DELETE",
 } as const;
 
 export type GetAvriDriftReportParams = {

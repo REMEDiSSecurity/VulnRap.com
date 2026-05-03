@@ -2553,6 +2553,102 @@ export const GetHoldoutEvalResponse = zod.object({
 });
 
 /**
+ * Task #645 — Reviewer-only paginated read of the `audit_log` table
+populated by the audit-log middleware on every mutation route.
+Strict reviewer auth required (sends reviewer identities and IPs).
+
+ * @summary List recorded reviewer mutations
+ */
+export const getAuditLogQueryLimitDefault = 50;
+export const getAuditLogQueryLimitMax = 200;
+
+export const getAuditLogQueryOffsetDefault = 0;
+export const getAuditLogQueryOffsetMin = 0;
+
+export const GetAuditLogQueryParams = zod.object({
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(getAuditLogQueryLimitMax)
+    .default(getAuditLogQueryLimitDefault),
+  offset: zod.coerce
+    .number()
+    .min(getAuditLogQueryOffsetMin)
+    .default(getAuditLogQueryOffsetDefault),
+  actor: zod.coerce
+    .string()
+    .optional()
+    .describe("Exact-match filter on the `actor` column."),
+  method: zod
+    .enum(["POST", "PUT", "PATCH", "DELETE"])
+    .optional()
+    .describe("Exact-match HTTP method filter (case-insensitive)."),
+  endpoint: zod.coerce
+    .string()
+    .optional()
+    .describe("Substring filter (case-insensitive) on the endpoint URL."),
+  from: zod
+    .date()
+    .optional()
+    .describe("Inclusive lower bound on `createdAt` (ISO 8601)."),
+  to: zod
+    .date()
+    .optional()
+    .describe("Inclusive upper bound on `createdAt` (ISO 8601)."),
+});
+
+export const GetAuditLogResponse = zod
+  .object({
+    total: zod.number(),
+    limit: zod.number(),
+    offset: zod.number(),
+    entries: zod.array(
+      zod
+        .object({
+          id: zod.number(),
+          actor: zod
+            .string()
+            .describe(
+              'Reviewer name (from body.reviewer or X-Reviewer-Name) or \"anonymous\".',
+            ),
+          method: zod.string(),
+          endpoint: zod.string(),
+          requestPayload: zod
+            .unknown()
+            .nullish()
+            .describe(
+              "Redacted JSON body. Null for empty \/ multipart bodies.",
+            ),
+          queryParams: zod
+            .unknown()
+            .nullish()
+            .describe(
+              "Redacted query-string parameters. Null when none were sent.",
+            ),
+          responseStatus: zod.number(),
+          ip: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          revertHint: zod
+            .object({
+              method: zod.string(),
+              endpoint: zod.string(),
+              description: zod.string(),
+            })
+            .describe(
+              'Task #645 — Static \"revert this mutation\" hint stitched onto each\naudit-log entry by the read endpoint. Null when the entry\'s\nendpoint has no known reverse operation.\n',
+            )
+            .nullable(),
+        })
+        .describe(
+          "Task #645 — One reviewer mutation captured by the audit-log\nmiddleware. `requestPayload` is the JSON body that hit the\nserver with secret-shaped keys (token\/secret\/password\/...)\nreplaced by `[REDACTED]`. `responseStatus` is the final HTTP\nstatus the reviewer's request received.\n",
+        ),
+    ),
+  })
+  .describe(
+    "Task #645 — Paginated reviewer audit log response. `entries` is\nordered newest-first.\n",
+  );
+
+/**
  * Analyzes feedback data against scoring results to suggest weight and threshold adjustments. Uses volume gating to ensure suggestions are based on sufficient data.
  * @summary Get calibration report with tuning suggestions
  */

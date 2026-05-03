@@ -28,6 +28,8 @@ tags:
     description: User-suggested handwavy / ai-self-disclosure phrases (Task #634)
   - name: internal
     description: Reviewer-only internal surfaces (gated by CALIBRATION_TOKEN)
+  - name: audit
+    description: Reviewer audit log of mutation endpoints
 paths:
   /healthz:
     get:
@@ -562,6 +564,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HoldoutEvalResponse"
+
+  /audit-log:
+    get:
+      operationId: getAuditLog
+      tags: [audit]
+      summary: List recorded reviewer mutations
+      description: |
+        Task #645 — Reviewer-only paginated read of the `audit_log` table
+        populated by the audit-log middleware on every mutation route.
+        Strict reviewer auth required (sends reviewer identities and IPs).
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: actor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Exact-match filter on the `actor` column.
+        - name: method
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [POST, PUT, PATCH, DELETE]
+          description: Exact-match HTTP method filter (case-insensitive).
+        - name: endpoint
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Substring filter (case-insensitive) on the endpoint URL.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound on `createdAt` (ISO 8601).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on `createdAt` (ISO 8601).
+      responses:
+        "200":
+          description: Audit log page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogResponse"
+        "401":
+          description: Reviewer auth required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /feedback/calibration:
     get:
@@ -1761,6 +1835,77 @@ paths:
 
 components:
   schemas:
+    AuditRevertHint:
+      type: object
+      description: |
+        Task #645 — Static "revert this mutation" hint stitched onto each
+        audit-log entry by the read endpoint. Null when the entry's
+        endpoint has no known reverse operation.
+      properties:
+        method:
+          type: string
+        endpoint:
+          type: string
+        description:
+          type: string
+      required: [method, endpoint, description]
+
+    AuditLogEntry:
+      type: object
+      description: |
+        Task #645 — One reviewer mutation captured by the audit-log
+        middleware. `requestPayload` is the JSON body that hit the
+        server with secret-shaped keys (token/secret/password/...)
+        replaced by `[REDACTED]`. `responseStatus` is the final HTTP
+        status the reviewer's request received.
+      properties:
+        id:
+          type: integer
+        actor:
+          type: string
+          description: Reviewer name (from body.reviewer or X-Reviewer-Name) or "anonymous".
+        method:
+          type: string
+        endpoint:
+          type: string
+        requestPayload:
+          nullable: true
+          description: Redacted JSON body. Null for empty / multipart bodies.
+        queryParams:
+          nullable: true
+          description: Redacted query-string parameters. Null when none were sent.
+        responseStatus:
+          type: integer
+        ip:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        revertHint:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/AuditRevertHint"
+      required: [id, actor, method, endpoint, responseStatus, createdAt, revertHint]
+
+    AuditLogResponse:
+      type: object
+      description: |
+        Task #645 — Paginated reviewer audit log response. `entries` is
+        ordered newest-first.
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+      required: [total, limit, offset, entries]
+
     HealthStatus:
       type: object
       properties:
