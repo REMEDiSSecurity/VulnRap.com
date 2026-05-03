@@ -29,6 +29,7 @@ import {
   type SignalAdjustments,
 } from "@/components/signal-mute-boost-panel";
 import { AdvancedSensitivityPanel } from "@/components/advanced-sensitivity-panel";
+import { SUBMIT_CHECK_EVENT, TOGGLE_REDACTION_EVENT, FOCUS_TEXTAREA_EVENT } from "@/hooks/use-keyboard-shortcuts";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
@@ -387,6 +388,8 @@ export default function Check() {
   const [skipLlm, setSkipLlm] = useState(false);
   const [skipRedaction, setSkipRedaction] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const rawTextRef = useRef<HTMLTextAreaElement>(null);
+  const handleSubmitRef = useRef<() => void>(() => {});
   const [result, setResult] = useState<CheckResultData | null>(null);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
   // Task #611 — *accepted exception* to the task's "jump to crash
@@ -549,6 +552,38 @@ export default function Check() {
 
   const hasContent = inputMode === "file" ? !!file : inputMode === "link" ? reportUrl.trim().length > 0 : rawText.trim().length > 0;
 
+  useEffect(() => {
+    handleSubmitRef.current = () => {
+      if (!hasContent || checkMutation.isPending) return;
+      handleSubmit();
+    };
+  });
+
+  useEffect(() => {
+    const onSubmit = () => handleSubmitRef.current();
+    const onToggleRedaction = () => {
+      setSkipRedaction((prev) => {
+        const next = !prev;
+        if (next) setSkipLlm(true);
+        return next;
+      });
+    };
+    const onFocusTextarea = () => {
+      setInputMode("text");
+      requestAnimationFrame(() => {
+        rawTextRef.current?.focus();
+      });
+    };
+    window.addEventListener(SUBMIT_CHECK_EVENT, onSubmit);
+    window.addEventListener(TOGGLE_REDACTION_EVENT, onToggleRedaction);
+    window.addEventListener(FOCUS_TEXTAREA_EVENT, onFocusTextarea);
+    return () => {
+      window.removeEventListener(SUBMIT_CHECK_EVENT, onSubmit);
+      window.removeEventListener(TOGGLE_REDACTION_EVENT, onToggleRedaction);
+      window.removeEventListener(FOCUS_TEXTAREA_EVENT, onFocusTextarea);
+    };
+  }, []);
+
   const visibleEvidence = result?.evidence && result.evidence.length > 0
     ? (showAllEvidence ? result.evidence : result.evidence.slice(0, 5))
     : [];
@@ -618,6 +653,8 @@ export default function Check() {
           {inputMode === "text" ? (
             <div className="space-y-2">
               <textarea
+                ref={rawTextRef}
+                data-testid="input-rawtext"
                 className="w-full h-48 rounded-xl glass-card p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/40 bg-transparent"
                 placeholder="Paste the vulnerability report text here...&#10;&#10;Plain text only. Content is analyzed but never stored."
                 value={rawText}
@@ -754,6 +791,7 @@ export default function Check() {
         </CardContent>
         <CardFooter>
           <Button
+            data-testid="button-submit"
             className="w-full h-11 sm:h-12 text-base sm:text-lg font-bold gap-2 glow-button"
             onClick={handleSubmit}
             disabled={!hasContent || checkMutation.isPending}

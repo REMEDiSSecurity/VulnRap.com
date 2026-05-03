@@ -7,6 +7,8 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { Layout } from "@/components/layout";
 import { PageViewTracker } from "@/components/page-view-tracker";
 import { ScrollToTop } from "@/components/scroll-to-top";
+import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 
 function lazyRetry(importFn: () => Promise<{ default: React.ComponentType }>) {
   return lazy(() =>
@@ -70,10 +72,12 @@ function PageLoader() {
 }
 
 function AppRoutes() {
+  const { helpOpen, setHelpOpen } = useKeyboardShortcuts();
   return (
     <Layout>
       <ScrollToTop />
       <PageViewTracker />
+      <KeyboardShortcutsModal open={helpOpen} onClose={() => setHelpOpen(false)} />
       <ErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <Routes>
