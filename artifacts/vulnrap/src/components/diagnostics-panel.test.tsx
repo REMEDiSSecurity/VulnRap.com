@@ -174,6 +174,45 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/correlation: corr-test-1234/i)).toBeInTheDocument();
   });
 
+  // Task #624 — engine-version footer line.
+  it("renders the engine-version footer when the diagnostics response includes engineVersions", async () => {
+    fetchSpy.mockImplementationOnce(async () => new Response(
+      JSON.stringify({
+        ...SAMPLE_DIAGNOSTICS,
+        engineVersions: {
+          linguistic: "3.10.0",
+          substance: "3.10.1",
+          cwe: "3.10.0",
+          avri: "3.11.0",
+          fusion: "3.10.0",
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    const footer = await screen.findByTestId("diagnostics-engine-versions");
+    expect(footer.textContent).toMatch(/linguistic v3\.10\.0/);
+    expect(footer.textContent).toMatch(/substance v3\.10\.1/);
+    expect(footer.textContent).toMatch(/cwe v3\.10\.0/);
+    expect(footer.textContent).toMatch(/avri v3\.11\.0/);
+    expect(footer.textContent).toMatch(/fusion v3\.10\.0/);
+  });
+
+  it("hides the engine-version footer for legacy responses without engineVersions", async () => {
+    const user = userEvent.setup();
+    renderWithClient();
+    await user.click(screen.getByRole("button", { name: /show/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Composite Breakdown/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("diagnostics-engine-versions")).not.toBeInTheDocument();
+  });
+
   it("renders the AVRI family rubric section with gold hits, misses, absence penalties, and overrides", async () => {
     fetchSpy.mockImplementationOnce(async () => new Response(
       JSON.stringify({

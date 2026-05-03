@@ -897,6 +897,22 @@ export interface VulnrapComposite {
   rescoreHistory?: VulnrapCompositeRescoreHistoryItem[];
 }
 
+/**
+ * Semver pins for each scoring engine that produced a report. Bumped when an engine's behavior changes so reviewers can attribute score deltas to the right release.
+ */
+export interface EngineVersions {
+  /** Semver of the linguistic-slop scorer. */
+  linguistic: string;
+  /** Semver of the substance scorer. */
+  substance: string;
+  /** Semver of the CWE classifier. */
+  cwe: string;
+  /** Semver of the AVRI rubric engine. */
+  avri: string;
+  /** Semver of the composite fusion algorithm. */
+  fusion: string;
+}
+
 export interface ReportAnalysis {
   id: number;
   /** Secret token for deleting this report. Only returned on initial submission. Store it — it cannot be recovered. */
@@ -1001,6 +1017,8 @@ export interface ReportAnalysis {
    * @nullable
    */
   avriFamily?: string | null;
+  /** Semver pin of every scoring engine that produced this report. Null for legacy rows scored before the engine_versions column shipped (Task */
+  engineVersions?: EngineVersions | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;

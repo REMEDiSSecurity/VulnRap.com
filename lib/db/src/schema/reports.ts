@@ -97,6 +97,18 @@ export const reportsTable = pgTable("reports", {
   vulnrapOverridesApplied: jsonb("vulnrap_overrides_applied").$type<string[]>(),
   vulnrapCorrelationId: varchar("vulnrap_correlation_id", { length: 64 }),
   vulnrapDurationMs: real("vulnrap_duration_ms"),
+  // Task #624 — Engine version pinning per report. Holds a semver per
+  // engine ({linguistic, substance, cwe, avri, fusion}) captured at
+  // write time so reproducibility audits ("was this scored under v3.10
+  // or v3.11?") and the score-evolution timeline have an exact pin
+  // instead of inferring from git history.
+  engineVersions: jsonb("engine_versions").$type<{
+    linguistic: string;
+    substance: string;
+    cwe: string;
+    avri: string;
+    fusion: string;
+  }>(),
   // Sprint 12 — Cached AVRI rubric family for the report. Persisted at write
   // time from the AVRI composite (`vulnrapEngineResults.avri.family`) so the
   // drift dashboard and any per-family filters can read it without

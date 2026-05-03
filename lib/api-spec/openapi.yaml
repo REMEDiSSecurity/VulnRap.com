@@ -1769,6 +1769,11 @@ components:
         avriFamily:
           type: ["string", "null"]
           description: Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Sourced from the persisted reports.avri_family column; null for legacy rows submitted before the family was persisted.
+        engineVersions:
+          oneOf:
+            - $ref: "#/components/schemas/EngineVersions"
+            - type: "null"
+          description: Semver pin of every scoring engine that produced this report. Null for legacy rows scored before the engine_versions column shipped (Task #624).
         fileName:
           type: ["string", "null"]
         fileSize:
@@ -1794,6 +1799,32 @@ components:
         - llmEnhanced
         - fileSize
         - createdAt
+
+    EngineVersions:
+      type: object
+      description: Semver pins for each scoring engine that produced a report. Bumped when an engine's behavior changes so reviewers can attribute score deltas to the right release.
+      properties:
+        linguistic:
+          type: string
+          description: Semver of the linguistic-slop scorer.
+        substance:
+          type: string
+          description: Semver of the substance scorer.
+        cwe:
+          type: string
+          description: Semver of the CWE classifier.
+        avri:
+          type: string
+          description: Semver of the AVRI rubric engine.
+        fusion:
+          type: string
+          description: Semver of the composite fusion algorithm.
+      required:
+        - linguistic
+        - substance
+        - cwe
+        - avri
+        - fusion
 
     VulnrapComposite:
       type: object

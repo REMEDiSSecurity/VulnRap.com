@@ -155,6 +155,18 @@ export interface DiagnosticsResponse {
    * analyzed before this audit pass shipped.
    */
   auditTelemetry?: AuditTelemetryBlock | null;
+  /**
+   * Task #624 — semver pins for each engine that contributed to this report.
+   * Persisted at write time on `reports.engine_versions`. `null` for legacy
+   * rows analyzed before the column shipped.
+   */
+  engineVersions?: {
+    linguistic: string;
+    substance: string;
+    cwe: string;
+    avri: string;
+    fusion: string;
+  } | null;
 }
 
 // Task #209 — these mirror the server types in routes/reports.ts and
@@ -588,6 +600,28 @@ export function DiagnosticsPanel({
                     </div>
                     <p className="text-[11px] text-muted-foreground leading-relaxed">{data.legacyMapping.note}</p>
                   </section>
+                </>
+              )}
+
+              {/* Task #624 — engine-version footer line. Rendered at the
+                  bottom of the panel so reviewers can answer "which engine
+                  versions scored this report?" without leaving the panel.
+                  Hidden for legacy rows analyzed before the column shipped
+                  (engineVersions=null). */}
+              {data.engineVersions && (
+                <>
+                  <Separator className="bg-border/30" />
+                  <div
+                    data-testid="diagnostics-engine-versions"
+                    className="text-[10px] font-mono text-muted-foreground leading-relaxed"
+                  >
+                    engines:{" "}
+                    linguistic v{data.engineVersions.linguistic}
+                    {" · "}substance v{data.engineVersions.substance}
+                    {" · "}cwe v{data.engineVersions.cwe}
+                    {" · "}avri v{data.engineVersions.avri}
+                    {" · "}fusion v{data.engineVersions.fusion}
+                  </div>
                 </>
               )}
             </>

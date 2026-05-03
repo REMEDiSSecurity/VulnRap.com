@@ -67,6 +67,7 @@ export * from "./deleteReportBody";
 export * from "./deleteReportResponse";
 export * from "./detectedProject";
 export * from "./dontMissItem";
+export * from "./engineVersions";
 export * from "./errorResponse";
 export * from "./evidenceItem";
 export * from "./evidenceItemContext";

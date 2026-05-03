@@ -63,6 +63,7 @@ import {
   type BackfillStats,
   type ConcurrencyGuard,
 } from "./backfill-vulnrap-helpers";
+import { getCurrentEngineVersions } from "./lib/engine-versions";
 import { fileURLToPath } from "url";
 import type { SQL } from "drizzle-orm";
 
@@ -438,6 +439,7 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
             vulnrapOverridesApplied: composite.overridesApplied,
             vulnrapCorrelationId: correlationId,
             vulnrapDurationMs: 0,
+            engineVersions: getCurrentEngineVersions(),
           })
           .where(and(eq(reportsTable.id, row.id), concurrencyGuard))
           .returning({ id: reportsTable.id });
@@ -517,6 +519,7 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
               vulnrapOverridesApplied: composite.overridesApplied,
               vulnrapCorrelationId: persistedTrace.correlationId,
               vulnrapDurationMs: persistedTrace.totalDurationMs,
+              engineVersions: getCurrentEngineVersions(),
             })
             .where(and(eq(reportsTable.id, row.id), concurrencyGuard))
             .returning({ id: reportsTable.id });

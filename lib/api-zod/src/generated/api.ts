@@ -1118,6 +1118,29 @@ export const GetReportResponse = zod.object({
     .describe(
       "Cached AVRI rubric family id for this report (e.g. INJECTION, MEMORY_CORRUPTION). Sourced from the persisted reports.avri_family column; null for legacy rows submitted before the family was persisted.",
     ),
+  engineVersions: zod
+    .union([
+      zod
+        .object({
+          linguistic: zod
+            .string()
+            .describe("Semver of the linguistic-slop scorer."),
+          substance: zod.string().describe("Semver of the substance scorer."),
+          cwe: zod.string().describe("Semver of the CWE classifier."),
+          avri: zod.string().describe("Semver of the AVRI rubric engine."),
+          fusion: zod
+            .string()
+            .describe("Semver of the composite fusion algorithm."),
+        })
+        .describe(
+          "Semver pins for each scoring engine that produced a report. Bumped when an engine's behavior changes so reviewers can attribute score deltas to the right release.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Semver pin of every scoring engine that produced this report. Null for legacy rows scored before the engine_versions column shipped (Task",
+    ),
   fileName: zod.string().nullish(),
   fileSize: zod.number(),
   createdAt: zod.coerce.date(),

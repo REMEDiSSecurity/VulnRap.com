@@ -39,6 +39,13 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
     ],
   },
   {
+    id: "2026-05-03-add-reports-engine-versions",
+    description: "Task #624 — Add nullable engine_versions JSONB column to reports for per-report engine version pinning",
+    statements: [
+      `ALTER TABLE reports ADD COLUMN IF NOT EXISTS engine_versions jsonb`,
+    ],
+  },
+  {
     // page_views is materialized only in production. Replit's deploy validator
     // performs a live dev↔prod schema diff; if the dev DB had page_views with
     // the desired shape and production had the historical broken shape, the

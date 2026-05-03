@@ -5,6 +5,7 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { EngineVersions } from "./engineVersions";
 import type { EvidenceItem } from "./evidenceItem";
 import type { HumanIndicator } from "./humanIndicator";
 import type { LLMClaims } from "./lLMClaims";
@@ -131,6 +132,8 @@ export interface ReportAnalysis {
    * @nullable
    */
   avriFamily?: string | null;
+  /** Semver pin of every scoring engine that produced this report. Null for legacy rows scored before the engine_versions column shipped (Task */
+  engineVersions?: EngineVersions | null;
   /** @nullable */
   fileName?: string | null;
   fileSize: number;

@@ -66,6 +66,7 @@ import {
   type TriageAssistantResult,
 } from "../lib/triage-assistant";
 import { deriveFabricatedEvidenceFlags } from "../lib/fabricated-evidence-flags";
+import { getCurrentEngineVersions } from "../lib/engine-versions";
 import { deriveInferredCwe } from "../lib/inferred-cwe";
 
 function parseBoolParam(value: unknown): boolean {
@@ -1010,6 +1011,10 @@ router.post("/reports", async (req, res): Promise<void> => {
         vulnrapOverridesApplied: vulnrapComposite?.overridesApplied ?? null,
         vulnrapCorrelationId: vulnrapTrace?.correlationId ?? null,
         vulnrapDurationMs: vulnrapTrace?.totalDurationMs ?? null,
+        // Task #624 — pin the engine versions that scored this report so a
+        // future re-score / score-evolution timeline can answer "which engine
+        // versions produced this row?" without inferring from git history.
+        engineVersions: getCurrentEngineVersions(),
         // Cache the AVRI rubric family on the row so generateAvriDriftReport
         // (and any future per-family filters) can read it without
         // re-classifying contentText. Sourced from the composite that just
@@ -1136,6 +1141,7 @@ router.post("/reports", async (req, res): Promise<void> => {
           engineCount: vulnrapComposite.engineCount,
         }
       : null,
+    engineVersions: report.engineVersions ?? null,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
@@ -2049,6 +2055,7 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
       };
     })(),
     avriFamily: report.avriFamily ?? null,
+    engineVersions: report.engineVersions ?? null,
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
@@ -2142,6 +2149,10 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
     trace: traceRow?.trace ?? null,
     engines: report.vulnrapEngineResults ?? null,
     auditTelemetry,
+    // Task #624 — surface the engine versions that scored this report so the
+    // diagnostics-panel footer can render an exact pin. `null` for legacy
+    // rows analyzed before the column shipped.
+    engineVersions: report.engineVersions ?? null,
   });
 });
 
