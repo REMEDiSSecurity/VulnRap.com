@@ -39,6 +39,7 @@ import type {
   FeedbackAnalytics,
   FeedbackChallenge,
   FeedbackResponse,
+  GalleryResponse,
   GetAuditLogParams,
   GetAvriDriftReportParams,
   GetCalibrationAuthBruteForceAlertsParams,
@@ -2545,6 +2546,88 @@ export function useListPresets<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListPresetsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #647 — Returns the curated sample-report gallery rendered on
+`/gallery`. Sourced from a static JSON file shipped with the
+api-server; safe to cache for an hour. Each sample carries the
+display fields the gallery card needs (title, snippet, score,
+top signals, label) plus a `reportId` pointing at a seed report
+so click-through resolves on `/results/:id`.
+
+ * @summary List curated sample reports
+ */
+export const getListGalleryUrl = () => {
+  return `/api/gallery`;
+};
+
+export const listGallery = async (
+  options?: RequestInit,
+): Promise<GalleryResponse> => {
+  return customFetch<GalleryResponse>(getListGalleryUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListGalleryQueryKey = () => {
+  return [`/api/gallery`] as const;
+};
+
+export const getListGalleryQueryOptions = <
+  TData = Awaited<ReturnType<typeof listGallery>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listGallery>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListGalleryQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listGallery>>> = ({
+    signal,
+  }) => listGallery({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listGallery>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListGalleryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listGallery>>
+>;
+export type ListGalleryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List curated sample reports
+ */
+
+export function useListGallery<
+  TData = Awaited<ReturnType<typeof listGallery>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listGallery>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListGalleryQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

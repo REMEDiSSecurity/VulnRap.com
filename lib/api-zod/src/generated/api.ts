@@ -3490,6 +3490,65 @@ export const ListPresetsResponse = zod
   );
 
 /**
+ * Task #647 — Returns the curated sample-report gallery rendered on
+`/gallery`. Sourced from a static JSON file shipped with the
+api-server; safe to cache for an hour. Each sample carries the
+display fields the gallery card needs (title, snippet, score,
+top signals, label) plus a `reportId` pointing at a seed report
+so click-through resolves on `/results/:id`.
+
+ * @summary List curated sample reports
+ */
+export const listGalleryResponseSamplesItemScoreMin = 0;
+export const listGalleryResponseSamplesItemScoreMax = 100;
+
+export const listGalleryResponseSamplesItemTopSignalsMax = 3;
+
+export const ListGalleryResponse = zod
+  .object({
+    version: zod.string(),
+    samples: zod.array(
+      zod
+        .object({
+          id: zod
+            .string()
+            .describe(
+              "Opaque slug for the gallery entry (stable across curator edits).",
+            ),
+          label: zod
+            .enum(["obvious_slop", "subtle_slop", "borderline", "clean"])
+            .describe("Curator-assigned bucket the sample illustrates."),
+          title: zod.string().describe("Card title."),
+          snippet: zod
+            .string()
+            .describe("~150 char preview of the report content."),
+          score: zod
+            .number()
+            .min(listGalleryResponseSamplesItemScoreMin)
+            .max(listGalleryResponseSamplesItemScoreMax)
+            .describe(
+              "Final composite slop score for the sample (0 clean → 100 slop).",
+            ),
+          topSignals: zod
+            .array(zod.string())
+            .min(1)
+            .max(listGalleryResponseSamplesItemTopSignalsMax)
+            .describe("Top fired signals, in display order."),
+          reportId: zod
+            .number()
+            .min(1)
+            .describe(
+              "Seed report id; click-through opens `\/results\/<reportId>`.",
+            ),
+        })
+        .describe("A single curated sample report shown on `\/gallery`."),
+    ),
+  })
+  .describe(
+    "Curated sample-report gallery returned by `GET \/api\/gallery`. The\n`version` string lets clients cache-bust when curators ship a new\nrevision of `gallery.json`.\n",
+  );
+
+/**
  * Task #617 — Public, read-only summary of the rolling weekly
 T1-vs-T3 mean composite spread. Wraps the internal AVRI drift
 compute and strips every reviewer-only field (cohort sample IDs,

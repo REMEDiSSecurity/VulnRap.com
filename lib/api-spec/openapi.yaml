@@ -30,6 +30,8 @@ tags:
     description: Reviewer-only internal surfaces (gated by CALIBRATION_TOKEN)
   - name: audit
     description: Reviewer audit log of mutation endpoints
+  - name: gallery
+    description: Curated sample-report gallery for new users
 paths:
   /healthz:
     get:
@@ -926,6 +928,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PresetLibrary"
+
+  /gallery:
+    get:
+      operationId: listGallery
+      tags: [gallery]
+      summary: List curated sample reports
+      description: |
+        Task #647 — Returns the curated sample-report gallery rendered on
+        `/gallery`. Sourced from a static JSON file shipped with the
+        api-server; safe to cache for an hour. Each sample carries the
+        display fields the gallery card needs (title, snippet, score,
+        top signals, label) plus a `reportId` pointing at a seed report
+        so click-through resolves on `/results/:id`.
+      responses:
+        "200":
+          description: Curated sample-report gallery
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GalleryResponse"
 
   /public/drift-summary:
     get:
@@ -6642,6 +6664,56 @@ components:
         - slopThresholdLow
         - slopThresholdHigh
         - engineWeights
+
+    GallerySample:
+      type: object
+      description: A single curated sample report shown on `/gallery`.
+      properties:
+        id:
+          type: string
+          description: Opaque slug for the gallery entry (stable across curator edits).
+        label:
+          type: string
+          enum: [obvious_slop, subtle_slop, borderline, clean]
+          description: Curator-assigned bucket the sample illustrates.
+        title:
+          type: string
+          description: Card title.
+        snippet:
+          type: string
+          description: ~150 char preview of the report content.
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Final composite slop score for the sample (0 clean → 100 slop).
+        topSignals:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            type: string
+          description: Top fired signals, in display order.
+        reportId:
+          type: integer
+          minimum: 1
+          description: Seed report id; click-through opens `/results/<reportId>`.
+      required: [id, label, title, snippet, score, topSignals, reportId]
+
+    GalleryResponse:
+      type: object
+      description: |
+        Curated sample-report gallery returned by `GET /api/gallery`. The
+        `version` string lets clients cache-bust when curators ship a new
+        revision of `gallery.json`.
+      properties:
+        version:
+          type: string
+        samples:
+          type: array
+          items:
+            $ref: "#/components/schemas/GallerySample"
+      required: [version, samples]
 
     PresetLibrary:
       type: object

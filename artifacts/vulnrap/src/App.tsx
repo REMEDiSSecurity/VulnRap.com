@@ -56,6 +56,7 @@ const AccessibilityPage = lazyRetry(() => import("@/pages/accessibility"));
 const Quickstart = lazyRetry(() => import("@/pages/quickstart"));
 const Playground = lazyRetry(() => import("@/pages/playground"));
 const AuditLog = lazyRetry(() => import("@/pages/audit-log"));
+const Gallery = lazyRetry(() => import("@/pages/gallery"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -109,6 +110,7 @@ function AppRoutes() {
             <Route path="/quickstart" element={<Quickstart />} />
             <Route path="/playground" element={<Playground />} />
             <Route path="/audit-log" element={<AuditLog />} />
+            <Route path="/gallery" element={<Gallery />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

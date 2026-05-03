@@ -13,6 +13,7 @@ import presetsRouter from "./presets";
 import phraseSuggestionsRouter from "./phrase-suggestions";
 import internalRouter from "./internal";
 import auditLogRouter from "./audit-log";
+import galleryRouter from "./gallery";
 
 const router: IRouter = Router();
 
@@ -28,6 +29,7 @@ router.use(presetsRouter);
 router.use(phraseSuggestionsRouter);
 router.use(internalRouter);
 router.use(auditLogRouter);
+router.use(galleryRouter);
 router.use(publicRouter);
 // v3.6.0 §7: Dev-only test endpoint at GET /api/test/run. The handler itself
 // returns 404 in production, so it is safe to mount unconditionally here.

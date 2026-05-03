@@ -3648,6 +3648,61 @@ export interface PresetEntry {
 }
 
 /**
+ * Curator-assigned bucket the sample illustrates.
+ */
+export type GallerySampleLabel =
+  (typeof GallerySampleLabel)[keyof typeof GallerySampleLabel];
+
+export const GallerySampleLabel = {
+  obvious_slop: "obvious_slop",
+  subtle_slop: "subtle_slop",
+  borderline: "borderline",
+  clean: "clean",
+} as const;
+
+/**
+ * A single curated sample report shown on `/gallery`.
+ */
+export interface GallerySample {
+  /** Opaque slug for the gallery entry (stable across curator edits). */
+  id: string;
+  /** Curator-assigned bucket the sample illustrates. */
+  label: GallerySampleLabel;
+  /** Card title. */
+  title: string;
+  /** ~150 char preview of the report content. */
+  snippet: string;
+  /**
+   * Final composite slop score for the sample (0 clean → 100 slop).
+   * @minimum 0
+   * @maximum 100
+   */
+  score: number;
+  /**
+   * Top fired signals, in display order.
+   * @minItems 1
+   * @maxItems 3
+   */
+  topSignals: string[];
+  /**
+   * Seed report id; click-through opens `/results/<reportId>`.
+   * @minimum 1
+   */
+  reportId: number;
+}
+
+/**
+ * Curated sample-report gallery returned by `GET /api/gallery`. The
+`version` string lets clients cache-bust when curators ship a new
+revision of `gallery.json`.
+
+ */
+export interface GalleryResponse {
+  version: string;
+  samples: GallerySample[];
+}
+
+/**
  * Curated public preset library returned by `GET /api/presets`. The
 `version` string lets clients cache-bust when curators ship a new
 revision of `presets.json`.

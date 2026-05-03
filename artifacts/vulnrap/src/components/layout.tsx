@@ -4,7 +4,7 @@ import {
   Activity, Search, Code, BookOpen, MessageSquare, Menu, X, Github,
   Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
   ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library,
-  ScrollText, Scale, Compass, Rocket, Sliders,
+  ScrollText, Scale, Compass, Rocket, Sliders, Images,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
@@ -72,7 +72,7 @@ const NAV: NavEntry[] = [
   {
     label: "Docs",
     icon: <BookOpen className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/developers", "/quickstart", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors", "/playground"],
+    matchPrefixes: ["/developers", "/quickstart", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors", "/playground", "/gallery"],
     align: "right",
     items: [
       { to: "/quickstart", label: "Quickstart", icon: <Rocket className="w-4 h-4" />, description: "Zero to first scored report in five copy-paste steps." },
@@ -85,6 +85,7 @@ const NAV: NavEntry[] = [
       { to: "/whitepaper", label: "Whitepaper", icon: <ScrollText className="w-4 h-4" />, description: "Long-form, citation-style methodology document — print-friendly." },
       { to: "/compare-detectors", label: "Compare Detectors", icon: <Scale className="w-4 h-4" />, description: "Capability matrix vs. generic LLM detectors, plagiarism checkers, and manual triage." },
       { to: "/playground", label: "Scoring Playground", icon: <Sliders className="w-4 h-4" />, description: "Toggle signals and per-engine weights on a sample report and watch the score recalculate live." },
+      { to: "/gallery", label: "Sample Gallery", icon: <Images className="w-4 h-4" />, description: "12 pre-scored example reports — obvious slop, subtle slop, borderline, clean." },
       { to: "/blog", label: "Blog", icon: <FileText className="w-4 h-4" />, description: "Field tests, methodology, and post-mortems." },
       { to: "/changelog", label: "Changelog", icon: <BookOpen className="w-4 h-4" />, description: "Per-release notes and version history." },
       { to: "/community", label: "Community", icon: <Users className="w-4 h-4" />, description: "GitHub, mailing list, and how to contribute." },

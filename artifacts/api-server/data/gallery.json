@@ -1,0 +1,162 @@
+{
+  "$comment": "Task #647 — Curated sample report gallery. Each entry powers a card on /gallery and click-through opens /results/<reportId>. Display fields (title, snippet, score, signals, label) are stub-rendered on the card so the gallery is self-contained without DB lookups; the reportId points at one of the 6 seed reports inserted by `pnpm --filter @workspace/api-server seed` so click-through resolves in any environment that has been seeded. Edit this file (and bump the version when shipping changes) — there is no admin UI.",
+  "version": "1.0.0",
+  "samples": [
+    {
+      "id": "obvious-buzzword-soup",
+      "label": "obvious_slop",
+      "title": "Comprehensive Security Analysis of Authentication System",
+      "snippet": "It is important to note that in today's digital landscape, robust security measures are paramount. The authentication mechanism represents a significant area of concern…",
+      "score": 92,
+      "topSignals": [
+        "AI buzzword density",
+        "No reproduction steps",
+        "No CWE / CVSS"
+      ],
+      "reportId": 4
+    },
+    {
+      "id": "obvious-could-might-soup",
+      "label": "obvious_slop",
+      "title": "Multiple potential vulnerabilities in login flow",
+      "snippet": "The login page might be vulnerable to attacks. Passwords could potentially be weak. The session management system leveraging this could lead to unauthorized access…",
+      "score": 88,
+      "topSignals": [
+        "Hedging language (might/could)",
+        "No affected version",
+        "Vague impact section"
+      ],
+      "reportId": 4
+    },
+    {
+      "id": "obvious-llm-disclaimer",
+      "label": "obvious_slop",
+      "title": "Holistic review of platform security posture",
+      "snippet": "Certainly! Here is a comprehensive overview. It bears mentioning that proactive measures should be taken to ensure robust security across the platform…",
+      "score": 95,
+      "topSignals": [
+        "AI self-disclosure phrase",
+        "Template boilerplate",
+        "No technical artefacts"
+      ],
+      "reportId": 4
+    },
+    {
+      "id": "subtle-plausible-xss-no-poc",
+      "label": "subtle_slop",
+      "title": "Stored XSS in profile bio (no working PoC)",
+      "snippet": "Vulnerability appears in /api/v2/users/profile. An attacker could inject script tags. Output encoding is reportedly missing on the profile page…",
+      "score": 64,
+      "topSignals": [
+        "Endpoint named but no payload",
+        "Missing reproduction trace",
+        "Plausible CWE-79 framing"
+      ],
+      "reportId": 1
+    },
+    {
+      "id": "subtle-fabricated-cve",
+      "label": "subtle_slop",
+      "title": "SSRF in webhook handler — references nonexistent CVE",
+      "snippet": "Cites CVE-2024-XXXXX as the upstream root cause. Pattern matches a real bug class (DNS rebinding) but the cited identifier does not resolve…",
+      "score": 58,
+      "topSignals": [
+        "Fabricated CVE reference",
+        "Real-looking endpoint",
+        "Plausible CWE-918 framing"
+      ],
+      "reportId": 5
+    },
+    {
+      "id": "subtle-overstated-impact",
+      "label": "subtle_slop",
+      "title": "IDOR in invoice download — overstated CVSS",
+      "snippet": "Reports a real-looking IDOR but inflates impact to CVSS 9.8 with claims of full database compromise unsupported by the proof-of-concept shown…",
+      "score": 55,
+      "topSignals": [
+        "Severity inflation",
+        "PoC weaker than claim",
+        "Real endpoint, weak evidence"
+      ],
+      "reportId": 2
+    },
+    {
+      "id": "borderline-terse-but-real",
+      "label": "borderline",
+      "title": "Terse race-condition note — light on prose, real bug",
+      "snippet": "TOCTOU on POST /api/transfers. Concurrent curl loop drains balance past zero. Suspect missing SELECT FOR UPDATE in HandleTransfer()…",
+      "score": 42,
+      "topSignals": [
+        "Sparse narrative",
+        "Real reproduction",
+        "Concrete file/function"
+      ],
+      "reportId": 6
+    },
+    {
+      "id": "borderline-template-but-honest",
+      "label": "borderline",
+      "title": "SQLi triage from a templated bounty submission",
+      "snippet": "Looks templated (boilerplate Summary / Affected / PoC / Impact headings) but the payload, response excerpt and root-cause snippet are all genuine…",
+      "score": 48,
+      "topSignals": [
+        "Template fingerprint",
+        "Genuine PoC inside",
+        "Authentic root-cause"
+      ],
+      "reportId": 3
+    },
+    {
+      "id": "borderline-mixed-signals",
+      "label": "borderline",
+      "title": "XSS report with strong PoC but hedging conclusion",
+      "snippet": "Solid payload and CSP analysis up front, then drifts into a hedging conclusion (\"this could potentially be leveraged…\") that pulls the score upward…",
+      "score": 45,
+      "topSignals": [
+        "Good early evidence",
+        "Hedging tail",
+        "Mixed substance"
+      ],
+      "reportId": 1
+    },
+    {
+      "id": "clean-stored-xss",
+      "label": "clean",
+      "title": "Stored XSS in user profile — clean human report",
+      "snippet": "Concrete payload, file path /src/components/UserProfile.tsx, CWE-79, CVSS 8.1, observed-vs-expected behaviour and a remediation pointing at DOMPurify…",
+      "score": 12,
+      "topSignals": [
+        "Working PoC payload",
+        "CWE + CVSS present",
+        "Concrete remediation"
+      ],
+      "reportId": 1
+    },
+    {
+      "id": "clean-idor-invoice",
+      "label": "clean",
+      "title": "IDOR in invoice download — clean human report",
+      "snippet": "Two-request PoC, exact endpoint, code snippet showing the missing ownership check, CWE-639 + CVSS 7.5, and a row-level-security remediation…",
+      "score": 9,
+      "topSignals": [
+        "Reproducible two-request PoC",
+        "Root-cause code shown",
+        "Specific remediation"
+      ],
+      "reportId": 2
+    },
+    {
+      "id": "clean-sqli-search",
+      "label": "clean",
+      "title": "SQL injection in product search — clean human report",
+      "snippet": "UNION-based and time-based payloads, vulnerable Python snippet, CWE-89 + CVSS 9.8, parameterised-query fix shown verbatim…",
+      "score": 7,
+      "topSignals": [
+        "Two PoC variants",
+        "Vulnerable code snippet",
+        "Drop-in fix snippet"
+      ],
+      "reportId": 3
+    }
+  ]
+}
