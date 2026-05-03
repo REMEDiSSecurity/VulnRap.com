@@ -60,9 +60,10 @@ const NAV: NavEntry[] = [
   {
     label: "Insights",
     icon: <BarChart3 className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/stats", "/transparency"],
+    matchPrefixes: ["/stats", "/transparency", "/corpus-stats"],
     items: [
       { to: "/stats", label: "Stats", icon: <Activity className="w-4 h-4" />, description: "Aggregate scoring stats and engine health." },
+      { to: "/corpus-stats", label: "Corpus Stats", icon: <Database className="w-4 h-4" />, description: "Public corpus totals, top signals, top CWE families, and 90-day volume." },
       { to: "/transparency", label: "Impact", icon: <Eye className="w-4 h-4" />, description: "Public-good metrics and transparency report." },
     ],
   },

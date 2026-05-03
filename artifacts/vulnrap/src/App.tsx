@@ -26,6 +26,7 @@ function lazyRetry(importFn: () => Promise<{ default: React.ComponentType }>) {
 const Home = lazyRetry(() => import("@/pages/home"));
 const Results = lazyRetry(() => import("@/pages/results"));
 const Stats = lazyRetry(() => import("@/pages/stats"));
+const CorpusStats = lazyRetry(() => import("@/pages/corpus-stats"));
 const Privacy = lazyRetry(() => import("@/pages/privacy"));
 const Verify = lazyRetry(() => import("@/pages/verify"));
 const Check = lazyRetry(() => import("@/pages/check"));
@@ -69,6 +70,7 @@ function AppRoutes() {
             <Route path="/verify/:id" element={<Verify />} />
             <Route path="/check" element={<Check />} />
             <Route path="/stats" element={<Stats />} />
+            <Route path="/corpus-stats" element={<CorpusStats />} />
             <Route path="/developers" element={<ApiDocs />} />
             <Route path="/security" element={<Security />} />
             <Route path="/use-cases" element={<UseCases />} />

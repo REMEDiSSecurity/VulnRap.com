@@ -31,6 +31,7 @@ import type {
   CheckReportBody,
   CheckResult,
   CohortBaseline,
+  CorpusStats,
   DeleteReportBody,
   DeleteReportResponse,
   ErrorResponse,
@@ -3972,6 +3973,86 @@ export function useGetCohortBaseline<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetCohortBaselineQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns at-a-glance aggregates over the platform's full scoring corpus —
+total reports, breakdown by tier, top 10 most-fired evidence signals,
+top 10 CWE families, and a daily volume time series. All values are
+already-aggregated counts; no individual report content is exposed.
+
+ * @summary Get aggregate corpus statistics
+ */
+export const getGetCorpusStatsUrl = () => {
+  return `/api/public/corpus-stats`;
+};
+
+export const getCorpusStats = async (
+  options?: RequestInit,
+): Promise<CorpusStats> => {
+  return customFetch<CorpusStats>(getGetCorpusStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCorpusStatsQueryKey = () => {
+  return [`/api/public/corpus-stats`] as const;
+};
+
+export const getGetCorpusStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCorpusStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCorpusStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCorpusStatsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCorpusStats>>> = ({
+    signal,
+  }) => getCorpusStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCorpusStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCorpusStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCorpusStats>>
+>;
+export type GetCorpusStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get aggregate corpus statistics
+ */
+
+export function useGetCorpusStats<
+  TData = Awaited<ReturnType<typeof getCorpusStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCorpusStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCorpusStatsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -1389,6 +1389,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/CohortBaseline"
 
+  /public/corpus-stats:
+    get:
+      operationId: getCorpusStats
+      tags: [stats]
+      summary: Get aggregate corpus statistics
+      description: |
+        Returns at-a-glance aggregates over the platform's full scoring corpus —
+        total reports, breakdown by tier, top 10 most-fired evidence signals,
+        top 10 CWE families, and a daily volume time series. All values are
+        already-aggregated counts; no individual report content is exposed.
+      responses:
+        "200":
+          description: Corpus statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CorpusStats"
+
   /stats/trends:
     get:
       operationId: getTrends
@@ -2411,6 +2429,82 @@ components:
         - totalReports
         - median
         - bins
+
+    CorpusStats:
+      type: object
+      description: |
+        Already-aggregated corpus statistics for the public stats page.
+        Contains no individual report content — only counts and totals over
+        the full scoring corpus.
+      properties:
+        totalReports:
+          type: integer
+          description: Total number of reports scored to date.
+        generatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when these aggregates were computed.
+        tierBreakdown:
+          type: array
+          description: Count of reports per slop tier label.
+          items:
+            type: object
+            properties:
+              tier:
+                type: string
+              count:
+                type: integer
+            required:
+              - tier
+              - count
+        topSignals:
+          type: array
+          description: Top 10 most-fired evidence signal types across the corpus.
+          items:
+            type: object
+            properties:
+              signal:
+                type: string
+              count:
+                type: integer
+            required:
+              - signal
+              - count
+        topCweFamilies:
+          type: array
+          description: |
+            Top 10 AVRI rubric CWE families across reports (e.g. INJECTION,
+            MEMORY_CORRUPTION). Reports with no cached family are omitted.
+          items:
+            type: object
+            properties:
+              family:
+                type: string
+              count:
+                type: integer
+            required:
+              - family
+              - count
+        volumeTimeSeries:
+          type: array
+          description: Daily report volume for the last 90 days (oldest first).
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              count:
+                type: integer
+            required:
+              - date
+              - count
+      required:
+        - totalReports
+        - generatedAt
+        - tierBreakdown
+        - topSignals
+        - topCweFamilies
+        - volumeTimeSeries
 
     SlopDistribution:
       type: object

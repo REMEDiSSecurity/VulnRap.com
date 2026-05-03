@@ -1384,6 +1384,49 @@ platform cohort is returned instead.
   bins: CohortBaselineBinsItem[];
 }
 
+export type CorpusStatsTierBreakdownItem = {
+  tier: string;
+  count: number;
+};
+
+export type CorpusStatsTopSignalsItem = {
+  signal: string;
+  count: number;
+};
+
+export type CorpusStatsTopCweFamiliesItem = {
+  family: string;
+  count: number;
+};
+
+export type CorpusStatsVolumeTimeSeriesItem = {
+  date: string;
+  count: number;
+};
+
+/**
+ * Already-aggregated corpus statistics for the public stats page.
+Contains no individual report content — only counts and totals over
+the full scoring corpus.
+
+ */
+export interface CorpusStats {
+  /** Total number of reports scored to date. */
+  totalReports: number;
+  /** Timestamp when these aggregates were computed. */
+  generatedAt: string;
+  /** Count of reports per slop tier label. */
+  tierBreakdown: CorpusStatsTierBreakdownItem[];
+  /** Top 10 most-fired evidence signal types across the corpus. */
+  topSignals: CorpusStatsTopSignalsItem[];
+  /** Top 10 AVRI rubric CWE families across reports (e.g. INJECTION,
+MEMORY_CORRUPTION). Reports with no cached family are omitted.
+ */
+  topCweFamilies: CorpusStatsTopCweFamiliesItem[];
+  /** Daily report volume for the last 90 days (oldest first). */
+  volumeTimeSeries: CorpusStatsVolumeTimeSeriesItem[];
+}
+
 export type SlopDistributionBucketsItem = {
   label: string;
   min: number;

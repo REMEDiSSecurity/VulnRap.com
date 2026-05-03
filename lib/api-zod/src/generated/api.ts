@@ -11386,6 +11386,61 @@ export const GetCohortBaselineResponse = zod
   );
 
 /**
+ * Returns at-a-glance aggregates over the platform's full scoring corpus —
+total reports, breakdown by tier, top 10 most-fired evidence signals,
+top 10 CWE families, and a daily volume time series. All values are
+already-aggregated counts; no individual report content is exposed.
+
+ * @summary Get aggregate corpus statistics
+ */
+export const GetCorpusStatsResponse = zod
+  .object({
+    totalReports: zod
+      .number()
+      .describe("Total number of reports scored to date."),
+    generatedAt: zod.coerce
+      .date()
+      .describe("Timestamp when these aggregates were computed."),
+    tierBreakdown: zod
+      .array(
+        zod.object({
+          tier: zod.string(),
+          count: zod.number(),
+        }),
+      )
+      .describe("Count of reports per slop tier label."),
+    topSignals: zod
+      .array(
+        zod.object({
+          signal: zod.string(),
+          count: zod.number(),
+        }),
+      )
+      .describe("Top 10 most-fired evidence signal types across the corpus."),
+    topCweFamilies: zod
+      .array(
+        zod.object({
+          family: zod.string(),
+          count: zod.number(),
+        }),
+      )
+      .describe(
+        "Top 10 AVRI rubric CWE families across reports (e.g. INJECTION,\nMEMORY_CORRUPTION). Reports with no cached family are omitted.\n",
+      ),
+    volumeTimeSeries: zod
+      .array(
+        zod.object({
+          date: zod.string(),
+          count: zod.number(),
+        }),
+      )
+      .describe("Daily report volume for the last 90 days (oldest first)."),
+  })
+  .describe(
+    "Already-aggregated corpus statistics for the public stats page.\nContains no individual report content — only counts and totals over\nthe full scoring corpus.\n",
+  );
+
+/**
  * Returns daily report volume, tier breakdown, average score, and feedback trends for the specified time window
  * @summary Get trend data over time
  */

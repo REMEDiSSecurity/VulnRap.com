@@ -15,6 +15,7 @@ import {
   GetRecentActivityResponse,
   GetSlopDistributionResponse,
   GetTrendsResponse,
+  GetCorpusStatsResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -304,6 +305,73 @@ router.get("/stats/trends", async (req, res): Promise<void> => {
   });
 
   res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
+  res.json(response);
+});
+
+router.get("/public/corpus-stats", async (_req, res): Promise<void> => {
+  const generatedAt = new Date();
+
+  const [totals] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(reportsTable);
+
+  const tierRows = await db
+    .select({
+      tier: reportsTable.slopTier,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(reportsTable)
+    .groupBy(reportsTable.slopTier)
+    .orderBy(sql`count(*) desc`);
+
+  const familyRows = await db
+    .select({
+      family: reportsTable.avriFamily,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(reportsTable)
+    .where(sql`${reportsTable.avriFamily} is not null`)
+    .groupBy(reportsTable.avriFamily)
+    .orderBy(sql`count(*) desc`)
+    .limit(10);
+
+  const signalRows = await db.execute<{ signal: string; count: number }>(sql`
+    SELECT (elem->>'type') AS signal, count(*)::int AS count
+    FROM reports, jsonb_array_elements(coalesce(evidence, '[]'::jsonb)) AS elem
+    WHERE elem->>'type' IS NOT NULL
+    GROUP BY elem->>'type'
+    ORDER BY count(*) DESC
+    LIMIT 10
+  `);
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const volumeRows = await db
+    .select({
+      date: sql<string>`${reportsTable.createdAt}::date::text`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(reportsTable)
+    .where(gte(reportsTable.createdAt, cutoff))
+    .groupBy(sql`${reportsTable.createdAt}::date`)
+    .orderBy(sql`${reportsTable.createdAt}::date asc`);
+
+  const response = GetCorpusStatsResponse.parse({
+    totalReports: totals.total,
+    generatedAt: generatedAt.toISOString(),
+    tierBreakdown: tierRows.map((r) => ({ tier: r.tier, count: r.count })),
+    topSignals: signalRows.rows.map((r) => ({
+      signal: r.signal,
+      count: Number(r.count),
+    })),
+    topCweFamilies: familyRows.map((r) => ({
+      family: r.family ?? "FLAT",
+      count: r.count,
+    })),
+    volumeTimeSeries: volumeRows.map((r) => ({ date: r.date, count: r.count })),
+  });
+
+  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
   res.json(response);
 });
 
