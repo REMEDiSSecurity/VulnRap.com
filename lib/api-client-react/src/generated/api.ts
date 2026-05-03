@@ -78,6 +78,7 @@ import type {
   LatencySnapshot,
   ListHandwavyPhraseRemovalBatchesParams,
   ListPhraseSuggestionsParams,
+  NewsletterChallenge,
   NewsletterConfirmResponse,
   NewsletterSubscribeBody,
   NewsletterSubscribeResponse,
@@ -1792,11 +1793,92 @@ export function useGetReportFeed<
 }
 
 /**
+ * Returns a SHA-256 proof-of-work challenge that must be solved before
+submitting a newsletter signup. This raises the cost of distributed
+bot signups beyond what the per-IP rate limit can stop on its own.
+
+ * @summary Get a proof-of-work challenge for newsletter signup
+ */
+export const getGetNewsletterChallengeUrl = () => {
+  return `/api/newsletter/challenge`;
+};
+
+export const getNewsletterChallenge = async (
+  options?: RequestInit,
+): Promise<NewsletterChallenge> => {
+  return customFetch<NewsletterChallenge>(getGetNewsletterChallengeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNewsletterChallengeQueryKey = () => {
+  return [`/api/newsletter/challenge`] as const;
+};
+
+export const getGetNewsletterChallengeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNewsletterChallenge>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNewsletterChallenge>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetNewsletterChallengeQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getNewsletterChallenge>>
+  > = ({ signal }) => getNewsletterChallenge({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNewsletterChallenge>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNewsletterChallengeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNewsletterChallenge>>
+>;
+export type GetNewsletterChallengeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get a proof-of-work challenge for newsletter signup
+ */
+
+export function useGetNewsletterChallenge<
+  TData = Awaited<ReturnType<typeof getNewsletterChallenge>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNewsletterChallenge>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNewsletterChallengeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * Stores a SHA-256 HMAC of the email address (keyed with VISITOR_HMAC_KEY)
 so duplicate signups can be detected without persisting the raw address.
 When NEWSLETTER_FORWARD_URL is configured, the raw email is forwarded to
 that destination as a best-effort POST. Per-IP rate limited to 20
-signups per hour.
+signups per hour. Requires a solved proof-of-work challenge from
+GET /newsletter/challenge.
 
 Task #733 — On a fresh signup the server mints a per-row random
 token (only the SHA-256 hash is persisted) and dispatches a

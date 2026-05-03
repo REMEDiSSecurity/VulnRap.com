@@ -189,6 +189,7 @@ export * from "./lLMClaims";
 export * from "./lLMClaimsComplianceRelevance";
 export * from "./lLMSubstanceScores";
 export * from "./lLMTriageGuidance";
+export * from "./newsletterChallenge";
 export * from "./newsletterConfirmResponse";
 export * from "./newsletterSubscribeBody";
 export * from "./newsletterSubscribeResponse";

@@ -12,4 +12,10 @@ export interface NewsletterSubscribeBody {
    * @maxLength 254
    */
   email: string;
+  /** The challenge ID returned from GET /newsletter/challenge. */
+  challengeId: string;
+  /** The solution string whose SHA-256 hash with the issued nonce
+satisfies the challenge difficulty.
+ */
+  challengeSolution: string;
 }

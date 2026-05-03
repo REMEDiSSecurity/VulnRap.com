@@ -2583,11 +2583,27 @@ export const GetReportFeedResponse = zod.object({
 });
 
 /**
+ * Returns a SHA-256 proof-of-work challenge that must be solved before
+submitting a newsletter signup. This raises the cost of distributed
+bot signups beyond what the per-IP rate limit can stop on its own.
+
+ * @summary Get a proof-of-work challenge for newsletter signup
+ */
+export const GetNewsletterChallengeResponse = zod.object({
+  challengeId: zod.string(),
+  nonce: zod.string(),
+  difficulty: zod.number(),
+  prefix: zod.string(),
+  expiresAt: zod.number(),
+});
+
+/**
  * Stores a SHA-256 HMAC of the email address (keyed with VISITOR_HMAC_KEY)
 so duplicate signups can be detected without persisting the raw address.
 When NEWSLETTER_FORWARD_URL is configured, the raw email is forwarded to
 that destination as a best-effort POST. Per-IP rate limited to 20
-signups per hour.
+signups per hour. Requires a solved proof-of-work challenge from
+GET /newsletter/challenge.
 
 Task #733 — On a fresh signup the server mints a per-row random
 token (only the SHA-256 hash is persisted) and dispatches a
@@ -2608,6 +2624,14 @@ export const SubscribeNewsletterBody = zod.object({
     .email()
     .max(subscribeNewsletterBodyEmailMax)
     .describe("Email address to subscribe to the community mailing list."),
+  challengeId: zod
+    .string()
+    .describe("The challenge ID returned from GET \/newsletter\/challenge."),
+  challengeSolution: zod
+    .string()
+    .describe(
+      "The solution string whose SHA-256 hash with the issued nonce\nsatisfies the challenge difficulty.\n",
+    ),
 });
 
 /**

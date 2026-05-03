@@ -19,7 +19,11 @@ import {
   Award,
   GitBranch,
 } from "lucide-react";
-import { useSubscribeNewsletter, ApiError } from "@workspace/api-client-react";
+import {
+  useSubscribeNewsletter,
+  getNewsletterChallenge,
+  ApiError,
+} from "@workspace/api-client-react";
 import {
   Card,
   CardContent,
@@ -151,14 +155,43 @@ function ContributionCard({
   );
 }
 
+async function solveNewsletterChallenge(
+  prefix: string,
+  nonce: string,
+  difficulty: number,
+): Promise<string> {
+  const required = "0".repeat(difficulty);
+  const encoder = new TextEncoder();
+  // Difficulty 4 hex zeros ≈ 65k tries on average; cheap on the main thread
+  // but we yield to the event loop every 1k iterations so very unlucky
+  // searches don't freeze the tab.
+  for (let i = 0; i < 5_000_000; i++) {
+    const solution = i.toString(16);
+    const buf = encoder.encode(prefix + nonce + solution);
+    const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+    const hashArr = new Uint8Array(hashBuf);
+    let hex = "";
+    for (let j = 0; j < hashArr.length; j++) {
+      hex += hashArr[j].toString(16).padStart(2, "0");
+    }
+    if (hex.startsWith(required)) return solution;
+    if ((i & 0x3ff) === 0x3ff) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+  throw new Error("Could not solve challenge in time. Please try again.");
+}
+
 function NewsletterForm() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
+  const [solving, setSolving] = useState(false);
   const [submitted, setSubmitted] = useState<{
     alreadySubscribed: boolean;
     pendingConfirmation: boolean;
   } | null>(null);
   const subscribe = useSubscribeNewsletter();
+  const busy = subscribe.isPending || solving;
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -172,7 +205,21 @@ function NewsletterForm() {
       return;
     }
     try {
-      const res = await subscribe.mutateAsync({ data: { email: trimmed } });
+      setSolving(true);
+      const challenge = await getNewsletterChallenge();
+      const challengeSolution = await solveNewsletterChallenge(
+        challenge.prefix,
+        challenge.nonce,
+        challenge.difficulty,
+      );
+      setSolving(false);
+      const res = await subscribe.mutateAsync({
+        data: {
+          email: trimmed,
+          challengeId: challenge.challengeId,
+          challengeSolution,
+        },
+      });
       setSubmitted({
         alreadySubscribed: res.alreadySubscribed,
         pendingConfirmation: res.pendingConfirmation,
@@ -187,6 +234,7 @@ function NewsletterForm() {
       });
       if (!res.alreadySubscribed) setEmail("");
     } catch (err) {
+      setSolving(false);
       const message =
         err instanceof ApiError
           ? err.data && typeof err.data === "object" && "error" in err.data
@@ -229,20 +277,20 @@ function NewsletterForm() {
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={subscribe.isPending}
+            disabled={busy}
             className="flex-1 min-w-0 rounded-md bg-background/60 border border-border/70 px-3 py-2 text-sm font-mono placeholder:text-muted-foreground/50 focus:border-primary/60 focus:outline-none focus:ring-1 focus:ring-primary/40 transition-colors disabled:opacity-50"
             data-testid="input-newsletter-email"
           />
           <Button
             type="submit"
-            disabled={subscribe.isPending}
+            disabled={busy}
             className="shrink-0"
             data-testid="button-newsletter-subscribe"
           >
-            {subscribe.isPending ? (
+            {busy ? (
               <>
                 <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                Subscribing…
+                {solving ? "Verifying…" : "Subscribing…"}
               </>
             ) : (
               <>

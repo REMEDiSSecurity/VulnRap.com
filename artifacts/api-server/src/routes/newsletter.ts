@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
@@ -8,6 +8,193 @@ import { buildPublicUrl } from "../lib/public-url";
 import { sendNewsletterEmail } from "../lib/newsletter-email";
 
 const router: IRouter = Router();
+
+// ---------------------------------------------------------------------------
+// Stateless proof-of-work challenge.
+//
+// We deliberately do not use the in-memory challenge store from
+// `lib/challenge.ts` here — that store breaks the moment the api-server
+// runs on more than one pod (challenge issued by pod A, signup hits pod
+// B → "challenge not found"). Instead the challenge is encoded as a
+// self-describing string:
+//
+//   challengeId = base64url(payload) + "." + base64url(HMAC(payload))
+//
+// where `payload` is `${nonce}:${expiresAtMs}` and the HMAC key comes
+// from NEWSLETTER_CHALLENGE_HMAC_KEY (or, if unset, a per-process
+// random key — degraded but documented). Any pod that holds the same
+// key can verify the token without coordination.
+//
+// To bound replay we keep a small in-process LRU of recently-spent
+// signatures. Cross-pod replay is still possible up to (pod count)
+// signups per solved PoW, which is acceptable: the dominant cost of an
+// attack is computing the PoW, and the per-IP rate limit on the signup
+// endpoint already caps how many signups any single client can land per
+// hour regardless of how many pods see the same token.
+// ---------------------------------------------------------------------------
+
+const CHALLENGE_DIFFICULTY = 4;
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const CHALLENGE_PREFIX = "vulnrap-newsletter-pow-";
+
+let CHALLENGE_KEY = process.env.NEWSLETTER_CHALLENGE_HMAC_KEY;
+if (!CHALLENGE_KEY) {
+  CHALLENGE_KEY = randomBytes(32).toString("hex");
+  logger.warn(
+    "[newsletter] NEWSLETTER_CHALLENGE_HMAC_KEY not set — using ephemeral " +
+      "per-process key. Challenges minted on one process will be rejected on " +
+      "any other process. Set this env var in production / multi-pod deploys.",
+  );
+}
+const CHALLENGE_KEY_BUF: Buffer = Buffer.from(CHALLENGE_KEY, "utf8");
+
+const SPENT_MAX = 10_000;
+const spentSignatures = new Map<string, number>();
+function markSpent(sig: string, expiresAt: number): void {
+  if (spentSignatures.size >= SPENT_MAX) {
+    // Drop the oldest half on overflow. Cheap; runs at most once per
+    // SPENT_MAX inserts and keeps memory strictly bounded.
+    const drop = Math.floor(SPENT_MAX / 2);
+    let i = 0;
+    for (const k of spentSignatures.keys()) {
+      spentSignatures.delete(k);
+      if (++i >= drop) break;
+    }
+  }
+  spentSignatures.set(sig, expiresAt);
+}
+
+function b64urlEncode(input: Buffer | string): string {
+  const buf = typeof input === "string" ? Buffer.from(input, "utf8") : input;
+  return buf
+    .toString("base64")
+    .replace(/=+$/, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+}
+function b64urlDecode(input: string): Buffer {
+  const padded = input.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = padded.length % 4 === 0 ? "" : "=".repeat(4 - (padded.length % 4));
+  return Buffer.from(padded + pad, "base64");
+}
+
+function signPayload(payload: string): string {
+  return b64urlEncode(
+    createHmac("sha256", CHALLENGE_KEY_BUF).update(payload).digest(),
+  );
+}
+
+interface IssuedChallenge {
+  challengeId: string;
+  nonce: string;
+  difficulty: number;
+  prefix: string;
+  expiresAt: number;
+}
+function issueChallenge(): IssuedChallenge {
+  const nonce = randomBytes(16).toString("hex");
+  const expiresAt = Date.now() + CHALLENGE_TTL_MS;
+  const payload = `${nonce}:${expiresAt}`;
+  const sig = signPayload(payload);
+  const challengeId = `${b64urlEncode(payload)}.${sig}`;
+  return {
+    challengeId,
+    nonce,
+    difficulty: CHALLENGE_DIFFICULTY,
+    prefix: CHALLENGE_PREFIX,
+    expiresAt,
+  };
+}
+
+function verifyChallengeToken(
+  challengeId: string,
+  solution: string,
+): { valid: true } | { valid: false; status: 400 | 403; error: string } {
+  const dot = challengeId.indexOf(".");
+  if (dot <= 0 || dot === challengeId.length - 1) {
+    return { valid: false, status: 400, error: "Malformed challenge token." };
+  }
+  const payloadB64 = challengeId.slice(0, dot);
+  const sigB64 = challengeId.slice(dot + 1);
+
+  let payload: string;
+  try {
+    payload = b64urlDecode(payloadB64).toString("utf8");
+  } catch {
+    return { valid: false, status: 400, error: "Malformed challenge token." };
+  }
+
+  const expectedSig = signPayload(payload);
+  const a = Buffer.from(sigB64, "utf8");
+  const b = Buffer.from(expectedSig, "utf8");
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return {
+      valid: false,
+      status: 403,
+      error: "Invalid challenge signature.",
+    };
+  }
+
+  const colon = payload.indexOf(":");
+  if (colon <= 0) {
+    return { valid: false, status: 400, error: "Malformed challenge token." };
+  }
+  const nonce = payload.slice(0, colon);
+  const expiresAt = Number(payload.slice(colon + 1));
+  if (!Number.isFinite(expiresAt)) {
+    return { valid: false, status: 400, error: "Malformed challenge token." };
+  }
+  if (Date.now() > expiresAt) {
+    return { valid: false, status: 403, error: "Challenge expired." };
+  }
+
+  // Opportunistic per-process replay guard.
+  if (spentSignatures.has(sigB64)) {
+    return { valid: false, status: 403, error: "Challenge already used." };
+  }
+
+  const hash = createHash("sha256")
+    .update(CHALLENGE_PREFIX + nonce + solution)
+    .digest("hex");
+  if (!hash.startsWith("0".repeat(CHALLENGE_DIFFICULTY))) {
+    return {
+      valid: false,
+      status: 403,
+      error: "Invalid solution — hash does not meet difficulty requirement.",
+    };
+  }
+
+  markSpent(sigB64, expiresAt);
+  return { valid: true };
+}
+
+// Periodically expire spent-signature entries so the map doesn't keep
+// rows from long-dead challenges around past their useful life.
+setInterval(() => {
+  const now = Date.now();
+  for (const [sig, exp] of spentSignatures) {
+    if (exp < now) spentSignatures.delete(sig);
+  }
+}, 60_000).unref?.();
+
+const challengeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "Too many challenge requests from this IP. Try again later.",
+  },
+});
+
+router.get("/newsletter/challenge", challengeLimiter, (req, res) => {
+  try {
+    res.json(issueChallenge());
+  } catch (err) {
+    req.log?.error(err, "Failed to generate newsletter challenge");
+    res.status(500).json({ error: "Failed to generate challenge." });
+  }
+});
 
 let HMAC_KEY = process.env.VISITOR_HMAC_KEY;
 if (!HMAC_KEY) {
@@ -111,6 +298,30 @@ router.post(
   subscribeLimiter,
   async (req, res): Promise<void> => {
     try {
+      const challengeId =
+        typeof req.body?.challengeId === "string" ? req.body.challengeId : "";
+      const challengeSolution =
+        typeof req.body?.challengeSolution === "string"
+          ? req.body.challengeSolution
+          : "";
+      if (!challengeId || !challengeSolution) {
+        res.status(400).json({
+          error:
+            "Proof-of-work challenge is required. Fetch a challenge from GET /newsletter/challenge first.",
+        });
+        return;
+      }
+      const challengeResult = verifyChallengeToken(
+        challengeId,
+        challengeSolution,
+      );
+      if (!challengeResult.valid) {
+        res.status(challengeResult.status).json({
+          error: challengeResult.error,
+        });
+        return;
+      }
+
       const rawEmail =
         typeof req.body?.email === "string" ? req.body.email.trim() : "";
       if (!rawEmail) {
