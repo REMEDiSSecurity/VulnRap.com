@@ -28,6 +28,7 @@ import { AutoRedactionCard } from "./auto-redaction-card";
 import { SectionHashingCard } from "./section-hashing-card";
 import { SlopDetectionCard } from "./slop-detection-card";
 import { VisitorCounter } from "./visitor-counter";
+import { TrustBadges } from "./trust-badges";
 import { OnboardingTour, hasSeenOnboardingTour } from "@/components/onboarding-tour";
 
 // Below-the-fold sections — lazy loaded so they don't bloat the initial
@@ -350,6 +351,7 @@ export default function Home() {
         <p className="text-sm sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed px-2">
           Assess the likelihood that an incoming vulnerability report describes a real, reproducible issue. Cross-check claims against live sources, detect duplicate submissions, and surface what deserves analyst time. Built for PSIRT teams, triage analysts, and anyone buried in an inbox full of incoming reports.
         </p>
+        <TrustBadges />
       </div>
 
       <ReportSubmitCooldownBanner state={reportSubmitCooldown} />
