@@ -222,6 +222,13 @@ const NAV: NavEntry[] = [
         description: "Pipeline diagram and request flow for integrators.",
       },
       {
+        to: "/engines",
+        label: "Engines Overview",
+        icon: <Layers className="w-4 h-4" />,
+        description:
+          "Index of every scoring engine — weights, blind spots, false-positive patterns, and worked examples.",
+      },
+      {
         to: "/engines/substance",
         label: "Substance Engine",
         icon: <FlaskConical className="w-4 h-4" />,

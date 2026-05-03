@@ -37,8 +37,8 @@ const NODES: PipelineNode[] = [
     id: "fuse",
     label: "Score Fusion",
     sub: "3 engines · weighted",
-    to: "/transparency",
-    linkLabel: "Engine transparency",
+    to: "/engines",
+    linkLabel: "Per-engine deep dives",
     fill: "rgba(251,191,36,0.10)",
     stroke: "rgba(251,191,36,0.55)",
     text: "#fbbf24",
@@ -523,6 +523,10 @@ export default function Architecture() {
         See also:{" "}
         <Link to="/developers" className="text-primary/80 hover:text-primary">
           API reference
+        </Link>
+        {" · "}
+        <Link to="/engines" className="text-primary/80 hover:text-primary">
+          Per-engine deep dives
         </Link>
         {" · "}
         <Link to="/transparency" className="text-primary/80 hover:text-primary">
