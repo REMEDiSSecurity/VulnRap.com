@@ -814,6 +814,32 @@ describe("runEngine2Avri — INJECTION placeholder-body integration", () => {
     const survivingIds = result.detail.goldHits.map((g) => g.id);
     expect(survivingIds).toContain("concrete_payload");
   });
+
+  // Task #763 — the SQLi payload only becomes visible after the printf
+  // shell-escape is unescaped: `q=1 UNION\nSELECT…` in the source has a
+  // literal backslash-n between UNION and SELECT, so `union\s+select`
+  // doesn't match the original text. After `augmentTextWithUnescapedHttp`
+  // appends the unescaped bytes, the keywords are separated by a real
+  // newline (whitespace) and the gold signal fires. The body-payload
+  // re-test path must run against the augmented buffer too — otherwise
+  // the prose `<sql payload here>` placeholder would revoke the gold
+  // point even though a real payload exists in the shell-escaped body.
+  it("keeps concrete_payload when the only real payload sits in a printf shell-escaped POST body", () => {
+    const fixture = [
+      "# SQL injection on POST /search via the q parameter",
+      "",
+      "The q parameter is concatenated directly into a database query (CWE-89).",
+      "Payload: `<sql payload here>`. Reproduction below:",
+      "",
+      "```sh",
+      "printf 'POST /search HTTP/1.1\\r\\nHost: shop.example.com\\r\\nContent-Type: application/x-www-form-urlencoded\\r\\nContent-Length: 36\\r\\n\\r\\nq=1 UNION\\nSELECT password FROM users--' | nc shop.example.com 80",
+      "```",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, INJ);
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).toContain("concrete_payload");
+  });
 });
 
 // SQLi slop fixture: prose only — no fake bytes, no fenced code, just a

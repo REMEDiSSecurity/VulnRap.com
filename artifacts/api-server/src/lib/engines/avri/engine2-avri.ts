@@ -15,6 +15,7 @@ import {
 } from "./crash-trace";
 import {
   augmentTextWithUnescapedHttp,
+  unescapeShellHttpFragments,
   evaluateRawHttpRequest,
   evaluateRawHttpResponse,
   rawHttpGoldSignalIdsFor,
@@ -417,7 +418,26 @@ export function runEngine2Avri(
     // payload too), the gold point survives.
     const bodyPayloadIds = rawHttpBodyPayloadGoldSignalIdsFor(family.id);
     if (bodyPayloadIds && rawHttp.placeholderBodyRanges.length > 0) {
-      const stripped = stripPlaceholderBodies(fullText, rawHttp);
+      // Task #763 — strip placeholder ranges from the original text, then
+      // append the unescaped bytes from any `printf '...HTTP/1.x\r\n...'`
+      // shell-escaped reproduction. Without the appendix a SQLi/XSS payload
+      // that's only visible after shell-unescaping (e.g. `q=1 UNION\nSELECT…`
+      // where `\n` is a literal backslash-n in the source) would fail the
+      // re-test even though `concrete_payload` legitimately matched the
+      // augmented text earlier. We can't pass `httpAugmentedText` directly
+      // to `stripPlaceholderBodies` because its prose-blanking pass treats
+      // the appended bytes as bare prose (they sit outside any markdown
+      // fence) and would blank them too — so we strip first, then append
+      // the raw unescaped fragments which by construction contain only
+      // request bytes, no prose-dodge tokens.
+      const strippedOriginal = stripPlaceholderBodies(fullText, rawHttp);
+      const unescapedAppendix = familyWantsRawHttp
+        ? unescapeShellHttpFragments(fullText)
+        : "";
+      const stripped =
+        unescapedAppendix.length > 0
+          ? `${strippedOriginal}\n\n${unescapedAppendix}`
+          : strippedOriginal;
       const remaining: typeof goldHits = [];
       for (const hit of goldHits) {
         if (bodyPayloadIds.has(hit.id)) {
