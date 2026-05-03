@@ -57,8 +57,8 @@ const NODES: PipelineNode[] = [
     id: "store",
     label: "Store",
     sub: "hash · index · search",
-    to: "/reports",
-    linkLabel: "Reports gallery",
+    to: "/gallery",
+    linkLabel: "Curated report gallery",
     fill: "rgba(52,211,153,0.10)",
     stroke: "rgba(52,211,153,0.55)",
     text: "#34d399",
@@ -482,6 +482,21 @@ export default function Architecture() {
             </li>
           ))}
         </ul>
+
+        {/* Task #768 — Store now points to the curated gallery; surface the
+            raw reports explorer here so reviewers who want every public
+            report (not just the curated set) still have a one-click path. */}
+        <p className="text-[11px] text-muted-foreground/70">
+          Store opens the{" "}
+          <Link to="/gallery" className="text-primary/80 hover:text-primary">
+            curated gallery
+          </Link>
+          . For the full searchable index of every public report, see the{" "}
+          <Link to="/reports" className="text-primary/80 hover:text-primary">
+            reports explorer
+          </Link>
+          .
+        </p>
       </section>
 
       <section className="space-y-4">
