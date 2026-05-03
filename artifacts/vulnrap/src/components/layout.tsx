@@ -5,7 +5,7 @@ import {
   Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
   ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library,
   ScrollText, Scale, Compass, Rocket, Sliders, Images, ShieldAlert, Radar, BadgeCheck, Layers,
-  Map as MapIcon, Siren, HeartPulse,
+  Map as MapIcon, Siren, HeartPulse, BookA,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
@@ -75,7 +75,7 @@ const NAV: NavEntry[] = [
   {
     label: "Docs",
     icon: <BookOpen className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/developers", "/quickstart", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors", "/playground", "/gallery", "/cwe", "/signals", "/badges", "/roadmap", "/status", "/incidents"],
+    matchPrefixes: ["/developers", "/quickstart", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors", "/playground", "/gallery", "/cwe", "/signals", "/badges", "/roadmap", "/status", "/incidents", "/glossary"],
     align: "right",
     items: [
       { to: "/quickstart", label: "Quickstart", icon: <Rocket className="w-4 h-4" />, description: "Zero to first scored report in five copy-paste steps." },
@@ -97,6 +97,7 @@ const NAV: NavEntry[] = [
       { to: "/changelog", label: "Changelog", icon: <BookOpen className="w-4 h-4" />, description: "Per-release notes and version history." },
       { to: "/roadmap", label: "Roadmap", icon: <MapIcon className="w-4 h-4" />, description: "Now / Next / Later — what's being built and what's queued." },
       { to: "/incidents", label: "Incidents", icon: <Siren className="w-4 h-4" />, description: "Public postmortems for engine outages, scoring regressions, and calibration mistakes." },
+      { to: "/glossary", label: "Glossary", icon: <BookA className="w-4 h-4" />, description: "Working vocabulary for the engine, signals, and report-quality concepts." },
       { to: "/community", label: "Community", icon: <Users className="w-4 h-4" />, description: "GitHub, mailing list, and how to contribute." },
       { to: "/status", label: "Status", icon: <HeartPulse className="w-4 h-4" />, description: "Live API uptime, scoring latency, and per-engine health." },
     ],
