@@ -48,6 +48,7 @@ const EnginesSubstance = lazyRetry(() => import("@/pages/engines-substance"));
 const Presets = lazyRetry(() => import("@/pages/presets"));
 const RedactionExamples = lazyRetry(() => import("@/pages/redaction-examples"));
 const GoodReport = lazyRetry(() => import("@/pages/good-report"));
+const Whitepaper = lazyRetry(() => import("@/pages/whitepaper"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -93,6 +94,7 @@ function AppRoutes() {
             <Route path="/presets" element={<Presets />} />
             <Route path="/redaction-examples" element={<RedactionExamples />} />
             <Route path="/docs/good-report" element={<GoodReport />} />
+            <Route path="/whitepaper" element={<Whitepaper />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

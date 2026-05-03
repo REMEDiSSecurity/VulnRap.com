@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Activity, Search, Code, BookOpen, MessageSquare, Menu, X, Github,
   Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
-  ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library,
+  ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library, ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
@@ -71,13 +71,14 @@ const NAV: NavEntry[] = [
   {
     label: "Docs",
     icon: <BookOpen className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/developers", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets"],
+    matchPrefixes: ["/developers", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper"],
     align: "right",
     items: [
       { to: "/developers", label: "API", icon: <Code className="w-4 h-4" />, description: "REST endpoints, schemas, and examples." },
       { to: "/architecture", label: "Architecture", icon: <Network className="w-4 h-4" />, description: "Pipeline diagram and request flow for integrators." },
       { to: "/engines/substance", label: "Substance Engine", icon: <FlaskConical className="w-4 h-4" />, description: "Engine 2 deep-dive: technical substance density." },
       { to: "/presets", label: "Presets", icon: <Library className="w-4 h-4" />, description: "Curated sensitivity + per-engine weight profiles for common triage workflows." },
+      { to: "/whitepaper", label: "Whitepaper", icon: <ScrollText className="w-4 h-4" />, description: "Long-form, citation-style methodology document — print-friendly." },
       { to: "/blog", label: "Blog", icon: <FileText className="w-4 h-4" />, description: "Field tests, methodology, and post-mortems." },
       { to: "/changelog", label: "Changelog", icon: <BookOpen className="w-4 h-4" />, description: "Per-release notes and version history." },
       { to: "/community", label: "Community", icon: <Users className="w-4 h-4" />, description: "GitHub, mailing list, and how to contribute." },
