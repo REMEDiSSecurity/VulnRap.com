@@ -330,6 +330,66 @@ describe("runEngine2Avri — REQUEST_SMUGGLING raw-HTTP integration", () => {
     expect(survivingIds).not.toContain("smuggled_second_request");
     expect(result.detail.rawAvriScore).toBeLessThan(40);
   });
+
+  // Task #755 — bash ANSI-C quoting (`$'...'`) is the most idiomatic
+  // way to embed real CRLFs in a one-liner (`echo $'POST / HTTP/1.1
+  // \r\n…' | nc target 80`). Legitimate smuggling reproductions
+  // written this way must surface the same raw-HTTP and
+  // second-request gold signals as the printf '…' variant covered by
+  // Task #427.
+  it("awards raw_http_request + smuggled_second_request for an ANSI-C $'...' reproduction", () => {
+    const fixture = [
+      "# CL.TE smuggling on shop.example.com (CloudFront -> nginx)",
+      "",
+      "The CloudFront frontend frames on Content-Length while the nginx",
+      "backend honors Transfer-Encoding: chunked. CWE-444.",
+      "",
+      "```",
+      "echo $'POST / HTTP/1.1\\r\\nHost: shop.example.com\\r\\nContent-Length: 13\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n0\\r\\n\\r\\nGPOST / HTTP/1.1\\r\\nHost: shop.example.com\\r\\nContent-Length: 10\\r\\n\\r\\nx=1' | nc shop.example.com 80",
+      "```",
+      "",
+      "The second connection in the pool then serves the smuggled",
+      "`GPOST / HTTP/1.1` to the next victim user.",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, SMUG);
+    const goldIds = result.detail.goldHits.map((g) => g.id);
+    expect(goldIds).toContain("raw_http_request");
+    expect(goldIds).toContain("smuggled_second_request");
+    expect(goldIds).toContain("te_or_cl_conflict");
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).not.toContain("FAKE_RAW_HTTP");
+    expect(result.detail.rawAvriScore).toBeGreaterThanOrEqual(60);
+  });
+
+  // Task #755 — slop reports that wrap their fake bytes in an ANSI-C
+  // `$'...'` block must still get revoked: `<target>` placeholders,
+  // `XX`/`NNNN` Content-Length values, and `<chunked>` TE values are
+  // all visible to the request validator after unescaping, so the
+  // raw-HTTP gold hits are dropped just like the printf '…' version.
+  it("revokes raw-HTTP gold hits for an ANSI-C $'...' slop reproduction", () => {
+    const fixture = [
+      "# Critical HTTP request smuggling on the production frontend",
+      "",
+      "The proxy and backend disagree on framing, allowing TE.CL desync.",
+      "CWE-444. Severity: Critical. Affects the entire production fleet.",
+      "",
+      "```",
+      "echo $'POST / HTTP/1.1\\r\\nHost: <target>\\r\\nContent-Length: XX\\r\\nTransfer-Encoding: <chunked>\\r\\n\\r\\n0\\r\\n\\r\\nGPOST / HTTP/1.1\\r\\nHost: <target>\\r\\nContent-Length: NNNN\\r\\n\\r\\n<smuggled body here>' | nc <target> 80",
+      "```",
+      "",
+      "Repro: any modern HTTP/1.1 frontend will exhibit this against any",
+      "compliant backend.",
+    ].join("\n");
+    const sig = extractSignals(fixture);
+    const result = runEngine2Avri(sig, fixture, SMUG);
+    const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
+    expect(indicators).toContain("FAKE_RAW_HTTP");
+    const survivingIds = result.detail.goldHits.map((g) => g.id);
+    expect(survivingIds).not.toContain("raw_http_request");
+    expect(survivingIds).not.toContain("smuggled_second_request");
+    expect(result.detail.rawAvriScore).toBeLessThan(40);
+  });
 });
 
 // Legitimate AUTHN_AUTHZ fixture: realistic two-account IDOR proof

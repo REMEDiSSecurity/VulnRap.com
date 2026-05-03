@@ -161,14 +161,30 @@ const REQUEST_LINE_RE =
 // keep the match anchored to one shell-line so we don't accidentally
 // span paragraphs of unrelated prose. The `\b(?:HTTP|HTTP)` shape
 // inside the body keeps neutral quoted strings out of the match.
-const SHELL_ESCAPED_HTTP_SINGLE_RE = /'([^'\n]*HTTP\/1\.[01]\\r\\n[^'\n]*)'/g;
+//
+// Task #755 — bash also supports ANSI-C quoting via `$'...'`, the
+// most idiomatic one-liner for embedding real CRLFs (`echo $'POST /
+// HTTP/1.1\r\n…' | nc target 80`). The plain single-quote matcher
+// would accidentally pick up the `'…'` portion of an ANSI-C string,
+// but ANSI-C quoting also allows `\'` inside the body — which the
+// single-quote matcher cannot see through. We add a dedicated
+// `$'…'` matcher whose body class accepts `\\.` escape pairs (so
+// `\'` doesn't terminate the body), and anchor the single-quote
+// matcher with a `(?<!\$)` lookbehind so the two don't double-count
+// the same fragment.
+const SHELL_ESCAPED_HTTP_SINGLE_RE =
+  /(?<!\$)'([^'\n]*HTTP\/1\.[01]\\r\\n[^'\n]*)'/g;
 const SHELL_ESCAPED_HTTP_DOUBLE_RE = /"([^"\n]*HTTP\/1\.[01]\\r\\n[^"\n]*)"/g;
+const SHELL_ESCAPED_HTTP_ANSIC_RE =
+  /\$'((?:\\.|[^'\n])*HTTP\/1\.[01]\\r\\n(?:\\.|[^'\n])*)'/g;
 
 /** Decode the common shell-escape sequences (`\r`, `\n`, `\t`, `\v`,
- * `\0`, `\\`, `\'`, `\"`) inside a `printf '...'`-style body. Unknown
- * escapes are left as-is so we don't silently drop bytes. */
+ * `\0`, `\\`, `\'`, `\"`) inside a `printf '...'`-style body, plus
+ * the additional ANSI-C bash escapes (`\a`, `\b`, `\e`, `\E`, `\f`)
+ * accepted inside `$'...'`. Unknown escapes are left as-is so we
+ * don't silently drop bytes. */
 function unescapeShellBody(body: string): string {
-  return body.replace(/\\([rntv0\\'"])/g, (_m, c: string) => {
+  return body.replace(/\\([rntvabefE0\\'"])/g, (_m, c: string) => {
     switch (c) {
       case "r":
         return "\r";
@@ -178,6 +194,15 @@ function unescapeShellBody(body: string): string {
         return "\t";
       case "v":
         return "\v";
+      case "a":
+        return "\x07";
+      case "b":
+        return "\x08";
+      case "e":
+      case "E":
+        return "\x1b";
+      case "f":
+        return "\f";
       case "0":
         return "\0";
       case "\\":
@@ -193,11 +218,11 @@ function unescapeShellBody(body: string): string {
 }
 
 /** Find every shell-escaped HTTP fragment in `text` (printf '…' / "…"
- * bodies that contain `HTTP/1.x\r\n` with literal backslash-r-
- * backslash-n) and return their unescaped concatenation, joined by a
- * blank line so each unescaped block stands as its own request /
- * response excerpt for the downstream detectors. Returns "" when no
- * such fragment is present so callers can short-circuit. */
+ * / `$'…'` bodies that contain `HTTP/1.x\r\n` with literal
+ * backslash-r-backslash-n) and return their unescaped concatenation,
+ * joined by a blank line so each unescaped block stands as its own
+ * request / response excerpt for the downstream detectors. Returns
+ * "" when no such fragment is present so callers can short-circuit. */
 export function unescapeShellHttpFragments(text: string): string {
   const out: string[] = [];
   SHELL_ESCAPED_HTTP_SINGLE_RE.lastIndex = 0;
@@ -207,6 +232,10 @@ export function unescapeShellHttpFragments(text: string): string {
   }
   SHELL_ESCAPED_HTTP_DOUBLE_RE.lastIndex = 0;
   while ((m = SHELL_ESCAPED_HTTP_DOUBLE_RE.exec(text)) !== null) {
+    out.push(unescapeShellBody(m[1]));
+  }
+  SHELL_ESCAPED_HTTP_ANSIC_RE.lastIndex = 0;
+  while ((m = SHELL_ESCAPED_HTTP_ANSIC_RE.exec(text)) !== null) {
     out.push(unescapeShellBody(m[1]));
   }
   if (out.length === 0) return "";
