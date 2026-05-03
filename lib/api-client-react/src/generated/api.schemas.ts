@@ -3627,6 +3627,66 @@ export interface LatencySnapshot {
   worstEngine: LatencyWorstEngine | null;
 }
 
+export type PublicStatusEngineStatus =
+  (typeof PublicStatusEngineStatus)[keyof typeof PublicStatusEngineStatus];
+
+export const PublicStatusEngineStatus = {
+  operational: "operational",
+  degraded: "degraded",
+  down: "down",
+  unknown: "unknown",
+} as const;
+
+/**
+ * Health snapshot for one scoring subsystem. `status` is derived from
+when the corresponding pipeline stage was last seen successfully —
+operational (≤1h), degraded (≤6h), down (older than 6h but seen in
+the last 30 days), unknown (never observed).
+
+ */
+export interface PublicStatusEngine {
+  /** Stable machine id (linguistic, substance, cwe, avri, llm_gate). */
+  id: string;
+  /** Human-readable engine name. */
+  label: string;
+  status: PublicStatusEngineStatus;
+  /** Number of traces in the last hour that included this stage. */
+  recentSampleCount: number;
+  /** Most recent trace timestamp that included this stage, or null if never seen. */
+  lastSeenAt: null | string;
+}
+
+export interface PublicStatusUptime {
+  windowDays: number;
+  daysWithTraffic: number;
+  /** Fraction of windowDays with at least one successful trace, 0–100. */
+  uptimePercentage: number;
+}
+
+export interface PublicStatusLatency {
+  windowHours: number;
+  sampleCount: number;
+  p50Ms: number;
+  p95Ms: number;
+}
+
+export type PublicStatusSnapshotOverallStatus =
+  (typeof PublicStatusSnapshotOverallStatus)[keyof typeof PublicStatusSnapshotOverallStatus];
+
+export const PublicStatusSnapshotOverallStatus = {
+  operational: "operational",
+  degraded: "degraded",
+  down: "down",
+} as const;
+
+export interface PublicStatusSnapshot {
+  generatedAt: string;
+  overallStatus: PublicStatusSnapshotOverallStatus;
+  uptime: PublicStatusUptime;
+  latency: PublicStatusLatency;
+  engines: PublicStatusEngine[];
+}
+
 export interface TrendsData {
   days: number;
   totalReports: number;

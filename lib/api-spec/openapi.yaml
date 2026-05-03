@@ -1939,6 +1939,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/LatencySnapshot"
 
+  /public/status:
+    get:
+      operationId: getPublicStatus
+      tags: [stats]
+      summary: Public status / uptime snapshot
+      description: |
+        Task #706 — Public status page snapshot. Returns:
+          * 30-day API uptime % (fraction of last 30 days that recorded
+            at least one successful scoring trace).
+          * 24h p50/p95 end-to-end pipeline latency, in milliseconds.
+          * Per-engine subsystem health (linguistic, substance, CWE,
+            AVRI, LLM gate) derived from the most recent traces — each
+            engine is marked operational/degraded/down/unknown based on
+            how recently its pipeline stage was last seen successfully.
+          * An overall banner status — operational if every engine is
+            operational, degraded if any engine is degraded, and down
+            if any engine is fully down.
+        Cached publicly for 60 seconds.
+      responses:
+        "200":
+          description: Status snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicStatusSnapshot"
+
   /stats/trends:
     get:
       operationId: getTrends
@@ -6921,6 +6947,78 @@ components:
             - $ref: "#/components/schemas/LatencyWorstEngine"
             - type: "null"
       required: [windowHours, generatedAt, sampleCount, pipeline, engines, worstEngine]
+
+    PublicStatusEngine:
+      type: object
+      description: |
+        Health snapshot for one scoring subsystem. `status` is derived from
+        when the corresponding pipeline stage was last seen successfully —
+        operational (≤1h), degraded (≤6h), down (older than 6h but seen in
+        the last 30 days), unknown (never observed).
+      properties:
+        id:
+          type: string
+          description: Stable machine id (linguistic, substance, cwe, avri, llm_gate).
+        label:
+          type: string
+          description: Human-readable engine name.
+        status:
+          type: string
+          enum: [operational, degraded, down, unknown]
+        recentSampleCount:
+          type: integer
+          description: Number of traces in the last hour that included this stage.
+        lastSeenAt:
+          oneOf:
+            - type: "null"
+            - type: string
+              format: date-time
+          description: Most recent trace timestamp that included this stage, or null if never seen.
+      required: [id, label, status, recentSampleCount, lastSeenAt]
+
+    PublicStatusUptime:
+      type: object
+      properties:
+        windowDays:
+          type: integer
+        daysWithTraffic:
+          type: integer
+        uptimePercentage:
+          type: number
+          description: Fraction of windowDays with at least one successful trace, 0–100.
+      required: [windowDays, daysWithTraffic, uptimePercentage]
+
+    PublicStatusLatency:
+      type: object
+      properties:
+        windowHours:
+          type: integer
+        sampleCount:
+          type: integer
+        p50Ms:
+          type: number
+        p95Ms:
+          type: number
+      required: [windowHours, sampleCount, p50Ms, p95Ms]
+
+    PublicStatusSnapshot:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        overallStatus:
+          type: string
+          enum: [operational, degraded, down]
+        uptime:
+          $ref: "#/components/schemas/PublicStatusUptime"
+        latency:
+          $ref: "#/components/schemas/PublicStatusLatency"
+        engines:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicStatusEngine"
+      required: [generatedAt, overallStatus, uptime, latency, engines]
 
     TrendsData:
       type: object

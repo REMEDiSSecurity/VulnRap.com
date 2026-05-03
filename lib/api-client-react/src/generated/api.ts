@@ -85,6 +85,7 @@ import type {
   PlatformStats,
   PresetLibrary,
   PublicDriftSummary,
+  PublicStatusSnapshot,
   RecentActivity,
   ReportAnalysis,
   ReportComparison,
@@ -5520,6 +5521,94 @@ export function useGetLatencySnapshot<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetLatencySnapshotQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #706 — Public status page snapshot. Returns:
+  * 30-day API uptime % (fraction of last 30 days that recorded
+    at least one successful scoring trace).
+  * 24h p50/p95 end-to-end pipeline latency, in milliseconds.
+  * Per-engine subsystem health (linguistic, substance, CWE,
+    AVRI, LLM gate) derived from the most recent traces — each
+    engine is marked operational/degraded/down/unknown based on
+    how recently its pipeline stage was last seen successfully.
+  * An overall banner status — operational if every engine is
+    operational, degraded if any engine is degraded, and down
+    if any engine is fully down.
+Cached publicly for 60 seconds.
+
+ * @summary Public status / uptime snapshot
+ */
+export const getGetPublicStatusUrl = () => {
+  return `/api/public/status`;
+};
+
+export const getPublicStatus = async (
+  options?: RequestInit,
+): Promise<PublicStatusSnapshot> => {
+  return customFetch<PublicStatusSnapshot>(getGetPublicStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPublicStatusQueryKey = () => {
+  return [`/api/public/status`] as const;
+};
+
+export const getGetPublicStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPublicStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPublicStatusQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicStatus>>> = ({
+    signal,
+  }) => getPublicStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPublicStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPublicStatus>>
+>;
+export type GetPublicStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Public status / uptime snapshot
+ */
+
+export function useGetPublicStatus<
+  TData = Awaited<ReturnType<typeof getPublicStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPublicStatusQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

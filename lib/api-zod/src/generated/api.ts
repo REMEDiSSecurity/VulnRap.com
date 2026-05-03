@@ -12438,6 +12438,67 @@ export const GetLatencySnapshotResponse = zod.object({
 });
 
 /**
+ * Task #706 — Public status page snapshot. Returns:
+  * 30-day API uptime % (fraction of last 30 days that recorded
+    at least one successful scoring trace).
+  * 24h p50/p95 end-to-end pipeline latency, in milliseconds.
+  * Per-engine subsystem health (linguistic, substance, CWE,
+    AVRI, LLM gate) derived from the most recent traces — each
+    engine is marked operational/degraded/down/unknown based on
+    how recently its pipeline stage was last seen successfully.
+  * An overall banner status — operational if every engine is
+    operational, degraded if any engine is degraded, and down
+    if any engine is fully down.
+Cached publicly for 60 seconds.
+
+ * @summary Public status / uptime snapshot
+ */
+export const GetPublicStatusResponse = zod.object({
+  generatedAt: zod.coerce.date(),
+  overallStatus: zod.enum(["operational", "degraded", "down"]),
+  uptime: zod.object({
+    windowDays: zod.number(),
+    daysWithTraffic: zod.number(),
+    uptimePercentage: zod
+      .number()
+      .describe(
+        "Fraction of windowDays with at least one successful trace, 0–100.",
+      ),
+  }),
+  latency: zod.object({
+    windowHours: zod.number(),
+    sampleCount: zod.number(),
+    p50Ms: zod.number(),
+    p95Ms: zod.number(),
+  }),
+  engines: zod.array(
+    zod
+      .object({
+        id: zod
+          .string()
+          .describe(
+            "Stable machine id (linguistic, substance, cwe, avri, llm_gate).",
+          ),
+        label: zod.string().describe("Human-readable engine name."),
+        status: zod.enum(["operational", "degraded", "down", "unknown"]),
+        recentSampleCount: zod
+          .number()
+          .describe(
+            "Number of traces in the last hour that included this stage.",
+          ),
+        lastSeenAt: zod
+          .union([zod.null(), zod.coerce.date()])
+          .describe(
+            "Most recent trace timestamp that included this stage, or null if never seen.",
+          ),
+      })
+      .describe(
+        "Health snapshot for one scoring subsystem. `status` is derived from\nwhen the corresponding pipeline stage was last seen successfully —\noperational (≤1h), degraded (≤6h), down (older than 6h but seen in\nthe last 30 days), unknown (never observed).\n",
+      ),
+  ),
+});
+
+/**
  * Returns daily report volume, tier breakdown, average score, and feedback trends for the specified time window
  * @summary Get trend data over time
  */
