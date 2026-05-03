@@ -1,4 +1,4 @@
-import { Target, Shield, Users, GitBranch, Zap, Building, Bug, Search, FileText, ArrowRight } from "lucide-react";
+import { Target, Shield, Users, GitBranch, Zap, Building, Bug, Search, FileText, ArrowRight, BookOpen } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 
@@ -109,6 +109,57 @@ export default function UseCases() {
           </Card>
         ))}
       </div>
+
+      <Card className="glass-card rounded-xl border-primary/20" data-testid="callout-case-studies">
+        <CardHeader className="pb-3">
+          <div className="flex items-start gap-4">
+            <div className="p-2.5 rounded-lg shrink-0 icon-glow-cyan">
+              <BookOpen className="w-6 h-6 text-cyan-400" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Case studies</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5 italic">
+                See these scenarios play out end-to-end
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 pl-[4.25rem]">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Want to see what one of these workflows looks like in practice?
+            Read the worked example of a PSIRT team wiring VulnRap into their
+            intake pipeline — including the thresholds they chose, the
+            integration shape, and illustrative before/after numbers.
+          </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            <a
+              href="https://github.com/REMEDiSSecurity/VulnRap.com/blob/main/artifacts/api-server/docs/marketing/2026-05-02-case-study-psirt-intake.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline inline-flex items-center gap-1.5"
+              data-testid="link-case-study-psirt"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              PSIRT intake screening
+            </a>
+            <span className="text-muted-foreground/30">|</span>
+            <a
+              href="https://github.com/REMEDiSSecurity/VulnRap.com/blob/main/artifacts/api-server/docs/marketing/case-study-template.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-primary hover:underline inline-flex items-center gap-1.5 text-xs"
+              data-testid="link-case-study-template"
+            >
+              Case-study template
+            </a>
+          </div>
+          <p className="text-xs text-muted-foreground/70 italic leading-relaxed">
+            Numbers in the case study are illustrative — composited from
+            internal testing and design conversations, not from a single
+            named customer.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card className="glass-card-accent rounded-xl">
         <CardContent className="p-6 text-center space-y-3">
