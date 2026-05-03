@@ -124,6 +124,53 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
       `CREATE INDEX IF NOT EXISTS idx_page_views_date ON page_views (view_date)`,
     ],
   },
+  {
+    // Task #620 — append-only log of nightly score-stability re-scores.
+    // Drives the calibration page's tier-flip chart and the
+    // >2%-flip-rate alert. Created in dev too so route + e2e tests can
+    // exercise the surface against a live Postgres.
+    id: "2026-05-03-add-report-rescore-log",
+    description: "Add report_rescore_log table for the score stability monitor",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS report_rescore_log (
+         id serial PRIMARY KEY,
+         report_id integer NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+         old_score integer NOT NULL,
+         new_score integer NOT NULL,
+         old_tier varchar(30) NOT NULL,
+         new_tier varchar(30) NOT NULL,
+         scored_at timestamptz NOT NULL DEFAULT now(),
+         code_version varchar(64) NOT NULL DEFAULT 'unknown'
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_report_rescore_log_scored_at ON report_rescore_log (scored_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_report_rescore_log_report_id ON report_rescore_log (report_id)`,
+    ],
+  },
+  {
+    // Task #620 — daily idempotency for the rescore log.
+    //
+    // Without this, a retry after a partial failure (or a second replica
+    // running its own scheduler tick on the same day) re-appends rows
+    // for the same reports, inflating denominators and flip counts in
+    // the calibration chart and potentially firing false-positive alerts.
+    //
+    // The unique key is (report_id, code_version, scored_date) where
+    // scored_date is `scored_at` truncated to a UTC calendar day — same
+    // bucketing the chart uses. INSERTs use ON CONFLICT DO NOTHING so
+    // both the retry case and the multi-replica race resolve to "first
+    // writer wins, everyone else is a no-op".
+    id: "2026-05-03-add-report-rescore-log-daily-unique",
+    description:
+      "Add unique (report_id, code_version, scored_date UTC) index to make the nightly rescore pass idempotent across retries and replicas",
+    statements: [
+      `CREATE UNIQUE INDEX IF NOT EXISTS uniq_report_rescore_log_daily
+         ON report_rescore_log (
+           report_id,
+           code_version,
+           ((scored_at AT TIME ZONE 'UTC')::date)
+         )`,
+    ],
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

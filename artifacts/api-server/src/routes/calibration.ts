@@ -12,6 +12,11 @@ import {
   listRearmHistory,
 } from "../lib/avri-drift-notifications";
 import { getRescoreBackfillSchedulerStatus } from "../lib/rescore-backfill-scheduler";
+import { getScoreStabilitySchedulerStatus } from "../lib/score-stability-scheduler";
+import {
+  computeScoreStabilitySummary,
+  DEFAULT_LOOKBACK_DAYS,
+} from "../lib/score-stability-monitor";
 import {
   getHandwavyPhrases,
   getHandwavyPhraseHistory,
@@ -973,6 +978,59 @@ router.get(
       res
         .status(500)
         .json({ error: "Failed to read rescore backfill scheduler status." });
+    }
+  },
+);
+
+// Task #620 — Reviewer-only tier-flip summary backing the score
+// stability chart on /feedback-analytics. Strict-auth because the
+// per-day flip-rate is a leading signal for an active scoring
+// regression — same access policy as the other reviewer-only drift
+// surfaces. Read-only and pure aggregation, so HEAD/cache semantics
+// are fine; we keep it on the calibration namespace alongside the
+// other flip-rate / drift surfaces.
+router.get(
+  "/feedback/calibration/score-stability",
+  requireCalibrationAuthStrict,
+  async (req, res) => {
+    try {
+      // Don't pass `alertThreshold` here — let computeScoreStabilitySummary
+      // resolve it via the same SCORE_STABILITY_FLIP_RATE_THRESHOLD env
+      // override the alert dispatcher uses. That way the dashed line
+      // reviewers see on the chart can never drift from the line the
+      // nightly job is actually paging on.
+      const summary = await computeScoreStabilitySummary({
+        lookbackDays: DEFAULT_LOOKBACK_DAYS,
+      });
+      res.json(summary);
+    } catch (err) {
+      req.log?.error(err, "Failed to compute score stability summary");
+      res
+        .status(500)
+        .json({ error: "Failed to compute score stability summary." });
+    }
+  },
+);
+
+// Operator-visible heartbeat for the nightly score-stability scheduler.
+// Mirrors the AVRI drift / rescore-backfill scheduler-status endpoints:
+// timestamps + booleans + small numeric counters only (no error text,
+// row text, or env values), so the endpoint stays safe to expose
+// unauthenticated alongside the other heartbeat surfaces.
+router.get(
+  "/feedback/calibration/score-stability/scheduler-status",
+  (_req, res) => {
+    try {
+      const status = getScoreStabilitySchedulerStatus();
+      res.json(status);
+    } catch (err) {
+      _req.log?.error(
+        err,
+        "Failed to read score stability scheduler status",
+      );
+      res
+        .status(500)
+        .json({ error: "Failed to read score stability scheduler status." });
     }
   },
 );

@@ -2117,6 +2117,96 @@ export interface CalibrationReport {
 }
 
 /**
+ * Per-day flip counts for the score-stability monitor. `total` is
+the number of `report_rescore_log` rows the scheduler wrote on
+that day (i.e. the day's re-score volume); `flips` is the
+subset whose tier changed. The direction-specific counters
+sum to `flips`.
+
+ */
+export interface ScoreStabilityDailyBucket {
+  /** ISO date `YYYY-MM-DD` (UTC) the re-scores were written for. */
+  date: string;
+  /** Number of re-score rows logged that day. */
+  total: number;
+  /** Subset of `total` whose tier changed under the new code. */
+  flips: number;
+  /** Reports that moved from {Clean, Likely Human} into {Likely Slop, Slop}. */
+  legitToSlop: number;
+  /** Reports that moved from {Likely Slop, Slop} into {Clean, Likely Human}. */
+  slopToLegit: number;
+  /** One-step moves toward `slop` (e.g. legit→middle, middle→slop). */
+  tightened: number;
+  /** One-step moves toward `legit` (e.g. slop→middle, middle→legit). */
+  loosened: number;
+  /** Tier changes that don't fit any of the above directions. */
+  lateral: number;
+  /** flips / total, rounded to 4 decimals (0 when total is 0). */
+  flipRate: number;
+}
+
+export type ScoreStabilitySummaryTotals = {
+  total: number;
+  flips: number;
+  legitToSlop: number;
+  slopToLegit: number;
+  tightened: number;
+  loosened: number;
+  lateral: number;
+  flipRate: number;
+};
+
+/**
+ * Reviewer-only summary backing the tier-flip chart on
+`/feedback-analytics`. Aggregates `report_rescore_log` over the
+lookback window into per-day flip counts plus the rolling totals
+the chart's header needs. The `alertThreshold` is echoed back so
+the UI can render the same dashed line the scheduler uses to
+decide whether to page reviewers.
+
+ */
+export interface ScoreStabilitySummary {
+  generatedAt: string;
+  lookbackDays: number;
+  /** Flip-rate threshold (0..1) above which the scheduler pages reviewers. */
+  alertThreshold: number;
+  /** Per-day flip buckets, most-recent first. */
+  daily: ScoreStabilityDailyBucket[];
+  totals: ScoreStabilitySummaryTotals;
+}
+
+/**
+ * Per-replica heartbeat for the in-process score-stability
+scheduler. Mirrors `AvriDriftSchedulerStatus` shape (booleans /
+timestamps / small numeric counters only) so it's safe to
+expose on an unauthenticated endpoint alongside the other
+scheduler-status surfaces.
+
+ */
+export interface ScoreStabilitySchedulerStatus {
+  schedulerStarted: boolean;
+  /** True when SCORE_STABILITY_SCHEDULER_ENABLED is set; ticks short-circuit when false. */
+  schedulerEnabled: boolean;
+  startedAt: string | null;
+  intervalMs: number | null;
+  retryIntervalMs: number | null;
+  lastTickAt: string | null;
+  lastTickOk: boolean | null;
+  /** True when the last tick scanned the database; false when it short-circuited because the scheduler is disabled. */
+  lastTickRanCheck: boolean | null;
+  lastTickScanned: number | null;
+  lastTickLogged: number | null;
+  lastTickFlips: number | null;
+  lastTickFailed: number | null;
+  /** ISO date (`YYYY-MM-DD`) of the most recently evaluated day. */
+  lastAlertDate: string | null;
+  lastAlertFlipRate: number | null;
+  lastAlertDispatched: boolean | null;
+  nextTickAt: string | null;
+  ticksCompleted: number;
+}
+
+/**
  * Object with scoring config changes (prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost)
  */
 export type ApplyCalibrationBodyChanges = { [key: string]: unknown };

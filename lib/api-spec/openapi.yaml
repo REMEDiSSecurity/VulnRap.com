@@ -649,6 +649,54 @@ paths:
                 items:
                   $ref: "#/components/schemas/AvriDriftSchedulerStatus"
 
+  /feedback/calibration/score-stability:
+    get:
+      operationId: getScoreStabilitySummary
+      tags: [feedback]
+      summary: Score-stability tier-flip summary (reviewer-only, Task #620)
+      description: |
+        Reviewer-only summary of the nightly score-stability monitor.
+        Aggregates `report_rescore_log` rows from the last 7 days into
+        per-day flip counts broken down by direction (legit→slop,
+        slop→legit, tightened, loosened, lateral) plus the day's
+        overall flip-rate. Backs the tier-flip chart on
+        `/feedback-analytics`. Strict-auth: an elevated flip-rate is a
+        leading indicator of an active scoring regression, same access
+        policy as the other reviewer-only drift surfaces.
+      responses:
+        "200":
+          description: Score stability summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreStabilitySummary"
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /feedback/calibration/score-stability/scheduler-status:
+    get:
+      operationId: getScoreStabilitySchedulerStatus
+      tags: [feedback]
+      summary: Per-replica score-stability scheduler heartbeat (Task #620)
+      description: |
+        Operator-visible status of the in-process score-stability
+        scheduler for the responding replica. Mirrors the AVRI drift /
+        rescore-backfill scheduler-status endpoints: timestamps +
+        booleans + small numeric counters only, so the endpoint stays
+        safe to expose unauthenticated alongside the other heartbeat
+        surfaces.
+      responses:
+        "200":
+          description: Score stability scheduler status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreStabilitySchedulerStatus"
+
   /feedback/calibration/avri-drift/notifications/rearm-history:
     get:
       operationId: getAvriDriftRearmHistory
@@ -4268,6 +4316,146 @@ components:
         minFeedbackThreshold:
           type: integer
       required: [currentConfig, totalFeedbackAnalyzed, bucketAnalysis, suggestions, overallHealth, minFeedbackThreshold]
+
+    ScoreStabilityDailyBucket:
+      type: object
+      description: |
+        Per-day flip counts for the score-stability monitor. `total` is
+        the number of `report_rescore_log` rows the scheduler wrote on
+        that day (i.e. the day's re-score volume); `flips` is the
+        subset whose tier changed. The direction-specific counters
+        sum to `flips`.
+      properties:
+        date:
+          type: string
+          description: ISO date `YYYY-MM-DD` (UTC) the re-scores were written for.
+        total:
+          type: integer
+          description: Number of re-score rows logged that day.
+        flips:
+          type: integer
+          description: Subset of `total` whose tier changed under the new code.
+        legitToSlop:
+          type: integer
+          description: Reports that moved from {Clean, Likely Human} into {Likely Slop, Slop}.
+        slopToLegit:
+          type: integer
+          description: Reports that moved from {Likely Slop, Slop} into {Clean, Likely Human}.
+        tightened:
+          type: integer
+          description: One-step moves toward `slop` (e.g. legit→middle, middle→slop).
+        loosened:
+          type: integer
+          description: One-step moves toward `legit` (e.g. slop→middle, middle→legit).
+        lateral:
+          type: integer
+          description: Tier changes that don't fit any of the above directions.
+        flipRate:
+          type: number
+          description: flips / total, rounded to 4 decimals (0 when total is 0).
+      required: [date, total, flips, legitToSlop, slopToLegit, tightened, loosened, lateral, flipRate]
+
+    ScoreStabilitySummary:
+      type: object
+      description: |
+        Reviewer-only summary backing the tier-flip chart on
+        `/feedback-analytics`. Aggregates `report_rescore_log` over the
+        lookback window into per-day flip counts plus the rolling totals
+        the chart's header needs. The `alertThreshold` is echoed back so
+        the UI can render the same dashed line the scheduler uses to
+        decide whether to page reviewers.
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        lookbackDays:
+          type: integer
+        alertThreshold:
+          type: number
+          description: Flip-rate threshold (0..1) above which the scheduler pages reviewers.
+        daily:
+          type: array
+          description: Per-day flip buckets, most-recent first.
+          items:
+            $ref: "#/components/schemas/ScoreStabilityDailyBucket"
+        totals:
+          type: object
+          properties:
+            total: { type: integer }
+            flips: { type: integer }
+            legitToSlop: { type: integer }
+            slopToLegit: { type: integer }
+            tightened: { type: integer }
+            loosened: { type: integer }
+            lateral: { type: integer }
+            flipRate: { type: number }
+          required: [total, flips, legitToSlop, slopToLegit, tightened, loosened, lateral, flipRate]
+      required: [generatedAt, lookbackDays, alertThreshold, daily, totals]
+
+    ScoreStabilitySchedulerStatus:
+      type: object
+      description: |
+        Per-replica heartbeat for the in-process score-stability
+        scheduler. Mirrors `AvriDriftSchedulerStatus` shape (booleans /
+        timestamps / small numeric counters only) so it's safe to
+        expose on an unauthenticated endpoint alongside the other
+        scheduler-status surfaces.
+      properties:
+        schedulerStarted:
+          type: boolean
+        schedulerEnabled:
+          type: boolean
+          description: True when SCORE_STABILITY_SCHEDULER_ENABLED is set; ticks short-circuit when false.
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        intervalMs:
+          type: integer
+          nullable: true
+        retryIntervalMs:
+          type: integer
+          nullable: true
+        lastTickAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastTickOk:
+          type: boolean
+          nullable: true
+        lastTickRanCheck:
+          type: boolean
+          nullable: true
+          description: True when the last tick scanned the database; false when it short-circuited because the scheduler is disabled.
+        lastTickScanned:
+          type: integer
+          nullable: true
+        lastTickLogged:
+          type: integer
+          nullable: true
+        lastTickFlips:
+          type: integer
+          nullable: true
+        lastTickFailed:
+          type: integer
+          nullable: true
+        lastAlertDate:
+          type: string
+          nullable: true
+          description: ISO date (`YYYY-MM-DD`) of the most recently evaluated day.
+        lastAlertFlipRate:
+          type: number
+          nullable: true
+        lastAlertDispatched:
+          type: boolean
+          nullable: true
+        nextTickAt:
+          type: string
+          format: date-time
+          nullable: true
+        ticksCompleted:
+          type: integer
+      required: [schedulerStarted, schedulerEnabled, startedAt, intervalMs, retryIntervalMs, lastTickAt, lastTickOk, lastTickRanCheck, lastTickScanned, lastTickLogged, lastTickFlips, lastTickFailed, lastAlertDate, lastAlertFlipRate, lastAlertDispatched, nextTickAt, ticksCompleted]
 
     ApplyCalibrationBody:
       type: object

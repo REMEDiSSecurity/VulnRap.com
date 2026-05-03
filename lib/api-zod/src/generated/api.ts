@@ -2870,6 +2870,141 @@ export const GetAvriDriftSchedulerStatusResponse = zod.array(
 );
 
 /**
+ * Reviewer-only summary of the nightly score-stability monitor.
+Aggregates `report_rescore_log` rows from the last 7 days into
+per-day flip counts broken down by direction (legit→slop,
+slop→legit, tightened, loosened, lateral) plus the day's
+overall flip-rate. Backs the tier-flip chart on
+`/feedback-analytics`. Strict-auth: an elevated flip-rate is a
+leading indicator of an active scoring regression, same access
+policy as the other reviewer-only drift surfaces.
+
+ * @summary Score-stability tier-flip summary (reviewer-only, Task
+ */
+export const GetScoreStabilitySummaryResponse = zod
+  .object({
+    generatedAt: zod.coerce.date(),
+    lookbackDays: zod.number(),
+    alertThreshold: zod
+      .number()
+      .describe(
+        "Flip-rate threshold (0..1) above which the scheduler pages reviewers.",
+      ),
+    daily: zod
+      .array(
+        zod
+          .object({
+            date: zod
+              .string()
+              .describe(
+                "ISO date `YYYY-MM-DD` (UTC) the re-scores were written for.",
+              ),
+            total: zod
+              .number()
+              .describe("Number of re-score rows logged that day."),
+            flips: zod
+              .number()
+              .describe(
+                "Subset of `total` whose tier changed under the new code.",
+              ),
+            legitToSlop: zod
+              .number()
+              .describe(
+                "Reports that moved from {Clean, Likely Human} into {Likely Slop, Slop}.",
+              ),
+            slopToLegit: zod
+              .number()
+              .describe(
+                "Reports that moved from {Likely Slop, Slop} into {Clean, Likely Human}.",
+              ),
+            tightened: zod
+              .number()
+              .describe(
+                "One-step moves toward `slop` (e.g. legit→middle, middle→slop).",
+              ),
+            loosened: zod
+              .number()
+              .describe(
+                "One-step moves toward `legit` (e.g. slop→middle, middle→legit).",
+              ),
+            lateral: zod
+              .number()
+              .describe(
+                "Tier changes that don't fit any of the above directions.",
+              ),
+            flipRate: zod
+              .number()
+              .describe(
+                "flips \/ total, rounded to 4 decimals (0 when total is 0).",
+              ),
+          })
+          .describe(
+            "Per-day flip counts for the score-stability monitor. `total` is\nthe number of `report_rescore_log` rows the scheduler wrote on\nthat day (i.e. the day's re-score volume); `flips` is the\nsubset whose tier changed. The direction-specific counters\nsum to `flips`.\n",
+          ),
+      )
+      .describe("Per-day flip buckets, most-recent first."),
+    totals: zod.object({
+      total: zod.number(),
+      flips: zod.number(),
+      legitToSlop: zod.number(),
+      slopToLegit: zod.number(),
+      tightened: zod.number(),
+      loosened: zod.number(),
+      lateral: zod.number(),
+      flipRate: zod.number(),
+    }),
+  })
+  .describe(
+    "Reviewer-only summary backing the tier-flip chart on\n`\/feedback-analytics`. Aggregates `report_rescore_log` over the\nlookback window into per-day flip counts plus the rolling totals\nthe chart's header needs. The `alertThreshold` is echoed back so\nthe UI can render the same dashed line the scheduler uses to\ndecide whether to page reviewers.\n",
+  );
+
+/**
+ * Operator-visible status of the in-process score-stability
+scheduler for the responding replica. Mirrors the AVRI drift /
+rescore-backfill scheduler-status endpoints: timestamps +
+booleans + small numeric counters only, so the endpoint stays
+safe to expose unauthenticated alongside the other heartbeat
+surfaces.
+
+ * @summary Per-replica score-stability scheduler heartbeat (Task
+ */
+export const GetScoreStabilitySchedulerStatusResponse = zod
+  .object({
+    schedulerStarted: zod.boolean(),
+    schedulerEnabled: zod
+      .boolean()
+      .describe(
+        "True when SCORE_STABILITY_SCHEDULER_ENABLED is set; ticks short-circuit when false.",
+      ),
+    startedAt: zod.coerce.date().nullable(),
+    intervalMs: zod.number().nullable(),
+    retryIntervalMs: zod.number().nullable(),
+    lastTickAt: zod.coerce.date().nullable(),
+    lastTickOk: zod.boolean().nullable(),
+    lastTickRanCheck: zod
+      .boolean()
+      .nullable()
+      .describe(
+        "True when the last tick scanned the database; false when it short-circuited because the scheduler is disabled.",
+      ),
+    lastTickScanned: zod.number().nullable(),
+    lastTickLogged: zod.number().nullable(),
+    lastTickFlips: zod.number().nullable(),
+    lastTickFailed: zod.number().nullable(),
+    lastAlertDate: zod
+      .string()
+      .nullable()
+      .describe("ISO date (`YYYY-MM-DD`) of the most recently evaluated day."),
+    lastAlertFlipRate: zod.number().nullable(),
+    lastAlertDispatched: zod.boolean().nullable(),
+    nextTickAt: zod.coerce.date().nullable(),
+    ticksCompleted: zod.number(),
+  })
+  .describe(
+    "Per-replica heartbeat for the in-process score-stability\nscheduler. Mirrors `AvriDriftSchedulerStatus` shape (booleans \/\ntimestamps \/ small numeric counters only) so it's safe to\nexpose on an unauthenticated endpoint alongside the other\nscheduler-status surfaces.\n",
+  );
+
+/**
  * Returns the bounded audit log of every reviewer-driven re-arm
 event recorded by
 `POST /feedback/calibration/avri-drift/notifications/rearm`. The

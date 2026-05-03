@@ -7,6 +7,7 @@ import {
   startStalledSchedulerWatchdog,
 } from "./lib/avri-drift-notifications";
 import { startRescoreBackfillScheduler } from "./lib/rescore-backfill-scheduler";
+import { startScoreStabilityScheduler } from "./lib/score-stability-scheduler";
 
 const rawPort = process.env["PORT"];
 
@@ -59,6 +60,13 @@ const server = app.listen(port, (err) => {
   // retained so signal handlers can stop the timer cleanly during a
   // graceful shutdown.
   const rescoreScheduler = startRescoreBackfillScheduler();
+  // Task #620 — Nightly score-stability monitor. Re-scores the last 7
+  // days against the currently-running code, writes per-row results to
+  // `report_rescore_log`, and pages through the existing AVRI alerts
+  // channel when a day's tier-flip count exceeds 2 % of its volume.
+  // Opt-in via SCORE_STABILITY_SCHEDULER_ENABLED so dev / test environments
+  // don't accidentally write rescore log rows.
+  const stabilityScheduler = startScoreStabilityScheduler();
   // Task #462 — Graceful shutdown that actually exits.
   //
   // Without an explicit process.exit, the pino-pretty transport's worker
@@ -92,6 +100,7 @@ const server = app.listen(port, (err) => {
     driftScheduler.stop();
     stalledSchedulerWatchdog.stop();
     rescoreScheduler.stop();
+    stabilityScheduler.stop();
     server.close();
     server.closeAllConnections?.();
     // Fire-and-forget the pool drain — process.exit below will tear down

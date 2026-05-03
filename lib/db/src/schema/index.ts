@@ -11,3 +11,4 @@ export * from "./user_feedback";
 export * from "./api_cache";
 export * from "./analysis_traces";
 export * from "./newsletter_subscriptions";
+export * from "./report_rescore_log";

@@ -73,6 +73,8 @@ import type {
   ReportAnalysis,
   ReportComparison,
   ReportFeed,
+  ScoreStabilitySchedulerStatus,
+  ScoreStabilitySummary,
   ScoringConfigResponse,
   SlopDistribution,
   SubmitFeedbackWithChallenge,
@@ -1800,6 +1802,180 @@ export function useGetAvriDriftSchedulerStatus<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAvriDriftSchedulerStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Reviewer-only summary of the nightly score-stability monitor.
+Aggregates `report_rescore_log` rows from the last 7 days into
+per-day flip counts broken down by direction (legit→slop,
+slop→legit, tightened, loosened, lateral) plus the day's
+overall flip-rate. Backs the tier-flip chart on
+`/feedback-analytics`. Strict-auth: an elevated flip-rate is a
+leading indicator of an active scoring regression, same access
+policy as the other reviewer-only drift surfaces.
+
+ * @summary Score-stability tier-flip summary (reviewer-only, Task
+ */
+export const getGetScoreStabilitySummaryUrl = () => {
+  return `/api/feedback/calibration/score-stability`;
+};
+
+export const getScoreStabilitySummary = async (
+  options?: RequestInit,
+): Promise<ScoreStabilitySummary> => {
+  return customFetch<ScoreStabilitySummary>(getGetScoreStabilitySummaryUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetScoreStabilitySummaryQueryKey = () => {
+  return [`/api/feedback/calibration/score-stability`] as const;
+};
+
+export const getGetScoreStabilitySummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScoreStabilitySummary>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScoreStabilitySummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetScoreStabilitySummaryQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getScoreStabilitySummary>>
+  > = ({ signal }) => getScoreStabilitySummary({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScoreStabilitySummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScoreStabilitySummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScoreStabilitySummary>>
+>;
+export type GetScoreStabilitySummaryQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Score-stability tier-flip summary (reviewer-only, Task
+ */
+
+export function useGetScoreStabilitySummary<
+  TData = Awaited<ReturnType<typeof getScoreStabilitySummary>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScoreStabilitySummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScoreStabilitySummaryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Operator-visible status of the in-process score-stability
+scheduler for the responding replica. Mirrors the AVRI drift /
+rescore-backfill scheduler-status endpoints: timestamps +
+booleans + small numeric counters only, so the endpoint stays
+safe to expose unauthenticated alongside the other heartbeat
+surfaces.
+
+ * @summary Per-replica score-stability scheduler heartbeat (Task
+ */
+export const getGetScoreStabilitySchedulerStatusUrl = () => {
+  return `/api/feedback/calibration/score-stability/scheduler-status`;
+};
+
+export const getScoreStabilitySchedulerStatus = async (
+  options?: RequestInit,
+): Promise<ScoreStabilitySchedulerStatus> => {
+  return customFetch<ScoreStabilitySchedulerStatus>(
+    getGetScoreStabilitySchedulerStatusUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetScoreStabilitySchedulerStatusQueryKey = () => {
+  return [
+    `/api/feedback/calibration/score-stability/scheduler-status`,
+  ] as const;
+};
+
+export const getGetScoreStabilitySchedulerStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScoreStabilitySchedulerStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScoreStabilitySchedulerStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetScoreStabilitySchedulerStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getScoreStabilitySchedulerStatus>>
+  > = ({ signal }) =>
+    getScoreStabilitySchedulerStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScoreStabilitySchedulerStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScoreStabilitySchedulerStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScoreStabilitySchedulerStatus>>
+>;
+export type GetScoreStabilitySchedulerStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Per-replica score-stability scheduler heartbeat (Task
+ */
+
+export function useGetScoreStabilitySchedulerStatus<
+  TData = Awaited<ReturnType<typeof getScoreStabilitySchedulerStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScoreStabilitySchedulerStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScoreStabilitySchedulerStatusQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

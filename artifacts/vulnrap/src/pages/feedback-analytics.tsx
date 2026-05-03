@@ -7,6 +7,9 @@ import {
   useGetAvriDriftNotifications, getGetAvriDriftNotificationsQueryKey,
   useGetAvriDriftSchedulerStatus, getGetAvriDriftSchedulerStatusQueryKey,
   useGetAvriDriftRearmHistory, getGetAvriDriftRearmHistoryQueryKey,
+  useGetScoreStabilitySummary, getGetScoreStabilitySummaryQueryKey,
+  type ScoreStabilitySummary,
+  type ScoreStabilityDailyBucket,
   useGetCalibrationAuthBruteForceAlerts,
   getGetCalibrationAuthBruteForceAlertsQueryKey,
   rearmAvriDriftNotifications,
@@ -13461,6 +13464,279 @@ function CalibrationAuthBruteForceAlertsContent({
   );
 }
 
+// Task #620 — Score-stability tier-flip chart. Reviewer-only: gated
+// on the same `authState.kind === "valid"` check the rest of this
+// dashboard's auth-bearing panels use. Renders one stacked bar per
+// day in the lookback window: legit→slop on top (red), slop→legit
+// below (orange), and a thin "other flips" wedge for tightened /
+// loosened / lateral moves so the chart still adds up to the day's
+// total flip count. A dashed horizontal line shows the alert
+// threshold (default 2 % of the day's volume) the scheduler uses to
+// decide whether to page reviewers, so the same number is visible
+// here and in the alert payload.
+function ScoreStabilityPanel({
+  authState,
+}: {
+  authState: CalibrationAuthState;
+}) {
+  const enabled = authState.kind === "valid";
+  const queryKey = getGetScoreStabilitySummaryQueryKey();
+  const { data, isLoading, isError } = useGetScoreStabilitySummary({
+    query: { queryKey, enabled, refetchInterval: 60_000, retry: 1 },
+  });
+
+  if (!enabled) {
+    return (
+      <div data-testid="score-stability-panel-locked">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+          <Activity className="w-3 h-3" />
+          <span>Score stability — tier flips per day</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground/70 italic px-3 py-2 rounded-md border border-dashed border-border/40">
+          Reviewer token required to load the score-stability tier-flip
+          summary.
+        </div>
+      </div>
+    );
+  }
+  if (isLoading) {
+    return <Skeleton className="h-32 rounded-md" />;
+  }
+  if (isError || !data) {
+    return (
+      <div data-testid="score-stability-panel-error" className="text-[11px] text-red-400/80 italic">
+        Could not load score-stability summary.
+      </div>
+    );
+  }
+
+  const summary: ScoreStabilitySummary = data;
+  // Days come back most-recent first; reverse for a left-to-right
+  // chronological chart so the "today" bar sits on the right where
+  // reviewers expect it.
+  const days = [...summary.daily].reverse();
+  const totalsHeader = summary.totals;
+  const overallExceeded =
+    totalsHeader.flipRate > summary.alertThreshold && totalsHeader.total > 0;
+
+  // Chart geometry. Bars + threshold line scale to the largest single
+  // day's flip count so a quiet week still shows visible structure.
+  const W = 360;
+  const H = 120;
+  const PAD_L = 28;
+  const PAD_R = 8;
+  const PAD_T = 8;
+  const PAD_B = 18;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+  void PAD_B;
+  const maxFlips = Math.max(1, ...days.map((d) => d.flips));
+  const maxTotalForThreshold = Math.max(1, ...days.map((d) => d.total));
+  // Threshold line is drawn at `alertThreshold * maxTotalForThreshold`
+  // — the count above which a uniformly-busy day would fire the alert.
+  // Reviewers reading this chart want "is today's red bar over the
+  // dashed line"; this scale gives them that affordance directly.
+  const thresholdY =
+    PAD_T +
+    innerH -
+    (Math.min(1, summary.alertThreshold) *
+      maxTotalForThreshold *
+      innerH) /
+      maxFlips;
+  const barW = days.length > 0 ? innerW / days.length : innerW;
+
+  function yFor(count: number): number {
+    return PAD_T + innerH - (count * innerH) / maxFlips;
+  }
+
+  return (
+    <div data-testid="score-stability-panel">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2 flex-wrap">
+        <Activity className="w-3 h-3" />
+        <span>Score stability — tier flips per day</span>
+        <span
+          className={
+            "normal-case font-normal italic " +
+            (overallExceeded
+              ? "text-red-400/90"
+              : "text-muted-foreground/40")
+          }
+        >
+          {summary.lookbackDays}-day flip rate{" "}
+          {(totalsHeader.flipRate * 100).toFixed(2)}% (alert{" "}
+          {(summary.alertThreshold * 100).toFixed(1)}%)
+        </span>
+      </div>
+      {totalsHeader.total === 0 ? (
+        <div className="text-[11px] text-muted-foreground/60 italic px-3 py-2 rounded-md border border-dashed border-border/40">
+          No re-score rows yet. Enable the nightly score-stability
+          scheduler (SCORE_STABILITY_SCHEDULER_ENABLED=true) and wait
+          for the next tick.
+        </div>
+      ) : (
+        <>
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full"
+            style={{ maxHeight: "180px" }}
+            role="img"
+            aria-label={`Tier flips per day for the last ${summary.lookbackDays} days`}
+          >
+            {/* Threshold guide */}
+            <line
+              x1={PAD_L}
+              x2={W - PAD_R}
+              y1={thresholdY}
+              y2={thresholdY}
+              stroke="currentColor"
+              strokeOpacity={0.35}
+              strokeDasharray="3 3"
+              strokeWidth={1}
+            />
+            <text
+              x={PAD_L - 4}
+              y={Math.max(PAD_T + 8, thresholdY + 3)}
+              textAnchor="end"
+              className="fill-muted-foreground"
+              style={{ fontSize: "8px" }}
+            >
+              {(summary.alertThreshold * 100).toFixed(0)}%
+            </text>
+            {/* Bars */}
+            {days.map((d, i) => {
+              const x = PAD_L + i * barW + 1;
+              const w = Math.max(1, barW - 2);
+              const otherFlips =
+                d.flips - d.legitToSlop - d.slopToLegit;
+              const yLegit = yFor(d.legitToSlop);
+              const yLegitPlusSlop = yFor(d.legitToSlop + d.slopToLegit);
+              const yTop = yFor(d.flips);
+              return (
+                <g key={d.date}>
+                  <title>
+                    {`${d.date}: ${d.flips}/${d.total} flips (${(d.flipRate * 100).toFixed(2)}%) — legit→slop ${d.legitToSlop}, slop→legit ${d.slopToLegit}, other ${otherFlips}`}
+                  </title>
+                  {d.legitToSlop > 0 && (
+                    <rect
+                      x={x}
+                      y={yLegit}
+                      width={w}
+                      height={Math.max(1, PAD_T + innerH - yLegit)}
+                      className="fill-red-500/80"
+                    />
+                  )}
+                  {d.slopToLegit > 0 && (
+                    <rect
+                      x={x}
+                      y={yLegitPlusSlop}
+                      width={w}
+                      height={Math.max(1, yLegit - yLegitPlusSlop)}
+                      className="fill-orange-400/80"
+                    />
+                  )}
+                  {otherFlips > 0 && (
+                    <rect
+                      x={x}
+                      y={yTop}
+                      width={w}
+                      height={Math.max(1, yLegitPlusSlop - yTop)}
+                      className="fill-muted-foreground/40"
+                    />
+                  )}
+                </g>
+              );
+            })}
+            {/* X-axis labels: only first / mid / last so they don't
+                overlap on a 7-day chart at narrow widths. */}
+            {days.length > 0 && (
+              <>
+                <text
+                  x={PAD_L}
+                  y={H - 4}
+                  className="fill-muted-foreground"
+                  style={{ fontSize: "8px" }}
+                >
+                  {days[0]!.date.slice(5)}
+                </text>
+                <text
+                  x={W - PAD_R}
+                  y={H - 4}
+                  textAnchor="end"
+                  className="fill-muted-foreground"
+                  style={{ fontSize: "8px" }}
+                >
+                  {days[days.length - 1]!.date.slice(5)}
+                </text>
+              </>
+            )}
+          </svg>
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-1 flex-wrap">
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500/80" />
+              legit→slop ({totalsHeader.legitToSlop})
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-orange-400/80" />
+              slop→legit ({totalsHeader.slopToLegit})
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-muted-foreground/40" />
+              other ({totalsHeader.tightened + totalsHeader.loosened + totalsHeader.lateral})
+            </span>
+          </div>
+          <ScoreStabilityDailyTable days={days} threshold={summary.alertThreshold} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function ScoreStabilityDailyTable({
+  days,
+  threshold,
+}: {
+  days: ScoreStabilityDailyBucket[];
+  threshold: number;
+}) {
+  return (
+    <table className="w-full mt-2 text-[10px] border-collapse" data-testid="score-stability-daily-table">
+      <thead>
+        <tr className="text-muted-foreground/70 uppercase tracking-wider">
+          <th className="text-left font-normal py-1">Day</th>
+          <th className="text-right font-normal py-1">Total</th>
+          <th className="text-right font-normal py-1">Flips</th>
+          <th className="text-right font-normal py-1">L→S</th>
+          <th className="text-right font-normal py-1">S→L</th>
+          <th className="text-right font-normal py-1">Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {[...days].reverse().map((d) => {
+          const exceeded = d.total > 0 && d.flipRate > threshold;
+          return (
+            <tr
+              key={d.date}
+              className={
+                "border-t border-border/20 " +
+                (exceeded ? "text-red-400/90" : "text-foreground/80")
+              }
+            >
+              <td className="py-1">{d.date}</td>
+              <td className="text-right tabular-nums">{d.total}</td>
+              <td className="text-right tabular-nums">{d.flips}</td>
+              <td className="text-right tabular-nums">{d.legitToSlop}</td>
+              <td className="text-right tabular-nums">{d.slopToLegit}</td>
+              <td className="text-right tabular-nums">
+                {(d.flipRate * 100).toFixed(2)}%
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 // Operator-visible heartbeat for the AVRI drift scheduler. Reads the
 // unauthenticated status endpoint and renders one row per server
 // replica so reviewers can confirm every replica's timer is firing —
@@ -17811,6 +18087,15 @@ function AvriDriftSection() {
         </div>
 
         <SchedulerStatusPanel />
+
+        {/* Task #620 — Reviewer-only score-stability chart. Renders the
+            nightly tier-flip count per day with direction breakdown
+            (legit→slop, slop→legit) plus the dashed 2 % alert
+            threshold the scheduler uses to page reviewers. Auth-gated
+            on the same reviewer token as the rest of this dashboard,
+            since an elevated flip-rate is a leading signal of an
+            active scoring regression. */}
+        <ScoreStabilityPanel authState={authState} />
 
         {/* Task #399 — Recent calibration auth brute-force alerts.
             Same auth-gating model as the dedup-state and re-arm-history
