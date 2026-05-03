@@ -449,6 +449,30 @@ export default function Check() {
     );
   };
 
+  // Task #679 — Browser bookmarklet pre-fill. The bookmarklet at
+  // sdks/bookmarklet/ opens `/check?text=<encoded selection>`; consume the
+  // param exactly once, switch to the paste tab, and strip it from the URL
+  // so a refresh does not re-seed the textarea or leak the selection into
+  // the user's browser history beyond the initial navigation.
+  const textParamConsumedRef = useRef(false);
+  useEffect(() => {
+    if (textParamConsumedRef.current) return;
+    const seed = searchParams.get("text");
+    if (seed == null) return;
+    textParamConsumedRef.current = true;
+    const trimmed = seed.slice(0, 50000);
+    setRawText(trimmed);
+    setInputMode("text");
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete("text");
+        return params;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
+
   const presetIdParam = searchParams.get("preset");
   const { data: presetLibrary } = useListPresets({
     query: { enabled: !!presetIdParam, queryKey: getListPresetsQueryKey() },

@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "generate:postman": "node ./generate-postman.mjs",
+    "generate:bookmarklet": "node ../sdks/bookmarklet/generate.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && node check-artifact-paths.test.mjs",
     "test": "node check-artifact-paths.test.mjs"
   },
