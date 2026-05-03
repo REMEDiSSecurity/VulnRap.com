@@ -3521,6 +3521,120 @@ export interface PresetLibrary {
 }
 
 /**
+ * Which curated list the suggestion targets.
+ */
+export type PhraseSuggestionSubmitBodyCategory =
+  (typeof PhraseSuggestionSubmitBodyCategory)[keyof typeof PhraseSuggestionSubmitBodyCategory];
+
+export const PhraseSuggestionSubmitBodyCategory = {
+  handwavy: "handwavy",
+  "ai-self-disclosure": "ai-self-disclosure",
+} as const;
+
+/**
+ * Task #634 — Public submission body. `text` is normalized
+(lowercase + collapsed whitespace) on the server before storage.
+
+ */
+export interface PhraseSuggestionSubmitBody {
+  /**
+   * The proposed phrase.
+   * @minLength 3
+   * @maxLength 240
+   */
+  text: string;
+  /** Which curated list the suggestion targets. */
+  category: PhraseSuggestionSubmitBodyCategory;
+  /**
+   * Optional reviewer-facing note (where the user saw it, why it matters).
+   * @maxLength 1000
+   */
+  context?: string;
+}
+
+export interface PhraseSuggestionSubmitResponse {
+  ok: boolean;
+  /** True when the same submitter already proposed this exact text in the last 24h. */
+  duplicate: boolean;
+  /** Newly assigned suggestion id (omitted on duplicate responses). */
+  id?: number;
+  message: string;
+}
+
+export interface PhraseSuggestionRateLimited {
+  error: string;
+  dailyLimit?: number;
+  retryAfterHours?: number;
+}
+
+export type PhraseSuggestionCategory =
+  (typeof PhraseSuggestionCategory)[keyof typeof PhraseSuggestionCategory];
+
+export const PhraseSuggestionCategory = {
+  handwavy: "handwavy",
+  "ai-self-disclosure": "ai-self-disclosure",
+} as const;
+
+export type PhraseSuggestionStatus =
+  (typeof PhraseSuggestionStatus)[keyof typeof PhraseSuggestionStatus];
+
+export const PhraseSuggestionStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface PhraseSuggestion {
+  id: number;
+  text: string;
+  category: PhraseSuggestionCategory;
+  context: string | null;
+  status: PhraseSuggestionStatus;
+  createdAt: string;
+}
+
+export type PhraseSuggestionListStatus =
+  (typeof PhraseSuggestionListStatus)[keyof typeof PhraseSuggestionListStatus];
+
+export const PhraseSuggestionListStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface PhraseSuggestionList {
+  suggestions: PhraseSuggestion[];
+  total: number;
+  status: PhraseSuggestionListStatus;
+}
+
+export type PhraseSuggestionPatchBodyStatus =
+  (typeof PhraseSuggestionPatchBodyStatus)[keyof typeof PhraseSuggestionPatchBodyStatus];
+
+export const PhraseSuggestionPatchBodyStatus = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface PhraseSuggestionPatchBody {
+  status: PhraseSuggestionPatchBodyStatus;
+}
+
+export type PhraseSuggestionPatchResponseStatus =
+  (typeof PhraseSuggestionPatchResponseStatus)[keyof typeof PhraseSuggestionPatchResponseStatus];
+
+export const PhraseSuggestionPatchResponseStatus = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface PhraseSuggestionPatchResponse {
+  ok: boolean;
+  id: number;
+  status: PhraseSuggestionPatchResponseStatus;
+}
+
+/**
  * Privacy mode — full shares content, similarity_only stores only hashes
  */
 export type SubmitReportBodyContentMode =
@@ -3728,3 +3842,21 @@ export type GetTrendsParams = {
    */
   days?: number;
 };
+
+export type ListPhraseSuggestionsParams = {
+  status?: ListPhraseSuggestionsStatus;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  limit?: number;
+};
+
+export type ListPhraseSuggestionsStatus =
+  (typeof ListPhraseSuggestionsStatus)[keyof typeof ListPhraseSuggestionsStatus];
+
+export const ListPhraseSuggestionsStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;

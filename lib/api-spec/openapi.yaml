@@ -24,6 +24,8 @@ tags:
     description: Public-safe transparency endpoints (no reviewer-only fields)
   - name: presets
     description: Curated public preset library (sensitivity + per-engine weights)
+  - name: phrase-suggestions
+    description: User-suggested handwavy / ai-self-disclosure phrases (Task #634)
 paths:
   /healthz:
     get:
@@ -1558,6 +1560,136 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TrendsData"
+
+  /public/phrase-suggestions:
+    post:
+      operationId: submitPhraseSuggestion
+      tags: [phrase-suggestions]
+      summary: Submit a user-suggested handwavy / ai-self-disclosure phrase
+      description: |
+        Task #634 — Public endpoint that lets anonymous end users propose new
+        phrases for reviewer triage. Submissions are queued (status="pending")
+        and never auto-applied. Rate-limited to 5 successful submissions per
+        IP per 24 hours; same-IP duplicates of the same normalized text in
+        the last 24h return 200 with `duplicate: true`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PhraseSuggestionSubmitBody"
+      responses:
+        "200":
+          description: Duplicate submission (already queued in the last 24h)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhraseSuggestionSubmitResponse"
+        "201":
+          description: Suggestion accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhraseSuggestionSubmitResponse"
+        "400":
+          description: Invalid submission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Daily limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhraseSuggestionRateLimited"
+
+  /feedback/calibration/phrase-suggestions:
+    get:
+      operationId: listPhraseSuggestions
+      tags: [phrase-suggestions]
+      summary: List queued user-suggested phrases (reviewer-only)
+      description: |
+        Task #634 — Returns the suggestion queue for reviewer triage.
+        Defaults to status=pending. Requires the calibration token.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+            default: pending
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Suggestions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhraseSuggestionList"
+        "401":
+          description: Missing or invalid calibration token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /feedback/calibration/phrase-suggestions/{id}:
+    patch:
+      operationId: updatePhraseSuggestionStatus
+      tags: [phrase-suggestions]
+      summary: Mark a suggestion approved or rejected (reviewer-only)
+      description: |
+        Task #634 — Updates the status of a queued suggestion. The actual
+        addition to the active phrase list happens via the existing
+        /feedback/calibration/handwavy-phrases (or
+        /feedback/calibration/ai-self-disclosure-phrases) endpoints; this
+        is just the bookkeeping flip.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PhraseSuggestionPatchBody"
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhraseSuggestionPatchResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid calibration token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Suggestion not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -6161,3 +6293,105 @@ components:
           items:
             $ref: "#/components/schemas/PresetEntry"
       required: [version, presets]
+
+    PhraseSuggestionSubmitBody:
+      type: object
+      description: |
+        Task #634 — Public submission body. `text` is normalized
+        (lowercase + collapsed whitespace) on the server before storage.
+      properties:
+        text:
+          type: string
+          minLength: 3
+          maxLength: 240
+          description: The proposed phrase.
+        category:
+          type: string
+          enum: [handwavy, ai-self-disclosure]
+          description: Which curated list the suggestion targets.
+        context:
+          type: string
+          maxLength: 1000
+          description: Optional reviewer-facing note (where the user saw it, why it matters).
+      required: [text, category]
+
+    PhraseSuggestionSubmitResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        duplicate:
+          type: boolean
+          description: True when the same submitter already proposed this exact text in the last 24h.
+        id:
+          type: integer
+          description: Newly assigned suggestion id (omitted on duplicate responses).
+        message:
+          type: string
+      required: [ok, duplicate, message]
+
+    PhraseSuggestionRateLimited:
+      type: object
+      properties:
+        error:
+          type: string
+        dailyLimit:
+          type: integer
+        retryAfterHours:
+          type: integer
+      required: [error]
+
+    PhraseSuggestion:
+      type: object
+      properties:
+        id:
+          type: integer
+        text:
+          type: string
+        category:
+          type: string
+          enum: [handwavy, ai-self-disclosure]
+        context:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, text, category, context, status, createdAt]
+
+    PhraseSuggestionList:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PhraseSuggestion"
+        total:
+          type: integer
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+      required: [suggestions, total, status]
+
+    PhraseSuggestionPatchBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected]
+      required: [status]
+
+    PhraseSuggestionPatchResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [approved, rejected]
+      required: [ok, id, status]

@@ -66,8 +66,15 @@ import type {
   HealthStatus,
   LatencySnapshot,
   ListHandwavyPhraseRemovalBatchesParams,
+  ListPhraseSuggestionsParams,
   NewsletterSubscribeBody,
   NewsletterSubscribeResponse,
+  PhraseSuggestionList,
+  PhraseSuggestionPatchBody,
+  PhraseSuggestionPatchResponse,
+  PhraseSuggestionRateLimited,
+  PhraseSuggestionSubmitBody,
+  PhraseSuggestionSubmitResponse,
   PlatformStats,
   PresetLibrary,
   PublicDriftSummary,
@@ -4598,3 +4605,308 @@ export function useGetTrends<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Task #634 — Public endpoint that lets anonymous end users propose new
+phrases for reviewer triage. Submissions are queued (status="pending")
+and never auto-applied. Rate-limited to 5 successful submissions per
+IP per 24 hours; same-IP duplicates of the same normalized text in
+the last 24h return 200 with `duplicate: true`.
+
+ * @summary Submit a user-suggested handwavy / ai-self-disclosure phrase
+ */
+export const getSubmitPhraseSuggestionUrl = () => {
+  return `/api/public/phrase-suggestions`;
+};
+
+export const submitPhraseSuggestion = async (
+  phraseSuggestionSubmitBody: PhraseSuggestionSubmitBody,
+  options?: RequestInit,
+): Promise<PhraseSuggestionSubmitResponse> => {
+  return customFetch<PhraseSuggestionSubmitResponse>(
+    getSubmitPhraseSuggestionUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(phraseSuggestionSubmitBody),
+    },
+  );
+};
+
+export const getSubmitPhraseSuggestionMutationOptions = <
+  TError = ErrorType<ErrorResponse | PhraseSuggestionRateLimited>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitPhraseSuggestion>>,
+    TError,
+    { data: BodyType<PhraseSuggestionSubmitBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitPhraseSuggestion>>,
+  TError,
+  { data: BodyType<PhraseSuggestionSubmitBody> },
+  TContext
+> => {
+  const mutationKey = ["submitPhraseSuggestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitPhraseSuggestion>>,
+    { data: BodyType<PhraseSuggestionSubmitBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return submitPhraseSuggestion(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitPhraseSuggestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitPhraseSuggestion>>
+>;
+export type SubmitPhraseSuggestionMutationBody =
+  BodyType<PhraseSuggestionSubmitBody>;
+export type SubmitPhraseSuggestionMutationError = ErrorType<
+  ErrorResponse | PhraseSuggestionRateLimited
+>;
+
+/**
+ * @summary Submit a user-suggested handwavy / ai-self-disclosure phrase
+ */
+export const useSubmitPhraseSuggestion = <
+  TError = ErrorType<ErrorResponse | PhraseSuggestionRateLimited>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitPhraseSuggestion>>,
+    TError,
+    { data: BodyType<PhraseSuggestionSubmitBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitPhraseSuggestion>>,
+  TError,
+  { data: BodyType<PhraseSuggestionSubmitBody> },
+  TContext
+> => {
+  return useMutation(getSubmitPhraseSuggestionMutationOptions(options));
+};
+
+/**
+ * Task #634 — Returns the suggestion queue for reviewer triage.
+Defaults to status=pending. Requires the calibration token.
+
+ * @summary List queued user-suggested phrases (reviewer-only)
+ */
+export const getListPhraseSuggestionsUrl = (
+  params?: ListPhraseSuggestionsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/feedback/calibration/phrase-suggestions?${stringifiedParams}`
+    : `/api/feedback/calibration/phrase-suggestions`;
+};
+
+export const listPhraseSuggestions = async (
+  params?: ListPhraseSuggestionsParams,
+  options?: RequestInit,
+): Promise<PhraseSuggestionList> => {
+  return customFetch<PhraseSuggestionList>(
+    getListPhraseSuggestionsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListPhraseSuggestionsQueryKey = (
+  params?: ListPhraseSuggestionsParams,
+) => {
+  return [
+    `/api/feedback/calibration/phrase-suggestions`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListPhraseSuggestionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPhraseSuggestions>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListPhraseSuggestionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPhraseSuggestions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListPhraseSuggestionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPhraseSuggestions>>
+  > = ({ signal }) =>
+    listPhraseSuggestions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPhraseSuggestions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPhraseSuggestionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPhraseSuggestions>>
+>;
+export type ListPhraseSuggestionsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List queued user-suggested phrases (reviewer-only)
+ */
+
+export function useListPhraseSuggestions<
+  TData = Awaited<ReturnType<typeof listPhraseSuggestions>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListPhraseSuggestionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPhraseSuggestions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPhraseSuggestionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #634 — Updates the status of a queued suggestion. The actual
+addition to the active phrase list happens via the existing
+/feedback/calibration/handwavy-phrases (or
+/feedback/calibration/ai-self-disclosure-phrases) endpoints; this
+is just the bookkeeping flip.
+
+ * @summary Mark a suggestion approved or rejected (reviewer-only)
+ */
+export const getUpdatePhraseSuggestionStatusUrl = (id: number) => {
+  return `/api/feedback/calibration/phrase-suggestions/${id}`;
+};
+
+export const updatePhraseSuggestionStatus = async (
+  id: number,
+  phraseSuggestionPatchBody: PhraseSuggestionPatchBody,
+  options?: RequestInit,
+): Promise<PhraseSuggestionPatchResponse> => {
+  return customFetch<PhraseSuggestionPatchResponse>(
+    getUpdatePhraseSuggestionStatusUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(phraseSuggestionPatchBody),
+    },
+  );
+};
+
+export const getUpdatePhraseSuggestionStatusMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePhraseSuggestionStatus>>,
+    TError,
+    { id: number; data: BodyType<PhraseSuggestionPatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePhraseSuggestionStatus>>,
+  TError,
+  { id: number; data: BodyType<PhraseSuggestionPatchBody> },
+  TContext
+> => {
+  const mutationKey = ["updatePhraseSuggestionStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePhraseSuggestionStatus>>,
+    { id: number; data: BodyType<PhraseSuggestionPatchBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updatePhraseSuggestionStatus(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePhraseSuggestionStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePhraseSuggestionStatus>>
+>;
+export type UpdatePhraseSuggestionStatusMutationBody =
+  BodyType<PhraseSuggestionPatchBody>;
+export type UpdatePhraseSuggestionStatusMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Mark a suggestion approved or rejected (reviewer-only)
+ */
+export const useUpdatePhraseSuggestionStatus = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePhraseSuggestionStatus>>,
+    TError,
+    { id: number; data: BodyType<PhraseSuggestionPatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePhraseSuggestionStatus>>,
+  TError,
+  { id: number; data: BodyType<PhraseSuggestionPatchBody> },
+  TContext
+> => {
+  return useMutation(getUpdatePhraseSuggestionStatusMutationOptions(options));
+};

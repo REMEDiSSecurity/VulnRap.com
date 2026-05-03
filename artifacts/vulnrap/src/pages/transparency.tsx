@@ -6,6 +6,7 @@ import { TrendingUp, BarChart3, Users, FileText, ThumbsUp, Activity, Eye } from 
 import { cn } from "@/lib/utils";
 import { TransparencyDriftWidget } from "@/components/transparency-drift-widget";
 import LatencySnapshotCard from "@/components/LatencySnapshotCard";
+import PhraseSuggestionForm from "@/components/phrase-suggestion-form";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -288,6 +289,10 @@ export default function Transparency() {
       </section>
 
       <LatencySnapshotCard />
+
+      <section aria-label="User-suggested phrase form">
+        <PhraseSuggestionForm />
+      </section>
 
       <Card className="glass-card rounded-xl">
         <CardContent className="p-5">

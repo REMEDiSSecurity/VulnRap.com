@@ -11907,3 +11907,112 @@ export const GetTrendsResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * Task #634 — Public endpoint that lets anonymous end users propose new
+phrases for reviewer triage. Submissions are queued (status="pending")
+and never auto-applied. Rate-limited to 5 successful submissions per
+IP per 24 hours; same-IP duplicates of the same normalized text in
+the last 24h return 200 with `duplicate: true`.
+
+ * @summary Submit a user-suggested handwavy / ai-self-disclosure phrase
+ */
+export const submitPhraseSuggestionBodyTextMin = 3;
+export const submitPhraseSuggestionBodyTextMax = 240;
+
+export const submitPhraseSuggestionBodyContextMax = 1000;
+
+export const SubmitPhraseSuggestionBody = zod
+  .object({
+    text: zod
+      .string()
+      .min(submitPhraseSuggestionBodyTextMin)
+      .max(submitPhraseSuggestionBodyTextMax)
+      .describe("The proposed phrase."),
+    category: zod
+      .enum(["handwavy", "ai-self-disclosure"])
+      .describe("Which curated list the suggestion targets."),
+    context: zod
+      .string()
+      .max(submitPhraseSuggestionBodyContextMax)
+      .optional()
+      .describe(
+        "Optional reviewer-facing note (where the user saw it, why it matters).",
+      ),
+  })
+  .describe(
+    "Task #634 — Public submission body. `text` is normalized\n(lowercase + collapsed whitespace) on the server before storage.\n",
+  );
+
+export const SubmitPhraseSuggestionResponse = zod.object({
+  ok: zod.boolean(),
+  duplicate: zod
+    .boolean()
+    .describe(
+      "True when the same submitter already proposed this exact text in the last 24h.",
+    ),
+  id: zod
+    .number()
+    .optional()
+    .describe("Newly assigned suggestion id (omitted on duplicate responses)."),
+  message: zod.string(),
+});
+
+/**
+ * Task #634 — Returns the suggestion queue for reviewer triage.
+Defaults to status=pending. Requires the calibration token.
+
+ * @summary List queued user-suggested phrases (reviewer-only)
+ */
+export const listPhraseSuggestionsQueryStatusDefault = `pending`;
+export const listPhraseSuggestionsQueryLimitDefault = 100;
+export const listPhraseSuggestionsQueryLimitMax = 500;
+
+export const ListPhraseSuggestionsQueryParams = zod.object({
+  status: zod
+    .enum(["pending", "approved", "rejected"])
+    .default(listPhraseSuggestionsQueryStatusDefault),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listPhraseSuggestionsQueryLimitMax)
+    .default(listPhraseSuggestionsQueryLimitDefault),
+});
+
+export const ListPhraseSuggestionsResponse = zod.object({
+  suggestions: zod.array(
+    zod.object({
+      id: zod.number(),
+      text: zod.string(),
+      category: zod.enum(["handwavy", "ai-self-disclosure"]),
+      context: zod.string().nullable(),
+      status: zod.enum(["pending", "approved", "rejected"]),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+  status: zod.enum(["pending", "approved", "rejected"]),
+});
+
+/**
+ * Task #634 — Updates the status of a queued suggestion. The actual
+addition to the active phrase list happens via the existing
+/feedback/calibration/handwavy-phrases (or
+/feedback/calibration/ai-self-disclosure-phrases) endpoints; this
+is just the bookkeeping flip.
+
+ * @summary Mark a suggestion approved or rejected (reviewer-only)
+ */
+export const UpdatePhraseSuggestionStatusParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdatePhraseSuggestionStatusBody = zod.object({
+  status: zod.enum(["approved", "rejected"]),
+});
+
+export const UpdatePhraseSuggestionStatusResponse = zod.object({
+  ok: zod.boolean(),
+  id: zod.number(),
+  status: zod.enum(["approved", "rejected"]),
+});
