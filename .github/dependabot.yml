@@ -1,0 +1,57 @@
+version: 2
+
+updates:
+  # npm/pnpm — Dependabot reads pnpm-lock.yaml v9 (since 2024) when the
+  # `npm` ecosystem is configured at the workspace root.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    labels: [dependencies, javascript]
+    groups:
+      # Group minor + patch bumps so we don't get a wall of single-version
+      # PRs every Monday morning. Major bumps still come through as their
+      # own PR so they get the human review they need.
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        update-types: [patch, minor, major]
+    ignore:
+      # Workspace overrides pin esbuild + a few platform packages on purpose;
+      # don't churn PRs trying to bump them.
+      - dependency-name: esbuild
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels: [dependencies, github-actions]
+    groups:
+      actions:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # Docker — included now so once the project's Dockerfile lands (it's
+  # called out as a future arrival in the task description), Dependabot
+  # picks it up without any extra configuration. Until then this is a
+  # safe no-op.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels: [dependencies, docker]

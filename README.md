@@ -1,5 +1,10 @@
 # VulnRap
 
+[![CI](https://github.com/REMEDiSSecurity/VulnRap.com/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/REMEDiSSecurity/VulnRap.com/actions/workflows/ci.yml)
+[![Build (main)](https://github.com/REMEDiSSecurity/VulnRap.com/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/REMEDiSSecurity/VulnRap.com/actions/workflows/build.yml)
+[![Nightly e2e](https://github.com/REMEDiSSecurity/VulnRap.com/actions/workflows/nightly-e2e.yml/badge.svg)](https://github.com/REMEDiSSecurity/VulnRap.com/actions/workflows/nightly-e2e.yml)
+[![CodeQL](https://github.com/REMEDiSSecurity/VulnRap.com/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/REMEDiSSecurity/VulnRap.com/actions/workflows/codeql.yml)
+
 **Like VirusTotal, but for vulnerability reports.**
 
 VulnRap is a free, anonymous vulnerability report validation platform built for PSIRT and triage teams receiving vulnerability reports. Upload an incoming report and instantly get:

@@ -1,0 +1,72 @@
+name: Release SBOM
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to attach the SBOM to (e.g. v1.2.3)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  sbom:
+    name: Generate CycloneDX SBOM and attach to release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate CycloneDX SBOM
+        # @cyclonedx/cyclonedx-npm understands pnpm-lock.yaml v9 and emits
+        # a workspace-aware SBOM. Pinned via npx --yes so we don't have to
+        # commit it to the workspace.
+        run: |
+          npx --yes @cyclonedx/cyclonedx-npm@^2 \
+            --output-format json \
+            --output-file vulnrap-sbom.cdx.json \
+            --package-lock-only \
+            --omit dev || npx --yes @cyclonedx/cyclonedx-npm@^2 \
+            --output-format json \
+            --output-file vulnrap-sbom.cdx.json
+          ls -la vulnrap-sbom.cdx.json
+
+      - name: Attach SBOM to GitHub Release
+        # `softprops/action-gh-release` either creates the release (if the
+        # tag push triggered the workflow and no release exists yet) or
+        # uploads the SBOM as an asset on the matching release.
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: vulnrap-sbom.cdx.json
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload SBOM as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnrap-sbom
+          path: vulnrap-sbom.cdx.json
+          retention-days: 90

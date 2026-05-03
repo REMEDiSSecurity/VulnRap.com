@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: codegen / typecheck / unit tests / format
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Match `.replit` (`modules = ["nodejs-24", ...]`).
+          node-version: 24
+          cache: pnpm
+
+      - name: Cache TypeScript build outputs
+        uses: actions/cache@v4
+        with:
+          # Composite project references emit `.tsbuildinfo` + `dist/` for every
+          # `lib/<name>`. Caching them lets `tsc --build` stay incremental in CI
+          # the same way it does locally.
+          path: |
+            lib/*/dist
+            lib/*/tsconfig.tsbuildinfo
+            artifacts/*/tsconfig.tsbuildinfo
+          key: tsc-build-${{ runner.os }}-node24-${{ hashFiles('pnpm-lock.yaml', 'tsconfig.base.json', 'lib/*/tsconfig.json', 'artifacts/*/tsconfig.json') }}
+          restore-keys: |
+            tsc-build-${{ runner.os }}-node24-
+
+      - name: Install dependencies
+        # `--frozen-lockfile` makes the install fail loudly on a stale
+        # pnpm-lock.yaml, which is the same contract pnpm uses for `pnpm i`
+        # under CI. The root `postinstall` runs codegen + `tsc --build`, so by
+        # the time this step finishes the workspace is ready for typecheck.
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify generated client matches the OpenAPI spec
+        run: pnpm run verify:codegen
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit tests
+        # Run every workspace package's `test` script EXCEPT
+        # @workspace/vulnrap, whose `test` transitively invokes the
+        # Playwright e2e suite (covered by the separate `e2e` job
+        # below). For vulnrap we run `test:unit` explicitly. The
+        # `--if-present` flag means new packages without a `test`
+        # script are silently skipped, and any new package that DOES
+        # add a `test` script is picked up automatically.
+        run: |
+          set -e
+          pnpm -r --filter '!@workspace/vulnrap' --if-present run test
+          pnpm --filter @workspace/vulnrap run test:unit
+
+      - name: Prettier (check)
+        # Keep this tolerant — the repo doesn't yet declare a top-level
+        # `format` script. If/when one lands, this step will pick it up
+        # automatically; otherwise it falls back to `prettier --check` over
+        # the workspace using the already-installed prettier devDependency.
+        run: |
+          if pnpm run | grep -qE '^\s*(format|format:check|prettier)\s'; then
+            pnpm run format:check 2>/dev/null \
+              || pnpm run format -- --check 2>/dev/null \
+              || pnpm run prettier -- --check .
+          else
+            pnpm exec prettier --check . \
+              || (echo "::warning::Prettier reported formatting drift. Run 'pnpm exec prettier --write .' locally." && exit 1)
+          fi
+
+      - name: Lint (if configured)
+        # ESLint is a separate task; this step no-ops cleanly today and
+        # auto-activates once a `lint` script is wired up at the root.
+        run: |
+          if pnpm run | grep -qE '^\s*lint\s'; then
+            pnpm run lint
+          else
+            echo "No top-level 'lint' script found yet; skipping."
+          fi
+
+  e2e:
+    name: vulnrap e2e (diff-aware)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The diff-aware selector (scripts/vulnrap-e2e-select-specs.mjs)
+          # walks `git merge-base HEAD origin/main` to decide which specs to
+          # run, so the runner needs both refs available.
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          v=$(pnpm --filter @workspace/vulnrap exec playwright --version | awk '{print $2}')
+          echo "version=$v" >>"$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @workspace/vulnrap exec playwright install --with-deps chromium
+
+      - name: Cache build-if-stale outputs
+        uses: actions/cache@v4
+        with:
+          # Matches the `BUILD_IF_STALE_CACHE_DIR` default in
+          # scripts/build-if-stale.mjs. Restoring it lets the e2e job reuse
+          # the same content-addressed bundle cache the local release gate
+          # uses, so back-to-back PR runs skip the vite + esbuild builds.
+          path: .cache/build-if-stale
+          key: build-if-stale-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'artifacts/vulnrap/**/*.ts', 'artifacts/vulnrap/**/*.tsx', 'artifacts/api-server/**/*.ts', 'lib/*/src/**') }}
+          restore-keys: |
+            build-if-stale-${{ runner.os }}-
+
+      - name: Run diff-aware vulnrap e2e suite
+        env:
+          E2E_DIFF_BASE: origin/${{ github.base_ref || 'main' }}
+        run: |
+          # Discover the Chromium binary Playwright just installed. The cache
+          # dir layout is versioned (chromium-<rev>/...), so we resolve it at
+          # runtime instead of hard-coding it.
+          CHROMIUM_BIN=$(pnpm --filter @workspace/vulnrap exec node -e "import('playwright-core').then(m => console.log(m.chromium.executablePath()))")
+          echo "Using Chromium at: $CHROMIUM_BIN"
+          export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$CHROMIUM_BIN"
+          bash scripts/vulnrap-e2e-check.sh
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: artifacts/vulnrap/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,88 @@
+name: Nightly e2e (full suite)
+
+on:
+  schedule:
+    # 04:17 UTC daily — off-peak and offset from common cron storm minutes.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  full-e2e:
+    name: vulnrap full Playwright suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          v=$(pnpm --filter @workspace/vulnrap exec playwright --version | awk '{print $2}')
+          echo "version=$v" >>"$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @workspace/vulnrap exec playwright install --with-deps chromium
+
+      - name: Run FULL vulnrap e2e suite
+        env:
+          # Force the wrapper to skip the diff-aware narrowing so we always
+          # get the entire Playwright suite — that's the whole point of the
+          # nightly run.
+          E2E_RUN_ALL_SPECS: "1"
+        run: |
+          CHROMIUM_BIN=$(pnpm --filter @workspace/vulnrap exec node -e "const {chromium}=require('playwright-core');console.log(chromium.executablePath())")
+          echo "Using Chromium at: $CHROMIUM_BIN"
+          export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$CHROMIUM_BIN"
+          bash scripts/vulnrap-e2e-check.sh
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-playwright-report
+          path: artifacts/vulnrap/playwright-report
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Open / update tracking issue on failure
+        if: failure()
+        uses: JasonEtco/create-an-issue@1b14a70e4d8dc185e5cc76d3bec9eab20257b2c5 # v2.9.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          # `update_existing: true` keeps a single rolling issue so repeat
+          # failures don't spam the tracker.
+          update_existing: true
+          search_existing: open
+          filename: .github/ISSUE_TEMPLATE/nightly-e2e-failure.md
