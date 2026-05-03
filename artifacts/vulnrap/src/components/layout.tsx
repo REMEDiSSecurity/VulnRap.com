@@ -10,6 +10,7 @@ import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
 import { CursorBugs } from "@/components/cursor-bugs";
 import { CURRENT_VERSION, RELEASE_DATE } from "@/pages/changelog";
+import { resetOnboardingTour } from "@/components/onboarding-tour";
 
 function feedbackMailto(page: string) {
   const subject = encodeURIComponent("VulnRap Feedback");
@@ -191,6 +192,16 @@ function NavDropdown({ group, pathname }: NavDropdownProps) {
 export function Layout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleRestartTour = () => {
+    resetOnboardingTour();
+    if (pathname === "/") {
+      // Force a remount of Home so its first-run effect fires again.
+      window.location.search = "?tour=1";
+    } else {
+      window.location.href = "/?tour=1";
+    }
+  };
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -379,6 +390,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link to="/stats" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Stats</Link>
               <Link to="/transparency" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Impact</Link>
               <Link to="/community" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Community</Link>
+              <button
+                type="button"
+                onClick={handleRestartTour}
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit text-left"
+                data-testid="footer-restart-tour"
+              >
+                Restart tour
+              </button>
             </div>
 
             <div className="flex flex-col gap-2">

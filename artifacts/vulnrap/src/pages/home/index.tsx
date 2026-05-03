@@ -28,6 +28,7 @@ import { AutoRedactionCard } from "./auto-redaction-card";
 import { SectionHashingCard } from "./section-hashing-card";
 import { SlopDetectionCard } from "./slop-detection-card";
 import { VisitorCounter } from "./visitor-counter";
+import { OnboardingTour, hasSeenOnboardingTour } from "@/components/onboarding-tour";
 
 // Below-the-fold sections — lazy loaded so they don't bloat the initial
 // home-page JS bundle. The user has to scroll past several full-height
@@ -283,6 +284,22 @@ export default function Home() {
         return "Analyze Report";
     }
   };
+
+  // First-run onboarding tour. Skipped if the user has already dismissed it,
+  // unless they explicitly re-trigger it via the footer "Restart tour" link
+  // (which sets ?tour=1) or removes the localStorage flag.
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const forced = params.get("tour") === "1";
+    if (forced || !hasSeenOnboardingTour()) {
+      // Slight delay so the page has settled and target rects are stable.
+      const t = setTimeout(() => setShowTour(true), 600);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, []);
 
   const [mirrorBannerDismissed, setMirrorBannerDismissed] = useState(() => {
     try { return sessionStorage.getItem("vulnrap-mirror-dismissed") === "1"; } catch { return false; }
@@ -894,6 +911,19 @@ export default function Home() {
       </Suspense>
 
       <VisitorCounter />
+
+      {showTour && (
+        <OnboardingTour
+          onClose={() => setShowTour(false)}
+          prefillSample={(text) => {
+            // Switch to the paste tab and seed the textarea so step 1's
+            // spotlight has something to point at — but never overwrite
+            // text the user has already typed.
+            setInputMode("text");
+            setRawText((current) => current.trim().length === 0 ? text : current);
+          }}
+        />
+      )}
     </div>
   );
 }
