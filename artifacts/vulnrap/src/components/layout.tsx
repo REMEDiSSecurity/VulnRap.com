@@ -4,7 +4,7 @@ import {
   Activity, Search, Code, BookOpen, MessageSquare, Menu, X, Github,
   Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
   ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library,
-  ScrollText, Scale, Compass, Rocket, Sliders, Images, ShieldAlert, Radar,
+  ScrollText, Scale, Compass, Rocket, Sliders, Images, ShieldAlert, Radar, BadgeCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
@@ -72,7 +72,7 @@ const NAV: NavEntry[] = [
   {
     label: "Docs",
     icon: <BookOpen className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/developers", "/quickstart", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors", "/playground", "/gallery", "/cwe", "/signals"],
+    matchPrefixes: ["/developers", "/quickstart", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors", "/playground", "/gallery", "/cwe", "/signals", "/badges"],
     align: "right",
     items: [
       { to: "/quickstart", label: "Quickstart", icon: <Rocket className="w-4 h-4" />, description: "Zero to first scored report in five copy-paste steps." },
@@ -88,6 +88,7 @@ const NAV: NavEntry[] = [
       { to: "/compare-detectors", label: "Compare Detectors", icon: <Scale className="w-4 h-4" />, description: "Capability matrix vs. generic LLM detectors, plagiarism checkers, and manual triage." },
       { to: "/playground", label: "Scoring Playground", icon: <Sliders className="w-4 h-4" />, description: "Toggle signals and per-engine weights on a sample report and watch the score recalculate live." },
       { to: "/gallery", label: "Sample Gallery", icon: <Images className="w-4 h-4" />, description: "12 pre-scored example reports — obvious slop, subtle slop, borderline, clean." },
+      { to: "/badges", label: "Embed Badges", icon: <BadgeCheck className="w-4 h-4" />, description: "Five badge styles + copy-paste markdown for embedding scores in READMEs and advisories." },
       { to: "/blog", label: "Blog", icon: <FileText className="w-4 h-4" />, description: "Field tests, methodology, and post-mortems." },
       { to: "/changelog", label: "Changelog", icon: <BookOpen className="w-4 h-4" />, description: "Per-release notes and version history." },
       { to: "/community", label: "Community", icon: <Users className="w-4 h-4" />, description: "GitHub, mailing list, and how to contribute." },

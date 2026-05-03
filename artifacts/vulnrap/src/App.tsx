@@ -62,6 +62,7 @@ const AuditLog = lazyRetry(() => import("@/pages/audit-log"));
 const Gallery = lazyRetry(() => import("@/pages/gallery"));
 const SignalsIndex = lazyRetry(() => import("@/pages/signals-index"));
 const SignalsDetail = lazyRetry(() => import("@/pages/signals-detail"));
+const Badges = lazyRetry(() => import("@/pages/badges"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -121,6 +122,7 @@ function AppRoutes() {
             <Route path="/gallery" element={<Gallery />} />
             <Route path="/signals" element={<SignalsIndex />} />
             <Route path="/signals/:id" element={<SignalsDetail />} />
+            <Route path="/badges" element={<Badges />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

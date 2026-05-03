@@ -5,11 +5,12 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { GetEmbedBadgeSvgStyle } from "./getEmbedBadgeSvgStyle";
 
-export type GetEmbedBadgeParams = {
+export type GetEmbedBadgeSvgParams = {
   /**
-   * Report code in the public `VR-XXXX` format (hex, case-insensitive).
-   * @pattern ^VR-[0-9A-Fa-f]{1,8}$
+   * Numeric report id, or public `VR-XXXX` hex code.
    */
   id: string;
+  style?: GetEmbedBadgeSvgStyle;
 };

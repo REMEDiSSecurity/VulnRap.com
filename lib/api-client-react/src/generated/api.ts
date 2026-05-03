@@ -45,7 +45,7 @@ import type {
   GetAvriDriftReportParams,
   GetCalibrationAuthBruteForceAlertsParams,
   GetCohortBaselineParams,
-  GetEmbedBadgeParams,
+  GetEmbedBadgeSvgParams,
   GetReportFeedParams,
   GetShadowDriftParams,
   GetTrendsParams,
@@ -470,19 +470,25 @@ export const useDeleteReport = <
 };
 
 /**
- * Returns a Shields.io-style SVG badge for the report identified by the
-`id` query parameter (e.g. `VR-002A`). Designed to be dropped into
-triage tickets, READMEs, and HackerOne / Bugcrowd comments via
-`<img>` or Markdown. Always returns 200 OK with a well-formed SVG —
-unknown / hidden / malformed ids render an "unknown" badge so a
-broken image never appears on the embedder's page. Honours
-`showInFeed`: hidden reports render as "unknown" so private scores
-are not leaked. Sets ETag + `Cache-Control: max-age=300` so
-embedders that re-render frequently get cheap 304s.
+ * Returns an SVG badge showing the slop tier + score for the report
+identified by `id` (either a numeric id or the public `VR-XXXX` hex
+code). Designed to be dropped into READMEs, advisories, HackerOne /
+Bugcrowd comments, or triage tickets via `<img>` or Markdown.
 
- * @summary Embeddable score badge SVG (Shields.io-style)
+Five visual styles are supported via the `style` query param:
+`default` (Shields-style flat with gradient), `flat`, `plastic`,
+`social`, and `square`.
+
+Always returns 200 OK with a well-formed SVG — unknown / hidden /
+malformed ids render an "unknown" badge so a broken image never
+appears on the embedder's page. Honours `showInFeed`: hidden
+reports render as "unknown" so private scores are not leaked. Sets
+ETag + `Cache-Control: max-age=300` so embedders that re-render
+frequently get cheap 304s.
+
+ * @summary Embeddable score badge SVG (5 styles)
  */
-export const getGetEmbedBadgeUrl = (params: GetEmbedBadgeParams) => {
+export const getGetEmbedBadgeSvgUrl = (params: GetEmbedBadgeSvgParams) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -498,28 +504,30 @@ export const getGetEmbedBadgeUrl = (params: GetEmbedBadgeParams) => {
     : `/api/embed/badge.svg`;
 };
 
-export const getEmbedBadge = async (
-  params: GetEmbedBadgeParams,
+export const getEmbedBadgeSvg = async (
+  params: GetEmbedBadgeSvgParams,
   options?: RequestInit,
 ): Promise<Blob> => {
-  return customFetch<Blob>(getGetEmbedBadgeUrl(params), {
+  return customFetch<Blob>(getGetEmbedBadgeSvgUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetEmbedBadgeQueryKey = (params?: GetEmbedBadgeParams) => {
+export const getGetEmbedBadgeSvgQueryKey = (
+  params?: GetEmbedBadgeSvgParams,
+) => {
   return [`/api/embed/badge.svg`, ...(params ? [params] : [])] as const;
 };
 
-export const getGetEmbedBadgeQueryOptions = <
-  TData = Awaited<ReturnType<typeof getEmbedBadge>>,
+export const getGetEmbedBadgeSvgQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEmbedBadgeSvg>>,
   TError = ErrorType<void>,
 >(
-  params: GetEmbedBadgeParams,
+  params: GetEmbedBadgeSvgParams,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getEmbedBadge>>,
+      Awaited<ReturnType<typeof getEmbedBadgeSvg>>,
       TError,
       TData
     >;
@@ -528,43 +536,44 @@ export const getGetEmbedBadgeQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetEmbedBadgeQueryKey(params);
+  const queryKey =
+    queryOptions?.queryKey ?? getGetEmbedBadgeSvgQueryKey(params);
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEmbedBadge>>> = ({
-    signal,
-  }) => getEmbedBadge(params, { signal, ...requestOptions });
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getEmbedBadgeSvg>>
+  > = ({ signal }) => getEmbedBadgeSvg(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getEmbedBadge>>,
+    Awaited<ReturnType<typeof getEmbedBadgeSvg>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type GetEmbedBadgeQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getEmbedBadge>>
+export type GetEmbedBadgeSvgQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEmbedBadgeSvg>>
 >;
-export type GetEmbedBadgeQueryError = ErrorType<void>;
+export type GetEmbedBadgeSvgQueryError = ErrorType<void>;
 
 /**
- * @summary Embeddable score badge SVG (Shields.io-style)
+ * @summary Embeddable score badge SVG (5 styles)
  */
 
-export function useGetEmbedBadge<
-  TData = Awaited<ReturnType<typeof getEmbedBadge>>,
+export function useGetEmbedBadgeSvg<
+  TData = Awaited<ReturnType<typeof getEmbedBadgeSvg>>,
   TError = ErrorType<void>,
 >(
-  params: GetEmbedBadgeParams,
+  params: GetEmbedBadgeSvgParams,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getEmbedBadge>>,
+      Awaited<ReturnType<typeof getEmbedBadgeSvg>>,
       TError,
       TData
     >;
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetEmbedBadgeQueryOptions(params, options);
+  const queryOptions = getGetEmbedBadgeSvgQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

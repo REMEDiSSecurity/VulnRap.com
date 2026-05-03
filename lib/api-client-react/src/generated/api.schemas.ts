@@ -3940,13 +3940,24 @@ export type SubmitReportBody = {
   skipRedaction?: SubmitReportBodySkipRedaction;
 };
 
-export type GetEmbedBadgeParams = {
+export type GetEmbedBadgeSvgParams = {
   /**
-   * Report code in the public `VR-XXXX` format (hex, case-insensitive).
-   * @pattern ^VR-[0-9A-Fa-f]{1,8}$
+   * Numeric report id, or public `VR-XXXX` hex code.
    */
   id: string;
+  style?: GetEmbedBadgeSvgStyle;
 };
+
+export type GetEmbedBadgeSvgStyle =
+  (typeof GetEmbedBadgeSvgStyle)[keyof typeof GetEmbedBadgeSvgStyle];
+
+export const GetEmbedBadgeSvgStyle = {
+  default: "default",
+  flat: "flat",
+  plastic: "plastic",
+  social: "social",
+  square: "square",
+} as const;
 
 /**
  * Skip LLM analysis — use only local heuristic/statistical scoring. Sent as string in multipart form data. Forced to "true" server-side when skipRedaction is "true".

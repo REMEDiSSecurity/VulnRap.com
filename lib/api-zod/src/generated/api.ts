@@ -1165,27 +1165,33 @@ export const DeleteReportResponse = zod.object({
 });
 
 /**
- * Returns a Shields.io-style SVG badge for the report identified by the
-`id` query parameter (e.g. `VR-002A`). Designed to be dropped into
-triage tickets, READMEs, and HackerOne / Bugcrowd comments via
-`<img>` or Markdown. Always returns 200 OK with a well-formed SVG —
-unknown / hidden / malformed ids render an "unknown" badge so a
-broken image never appears on the embedder's page. Honours
-`showInFeed`: hidden reports render as "unknown" so private scores
-are not leaked. Sets ETag + `Cache-Control: max-age=300` so
-embedders that re-render frequently get cheap 304s.
+ * Returns an SVG badge showing the slop tier + score for the report
+identified by `id` (either a numeric id or the public `VR-XXXX` hex
+code). Designed to be dropped into READMEs, advisories, HackerOne /
+Bugcrowd comments, or triage tickets via `<img>` or Markdown.
 
- * @summary Embeddable score badge SVG (Shields.io-style)
+Five visual styles are supported via the `style` query param:
+`default` (Shields-style flat with gradient), `flat`, `plastic`,
+`social`, and `square`.
+
+Always returns 200 OK with a well-formed SVG — unknown / hidden /
+malformed ids render an "unknown" badge so a broken image never
+appears on the embedder's page. Honours `showInFeed`: hidden
+reports render as "unknown" so private scores are not leaked. Sets
+ETag + `Cache-Control: max-age=300` so embedders that re-render
+frequently get cheap 304s.
+
+ * @summary Embeddable score badge SVG (5 styles)
  */
-export const getEmbedBadgeQueryIdRegExp = new RegExp("^VR-[0-9A-Fa-f]{1,8}$");
+export const getEmbedBadgeSvgQueryStyleDefault = `default`;
 
-export const GetEmbedBadgeQueryParams = zod.object({
+export const GetEmbedBadgeSvgQueryParams = zod.object({
   id: zod.coerce
     .string()
-    .regex(getEmbedBadgeQueryIdRegExp)
-    .describe(
-      "Report code in the public `VR-XXXX` format (hex, case-insensitive).",
-    ),
+    .describe("Numeric report id, or public `VR-XXXX` hex code."),
+  style: zod
+    .enum(["default", "flat", "plastic", "social", "square"])
+    .default(getEmbedBadgeSvgQueryStyleDefault),
 });
 
 /**

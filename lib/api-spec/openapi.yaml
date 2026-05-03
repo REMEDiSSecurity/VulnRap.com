@@ -184,27 +184,39 @@ paths:
 
   /embed/badge.svg:
     get:
-      operationId: getEmbedBadge
+      operationId: getEmbedBadgeSvg
       tags: [embed]
-      summary: Embeddable score badge SVG (Shields.io-style)
+      summary: Embeddable score badge SVG (5 styles)
       description: |
-        Returns a Shields.io-style SVG badge for the report identified by the
-        `id` query parameter (e.g. `VR-002A`). Designed to be dropped into
-        triage tickets, READMEs, and HackerOne / Bugcrowd comments via
-        `<img>` or Markdown. Always returns 200 OK with a well-formed SVG —
-        unknown / hidden / malformed ids render an "unknown" badge so a
-        broken image never appears on the embedder's page. Honours
-        `showInFeed`: hidden reports render as "unknown" so private scores
-        are not leaked. Sets ETag + `Cache-Control: max-age=300` so
-        embedders that re-render frequently get cheap 304s.
+        Returns an SVG badge showing the slop tier + score for the report
+        identified by `id` (either a numeric id or the public `VR-XXXX` hex
+        code). Designed to be dropped into READMEs, advisories, HackerOne /
+        Bugcrowd comments, or triage tickets via `<img>` or Markdown.
+
+        Five visual styles are supported via the `style` query param:
+        `default` (Shields-style flat with gradient), `flat`, `plastic`,
+        `social`, and `square`.
+
+        Always returns 200 OK with a well-formed SVG — unknown / hidden /
+        malformed ids render an "unknown" badge so a broken image never
+        appears on the embedder's page. Honours `showInFeed`: hidden
+        reports render as "unknown" so private scores are not leaked. Sets
+        ETag + `Cache-Control: max-age=300` so embedders that re-render
+        frequently get cheap 304s.
       parameters:
         - name: id
           in: query
           required: true
           schema:
             type: string
-            pattern: "^VR-[0-9A-Fa-f]{1,8}$"
-          description: Report code in the public `VR-XXXX` format (hex, case-insensitive).
+          description: Numeric report id, or public `VR-XXXX` hex code.
+        - name: style
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [default, flat, plastic, social, square]
+            default: default
       responses:
         "200":
           description: SVG badge
@@ -212,7 +224,6 @@ paths:
             image/svg+xml:
               schema:
                 type: string
-                format: binary
         "304":
           description: Not modified (matches the `If-None-Match` header)
 
