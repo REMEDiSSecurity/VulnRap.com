@@ -27,6 +27,11 @@
 import { logger } from "./logger";
 import { backfill } from "../backfill-vulnrap";
 import type { BackfillStats, CliOpts } from "../backfill-vulnrap-helpers";
+import {
+  createPostgresSchedulerLeadership,
+  type LeadershipSkipReason,
+  type SchedulerLeadership,
+} from "./scheduler-leader";
 
 const DEFAULT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 const DEFAULT_RETRY_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
@@ -113,7 +118,38 @@ export interface RescoreCheckResult {
   ok: boolean;
   /** False when the scheduler is disabled (no DB scan happened). */
   ranCheck: boolean;
+  /**
+   * Populated when `ranCheck` is false because cross-replica
+   * leadership election declined this tick. Lets the heartbeat panel
+   * distinguish "skipped because the scheduler is disabled" from
+   * "skipped because another replica owns this interval".
+   */
+  skippedReason?: LeadershipSkipReason;
   stats?: BackfillStats;
+}
+
+export interface RunRescoreBackfillCheckOptions {
+  /**
+   * Inject a leadership helper. Tests pin a fake one so they don't
+   * touch the database; in production the default Postgres-backed
+   * implementation is used.
+   */
+  leadership?: SchedulerLeadership;
+  /**
+   * Suppress a tick when the previous tick *started* less than this
+   * many milliseconds ago. Defaults to the scheduler's success
+   * interval so a weekly job stays weekly fleet-wide instead of
+   * firing once per replica per week.
+   */
+  minIntervalMs?: number;
+}
+
+let cachedLeadership: SchedulerLeadership | null = null;
+function defaultLeadership(): SchedulerLeadership {
+  if (!cachedLeadership) {
+    cachedLeadership = createPostgresSchedulerLeadership();
+  }
+  return cachedLeadership;
 }
 
 /**
@@ -121,13 +157,46 @@ export interface RescoreCheckResult {
  * logged and surfaced as `ok: false` so the scheduler can re-arm at
  * the shorter retry interval.
  *
- * Skips the DB scan entirely when the scheduler is disabled, so dev /
- * test environments pay zero cost per tick.
+ * Skips the DB scan entirely when:
+ *   * the scheduler is disabled (`ranCheck: false`, no
+ *     `skippedReason`); or
+ *   * another replica already owns this scheduling interval
+ *     (`ranCheck: false`, `skippedReason: "lock-held-elsewhere"` or
+ *     `"recent-run"`). In a multi-replica deploy this collapses the
+ *     fleet-wide tick rate from one-per-replica back to one-per-job.
  */
-export async function runRescoreBackfillCheck(): Promise<RescoreCheckResult> {
+export async function runRescoreBackfillCheck(
+  options: RunRescoreBackfillCheckOptions = {},
+): Promise<RescoreCheckResult> {
   if (!isSchedulerEnabled()) {
     return { ok: true, ranCheck: false };
   }
+  const minIntervalMs = options.minIntervalMs ?? autoIntervalMs();
+  const leadership = options.leadership ?? defaultLeadership();
+  const lease = await leadership.tryAcquire({
+    jobName: "rescore-backfill",
+    minIntervalMs,
+  });
+  if (!lease.acquired) {
+    if (lease.reason === "acquire-error") {
+      // Treat leadership-acquisition failures as a degraded run so the
+      // scheduler re-arms at the *retry* interval. If we returned
+      // `ok: true` here the caller would re-arm at the success
+      // interval (a full week for the rescore job) and a transient DB
+      // hiccup would suppress rescoring fleet-wide for that window.
+      logger.warn(
+        { err: lease.error, minIntervalMs },
+        "[rescore-backfill] leadership acquire failed; tick will re-arm at the retry interval",
+      );
+      return { ok: false, ranCheck: false };
+    }
+    logger.info(
+      { reason: lease.reason, minIntervalMs },
+      "[rescore-backfill] skipping tick — another replica owns this interval",
+    );
+    return { ok: true, ranCheck: false, skippedReason: lease.reason };
+  }
+  let success = false;
   try {
     const opts = buildRescoreOpts();
     logger.info(
@@ -157,6 +226,12 @@ export async function runRescoreBackfillCheck(): Promise<RescoreCheckResult> {
     // week to retry. The overall pass still counts as "ranCheck" so
     // the heartbeat surface shows the latest stats either way.
     const ok = stats.failed === 0;
+    // We mark the lease "successful" whenever the pass completed
+    // without throwing — even if some rows failed individually — so
+    // that `last_completed_at` reflects "the scan ran to the end" and
+    // not just "the engine processed every row cleanly". The OK / not-
+    // OK split that drives the retry interval is independent.
+    success = true;
     return { ok, ranCheck: true, stats };
   } catch (err) {
     logger.warn(
@@ -164,6 +239,8 @@ export async function runRescoreBackfillCheck(): Promise<RescoreCheckResult> {
       "[rescore-backfill] Scheduled rescore pass failed (non-fatal).",
     );
     return { ok: false, ranCheck: true };
+  } finally {
+    await lease.release(success);
   }
 }
 
@@ -188,10 +265,14 @@ export interface RescoreScheduler {
  * shape mirrors `DriftSchedulerStatus` (booleans / timestamps / small
  * numbers only) so it's safe to expose on an unauthenticated endpoint.
  *
- * Per-process by design: the scheduler runs in each replica, but the
- * row-level concurrency guards inside `backfill()` are what prevent
- * duplicate rescore writes across replicas. This struct is just the
- * heartbeat for the replica that served the request.
+ * Per-process by design: the scheduler timer runs in each replica,
+ * but cross-replica leadership election in `runRescoreBackfillCheck`
+ * (advisory lock + `scheduler_runs.last_started_at` gate) ensures
+ * only one replica per scheduling interval actually performs the
+ * scan. Replicas that lose election surface that on the heartbeat
+ * via `lastTickSkippedReason` so the calibration page can show "this
+ * replica skipped because another replica owns the tick" instead of
+ * looking like the scheduler is wedged.
  */
 export interface RescoreSchedulerStatus {
   schedulerStarted: boolean;
@@ -204,6 +285,7 @@ export interface RescoreSchedulerStatus {
   lastTickAt: string | null;
   lastTickOk: boolean | null;
   lastTickRanCheck: boolean | null;
+  lastTickSkippedReason: LeadershipSkipReason | null;
   lastTickProcessed: number | null;
   lastTickRescored: number | null;
   lastTickFailed: number | null;
@@ -224,6 +306,7 @@ const INITIAL_STATUS: RescoreSchedulerStatus = {
   lastTickAt: null,
   lastTickOk: null,
   lastTickRanCheck: null,
+  lastTickSkippedReason: null,
   lastTickProcessed: null,
   lastTickRescored: null,
   lastTickFailed: null,
@@ -286,11 +369,13 @@ export function startRescoreBackfillScheduler(
     if (stopped) return;
     let ok = true;
     let ranCheck: boolean | null = null;
+    let skippedReason: LeadershipSkipReason | null = null;
     let stats: BackfillStats | null = null;
     try {
       const result = await run();
       ok = result.ok;
       ranCheck = typeof result.ranCheck === "boolean" ? result.ranCheck : null;
+      skippedReason = result.skippedReason ?? null;
       stats = result.stats ?? null;
     } catch (err) {
       // `run` is supposed to swallow its own errors, but defend against
@@ -311,6 +396,7 @@ export function startRescoreBackfillScheduler(
         lastTickAt: new Date(completedAtMs).toISOString(),
         lastTickOk: ok,
         lastTickRanCheck: ranCheck,
+        lastTickSkippedReason: skippedReason,
         lastTickProcessed: stats?.processed ?? null,
         lastTickRescored: stats
           ? stats.rescoredUpdated + stats.rescoredReconstructed

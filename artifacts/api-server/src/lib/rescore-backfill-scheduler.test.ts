@@ -14,6 +14,53 @@ import {
   __testing,
 } from "./rescore-backfill-scheduler";
 import type { BackfillStats } from "../backfill-vulnrap-helpers";
+import type {
+  LeadershipResult,
+  SchedulerLeadership,
+} from "./scheduler-leader";
+
+// Test double: every call resolves with whatever the test queues up
+// next, defaulting to "always acquire". `release()` is recorded so we
+// can assert the leadership lease is closed for every successful tick.
+function fakeLeadership(
+  results: LeadershipResult[] = [],
+): SchedulerLeadership & {
+  releases: boolean[];
+  acquireCalls: number;
+} {
+  const releases: boolean[] = [];
+  let acquireCalls = 0;
+  const fake: SchedulerLeadership & {
+    releases: boolean[];
+    acquireCalls: number;
+  } = {
+    releases,
+    get acquireCalls() {
+      return acquireCalls;
+    },
+    async tryAcquire() {
+      acquireCalls += 1;
+      const next: LeadershipResult = results.shift() ?? {
+        acquired: true,
+        release: async (success: boolean) => {
+          releases.push(success);
+        },
+      };
+      if (next.acquired) {
+        const original = next.release;
+        return {
+          acquired: true,
+          release: async (success: boolean) => {
+            releases.push(success);
+            await original(success);
+          },
+        };
+      }
+      return next;
+    },
+  };
+  return fake;
+}
 
 const ENV_KEYS = [
   "RESCORE_BACKFILL_SCHEDULER_ENABLED",
@@ -132,6 +179,101 @@ describe("runRescoreBackfillCheck", () => {
       process.env.RESCORE_BACKFILL_SCHEDULER_ENABLED = v;
       expect(__testing.isSchedulerEnabled()).toBe(true);
     }
+  });
+
+  // ---- Task #762: cross-replica leadership election ----
+
+  it("skips the scan and surfaces the reason when leadership is held elsewhere", async () => {
+    process.env.RESCORE_BACKFILL_SCHEDULER_ENABLED = "true";
+    const leadership = fakeLeadership([
+      { acquired: false, reason: "lock-held-elsewhere" },
+    ]);
+    const result = await runRescoreBackfillCheck({ leadership });
+    expect(result).toEqual({
+      ok: true,
+      ranCheck: false,
+      skippedReason: "lock-held-elsewhere",
+    });
+    // No release() must fire when we never acquired the lease.
+    expect(leadership.releases).toEqual([]);
+    expect(leadership.acquireCalls).toBe(1);
+  });
+
+  it("skips the scan when another replica started a tick within minIntervalMs", async () => {
+    process.env.RESCORE_BACKFILL_SCHEDULER_ENABLED = "true";
+    const leadership = fakeLeadership([
+      { acquired: false, reason: "recent-run" },
+    ]);
+    const result = await runRescoreBackfillCheck({
+      leadership,
+      minIntervalMs: 12_345,
+    });
+    expect(result).toEqual({
+      ok: true,
+      ranCheck: false,
+      skippedReason: "recent-run",
+    });
+    expect(leadership.releases).toEqual([]);
+  });
+
+  it("forwards the configured minIntervalMs to leadership.tryAcquire", async () => {
+    process.env.RESCORE_BACKFILL_SCHEDULER_ENABLED = "true";
+    const captured: { jobName: string; minIntervalMs: number }[] = [];
+    const leadership: SchedulerLeadership = {
+      async tryAcquire(opts) {
+        captured.push(opts);
+        return { acquired: false, reason: "lock-held-elsewhere" };
+      },
+    };
+    await runRescoreBackfillCheck({ leadership, minIntervalMs: 999 });
+    expect(captured[0]).toEqual({
+      jobName: "rescore-backfill",
+      minIntervalMs: 999,
+    });
+  });
+
+  it("defaults minIntervalMs to the configured success interval", async () => {
+    process.env.RESCORE_BACKFILL_SCHEDULER_ENABLED = "true";
+    process.env.RESCORE_BACKFILL_INTERVAL_MS = "777";
+    const captured: { jobName: string; minIntervalMs: number }[] = [];
+    const leadership: SchedulerLeadership = {
+      async tryAcquire(opts) {
+        captured.push(opts);
+        return { acquired: false, reason: "lock-held-elsewhere" };
+      },
+    };
+    await runRescoreBackfillCheck({ leadership });
+    expect(captured[0]?.minIntervalMs).toBe(777);
+  });
+
+  it("returns ok=false when leadership acquisition errors so the scheduler re-arms at the retry interval", async () => {
+    // Critical: a transient DB / leadership error must NOT be treated
+    // as a healthy skip — that would re-arm the weekly tick at the
+    // success interval and suppress rescoring for a full week after a
+    // single transient failure.
+    process.env.RESCORE_BACKFILL_SCHEDULER_ENABLED = "true";
+    const leadership: SchedulerLeadership = {
+      async tryAcquire() {
+        return {
+          acquired: false,
+          reason: "acquire-error",
+          error: new Error("simulated DB outage"),
+        };
+      },
+    };
+    const result = await runRescoreBackfillCheck({ leadership });
+    expect(result).toEqual({ ok: false, ranCheck: false });
+    // No skippedReason on the error path — that field is reserved for
+    // *healthy* skips so the heartbeat panel doesn't conflate "another
+    // replica owns this tick" with "leadership election crashed".
+    expect(result.skippedReason).toBeUndefined();
+  });
+
+  it("does not invoke leadership at all when the scheduler is disabled", async () => {
+    const leadership = fakeLeadership();
+    const result = await runRescoreBackfillCheck({ leadership });
+    expect(result).toEqual({ ok: true, ranCheck: false });
+    expect(leadership.acquireCalls).toBe(0);
   });
 });
 
@@ -351,6 +493,67 @@ describe("startRescoreBackfillScheduler", () => {
       // the workload (or the scan needs investigation).
       expect(status.lastTickDeadlineReached).toBe(true);
       expect(status.lastTickProcessed).toBe(500);
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("surfaces the leadership skip reason on the heartbeat when a tick was declined", async () => {
+    const sched = startRescoreBackfillScheduler({
+      intervalMs: 60_000,
+      retryIntervalMs: 1_000,
+      initialDelayMs: 0,
+      run: async () => ({
+        ok: true,
+        ranCheck: false,
+        skippedReason: "lock-held-elsewhere",
+      }),
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await flushTick();
+      const status = getRescoreBackfillSchedulerStatus();
+      expect(status.lastTickRanCheck).toBe(false);
+      expect(status.lastTickSkippedReason).toBe("lock-held-elsewhere");
+      // A successful skip still counts as ok=true so we re-arm at the
+      // weekly cadence — losing election is the *expected* outcome on
+      // every replica that isn't this interval's leader.
+      expect(status.lastTickOk).toBe(true);
+      expect(status.lastTickProcessed).toBeNull();
+    } finally {
+      sched.stop();
+    }
+  });
+
+  it("clears the skip reason on the next tick that actually ran", async () => {
+    let nextResult: {
+      ok: boolean;
+      ranCheck: boolean;
+      skippedReason?: "lock-held-elsewhere" | "recent-run";
+      stats?: BackfillStats;
+    } = {
+      ok: true,
+      ranCheck: false,
+      skippedReason: "recent-run",
+    };
+    const sched = startRescoreBackfillScheduler({
+      intervalMs: 50,
+      retryIntervalMs: 10,
+      initialDelayMs: 0,
+      run: async () => nextResult,
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await flushTick();
+      expect(getRescoreBackfillSchedulerStatus().lastTickSkippedReason).toBe(
+        "recent-run",
+      );
+      nextResult = { ok: true, ranCheck: true, stats: makeStats() };
+      await vi.advanceTimersByTimeAsync(50);
+      await flushTick();
+      const status = getRescoreBackfillSchedulerStatus();
+      expect(status.lastTickRanCheck).toBe(true);
+      expect(status.lastTickSkippedReason).toBeNull();
     } finally {
       sched.stop();
     }
