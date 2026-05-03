@@ -4,6 +4,7 @@ import {
   Activity, Search, Code, BookOpen, MessageSquare, Menu, X, Github,
   Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
   ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library, ScrollText,
+  Compass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
@@ -71,9 +72,10 @@ const NAV: NavEntry[] = [
   {
     label: "Docs",
     icon: <BookOpen className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/developers", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper"],
+    matchPrefixes: ["/developers", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works"],
     align: "right",
     items: [
+      { to: "/how-it-works", label: "How It Works", icon: <Compass className="w-4 h-4" />, description: "Interactive walkthrough of the scoring pipeline, step by step." },
       { to: "/developers", label: "API", icon: <Code className="w-4 h-4" />, description: "REST endpoints, schemas, and examples." },
       { to: "/architecture", label: "Architecture", icon: <Network className="w-4 h-4" />, description: "Pipeline diagram and request flow for integrators." },
       { to: "/engines/substance", label: "Substance Engine", icon: <FlaskConical className="w-4 h-4" />, description: "Engine 2 deep-dive: technical substance density." },
